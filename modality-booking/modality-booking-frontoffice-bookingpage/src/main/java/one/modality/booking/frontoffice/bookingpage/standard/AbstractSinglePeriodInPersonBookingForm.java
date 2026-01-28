@@ -106,6 +106,9 @@ public abstract class AbstractSinglePeriodInPersonBookingForm implements Standar
     /** The entry point (NEW_BOOKING, MODIFY_BOOKING, PAY_BOOKING). */
     protected final BookingFormEntryPoint entryPoint;
 
+    /** The color scheme for theming the form. */
+    protected final BookingFormColorScheme colorScheme;
+
     /** The sticky price header shown at the top of the form. */
     protected final StickyPriceHeader stickyPriceHeader;
 
@@ -171,18 +174,21 @@ public abstract class AbstractSinglePeriodInPersonBookingForm implements Standar
     /**
      * Creates a new single-period in-person booking form.
      *
-     * @param activity   the activity providing WorkingBookingProperties
-     * @param settings   the event booking form settings
-     * @param entryPoint the entry point (NEW_BOOKING, MODIFY_BOOKING, PAY_BOOKING)
+     * @param activity    the activity providing WorkingBookingProperties
+     * @param settings    the event booking form settings
+     * @param entryPoint  the entry point (NEW_BOOKING, MODIFY_BOOKING, PAY_BOOKING)
+     * @param colorScheme the color scheme to use for theming
      */
     protected AbstractSinglePeriodInPersonBookingForm(
             HasWorkingBookingProperties activity,
             EventBookingFormSettings settings,
-            BookingFormEntryPoint entryPoint
+            BookingFormEntryPoint entryPoint,
+            BookingFormColorScheme colorScheme
     ) {
         this.settings = settings;
         this.workingBookingProperties = activity.getWorkingBookingProperties();
         this.entryPoint = entryPoint;
+        this.colorScheme = colorScheme;
 
         // Create the sticky price header
         this.stickyPriceHeader = new StickyPriceHeader();
@@ -240,16 +246,14 @@ public abstract class AbstractSinglePeriodInPersonBookingForm implements Standar
         setupWorkingBookingListener();
     }
 
-    // ========================================
-    // Abstract Methods (Required)
-    // ========================================
-
     /**
      * Returns the color scheme for this booking form.
      *
      * @return the color scheme to use for theming
      */
-    protected abstract BookingFormColorScheme getColorScheme();
+    protected BookingFormColorScheme getColorScheme() {
+        return colorScheme;
+    }
 
     // ========================================
     // Override Points (Optional)

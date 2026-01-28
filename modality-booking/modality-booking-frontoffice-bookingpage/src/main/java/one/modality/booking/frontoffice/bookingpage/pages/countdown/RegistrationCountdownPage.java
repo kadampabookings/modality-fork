@@ -27,9 +27,7 @@ import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuil
 import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
 import one.modality.ecommerce.policy.service.PolicyAggregate;
 
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
+import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 
@@ -76,6 +74,9 @@ public class RegistrationCountdownPage implements BookingFormPage {
     private double remainingSeconds;
     private BookingFormButton[] buttons;
 
+    // Override opening instant (if set, overrides policy aggregate)
+    private Instant overrideOpeningInstant;
+
     /**
      * Creates a new countdown page.
      *
@@ -92,6 +93,34 @@ public class RegistrationCountdownPage implements BookingFormPage {
 
         Double seconds = policyAggregate.getSecondsToOpeningDate();
         this.remainingSeconds = seconds != null ? seconds : 0;
+    }
+
+    /**
+     * Sets an override opening instant, bypassing the policy aggregate's opening date.
+     * Useful for hardcoding a specific opening time.
+     *
+     * @param openingInstant the opening instant to use
+     * @return this page for chaining
+     */
+    public RegistrationCountdownPage setOverrideOpeningInstant(Instant openingInstant) {
+        this.overrideOpeningInstant = openingInstant;
+        if (openingInstant != null) {
+            long secondsUntilOpening = java.time.Duration.between(Instant.now(), openingInstant).getSeconds();
+            this.remainingSeconds = Math.max(0, secondsUntilOpening);
+        }
+        return this;
+    }
+
+    /**
+     * Returns the opening instant (override if set, otherwise calculated from policy).
+     */
+    private Instant getOpeningInstant() {
+        if (overrideOpeningInstant != null) {
+            return overrideOpeningInstant;
+        }
+        Double secondsToOpening = policyAggregate.getSecondsToOpeningDate();
+        if (secondsToOpening == null) return null;
+        return Instant.now().plusSeconds(secondsToOpening.longValue());
     }
 
     @Override
@@ -407,11 +436,9 @@ public class RegistrationCountdownPage implements BookingFormPage {
     }
 
     private String formatOpeningDate() {
-        Double secondsToOpening = policyAggregate.getSecondsToOpeningDate();
-        if (secondsToOpening == null) return "";
+        Instant openingInstant = getOpeningInstant();
+        if (openingInstant == null) return "";
 
-        // Calculate opening date from now + seconds
-        Instant openingInstant = Instant.now().plusSeconds(secondsToOpening.longValue());
         ZoneId zoneId = ZoneId.systemDefault();
 
         // Try to get event timezone if available, fallback to system default

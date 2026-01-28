@@ -208,7 +208,10 @@ public class DefaultRegistrationTypeSection implements BookingFormSection {
             HBox buttonContent = new HBox(8);
             buttonContent.setAlignment(Pos.CENTER);
 
-            Label buttonText = I18nControls.newLabel(BookingPageI18nKeys.SelectInPerson);
+            Object buttonTextKey = type == RegistrationType.IN_PERSON
+                ? BookingPageI18nKeys.SelectInPerson
+                : BookingPageI18nKeys.SelectOnline;
+            Label buttonText = I18nControls.newLabel(buttonTextKey);
             buttonText.getStyleClass().add("bookingpage-btn-select-type-text");
 
             SVGPath arrowIcon = SvgIcons.createStrokeSVGPath(ARROW_ICON_PATH, null, 2.5);
@@ -298,10 +301,31 @@ public class DefaultRegistrationTypeSection implements BookingFormSection {
      * Sets whether the online registration option is enabled.
      * When false (default), the online card shows "Coming Soon".
      *
+     * <p>This method rebuilds the online card if the value changes after initial construction.</p>
+     *
      * @param enabled true to enable online registration selection
      */
     public void setOnlineEnabled(boolean enabled) {
+        if (this.onlineEnabled == enabled) {
+            return; // No change
+        }
         this.onlineEnabled = enabled;
+
+        // Rebuild the online card with the new enabled state
+        if (onlineCard != null && onlineCard.getParent() instanceof Pane cardsContainer) {
+            int index = cardsContainer.getChildren().indexOf(onlineCard);
+            if (index >= 0) {
+                VBox newOnlineCard = createTypeCard(
+                    BookingPageI18nKeys.OnlineRegistration,
+                    BookingPageI18nKeys.OnlineDescription,
+                    MONITOR_ICON_PATH,
+                    RegistrationType.ONLINE,
+                    enabled
+                );
+                cardsContainer.getChildren().set(index, newOnlineCard);
+                onlineCard = newOnlineCard;
+            }
+        }
     }
 
     public void setOnTypeSelected(Consumer<RegistrationType> callback) {

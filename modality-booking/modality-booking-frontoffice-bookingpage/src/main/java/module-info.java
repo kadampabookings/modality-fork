@@ -105,4 +105,7 @@ module modality.booking.frontoffice.bookingpage {
     exports one.modality.booking.frontoffice.bookingpage.theme;
     exports one.modality.booking.frontoffice.bookingpage.util;
 
+    // Provided services
+    provides one.modality.booking.frontoffice.bookingform.BookingFormProvider with one.modality.booking.frontoffice.bookingpage.standard.DefaultBookingFormProvider;
+
 }

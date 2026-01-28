@@ -454,6 +454,7 @@ public interface BookingPageI18nKeys {
     Object SelectClassesPageTitle = "SelectClassesPageTitle";
     Object SelectDepartureDateForShuttle = "SelectDepartureDateForShuttle";
     Object SelectInPerson = "SelectInPerson";
+    Object SelectOnline = "SelectOnline";
     Object SelectParkingType = "SelectParkingType";
     Object SelectPaymentMethod = "SelectPaymentMethod";
     Object SelectPaymentOption = "SelectPaymentOption";

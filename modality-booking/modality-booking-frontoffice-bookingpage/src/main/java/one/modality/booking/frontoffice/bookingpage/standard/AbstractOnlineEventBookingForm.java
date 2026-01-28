@@ -62,6 +62,9 @@ public abstract class AbstractOnlineEventBookingForm implements StandardBookingF
     /** The entry point (NEW_BOOKING, MODIFY_BOOKING, PAY_BOOKING). */
     protected final BookingFormEntryPoint entryPoint;
 
+    /** The color scheme for theming the form. */
+    protected final BookingFormColorScheme colorScheme;
+
     // === Section Instances ===
 
     /** Event header section showing event name, dates, location. */
@@ -81,16 +84,18 @@ public abstract class AbstractOnlineEventBookingForm implements StandardBookingF
     /** The Options page combining all custom sections. */
     protected CompositeBookingFormPage optionsPage;
 
-    // ========================================
-    // Abstract Methods (Required)
-    // ========================================
-
     /**
      * Returns the color scheme for this booking form.
      *
      * @return the color scheme to use for theming
      */
-    protected abstract BookingFormColorScheme getColorScheme();
+    protected BookingFormColorScheme getColorScheme() {
+        return colorScheme;
+    }
+
+    // ========================================
+    // Abstract Methods (Required)
+    // ========================================
 
     /**
      * Creates the rate/pricing section.
@@ -163,17 +168,20 @@ public abstract class AbstractOnlineEventBookingForm implements StandardBookingF
     /**
      * Creates a new online event booking form.
      *
-     * @param activity   the activity providing WorkingBookingProperties
-     * @param settings   the event booking form settings
-     * @param entryPoint the entry point (NEW_BOOKING, MODIFY_BOOKING, PAY_BOOKING)
+     * @param activity    the activity providing WorkingBookingProperties
+     * @param settings    the event booking form settings
+     * @param entryPoint  the entry point (NEW_BOOKING, MODIFY_BOOKING, PAY_BOOKING)
+     * @param colorScheme the color scheme to use for theming
      */
     protected AbstractOnlineEventBookingForm(
             HasWorkingBookingProperties activity,
             EventBookingFormSettings settings,
-            BookingFormEntryPoint entryPoint
+            BookingFormEntryPoint entryPoint,
+            BookingFormColorScheme colorScheme
     ) {
         this.settings = settings;
         this.entryPoint = entryPoint;
+        this.colorScheme = colorScheme;
 
         // Create custom options step
         createCustomStep();
