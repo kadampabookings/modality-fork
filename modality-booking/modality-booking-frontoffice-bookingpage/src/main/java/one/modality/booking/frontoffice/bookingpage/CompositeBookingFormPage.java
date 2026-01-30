@@ -160,6 +160,26 @@ public class CompositeBookingFormPage implements BookingFormPage {
     }
 
     /**
+     * Configures this page as a "special page" (non-step, own submit button, no back navigation).
+     * Used for payment forms, queue pages, error recovery pages, and other pages that shouldn't
+     * appear in the step navigation or allow going back.
+     *
+     * <p>This is a convenience method equivalent to calling:</p>
+     * <pre>
+     * setStep(false)
+     *     .setShowingOwnSubmitButton(true)
+     *     .setCanGoBack(false)
+     * </pre>
+     *
+     * @return this page for chaining
+     */
+    public CompositeBookingFormPage asSpecialPage() {
+        return this.setStep(false)
+                   .setShowingOwnSubmitButton(true)
+                   .setCanGoBack(false);
+    }
+
+    /**
      * Returns the list of sections in this page.
      * Useful for finding sections implementing specific interfaces.
      */

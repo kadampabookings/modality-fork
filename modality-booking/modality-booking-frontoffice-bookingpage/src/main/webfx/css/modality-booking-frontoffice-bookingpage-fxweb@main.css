@@ -3862,3 +3862,112 @@
     -fx-text-fill: -booking-form-primary;
     -fx-font-weight: 500;
 }
+
+/* ==========================================
+   Child Carer Section
+   ========================================== */
+
+/* Carer selection card - full width */
+.bookingpage-childcarer-card {
+    -fx-background-color: -booking-form-card-bg;
+    -fx-background-radius: 8;
+    -fx-border-color: -booking-form-card-border;
+    -fx-border-width: 2;
+    -fx-border-radius: 8;
+    -fx-cursor: hand;
+}
+
+.bookingpage-childcarer-card:hover {
+    -fx-border-color: -booking-form-hover-border;
+    -fx-background-color: -booking-form-selected-bg;
+}
+
+.bookingpage-childcarer-card.selected {
+    -fx-border-color: -booking-form-primary;
+    -fx-background-color: -booking-form-selected-bg;
+}
+
+.bookingpage-childcarer-card.selected:hover {
+    -fx-border-color: -booking-form-primary;
+    -fx-background-color: -booking-form-selected-bg;
+}
+
+.bookingpage-childcarer-card.disabled {
+    -fx-opacity: 0.6;
+    -fx-cursor: default;
+}
+
+.bookingpage-childcarer-card.disabled:hover {
+    -fx-border-color: -booking-form-card-border;
+    -fx-background-color: -booking-form-card-bg;
+}
+
+/* External carer fields container - uses theme colors */
+.bookingpage-childcarer-external-fields {
+    -fx-background-color: -booking-form-selected-bg;
+    -fx-background-radius: 8;
+    -fx-border-color: -booking-form-hover-border;
+    -fx-border-width: 1;
+    -fx-border-radius: 8;
+}
+
+/* Carer avatar circle - uses fill for Circle shape */
+.bookingpage-childcarer-avatar {
+    -fx-fill: #E5E7EB;
+}
+
+.bookingpage-childcarer-avatar-external {
+    -fx-fill: -booking-form-primary;
+}
+
+/* Icon on primary background (white stroke) */
+.bookingpage-icon-on-primary {
+    -fx-stroke: -booking-form-text-on-primary;
+    -fx-fill: transparent;
+}
+
+/* Selection indicator circle */
+.bookingpage-childcarer-indicator {
+    -fx-background-color: transparent;
+    -fx-border-color: -booking-form-card-border;
+    -fx-border-width: 2;
+    -fx-border-radius: 11;
+}
+
+.bookingpage-childcarer-indicator.selected {
+    -fx-background-color: -booking-form-primary;
+    -fx-border-color: -booking-form-primary;
+}
+
+/* Policy checkbox card */
+.bookingpage-childcarer-policy {
+    -fx-background-color: -booking-form-card-bg;
+    -fx-background-radius: 8;
+    -fx-border-color: -booking-form-card-border;
+    -fx-border-width: 2;
+    -fx-border-radius: 8;
+    -fx-cursor: hand;
+}
+
+.bookingpage-childcarer-policy:hover {
+    -fx-border-color: -booking-form-hover-border;
+}
+
+.bookingpage-childcarer-policy.selected {
+    -fx-border-color: -booking-form-primary;
+    -fx-background-color: -booking-form-selected-bg;
+}
+
+/* Policy checkbox indicator */
+.bookingpage-childcarer-checkbox {
+    -fx-background-color: -booking-form-card-bg;
+    -fx-background-radius: 6;
+    -fx-border-color: -booking-form-card-border;
+    -fx-border-width: 2;
+    -fx-border-radius: 6;
+}
+
+.bookingpage-childcarer-checkbox.selected {
+    -fx-background-color: -booking-form-primary;
+    -fx-border-color: -booking-form-primary;
+}

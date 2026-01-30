@@ -1,9 +1,6 @@
 package one.modality.booking.frontoffice.bookingpage.standard;
 
 import dev.webfx.extras.i18n.I18n;
-import dev.webfx.extras.util.dialog.DialogCallback;
-import dev.webfx.extras.util.dialog.DialogUtil;
-import dev.webfx.extras.util.dialog.builder.DialogContent;
 import dev.webfx.kit.util.properties.FXProperties;
 import dev.webfx.platform.async.Future;
 import dev.webfx.platform.async.Promise;
@@ -28,9 +25,7 @@ import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
-import one.modality.base.client.error.ErrorReporter;
 import one.modality.base.client.i18n.I18nEntities;
-import one.modality.base.client.mainframe.fx.FXMainFrameDialogArea;
 import one.modality.base.shared.entities.*;
 import one.modality.booking.client.workingbooking.*;
 import one.modality.booking.frontoffice.bookingform.BookingFormEntryPoint;
@@ -54,6 +49,8 @@ import one.modality.booking.frontoffice.bookingpage.sections.user.DefaultYourInf
 import one.modality.booking.frontoffice.bookingpage.sections.user.HasYourInformationSection;
 import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
 import one.modality.booking.frontoffice.bookingpage.util.BookingDateFormatter;
+import one.modality.booking.frontoffice.bookingpage.util.BookingFormDialogUtil;
+import one.modality.booking.frontoffice.bookingpage.util.PersonNameUtil;
 import one.modality.booking.frontoffice.bookingpage.util.SoldOutErrorParser;
 import one.modality.crm.shared.services.authn.ModalityUserPrincipal;
 import one.modality.crm.shared.services.authn.fx.FXModalityUserPrincipal;
@@ -969,47 +966,7 @@ public class StandardBookingForm extends MultiPageBookingForm
      * @param error The error/exception from the server
      */
     private void showSubmissionErrorDialog(Throwable error) {
-        // Build detailed error message for logging
-        String errorMessage = error != null && error.getMessage() != null
-            ? error.getMessage()
-            : "Unknown error";
-
-        // Get event context for error reporting
-        String eventName = null;
-        Event event = getEvent();
-        if (event != null) {
-            eventName = event.getName();
-        }
-
-        // Build comprehensive error report message
-        StringBuilder reportMessage = new StringBuilder();
-        reportMessage.append("[StandardBookingForm] Booking submission failed: ").append(errorMessage);
-        if (eventName != null) {
-            reportMessage.append(" | Event: ").append(eventName);
-        }
-
-        // Report error to database
-        ErrorReporter.reportError(reportMessage.toString());
-
-        // Show error dialog to user
-        UiScheduler.runInUiThread(() -> {
-            DialogContent errorDialog = DialogContent.createErrorDialogWithTechnicalDetails(
-                I18n.getI18nText(BookingPageI18nKeys.ServerErrorTitle),
-                I18n.getI18nText(BookingPageI18nKeys.ServerErrorHeader),
-                I18n.getI18nText(BookingPageI18nKeys.ServerErrorMessage),
-                errorMessage,  // Technical details - the actual server error
-                null,          // No error code
-                null           // No timestamp
-            );
-
-            // Use DialogUtil to show the dialog
-            DialogCallback callback = DialogUtil.showModalNodeInGoldLayout(
-                errorDialog.build(),
-                FXMainFrameDialogArea.getDialogArea()
-            );
-            errorDialog.setDialogCallback(callback);
-            errorDialog.getPrimaryButton().setOnAction(e -> callback.closeDialog());
-        });
+        BookingFormDialogUtil.showSubmissionErrorDialog(getEvent(), error);
     }
 
     /**
@@ -1017,35 +974,7 @@ public class StandardBookingForm extends MultiPageBookingForm
      * Reports the error to the database and displays a user-friendly message.
      */
     private void showAlreadyBookedErrorDialogInternal() {
-        // Get event context for error reporting
-        String eventName = null;
-        Event event = getEvent();
-        if (event != null) {
-            eventName = event.getName();
-        }
-
-        // Report to database
-        ErrorReporter.reportError("[StandardBookingForm] User already has booking for event: " + eventName);
-
-        // Show error dialog to user
-        UiScheduler.runInUiThread(() -> {
-            DialogContent errorDialog = DialogContent.createErrorDialogWithTechnicalDetails(
-                I18n.getI18nText(BookingPageI18nKeys.AlreadyBookedTitle),
-                I18n.getI18nText(BookingPageI18nKeys.AlreadyBookedHeader),
-                I18n.getI18nText(BookingPageI18nKeys.AlreadyBookedMessage),
-                null,  // No technical details needed
-                null,
-                null
-            );
-
-            // Use DialogUtil to show the dialog
-            DialogCallback callback = DialogUtil.showModalNodeInGoldLayout(
-                errorDialog.build(),
-                FXMainFrameDialogArea.getDialogArea()
-            );
-            errorDialog.setDialogCallback(callback);
-            errorDialog.getPrimaryButton().setOnAction(e -> callback.closeDialog());
-        });
+        BookingFormDialogUtil.showAlreadyBookedErrorDialog(getEvent());
     }
 
     /**
@@ -1315,8 +1244,8 @@ public class StandardBookingForm extends MultiPageBookingForm
         for (DocumentAggregate documentAggregate : documentAggregates) {
             Document doc = documentAggregate.getDocument();
             // Get person info from Document entity (safer than getAttendeeFullName() which relies on AddDocumentEvent)
-            String personName = getDocumentPersonName(doc);
-            String personEmail = getDocumentPersonEmail(doc);
+            String personName = PersonNameUtil.getDocumentPersonName(doc);
+            String personEmail = PersonNameUtil.getDocumentPersonEmail(doc);
 
             // Use stored values from Document for database-loaded bookings
             // These values were calculated and stored when the booking was submitted
@@ -1412,7 +1341,7 @@ public class StandardBookingForm extends MultiPageBookingForm
         Document doc = documentAggregate.getDocument();
         // Get person name from Document directly (it has personal details copied via EntityHasPersonalDetailsCopy)
         // Fall back to Person entity if Document doesn't have the name
-        String personName = getDocumentPersonName(doc);
+        String personName = PersonNameUtil.getDocumentPersonName(doc);
         String eventName = getEvent() != null ? getEvent().getName() : "";
 
         // Use WorkingBooking's balance calculation (calculates from MoneyTransfers which are loaded)
@@ -1438,61 +1367,6 @@ public class StandardBookingForm extends MultiPageBookingForm
         defaultPaymentSection.setPaymentsMade(paidDeposit);     // Previous payments (for display)
         int remainingMinDeposit = Math.max(0, minDeposit - paidDeposit);
         defaultPaymentSection.setDepositAmount(remainingMinDeposit);  // Remaining min deposit needed
-    }
-
-    /**
-     * Get full name from Person entity.
-     */
-    private String getPersonFullName(Person person) {
-        if (person == null) return "";
-        String firstName = person.getFirstName() != null ? person.getFirstName() : "";
-    String lastName = person.getLastName() != null ? person.getLastName() : "";
-        return (firstName + " " + lastName).trim();
-    }
-
-    /**
-     * Get person name from Document entity.
-     * Document has personal details copied directly via EntityHasPersonalDetailsCopy interface.
-     * Falls back to Person entity if Document doesn't have the name.
-     */
-    private String getDocumentPersonName(Document doc) {
-        if (doc == null) return "";
-
-        // Try to get name from Document directly (personal details are copied to Document)
-        String firstName = doc.getFirstName();
-        String lastName = doc.getLastName();
-
-        if (firstName != null || lastName != null) {
-            StringBuilder name = new StringBuilder();
-            if (firstName != null) name.append(firstName);
-            if (lastName != null) {
-                if (name.length() > 0) name.append(" ");
-                name.append(lastName);
-            }
-            return name.toString().trim();
-        }
-
-        // Fall back to Person entity
-        return getPersonFullName(doc.getPerson());
-    }
-
-    /**
-     * Get person email from Document entity.
-     * Document has personal details copied directly via EntityHasPersonalDetailsCopy interface.
-     * Falls back to Person entity if Document doesn't have the email.
-     */
-    private String getDocumentPersonEmail(Document doc) {
-        if (doc == null) return "";
-
-        // Try to get email from Document directly (personal details are copied to Document)
-        String email = doc.getEmail();
-        if (email != null) {
-            return email;
-        }
-
-        // Fall back to Person entity
-        Person person = doc.getPerson();
-        return person != null ? person.getEmail() : "";
     }
 
     // === Payment Page Handlers ===
@@ -1923,82 +1797,6 @@ public class StandardBookingForm extends MultiPageBookingForm
                 // Compute dates from attendances (uses centralized formatting)
                 String lineDates = BookingDateFormatter.computeDatesFromAttendances(workingBooking, line);
 
-                // DEBUG: Detailed logging for transport items
-                if (familyName != null && familyName.toLowerCase().contains("transport")) {
-                    Console.log("=== DEBUG Transport: " + itemName + " ===");
-                    Console.log("  line.getId() = " + line.getId());
-                    Console.log("  line.getSite() = " + (line.getSite() != null ? line.getSite().getPrimaryKey() : "null"));
-                    Console.log("  line.getItem() = " + (line.getItem() != null ? line.getItem().getPrimaryKey() : "null"));
-                    Console.log("  line.getPriceNet() = " + linePriceObj);
-                    Console.log("  priceCalculator.calculateDocumentLinePrice() = " + linePrice);
-
-                    // Check standard getLineAttendances
-                    List<Attendance> stdAttendances = documentAggregate.getLineAttendances(line);
-                    Console.log("  Standard getLineAttendances count = " + (stdAttendances != null ? stdAttendances.size() : "null"));
-
-                    // Check robust matching
-                    List<Attendance> robustAttendances = BookingDateFormatter.getLineAttendancesRobust(documentAggregate, line);
-                    Console.log("  Robust getLineAttendances count = " + robustAttendances.size());
-
-                    // Show all attendances and their documentLine info
-                    List<Attendance> allAtts = documentAggregate.getAttendances();
-                    Console.log("  Total attendances in DocumentAggregate = " + (allAtts != null ? allAtts.size() : "null"));
-                    if (allAtts != null) {
-                        for (Attendance att : allAtts) {
-                            DocumentLine attLine = att.getDocumentLine();
-                            if (attLine != null) {
-                                Item attItem = attLine.getItem();
-                                String attItemName = attItem != null ? attItem.getName() : "null";
-                                // Only show transport attendances
-                                if (attItemName != null && (attItemName.contains("Newark") || attItemName.contains("KMCNY"))) {
-                                    Site attSite = attLine.getSite();
-                                    Console.log("    Attendance: item='" + attItemName + "', attLine.site=" +
-                                        (attSite != null ? attSite.getPrimaryKey() : "null") +
-                                        ", attLine.item=" + (attItem != null ? attItem.getPrimaryKey() : "null") +
-                                        ", att.date=" + att.getDate() +
-                                        ", att.scheduledItem=" + (att.getScheduledItem() != null ? att.getScheduledItem().getPrimaryKey() : "null"));
-
-                                    // Check if this attendance matches the current line
-                                    boolean stdMatch = java.util.Objects.equals(attLine, line);
-                                    boolean siteMatch = attSite != null && line.getSite() != null &&
-                                        Entities.samePrimaryKey(attSite, line.getSite());
-                                    boolean itemMatch = attItem != null && line.getItem() != null &&
-                                        Entities.samePrimaryKey(attItem, line.getItem());
-                                    Console.log("      -> stdMatch=" + stdMatch + ", siteMatch=" + siteMatch + ", itemMatch=" + itemMatch);
-                                }
-                            }
-                        }
-                    }
-
-                    // Check rates for this Site+Item
-                    PolicyAggregate pa = workingBooking.getPolicyAggregate();
-                    if (pa != null) {
-                        List<Rate> rates = pa.getRates();
-                        Console.log("  Checking rates (total " + (rates != null ? rates.size() : 0) + "):");
-                        if (rates != null) {
-                            Site lineSite = line.getSite();
-                            Item lineItem = line.getItem();
-                            Item rateItem = lineItem != null && lineItem.getRateAliasItem() != null ?
-                                lineItem.getRateAliasItem() : lineItem;
-                            for (Rate rate : rates) {
-                                Site rateSite = rate.getSite();
-                                Item rateItemFromRate = rate.getItem();
-                                if (rateSite != null && rateItemFromRate != null) {
-                                    boolean siteMatch = Entities.samePrimaryKey(rateSite, lineSite);
-                                    boolean itemMatch = Entities.samePrimaryKey(rateItemFromRate, rateItem);
-                                    if (siteMatch || itemMatch) {
-                                        Console.log("    Rate: site=" + rateSite.getPrimaryKey() +
-                                            ", item=" + rateItemFromRate.getPrimaryKey() +
-                                            ", price=" + rate.getPrice() +
-                                            " -> siteMatch=" + siteMatch + ", itemMatch=" + itemMatch);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    Console.log("=== END DEBUG ===");
-                }
-
                 // Add the price line using new API with separate family/item for consistent formatting via UnifiedPriceDisplay
                 if (linePrice != 0 || (family != null && !Boolean.TRUE.equals(family.isSummaryHidden()))) {
                     defaultSummarySection.addPriceLine(familyName, itemName, lineDates, linePrice);
@@ -2015,42 +1813,6 @@ public class StandardBookingForm extends MultiPageBookingForm
                 defaultSummarySection.addPriceLine(null, eventName, null, totalPrice);
             }
         }
-    }
-
-    /**
-     * Calculates price from PolicyAggregate's rates for a given Site+Item.
-     * Used as a fallback when PriceCalculator returns 0 due to EntityStore mismatch issues.
-     */
-    private int calculatePriceFromRates(PolicyAggregate policyAggregate, Site site, Item item, int attendanceCount) {
-        if (policyAggregate == null || site == null || item == null) return 0;
-
-        // Look for a Rate matching this Site+Item
-        List<Rate> rates = policyAggregate.getRates();
-        if (rates == null || rates.isEmpty()) return 0;
-
-        // If item has a rate alias, use that for the lookup
-        Item rateItem = item.getRateAliasItem() != null ? item.getRateAliasItem() : item;
-
-        for (Rate rate : rates) {
-            if (rate.getSite() != null && rate.getItem() != null &&
-                Entities.samePrimaryKey(rate.getSite(), site) &&
-                Entities.samePrimaryKey(rate.getItem(), rateItem)) {
-                // Found matching rate
-                Integer ratePrice = rate.getPrice();
-                if (ratePrice != null) {
-                    // For daily rates, multiply by attendance count
-                    // For fixed rates (perDay = false or not set), return the rate price directly
-                    Boolean perDay = rate.isPerDay();
-                    if (Boolean.TRUE.equals(perDay)) {
-                        return ratePrice * attendanceCount;
-                    } else {
-                        return ratePrice;
-                    }
-                }
-            }
-        }
-
-        return 0; // No matching rate found
     }
 
     private void updatePaymentFromPendingBookings() {
@@ -2183,33 +1945,12 @@ public class StandardBookingForm extends MultiPageBookingForm
             String bookingRef = Strings.toString(workingBookingProperties.getBookingReference());
             DocumentAggregate docAggregate = workingBookingProperties.getDocumentAggregate();
             if (docAggregate != null) {
-                String personName = "";
-                String personEmail = "";
                 Document doc = docAggregate.getDocument();
-                if (doc != null) {
-                    // Get from Document's personal details fields (copied from Person via EntityHasPersonalDetailsCopy)
-                    String firstName = doc.getFirstName();
-                    String lastName = doc.getLastName();
-                    if (firstName != null || lastName != null) {
-                        personName = ((firstName != null ? firstName : "") + " " + (lastName != null ? lastName : "")).trim();
-                    }
-                    personEmail = doc.getEmail();
-                    // Fall back to Person entity if Document fields are empty
-                    if (personName.isEmpty() || personEmail == null) {
-                        Person person = doc.getPerson();
-                        if (person != null) {
-                            if (personName.isEmpty()) {
-                                personName = person.getFullName();
-                            }
-                            if (personEmail == null) {
-                                personEmail = person.getEmail();
-                            }
-                        }
-                    }
-                }
+                String personName = PersonNameUtil.getDocumentPersonName(doc);
+                String personEmail = PersonNameUtil.getDocumentPersonEmail(doc);
                 defaultConfirmationSection.addConfirmedBooking(new HasConfirmationSection.ConfirmedBooking(
-                    personName != null ? personName : "",
-                    personEmail != null ? personEmail : "",
+                    personName,
+                    personEmail,
                     bookingRef));
             }
         } else {
