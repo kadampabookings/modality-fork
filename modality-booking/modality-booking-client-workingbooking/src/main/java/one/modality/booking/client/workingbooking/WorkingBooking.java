@@ -407,6 +407,11 @@ public final class WorkingBooking {
         lastestDocumentAggregate = null;
     }
 
+    public void setCarersInfo(String carer1Name, Document carer1Document, String carer2Name, Document carer2Document) {
+        integrateNewDocumentEvent(new EditCarersInfoEvent(document, carer1Name, carer1Document, carer2Name, carer2Document), true);
+        lastestDocumentAggregate = null;
+    }
+
     public void applyFacilityFeeRate(boolean apply) {
         integrateNewDocumentEvent(new ApplyFacilityFeeEvent(document, apply), true);
     }
@@ -626,6 +631,14 @@ public final class WorkingBooking {
         return getLastestDocumentAggregate().getAttendancesRemoved(fromChangesOnly);
     }
 
+    public List<DocumentLine> getNonTemporalDocumentLinesAdded(boolean fromChangesOnly) {
+        return getLastestDocumentAggregate().getNonTemporalDocumentLinesAdded(fromChangesOnly);
+    }
+
+    public List<DocumentLine> getNonTemporalDocumentLinesRemoved(boolean fromChangesOnly) {
+        return getLastestDocumentAggregate().getNonTemporalDocumentLinesRemoved(fromChangesOnly);
+    }
+
     public AddDocumentEvent findAddDocumentEvent(boolean fromChangesOnly) {
         return getLastestDocumentAggregate().findAddDocumentEvent(fromChangesOnly);
     }
@@ -636,6 +649,14 @@ public final class WorkingBooking {
 
     public ApplyFacilityFeeEvent findApplyFacilityFeeEvent(boolean fromChangesOnly) {
         return getLastestDocumentAggregate().findApplyFacilityFeeEvent(fromChangesOnly);
+    }
+
+    public EditShareMateInfoDocumentLineEvent findEditShareMateInfoDocumentLineEvent(boolean fromChangesOnly) {
+        return getLastestDocumentAggregate().findEditShareMateInfoDocumentLineEvent(fromChangesOnly);
+    }
+
+    public EditShareOwnerInfoDocumentLineEvent findEditShareOwnerInfoDocumentLineEvent(boolean fromChangesOnly) {
+        return getLastestDocumentAggregate().findEditShareOwnerInfoDocumentLineEvent(fromChangesOnly);
     }
 
     public PriceDocumentLineEvent findPriceDocumentLineEvent(boolean fromChangesOnly) {

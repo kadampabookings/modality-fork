@@ -2,7 +2,6 @@ package one.modality.booking.frontoffice.bookingpage.pages.countdown;
 
 import dev.webfx.extras.i18n.controls.I18nControls;
 import dev.webfx.extras.styles.bootstrap.Bootstrap;
-import dev.webfx.platform.util.Booleans;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
 import javafx.beans.property.SimpleBooleanProperty;
@@ -11,7 +10,10 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Label;
-import javafx.scene.layout.*;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.StackPane;
+import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
 import javafx.scene.shape.SVGPath;
@@ -204,8 +206,8 @@ public class RegistrationCountdownPage implements BookingFormPage {
         titleLabel.getStyleClass().addAll("bookingpage-text-lg", "bookingpage-font-semibold", "bookingpage-text-dark");
         VBox.setMargin(titleLabel, new Insets(0, 0, 8, 0));
 
-        // Formatted opening date/time
-        Label dateLabel = new Label(formatOpeningDate());
+        // Formatted opening date/time (uses i18n key for hardcoded display)
+        Label dateLabel = I18nControls.newLabel(BookingPageI18nKeys.RegistrationOpeningDateTime);
         dateLabel.getStyleClass().addAll("bookingpage-text-base", "bookingpage-text-muted");
         VBox.setMargin(dateLabel, new Insets(0, 0, 32, 0));
 
