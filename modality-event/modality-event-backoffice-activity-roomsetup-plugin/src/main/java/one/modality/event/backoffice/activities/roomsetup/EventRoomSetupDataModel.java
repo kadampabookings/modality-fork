@@ -1,5 +1,6 @@
 package one.modality.event.backoffice.activities.roomsetup;
 
+import dev.webfx.kit.util.properties.FXProperties;
 import dev.webfx.platform.console.Console;
 import dev.webfx.stack.orm.domainmodel.DataSourceModel;
 import dev.webfx.stack.orm.domainmodel.HasDataSourceModel;
@@ -15,7 +16,6 @@ import javafx.beans.value.ObservableValue;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import one.modality.base.shared.entities.*;
-import one.modality.crm.backoffice.organization.fx.FXOrganization;
 import one.modality.event.client.event.fx.FXEvent;
 
 import java.util.List;
@@ -47,7 +47,7 @@ public class EventRoomSetupDataModel {
     private final ObservableList<Pool> sourcePools = FXCollections.observableArrayList();
     private final ObservableList<Pool> categoryPools = FXCollections.observableArrayList();
 
-    // Resource data (organization-scoped)
+    // Resource data (venue-scoped - filtered by event's venue)
     private final ObservableList<Resource> resources = FXCollections.observableArrayList();
     private final ObservableList<Item> roomTypes = FXCollections.observableArrayList();
 
@@ -109,7 +109,7 @@ public class EventRoomSetupDataModel {
 
         // Setup all 8 reactive mappers
         setupGlobalDataMappers(hasActiveProperty);
-        setupOrganizationDataMappers(hasActiveProperty);
+        setupVenueDataMappers(hasActiveProperty);
         setupEventDataMappers(hasActiveProperty);
     }
 
@@ -158,16 +158,15 @@ public class EventRoomSetupDataModel {
     }
 
     /**
-     * Sets up mappers for organization-scoped data.
+     * Sets up mappers for venue-scoped data (filtered by the selected event's venue).
      */
-    private void setupOrganizationDataMappers(Object mixin) {
-        // Resources for the organization (includes external sites via event allocations)
+    private void setupVenueDataMappers(Object mixin) {
+        // Resources for the event's venue only
         resourcesRem = ReactiveEntitiesMapper.<Resource>createPushReactiveChain(mixin)
             .always("{class: 'Resource', alias: 'r', fields: 'name,site.(name,organization),building.name,buildingZone.name,siteItemFamily.(name,itemFamily.name)'}")
             .always(orderBy("r.building.name,r.name"))
-            .ifNotNullOtherwiseEmpty(FXOrganization.organizationProperty(), o ->
-                where("r.siteItemFamily.itemFamily.code='acco' and (r.site.organization=$1 or r.id in (select resource from PoolAllocation pa where pa.event.organization=$1 and pa.resource.site.organization<>$1))",
-                    o.getPrimaryKey()))
+            .ifNotNullOtherwiseEmpty(FXEvent.eventProperty(), e ->
+                where("r.siteItemFamily.itemFamily.code='acco' and r.site=?", e.getVenueId()))
             .storeEntitiesInto(resources)
             .addEntitiesHandler(entities -> {
                 Console.log("EventRoomSetupDataModel: Resources loaded: " + entities.size());
@@ -175,31 +174,29 @@ public class EventRoomSetupDataModel {
             })
             .start();
 
-        // Permanent room configurations (default rooms - no date range)
+        // Permanent room configurations for venue (default rooms - no date range)
         permanentConfigsRem = ReactiveEntitiesMapper.<ResourceConfiguration>createPushReactiveChain(mixin)
             .always("{class: 'ResourceConfiguration', alias: 'rc', fields: 'name,item.name,max,comment,resource.(name,site.(name,organization),building.name,buildingZone.name,siteItemFamily.itemFamily.name)'}")
             .always(where("startDate is null and endDate is null"))
             .always(orderBy("resource.building.name,resource.name"))
-            .ifNotNullOtherwiseEmpty(FXOrganization.organizationProperty(), o -> where("resource.site.organization=$1", o.getPrimaryKey()))
+            .ifNotNullOtherwiseEmpty(FXEvent.eventProperty(), e -> where("resource.site=?", e.getVenueId()))
             .storeEntitiesInto(permanentRoomConfigs)
             .addEntitiesHandler(entities -> {
                 Console.log("EventRoomSetupDataModel: Permanent configs loaded: " + entities.size());
                 permanentConfigsLoaded.set(true);
             })
-            .setResultCacheEntry("modality/event/roomsetup/shared/permanent-configs")
             .start();
 
-        // Default pool allocations (event=null) - source pool assignments
+        // Default pool allocations for venue (event=null) - source pool assignments
         defaultAllocationsRem = ReactiveEntitiesMapper.<PoolAllocation>createPushReactiveChain(mixin)
             .always("{class: 'PoolAllocation', fields: 'pool.(name,webColor,graphic,eventPool),resource.(name),quantity'}")
             .always(where("event is null"))
-            .ifNotNullOtherwiseEmpty(FXOrganization.organizationProperty(), o -> where("resource.site.organization=$1", o.getPrimaryKey()))
+            .ifNotNullOtherwiseEmpty(FXEvent.eventProperty(), e -> where("resource.site=?", e.getVenueId()))
             .storeEntitiesInto(defaultAllocations)
             .addEntitiesHandler(entities -> {
                 Console.log("EventRoomSetupDataModel: Default allocations loaded: " + entities.size());
                 defaultAllocationsLoaded.set(true);
             })
-            .setResultCacheEntry("modality/event/roomsetup/shared/default-allocations")
             .start();
     }
 
@@ -210,7 +207,7 @@ public class EventRoomSetupDataModel {
         // Event-specific room configurations (overrides)
         eventConfigsRem = ReactiveEntitiesMapper.<ResourceConfiguration>createPushReactiveChain(mixin)
             .always("{class: 'ResourceConfiguration', fields: 'resource,item.(name),max,allowsMale,allowsFemale,allowsGuest,allowsVolunteer,allowsResident,comment'}")
-            .ifNotNullOtherwiseEmpty(FXEvent.eventProperty(), e -> where("event=$1", e.getPrimaryKey()))
+            .ifNotNullOtherwiseEmpty(FXEvent.eventProperty(), e -> where("event=?", e.getPrimaryKey()))
             .storeEntitiesInto(eventRoomConfigs)
             .addEntitiesHandler(entities -> {
                 Console.log("EventRoomSetupDataModel: Event configs loaded: " + entities.size());
@@ -224,7 +221,7 @@ public class EventRoomSetupDataModel {
         // Event-specific pool allocations (category assignments)
         eventAllocationsRem = ReactiveEntitiesMapper.<PoolAllocation>createPushReactiveChain(mixin)
             .always("{class: 'PoolAllocation', fields: 'pool.(name,webColor,graphic,eventPool),resource.(name),quantity,event'}")
-            .ifNotNullOtherwiseEmpty(FXEvent.eventProperty(), e -> where("event=$1", e.getPrimaryKey()))
+            .ifNotNullOtherwiseEmpty(FXEvent.eventProperty(), e -> where("event=?", e.getPrimaryKey()))
             .storeEntitiesInto(eventAllocations)
             .addEntitiesHandler(entities -> {
                 Console.log("EventRoomSetupDataModel: Event allocations loaded: " + entities.size());
@@ -369,9 +366,9 @@ public class EventRoomSetupDataModel {
     }
 
     /**
-     * Returns true if all organization-scoped data is loaded.
+     * Returns true if all venue-scoped data is loaded.
      */
-    public boolean isOrganizationDataLoaded() {
+    public boolean isVenueDataLoaded() {
         return resourcesLoaded.get() && permanentConfigsLoaded.get() && defaultAllocationsLoaded.get();
     }
 
@@ -386,7 +383,7 @@ public class EventRoomSetupDataModel {
      * Returns true if all data is loaded.
      */
     public boolean isAllDataLoaded() {
-        return isGlobalDataLoaded() && isOrganizationDataLoaded() && isEventDataLoaded();
+        return isGlobalDataLoaded() && isVenueDataLoaded() && isEventDataLoaded();
     }
 
     // === UPDATE STORE ===
