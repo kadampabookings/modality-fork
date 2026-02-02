@@ -76,7 +76,7 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
                 .replace("%limit%", limitTo1 ? "limit 1" : "");
             Object[] queryArguments = {personProvided ? argument.personPrimaryKey() : argument.accountPrimaryKey(), argument.eventPrimaryKey()};
             if (docPk != null) {
-                queryReplacement = queryReplacement.replace(") order by", " or id=$2) order by");
+                queryReplacement = queryReplacement.replace(") order by", " or id=$3) order by");
                 queryArguments = Arrays.add(Object[]::new, queryArguments, docPk);
             }
             for (int i = 0; i < queries.length; i++) {
