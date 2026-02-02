@@ -47,6 +47,7 @@ public interface EventRoomSetupI18nKeys {
     Object CategoryPools = "CategoryPools";
     Object ChangesOnlyAffectThisEvent = "ChangesOnlyAffectThisEvent";
     Object ChangesOnlyApplyToThisEvent = "ChangesOnlyApplyToThisEvent";
+    Object ClearPool = "ClearPool";
     Object ClickRoomToAssign = "ClickRoomToAssign";
     Object Collapse = "Collapse";
     Object Color = "Color";
@@ -85,6 +86,7 @@ public interface EventRoomSetupI18nKeys {
     Object Male = "Male";
     Object MaleOnly = "MaleOnly";
     Object Marquee = "Marquee";
+    Object MaxPool = "MaxPool";
     Object Mixed = "Mixed";
     Object Modified = "Modified";
     Object MoreRoomsStillAvailable = "MoreRoomsStillAvailable";
