@@ -605,3 +605,126 @@
     -fx-font-size: 28px;
     -fx-font-weight: 700;
 }
+
+/* Status Labels (for modal dialogs) */
+.roomsetup-status-base {
+    -fx-background-radius: 8px;
+    -fx-font-size: 13px;
+}
+
+.roomsetup-status-default {
+    -fx-background-color: #fafaf9;
+    -fx-text-fill: #78716c;
+}
+
+.roomsetup-status-warning {
+    -fx-background-color: #fef3c7;
+    -fx-text-fill: #92400e;
+}
+
+.roomsetup-status-complete {
+    -fx-background-color: #e0f4fc;
+    -fx-text-fill: #0096D6;
+}
+
+.roomsetup-status-success {
+    -fx-background-color: #dcfce7;
+    -fx-text-fill: #166534;
+}
+
+/* Quick Action Buttons (Max/Clear) */
+.roomsetup-quick-btn {
+    -fx-background-radius: 6px;
+    -fx-border-radius: 6px;
+    -fx-font-size: 11px;
+    -fx-font-weight: 600;
+}
+
+.roomsetup-quick-btn-max {
+    -fx-background-color: #eff6ff;
+    -fx-border-color: #3b82f6;
+    -fx-border-width: 1px;
+    -fx-text-fill: #2563eb;
+}
+
+.roomsetup-quick-btn-max-disabled {
+    -fx-background-color: #fafaf9;
+    -fx-border-color: #e5e5e5;
+    -fx-border-width: 1px;
+    -fx-text-fill: #a3a3a3;
+}
+
+.roomsetup-quick-btn-clear {
+    -fx-background-color: #fef2f2;
+    -fx-border-color: #ef4444;
+    -fx-border-width: 1px;
+    -fx-text-fill: #dc2626;
+}
+
+.roomsetup-quick-btn-clear-disabled {
+    -fx-background-color: #fafaf9;
+    -fx-border-color: #e5e5e5;
+    -fx-border-width: 1px;
+    -fx-text-fill: #a3a3a3;
+}
+
+/* Dialog Close Button */
+.roomsetup-modal-close-btn {
+    -fx-background-color: transparent;
+    -fx-font-size: 18px;
+    -fx-cursor: hand;
+}
+
+/* Room Info Box */
+.roomsetup-room-info-box {
+    -fx-background-color: #fafaf9;
+    -fx-background-radius: 8px;
+}
+
+.roomsetup-room-name-bold {
+    -fx-font-weight: 600;
+}
+
+.roomsetup-room-details {
+    -fx-font-size: 13px;
+    -fx-text-fill: #78716c;
+}
+
+/* Section Header Border */
+.roomsetup-section-header {
+    -fx-border-color: #e2e8f0;
+    -fx-border-width: 0 0 2px 0;
+}
+
+/* Empty State Styles */
+.roomsetup-empty-icon-warning {
+    -fx-font-size: 48px;
+    -fx-text-fill: #f59e0b;
+}
+
+.roomsetup-empty-description {
+    -fx-text-fill: #78716c;
+}
+
+/* Pool Option Card */
+.roomsetup-pool-option {
+    -fx-background-color: white;
+    -fx-border-color: #e7e5e4;
+    -fx-border-radius: 10px;
+    -fx-background-radius: 10px;
+    -fx-cursor: hand;
+}
+
+.roomsetup-pool-option:hover {
+    -fx-border-color: #0096D6;
+}
+
+.roomsetup-pool-desc {
+    -fx-font-size: 12px;
+    -fx-text-fill: #78716c;
+}
+
+/* Border width variant for selected/emphasized items */
+.roomsetup-border-thick {
+    -fx-border-width: 2px;
+}
