@@ -30,9 +30,9 @@ public final class FXUserPerson {
                     select firstName, lastName, male, ordained, email, phone, street, postCode, cityName, country
                             , organization, birthdate, layName, frontendAccount.(tester, security), accountPerson
                         from Person
-                        where id=?
+                        where id=$1
                     """, userPersonId)
-                .onFailure(Console::log)
+                .onFailure(Console::error)
                 .inUiThread()
                 .onCacheAndOrSuccess(persons -> {
                     setUserPerson(null); // Temporary transition to null because otherwise DynamicEntity.equals()

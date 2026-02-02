@@ -10,7 +10,10 @@
         <used-by-source-modules/>
     </dependencies>
 
-    <i18n javaKeysClass="one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys"/>
+    <java-ui-api package="one.modality.booking.frontoffice.bookingpage" prefix="BookingPage">
+        <i18n/>
+        <css/>
+    </java-ui-api>
 
     <providers>
         <!-- Default booking form provider (MODALITY_PRIORITY = 0, fallback) -->

@@ -85,7 +85,7 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
         // the "Unknown account" email doesn't propose any further action.
         String loginRunId = ThreadLocalStateHolder.getRunId(); // Capturing the loginRunId before async operation
         return EntityStore.create(dataSourceModel)
-            .<FrontendAccount>executeQuery("select FrontendAccount where corporation=? and lower(username)=lower(?) limit 1", 1, request.getEmail())
+            .<FrontendAccount>executeQuery("select FrontendAccount where corporation=$1 and lower(username)=lower($2) limit 1", 1, request.getEmail())
             .compose(accounts -> {
                     boolean unknown = accounts.isEmpty();
                     return MagicLinkService.createAndSendMagicLink(
@@ -104,7 +104,7 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
 
     private Future<Void> renewAndSendMagicLink(RenewMagicLinkCredentials request) {
         return EntityStore.create(dataSourceModel)
-            .<MagicLink>executeQuery("select loginRunId, lang, link, email, requestedPath from MagicLink where token=? order by id desc limit 1", request.previousToken())
+            .<MagicLink>executeQuery("select loginRunId, lang, link, email, requestedPath from MagicLink where token=$1 order by id desc limit 1", request.previousToken())
             .map(Collections::first)
             .compose(magicLink -> {
                 if (magicLink == null)
@@ -161,7 +161,7 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
                                 // we mark the magic link as used (to prevent using it again).
                                 return MagicLinkService.markMagicLinkAsUsed(magicLink, usageRunId)
                                     .map(ignored2 -> magicLink.getRequestedPath())
-                                    .onFailure(Console::log)
+                                    .onFailure(Console::error)
                                     .onSuccess(ignored2 -> {
                                         // 6) We also finally push the userId to the original login client here, and
                                         // this should be followed by a later push of the authorizations to that same
@@ -204,7 +204,7 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
         // 1) Loading the email for the magic link normally associated with this magic link app userId from the database
         // This will be used to identify the account we need to change the password for.
         return EntityStore.create(dataSourceModel)
-            .<MagicLink>executeQuery("select email from MagicLink where usageRunId=? limit 1", usageRunId)
+            .<MagicLink>executeQuery("select email from MagicLink where usageRunId=$1 limit 1", usageRunId)
             .compose(magicLinks -> {
                 if (magicLinks.isEmpty())
                     return Future.failedFuture("[%s] Magic link not found!".formatted(ModalityAuthenticationI18nKeys.LoginLinkUnrecognisedError));

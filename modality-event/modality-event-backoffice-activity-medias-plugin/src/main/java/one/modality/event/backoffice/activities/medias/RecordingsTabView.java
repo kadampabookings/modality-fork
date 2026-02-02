@@ -163,7 +163,7 @@ final class RecordingsTabView {
         saveButton.setOnAction(e -> {
             if (validationSupport.isValid()) {
                 updateStore.submitChanges()
-                    .onFailure(Console::log)
+                    .onFailure(Console::error)
                     //TODO : display a message to say the data has been saved
                     .onSuccess(Console::log);
             }
@@ -189,21 +189,21 @@ final class RecordingsTabView {
                     new EntityStoreQuery("""
                             select distinct item.(name, code)
                              from ScheduledItem
-                             where programScheduledItem.event= ? and item.family.code = ? and programScheduledItem.item.family.code = ?
+                             where programScheduledItem.event = $1 and item.family.code = $2 and programScheduledItem.item.family.code = $3
                              order by item.name""",
                         currentEditedEvent, KnownItemFamily.AUDIO_RECORDING.getCode(), KnownItemFamily.TEACHING.getCode()),
                     new EntityStoreQuery("""
                             select name, date, programScheduledItem.(name, startTime, endTime, timeline.(startTime, endTime, audioOffered)), event, site, item.code, published, expirationDate, available
                              from ScheduledItem
-                             where programScheduledItem.event= ? and item.family.code = ? and programScheduledItem.item.family.code = ?
-                             order by date, programScheduledItem..timeline..startTime""",
+                             where programScheduledItem.event = $1 and item.family.code = $2 and programScheduledItem.item.family.code = $3
+                             order by date, programScheduledItem?.timeline?.startTime""",
                         currentEditedEvent, KnownItemFamily.AUDIO_RECORDING.getCode(), KnownItemFamily.TEACHING.getCode()),
                     new EntityStoreQuery("""
                             select url, durationMillis, scheduledItem.(item.code, programScheduledItem, date, published)
                              from Media
-                             where scheduledItem.(event= ? and item.family.code = ?)""",
+                             where scheduledItem.(event = $1 and item.family.code = $2)""",
                         currentEditedEvent, KnownItemFamily.AUDIO_RECORDING.getCode()))
-                .onFailure(Console::log)
+                .onFailure(Console::error)
                 .inUiThread()
                 .onSuccess(entityList -> {
                     EntityList<ScheduledItem> itemList = entityList[0];
@@ -384,7 +384,7 @@ final class RecordingsTabView {
     private void displayEventDetails(Event e) {
         if (e != null)
             e.onExpressionLoaded("organization,audioExpirationDate, repeatedEvent, repeatAudio, repeatVideo")
-                .onFailure((Console::log))
+                .onFailure((Console::error))
                 .inUiThread()
                 .onSuccess(ignored -> drawContainer())
                 ;

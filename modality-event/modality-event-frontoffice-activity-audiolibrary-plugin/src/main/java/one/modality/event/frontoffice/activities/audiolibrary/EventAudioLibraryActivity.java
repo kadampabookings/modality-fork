@@ -56,6 +56,8 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+import static one.modality.event.frontoffice.activities.audiolibrary.AudioLibraryCssSelectors.*;
+
 /**
  * @author David Hello
  * @author Bruno Salmon
@@ -124,9 +126,9 @@ final class EventAudioLibraryActivity extends ViewDomainActivityBase {
                         select name, label, shortDescription, shortDescriptionLabel, audioExpirationDate
                                 , startDate, endDate, livestreamUrl, vodExpirationDate, repeatAudio, repeatedEvent
                             from Event
-                            where id=?
+                            where id=$1
                             limit 1""", eventId)
-                    .onFailure(Console::log)
+                    .onFailure(Console::error)
                     .onCacheAndOrSuccess(events -> {
                         Event event = events.get(0);
                         UiScheduler.runInUiThread(() -> eventProperty.set(event)); // will update i18n bindings
@@ -152,7 +154,7 @@ final class EventAudioLibraryActivity extends ViewDomainActivityBase {
                                             and exists(select Attendance
                                                 where scheduledItem=si.bookableScheduledItem
                                                     and documentLine.(!cancelled and document.(accountCanAccessPersonMedias($1, person) and event=$5)))
-                                        order by date, startTime, programScheduledItem.timeline..startTime""",
+                                        order by date, startTime, programScheduledItem.timeline?.startTime""",
                                     userAccountId, eventIdContainingAudios, KnownItemFamily.AUDIO_RECORDING.getCode(), pathItemCodeProperty.get(), event),
                                 // Index 1: we look for the scheduledItem of audio type having a `bookableScheduledItem` which is a teaching type (case of STTP)
                                 // TODO: for now we take only the English audio recording scheduledItem in that case. We should take the default language of the organization instead
@@ -169,15 +171,15 @@ final class EventAudioLibraryActivity extends ViewDomainActivityBase {
                                         and exists(select Attendance
                                             where scheduledItem=si.bookableScheduledItem
                                                 and documentLine.(!cancelled and document.(accountCanAccessPersonMedias($1, person) and event=$5)))
-                                     order by date, startTime, programScheduledItem.timeline..startTime""",
+                                     order by date, startTime, programScheduledItem.timeline?.startTime""",
                                     userAccountId, eventIdContainingAudios, KnownItemFamily.TEACHING.getCode(), KnownItem.AUDIO_RECORDING_ENGLISH.getCode(), event),
                                 // Index 2: the medias
                                 new EntityStoreQuery("""
                                     select url, durationMillis, scheduledItem.(date, event, name, published)
                                      from Media
-                                     where scheduledItem.(event=? and online and published and item.code in (?,?))""",
+                                     where scheduledItem.(event=$1 and online and published and item.code in ($2, $3))""",
                                     eventIdContainingAudios, pathItemCodeProperty.get(), KnownItem.AUDIO_RECORDING_ENGLISH.getCode()))
-                            .onFailure(Console::log)
+                            .onFailure(Console::error)
                             .inUiThread()
                             .onCacheAndOrSuccess(entityLists -> {
                                 AstArray parameters;
@@ -245,7 +247,7 @@ final class EventAudioLibraryActivity extends ViewDomainActivityBase {
 
         Text listOfTrackLabel = I18n.newText(AudioLibraryI18nKeys.ListOfTracks);
         VBox.setMargin(listOfTrackLabel, new Insets(30, 0, 0, 0));
-        listOfTrackLabel.getStyleClass().add("list-tracks-title");
+        listOfTrackLabel.getStyleClass().add(list_tracks_title);
 
         loadedContentVBox = new VBox(40,
             eventHeader.getView(),
@@ -275,7 +277,7 @@ final class EventAudioLibraryActivity extends ViewDomainActivityBase {
         // ************************************* Building final container **********************************************
         // *************************************************************************************************************
 
-        pageContainer.getStyleClass().addAll("audio-library");
+        pageContainer.getStyleClass().addAll(audio_library);
         // Setting a max width for big desktop screens
         return FOPageUtil.restrictToMaxPageWidthAndApplyPageLeftTopRightBottomPadding(pageContainer);
     }

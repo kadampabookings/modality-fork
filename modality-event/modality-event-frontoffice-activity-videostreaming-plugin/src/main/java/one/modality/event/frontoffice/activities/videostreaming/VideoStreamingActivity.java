@@ -42,6 +42,8 @@ import one.modality.event.frontoffice.medias.NotConfirmedView;
 import one.modality.event.frontoffice.medias.PaymentPendingView;
 import one.modality.event.frontoffice.medias.TimeZoneSwitch;
 
+import static one.modality.event.frontoffice.activities.videostreaming.VideoStreamingCssSelectors.*;
+
 
 /**
  * This is the activity for video streaming where people can watch the livestream and videos on demand.
@@ -129,7 +131,7 @@ final class VideoStreamingActivity extends ViewDomainActivityBase {
                             // 4) Smallest event (ex: favor Spring Festival over STTP)
                             ", document.event.(endDate - startDate)",
                             userAccountId, KnownItemFamily.VIDEO.getCode())
-                        .onFailure(Console::log)
+                        .onFailure(Console::error)
                         .inUiThread()
                         .onCacheAndOrSuccess(documentLines -> {
                             // Extracting the events with videos from the document lines.
@@ -161,7 +163,7 @@ final class VideoStreamingActivity extends ViewDomainActivityBase {
                 Event eventContainingVideos = Objects.coalesce(event.getRepeatedEvent(), event);
                 // We load all video scheduledItems booked by the user for the event (booking must be confirmed
                 // and paid). They will be grouped by day in the UI.
-                // Note: double dots such as `programScheduledItem.timeline..startTime` means we do a left join that allows null value (if the event is recurring, the timeline of the programScheduledItem is null)
+                // Note: `programScheduledItem.timeline?.startTime` means we do a left join that allows null value (if the event is recurring, the timeline of the programScheduledItem is null)
                 entityStore.<ScheduledItem>executeQueryWithCache("modality/event/video-streaming/scheduled-items",
                         """
                             select name, label, date, comment, commentLabel, expirationDate, programScheduledItem.(name, label, startTime, endTime, timeline.(startTime, endTime), cancelled), published, event.(name, type.recurringItem, livestreamUrl, recurringWithVideo, livestreamMessageLabel), vodDelayed,
@@ -174,9 +176,9 @@ final class VideoStreamingActivity extends ViewDomainActivityBase {
                                 and exists(select Attendance a
                                  where scheduledItem=si.bookableScheduledItem
                                     and documentLine.(!cancelled and document.(event=$5 and accountCanAccessPersonMedias($1, person))))
-                             order by date, programScheduledItem.timeline..startTime""",
+                             order by date, programScheduledItem.timeline?.startTime""",
                         /*$1*/ userAccountId, /*$2*/ eventContainingVideos, /*$3*/ KnownItemFamily.TEACHING.getCode(), /*$4*/ KnownItem.VIDEO.getCode(), /*$5*/ event)
-                    .onFailure(Console::log)
+                    .onFailure(Console::error)
                     .inUiThread()
                     .onCacheAndOrSuccess(videoScheduledItems::setAll); // Will trigger the build of the video table.
             }
@@ -277,7 +279,7 @@ final class VideoStreamingActivity extends ViewDomainActivityBase {
         pageContainer.setContent(loadedContentVBox);
         // and ensure the program is displayed in the appropriate mode (Ex: Festival or STTP)
         timetable.updateProgramDisplayMode();
-        pageContainer.getStyleClass().add("livestream");
+        pageContainer.getStyleClass().add(livestream);
         return FOPageUtil.restrictToMaxPageWidthAndApplyPageLeftTopRightBottomPadding(pageContainer);
     }
 

@@ -77,9 +77,9 @@ public abstract class MediaLinksManagement {
         entityStore.<Media>executeQuery("""
                     select url, scheduledItem.(name, item.code, date, published, programScheduledItem.name)
                      from Media
-                     where scheduledItem.event= ? and scheduledItem.item.code = ?""",
+                     where scheduledItem.event= $1 and scheduledItem.item.code = $2""",
                 FXEvent.getEvent(), currentItemCode)
-            .onFailure(Console::log)
+            .onFailure(Console::error)
             .inUiThread()
             .onSuccess(recordingsMediasReadFromDatabase::setAll);
     }
@@ -358,7 +358,7 @@ public abstract class MediaLinksManagement {
                 if (validationSupport.isValid()) {
                     AsyncSpinner.displayButtonSpinnerDuringAsyncExecution(
                         updateStore.submitChanges()
-                            .onFailure(Console::log)
+                            .onFailure(Console::error)
                             .inUiThread()
                             .onSuccess(x -> resetUpdateStoreAndOtherComponents())
                         , saveButton);
