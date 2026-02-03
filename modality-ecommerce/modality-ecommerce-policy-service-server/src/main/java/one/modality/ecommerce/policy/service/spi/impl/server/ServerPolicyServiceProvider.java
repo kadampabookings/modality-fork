@@ -62,6 +62,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
         "select scope.(organization,site,eventType,event)" +
         ",itemFamily.ord" +
         ",eventPhaseCoverage1,eventPhaseCoverage2,eventPhaseCoverage3,eventPhaseCoverage4" +
+        ",noticeLabel,prerequisiteDescriptionLabel,prerequisiteConfirmationLabel" +
         " from ItemFamilyPolicy ifp";
     private final static String ITEM_POLICIES_QUERY_BASE =
         "select scope.(organization,site,eventType,event)" +
