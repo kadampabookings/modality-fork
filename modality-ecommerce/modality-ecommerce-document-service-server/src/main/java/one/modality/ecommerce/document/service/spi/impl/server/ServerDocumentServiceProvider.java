@@ -56,7 +56,7 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
         Object docPk = argument.documentPrimaryKey();
         EntityStoreQuery[] queries = {
             // 0 - Loading document
-            new EntityStoreQuery("select event,person,ref,person_lang,person_firstName,person_lastName,person_email,person_facilityFee,request,personCarer1Name, personCarer1Document, personCarer2Name, personCarer2Document from Document where id=$1 order by id", docPk),
+            new EntityStoreQuery("select event,person,ref,person_lang,person_firstName,person_lastName,person_email,person_facilityFee,request,person_carer1Name, person_carer1Document, person_carer2Name, person_carer2Document from Document where id=$1 order by id", docPk),
             // 1 - Loading document lines
             new EntityStoreQuery("select document,site,item,price_net,price_minDeposit,price_custom,price_discount" +
                                  ",share_owner,share_owner_mate1Name,share_owner_mate2Name,share_owner_mate3Name,share_owner_mate4Name,share_owner_mate5Name,share_owner_mate6Name,share_owner_mate7Name" +
@@ -76,7 +76,7 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
                 .replace("%limit%", limitTo1 ? "limit 1" : "");
             Object[] queryArguments = {personProvided ? argument.personPrimaryKey() : argument.accountPrimaryKey(), argument.eventPrimaryKey()};
             if (docPk != null) {
-                queryReplacement = queryReplacement.replace(") order by", " or id=$2) order by");
+                queryReplacement = queryReplacement.replace(") order by", " or id=$3) order by");
                 queryArguments = Arrays.add(Object[]::new, queryArguments, docPk);
             }
             for (int i = 0; i < queries.length; i++) {

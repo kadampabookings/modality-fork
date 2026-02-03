@@ -597,9 +597,8 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
             alreadyBookedItemIds.add(bookedItem.getPrimaryKey());
         }
 
-        // PolicyAggregate.getScheduledItems() already returns only bookable items
-        // (server-side filtered by bookableScheduledItem=id in ServerDocumentServiceProvider)
-        List<ScheduledItem> scheduledItems = policyAggregate.getScheduledItems().stream()
+        // Filter to only teaching-type scheduled items for class booking
+        List<ScheduledItem> scheduledItems = policyAggregate.filterTeachingScheduledItems().stream()
                 .sorted((a, b) -> {
                     if (a.getDate() == null || b.getDate() == null) return 0;
                     return a.getDate().compareTo(b.getDate());

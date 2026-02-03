@@ -18,6 +18,9 @@ public interface ItemFamilyPolicy extends Entity,
     String eventPhaseCoverage2 = "eventPhaseCoverage2";
     String eventPhaseCoverage3 = "eventPhaseCoverage3";
     String eventPhaseCoverage4 = "eventPhaseCoverage4";
+    String noticeLabel = "noticeLabel";
+    String prerequisiteDescriptionLabel = "prerequisiteDescriptionLabel";
+    String prerequisiteConfirmationLabel = "prerequisiteConfirmationLabel";
 
     default void setScope(Object value) {
         setForeignField(scope, value);
@@ -82,5 +85,45 @@ public interface ItemFamilyPolicy extends Entity,
     List<EventPhaseCoverage> getEventPhaseCoverages(); // implemented in ItemFamilyPolicyImpl
 
     void setEventPhaseCoverages(List<EventPhaseCoverage> phaseCoverages); // implemented in ItemFamilyPolicyImpl
+
+    default void setNoticeLabel(Object value) {
+        setForeignField(noticeLabel, value);
+    }
+
+    default EntityId getNoticeLabelId() {
+        return getForeignEntityId(noticeLabel);
+    }
+
+    default Label getNoticeLabel() {
+        return getForeignEntity(noticeLabel);
+    }
+
+    default boolean hasPrerequisite() {
+        return getPrerequisiteDescriptionLabelId() != null || getPrerequisiteConfirmationLabelId() != null;
+    }
+
+    default void setPrerequisiteDescriptionLabel(Object value) {
+        setForeignField(prerequisiteDescriptionLabel, value);
+    }
+
+    default EntityId getPrerequisiteDescriptionLabelId() {
+        return getForeignEntityId(prerequisiteDescriptionLabel);
+    }
+
+    default Label getPrerequisiteDescriptionLabel() {
+        return getForeignEntity(prerequisiteDescriptionLabel);
+    }
+
+    default void setPrerequisiteConfirmationLabel(Object value) {
+        setForeignField(prerequisiteConfirmationLabel, value);
+    }
+
+    default EntityId getPrerequisiteConfirmationLabelId() {
+        return getForeignEntityId(prerequisiteConfirmationLabel);
+    }
+
+    default Label getPrerequisiteConfirmationLabel() {
+        return getForeignEntity(prerequisiteConfirmationLabel);
+    }
 
 }
