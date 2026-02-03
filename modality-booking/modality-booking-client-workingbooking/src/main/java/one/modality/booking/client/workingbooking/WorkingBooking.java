@@ -273,7 +273,7 @@ public final class WorkingBooking {
             return newAttendance;
         }).filter(Objects::nonNull).toArray(Attendance[]::new);
         if (newAttendances.length > 0)
-            integrateNewDocumentEvent(new AddAttendancesEvent(newAttendances), false);
+            integrateNewDocumentEvent(new AddAttendancesEvent(newAttendances, item.getItemFamilyType() == KnownItemFamily.TEACHING && getEvent().isOnlineAllowed()), false);
         if (replaceExistingDates) {
             // We remove all existing attendances not referencing the passed dates or scheduledItems
             List<Attendance> attendancesToRemove = Collections.filter(existingAttendances, a ->
