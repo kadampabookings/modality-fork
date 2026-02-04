@@ -10,12 +10,20 @@ import java.time.LocalDate;
  */
 public final class AddAttendancesEvent extends AbstractAttendancesEvent {
 
-    public AddAttendancesEvent(Attendance[] attendances) {
+    private final boolean videoAccessEnabled;
+
+    public AddAttendancesEvent(Attendance[] attendances, boolean videoAccessEnabled) {
         super(attendances);
+        this.videoAccessEnabled = videoAccessEnabled;
     }
 
-    public AddAttendancesEvent(Object documentPrimaryKey, Object documentLinePrimaryKey, Object[] attendancesPrimaryKeys, Object[] scheduledItemsPrimaryKeys, LocalDate[] dates) {
+    public AddAttendancesEvent(Object documentPrimaryKey, Object documentLinePrimaryKey, Object[] attendancesPrimaryKeys, Object[] scheduledItemsPrimaryKeys, LocalDate[] dates, boolean videoAccessEnabled) {
         super(documentPrimaryKey, documentLinePrimaryKey, attendancesPrimaryKeys, scheduledItemsPrimaryKeys, dates);
+        this.videoAccessEnabled = videoAccessEnabled;
+    }
+
+    public boolean isVideoAccessEnabled() {
+        return videoAccessEnabled;
     }
 
     @Override
@@ -23,5 +31,13 @@ public final class AddAttendancesEvent extends AbstractAttendancesEvent {
         if (isForSubmit())
             return updateStore.insertEntity(Attendance.class, attendancePrimaryKey);
         return super.createAttendance(attendancePrimaryKey);
+    }
+
+    @Override
+    protected void replayEventOnAttendances() {
+        super.replayEventOnAttendances();
+        for (Attendance attendance : getAttendances()) {
+            attendance.setVideoAccessEnabled(videoAccessEnabled);
+        }
     }
 }

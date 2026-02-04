@@ -221,8 +221,8 @@ public final class DocumentEvents {
     }
 
     private static AbstractAttendancesEvent cloneWithNewAttendances(AbstractAttendancesEvent event, Attendance[] attendances) {
-        if (event instanceof AddAttendancesEvent)
-            return new AddAttendancesEvent(attendances);
+        if (event instanceof AddAttendancesEvent eventWithAttendances)
+            return new AddAttendancesEvent(attendances, eventWithAttendances.isVideoAccessEnabled());
 
         if (event instanceof RemoveAttendancesEvent)
             return new RemoveAttendancesEvent(attendances);
