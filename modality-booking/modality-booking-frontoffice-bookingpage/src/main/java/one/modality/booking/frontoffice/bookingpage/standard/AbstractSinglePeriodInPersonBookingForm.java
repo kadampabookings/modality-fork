@@ -50,6 +50,7 @@ import one.modality.booking.frontoffice.bookingpage.sections.user.HasYourInforma
 import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
 import one.modality.booking.frontoffice.bookingpage.util.BookingDateFormatter;
 import one.modality.crm.shared.services.authn.fx.FXUserPerson;
+import one.modality.ecommerce.document.service.DocumentAggregate;
 import one.modality.ecommerce.policy.service.PolicyAggregate;
 import one.modality.ecommerce.shared.pricecalculator.PriceCalculator;
 import one.modality.event.frontoffice.activities.book.event.EventBookingFormSettings;
@@ -1111,7 +1112,7 @@ public abstract class AbstractSinglePeriodInPersonBookingForm implements Standar
      */
     protected int calculateAccommodationPrice(PolicyAggregate policyAggregate, Item accommodationItem,
                                                LocalDate arrivalDate, LocalDate departureDate) {
-        WorkingBooking tempBooking = new WorkingBooking(policyAggregate, null);
+        WorkingBooking tempBooking = new WorkingBooking(policyAggregate, (DocumentAggregate) null);
 
         // Book teachings (inclusive period: arrivalDate to departureDate)
         Period teachingPeriod = createSimplePeriod(arrivalDate, departureDate);
@@ -1195,7 +1196,7 @@ public abstract class AbstractSinglePeriodInPersonBookingForm implements Standar
 
     protected int calculateShareAccommodationPrice(PolicyAggregate policyAggregate, Item sharingItem,
                                                     LocalDate arrivalDate, LocalDate departureDate) {
-        WorkingBooking tempBooking = new WorkingBooking(policyAggregate, null);
+        WorkingBooking tempBooking = new WorkingBooking(policyAggregate, (DocumentAggregate) null);
 
         // Book teachings (inclusive period: arrivalDate to departureDate)
         Period teachingPeriod = createSimplePeriod(arrivalDate, departureDate);
@@ -1258,19 +1259,6 @@ public abstract class AbstractSinglePeriodInPersonBookingForm implements Standar
         );
 
         accommodationSection.addAccommodationOption(option);
-    }
-
-    protected int calculateDayVisitorPrice(PolicyAggregate policyAggregate, LocalDate arrivalDate, LocalDate departureDate) {
-        WorkingBooking tempBooking = new WorkingBooking(policyAggregate, null);
-
-        // Book teachings (inclusive period: arrivalDate to departureDate)
-        Period teachingPeriod = createSimplePeriod(arrivalDate, departureDate);
-        tempBooking.bookScheduledItemsOverPeriod(policyAggregate.filterTeachingScheduledItems(), teachingPeriod, true);
-
-        // Book meals (no breakfast for day visitors)
-        bookMealsForPriceCalculation(tempBooking, policyAggregate, arrivalDate, departureDate, false);
-
-        return tempBooking.calculateTotal();
     }
 
     /**
@@ -1651,7 +1639,7 @@ public abstract class AbstractSinglePeriodInPersonBookingForm implements Standar
      */
     protected AccommodationPriceResult calculateAccommodationPriceWithBreakdown(PolicyAggregate policyAggregate, Item accommodationItem,
                                                                                  LocalDate arrivalDate, LocalDate departureDate, Integer accommodationAvailability) {
-        WorkingBooking tempBooking = new WorkingBooking(policyAggregate, null);
+        WorkingBooking tempBooking = new WorkingBooking(policyAggregate, (DocumentAggregate) null);
 
         LocalDate teachingMinDate = null;
         LocalDate teachingMaxDate = null;
@@ -1721,7 +1709,7 @@ public abstract class AbstractSinglePeriodInPersonBookingForm implements Standar
      */
     protected AccommodationPriceResult calculateShareAccommodationPriceWithBreakdown(PolicyAggregate policyAggregate, Item sharingItem,
                                                                                       LocalDate arrivalDate, LocalDate departureDate) {
-        WorkingBooking tempBooking = new WorkingBooking(policyAggregate, null);
+        WorkingBooking tempBooking = new WorkingBooking(policyAggregate, (DocumentAggregate) null);
 
         LocalDate teachingMinDate = null;
         LocalDate teachingMaxDate = null;
@@ -1791,7 +1779,7 @@ public abstract class AbstractSinglePeriodInPersonBookingForm implements Standar
      * Calculates day visitor price with detailed breakdown.
      */
     protected AccommodationPriceResult calculateDayVisitorPriceWithBreakdown(PolicyAggregate policyAggregate, LocalDate arrivalDate, LocalDate departureDate) {
-        WorkingBooking tempBooking = new WorkingBooking(policyAggregate, null);
+        WorkingBooking tempBooking = new WorkingBooking(policyAggregate, (DocumentAggregate) null);
 
         LocalDate teachingMinDate = null;
         LocalDate teachingMaxDate = null;

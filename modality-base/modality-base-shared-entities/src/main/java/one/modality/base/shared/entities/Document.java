@@ -193,7 +193,7 @@ public interface Document extends
     }
 
     default void setAttendanceMode(AttendanceMode value) {
-        setInPerson(value == null ? null : value == AttendanceMode.IN_PERSON);
+        setInPerson(value == null || value == AttendanceMode.IN_PERSON);
     }
 
     default Document getCarer1Document() {
