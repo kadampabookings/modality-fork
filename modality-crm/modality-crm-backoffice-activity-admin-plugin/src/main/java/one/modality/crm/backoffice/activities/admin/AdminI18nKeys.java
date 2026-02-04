@@ -1,7 +1,7 @@
 // File managed by WebFX (DO NOT EDIT MANUALLY)
 package one.modality.crm.backoffice.activities.admin;
 
-public interface Admin18nKeysI18nKeys {
+public interface AdminI18nKeys {
 
     Object AccessTypeLabel = "AccessTypeLabel";
     Object AdminMenu = "AdminMenu";

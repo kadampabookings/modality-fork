@@ -17,7 +17,7 @@ import one.modality.base.shared.entities.AuthorizationOrganizationUserAccess;
 import one.modality.base.shared.entities.Event;
 import one.modality.base.shared.entities.Person;
 
-import static one.modality.crm.backoffice.activities.admin.Admin18nKeys.*;
+import static one.modality.crm.backoffice.activities.admin.AdminI18nKeys.*;
 
 /**
  * Custom renderers for UserManagementView grid columns.

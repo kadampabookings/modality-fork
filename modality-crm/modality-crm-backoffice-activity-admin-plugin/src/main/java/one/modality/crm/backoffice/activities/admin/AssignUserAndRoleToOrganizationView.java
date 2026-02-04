@@ -35,7 +35,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import static one.modality.crm.backoffice.activities.admin.Admin18nKeys.*;
+import static one.modality.crm.backoffice.activities.admin.AdminI18nKeys.*;
 
 /**
  * User Management view for managers to assign roles to users within their organizations.

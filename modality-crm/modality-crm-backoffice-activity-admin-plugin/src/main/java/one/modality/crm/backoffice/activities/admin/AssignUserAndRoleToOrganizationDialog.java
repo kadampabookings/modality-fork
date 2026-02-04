@@ -30,7 +30,7 @@ import one.modality.base.shared.entities.Organization;
 import one.modality.base.shared.entities.Person;
 import one.modality.crm.backoffice.organization.fx.FXOrganization;
 
-import static one.modality.crm.backoffice.activities.admin.Admin18nKeys.*;
+import static one.modality.crm.backoffice.activities.admin.AdminI18nKeys.*;
 
 /**
  * Dialog for assigning roles to users within an organization.
