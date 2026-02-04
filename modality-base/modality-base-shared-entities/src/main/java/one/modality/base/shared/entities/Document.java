@@ -187,6 +187,15 @@ public interface Document extends
         setFieldValue(inPerson, value);
     }
 
+    default AttendanceMode getAttendanceMode() {
+        Boolean inPerson = isInPerson();
+        return inPerson == null ? null : inPerson ? AttendanceMode.IN_PERSON : AttendanceMode.ONLINE;
+    }
+
+    default void setAttendanceMode(AttendanceMode value) {
+        setInPerson(value == null ? null : value == AttendanceMode.IN_PERSON);
+    }
+
     default Document getCarer1Document() {
         return getForeignEntity(carer1Document);
     }
