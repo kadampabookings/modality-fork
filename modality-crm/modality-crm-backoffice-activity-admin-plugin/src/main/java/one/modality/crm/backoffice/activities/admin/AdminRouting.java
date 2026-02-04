@@ -51,7 +51,7 @@ public final class AdminRouting {
 
         @Override
         public Object getI18nKey() {
-            return Admin18nKeys.AdminMenu;
+            return AdminI18nKeys.AdminMenu;
         }
     }
 
