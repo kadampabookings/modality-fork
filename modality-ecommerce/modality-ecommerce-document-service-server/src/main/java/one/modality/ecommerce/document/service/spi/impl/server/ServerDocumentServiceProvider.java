@@ -56,7 +56,7 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
         Object docPk = argument.documentPrimaryKey();
         EntityStoreQuery[] queries = {
             // 0 - Loading document
-            new EntityStoreQuery("select event,person,ref,person_lang,person_firstName,person_lastName,person_email,person_facilityFee,request,person_carer1Name, person_carer1Document, person_carer2Name, person_carer2Document from Document where id=$1 order by id", docPk),
+            new EntityStoreQuery("select event,person,ref,inPerson,person_lang,person_firstName,person_lastName,person_email,person_facilityFee,request,person_carer1Name, person_carer1Document, person_carer2Name, person_carer2Document from Document where id=$1 order by id", docPk),
             // 1 - Loading document lines
             new EntityStoreQuery("select document,site,item,price_net,price_minDeposit,price_custom,price_discount" +
                                  ",share_owner,share_owner_mate1Name,share_owner_mate2Name,share_owner_mate3Name,share_owner_mate4Name,share_owner_mate5Name,share_owner_mate6Name,share_owner_mate7Name" +
@@ -64,7 +64,7 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
                                  ",resourceConfiguration,allocate" +
                                  " from DocumentLine where document=$1 and site!=null order by id", docPk),
             // 2 - Loading attendances
-            new EntityStoreQuery("select documentLine,scheduledItem,date from Attendance where documentLine.document=$1 order by id", docPk),
+            new EntityStoreQuery("select documentLine,date,scheduledItem,videoAccessEnabled from Attendance where present and documentLine.document=$1 order by id", docPk),
             // 3 - Loading money transfers
             new EntityStoreQuery("select document,amount,pending,successful from MoneyTransfer where document=$1 order by id", docPk)
         };
@@ -124,7 +124,8 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
                 ((List<Attendance>) entityLists[2]).stream().collect(Collectors.groupingBy(Attendance::getDocumentLine))
                     .forEach((documentLine, attendances) -> {
                         List<AbstractDocumentEvent> documentEvents = allDocumentEvents.get(documentLine.getDocument());
-                        documentEvents.add(new AddAttendancesEvent(attendances.toArray(new Attendance[0])));
+                        Attendance firstAttendance = Collections.first(attendances);
+                        documentEvents.add(new AddAttendancesEvent(attendances.toArray(new Attendance[0]), firstAttendance != null && firstAttendance.isVideoAccessEnabled()));
                     });
                 // Aggregating money transfers by Adding AddMoneyTransferEvent
                 ((List<MoneyTransfer>) entityLists[3]).forEach(moneyTransfer -> {

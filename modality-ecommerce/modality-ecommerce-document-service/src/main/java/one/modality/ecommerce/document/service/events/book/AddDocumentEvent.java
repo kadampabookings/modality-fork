@@ -12,6 +12,7 @@ import one.modality.ecommerce.document.service.events.AbstractDocumentEvent;
 public final class AddDocumentEvent extends AbstractDocumentEvent {
 
     private final Object eventPrimaryKey;
+    private final boolean inPerson;
     private String personLang;
     // Booking with an account
     private Person person; // not serialized
@@ -26,6 +27,7 @@ public final class AddDocumentEvent extends AbstractDocumentEvent {
     public AddDocumentEvent(Document document) {
         super(document);
         eventPrimaryKey = Entities.getPrimaryKey(document.getEvent());
+        inPerson = document.isInPerson();
         personLang = document.getPersonLang();
         personPrimaryKey = Entities.getPrimaryKey(document.getPerson());
         firstName = document.getFirstName();
@@ -34,9 +36,10 @@ public final class AddDocumentEvent extends AbstractDocumentEvent {
         ref = document.getRef();
     }
 
-    public AddDocumentEvent(Object documentPrimaryKey, Object eventPrimaryKey, String personLang, Object personPrimaryKey, String firstName, String lastName, String email, Integer ref) {
+    public AddDocumentEvent(Object documentPrimaryKey, Object eventPrimaryKey, boolean inPerson, String personLang, Object personPrimaryKey, String firstName, String lastName, String email, Integer ref) {
         super(documentPrimaryKey);
         this.eventPrimaryKey = eventPrimaryKey;
+        this.inPerson = inPerson;
         this.personLang = personLang;
         this.personPrimaryKey = personPrimaryKey;
         this.firstName = firstName;
@@ -47,6 +50,10 @@ public final class AddDocumentEvent extends AbstractDocumentEvent {
 
     public Object getEventPrimaryKey() {
         return eventPrimaryKey;
+    }
+
+    public boolean isInPerson() {
+        return inPerson;
     }
 
     public String getPersonLang() {
@@ -120,6 +127,7 @@ public final class AddDocumentEvent extends AbstractDocumentEvent {
     public void replayEventOnDocument() {
         super.replayEventOnDocument();
         document.setEvent(isForSubmit() ? getEventPrimaryKey() : entityStore.getOrCreateEntity(Event.class, getEventPrimaryKey()));
+        document.setInPerson(inPerson);
         document.setPersonLang(personLang);
         if (person != null)
             document.setPerson(person);

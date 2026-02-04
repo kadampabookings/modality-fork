@@ -45,6 +45,7 @@ public final class WorkingBooking {
 
     private final PolicyAggregate policyAggregate;
     private DocumentAggregate initialDocumentAggregate; // null for new bookings
+    private final AttendanceMode attendanceMode;
     private final ObservableList<AbstractDocumentEvent> documentChanges = FXCollections.observableArrayList();
     // Making notEmptyBinding a class field to prevent GC in OpenJFX
     private final BooleanBinding notEmptyBinding = ObservableLists.isNotEmpty(documentChanges);
@@ -71,13 +72,25 @@ public final class WorkingBooking {
     // 2) isPaymentRequestedByUser() == true => existing, saved booking the user requested to pay from Orders page
     // 3) otherwise => existing booking that the user requested to modify from Orders page
 
+    // This is the constructor to call for new bookings
+    public WorkingBooking(PolicyAggregate policyAggregate, AttendanceMode attendanceMode) {
+        this(policyAggregate, null, attendanceMode, null);
+    }
+
+    // This is the constructor to call for working on existing bookings (modifying bookings)
     public WorkingBooking(PolicyAggregate policyAggregate, DocumentAggregate initialDocumentAggregate) {
         this(policyAggregate, initialDocumentAggregate, null);
     }
 
+    // This is the constructor to call for working on existing bookings in the context of payments (ex: /pay-order/:docId)
     public WorkingBooking(PolicyAggregate policyAggregate, DocumentAggregate initialDocumentAggregate, Object paymentRequestedByUserDocumentId) {
+        this(policyAggregate, initialDocumentAggregate, null, paymentRequestedByUserDocumentId);
+    }
+
+    private WorkingBooking(PolicyAggregate policyAggregate, DocumentAggregate initialDocumentAggregate, AttendanceMode attendanceMode, Object paymentRequestedByUserDocumentId) {
         this.policyAggregate = policyAggregate;
         this.initialDocumentAggregate = initialDocumentAggregate;
+        this.attendanceMode = initialDocumentAggregate != null ? initialDocumentAggregate.getDocument().getAttendanceMode() : attendanceMode;
         if (initialDocumentAggregate != null) // Case of existing booking
             initialDocumentAggregate.setPolicyAggregate(policyAggregate);
         cancelChanges(); // sounds a bit weired, but this will actually initialize the document
@@ -272,8 +285,11 @@ public final class WorkingBooking {
                 newAttendance.setDate((LocalDate) dateOrScheduledItem);
             return newAttendance;
         }).filter(Objects::nonNull).toArray(Attendance[]::new);
-        if (newAttendances.length > 0)
-            integrateNewDocumentEvent(new AddAttendancesEvent(newAttendances), false);
+        if (newAttendances.length > 0) {
+            // Video access is enabled by default for people attending teaching online
+            boolean videoAccessEnabled = item.getItemFamilyType() == KnownItemFamily.TEACHING && !document.isInPerson();
+            integrateNewDocumentEvent(new AddAttendancesEvent(newAttendances, videoAccessEnabled), false);
+        }
         if (replaceExistingDates) {
             // We remove all existing attendances not referencing the passed dates or scheduledItems
             List<Attendance> attendancesToRemove = Collections.filter(existingAttendances, a ->
@@ -457,6 +473,7 @@ public final class WorkingBooking {
                 document = getEntityStore().createEntity(Document.class);
                 document.setEvent(getEvent());
                 document.setPerson(FXPersonToBook.getPersonToBook());
+                document.setAttendanceMode(attendanceMode);
                 integrateNewDocumentEvent(new AddDocumentEvent(document), false);
             } else { // Case of new booking once submitted
                 document = getEntityStore().createEntity(Document.class, documentPrimaryKey);
@@ -669,12 +686,6 @@ public final class WorkingBooking {
 
     // Static factory and loading methods
 
-    public static WorkingBooking createWholeEventWorkingBooking(PolicyAggregate policyAggregate) {
-        WorkingBooking workingBooking = new WorkingBooking(policyAggregate, null);
-        workingBooking.bookWholeEvent();
-        return workingBooking;
-    }
-
     public static Future<WorkingBooking> loadWorkingBooking(Document document) {
         return DocumentService.loadDocumentWithPolicy(document)
             .map(policyAndDocumentAggregates -> {
@@ -684,9 +695,16 @@ public final class WorkingBooking {
             });
     }
 
-    public static WorkingBooking ofSiteItemsOverPeriod(PolicyAggregate policyAggregate, List<SiteItem> siteItems, Period period) {
-        WorkingBooking workingBooking = new WorkingBooking(policyAggregate, null);
+    public static WorkingBooking ofSiteItemsOverPeriod(PolicyAggregate policyAggregate, List<SiteItem> siteItems, Period period, AttendanceMode attendanceMode) {
+        WorkingBooking workingBooking = new WorkingBooking(policyAggregate, attendanceMode);
         workingBooking.bookSiteItemsOverPeriod(siteItems, period);
+        return workingBooking;
+    }
+
+    @Deprecated
+    public static WorkingBooking createWholeEventWorkingBooking(PolicyAggregate policyAggregate) {
+        WorkingBooking workingBooking = new WorkingBooking(policyAggregate, AttendanceMode.IN_PERSON);
+        workingBooking.bookWholeEvent();
         return workingBooking;
     }
 

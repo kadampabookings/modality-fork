@@ -6,12 +6,8 @@ import dev.webfx.extras.i18n.controls.I18nControls;
 import dev.webfx.extras.panes.MonoPane;
 import dev.webfx.extras.styles.bootstrap.Bootstrap;
 import javafx.animation.PauseTransition;
-
-import static one.modality.crm.backoffice.activities.admin.Admin18nKeys.*;
-import javafx.geometry.Bounds;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
-import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
@@ -28,6 +24,8 @@ import one.modality.base.client.mainframe.fx.FXMainFrameDialogArea;
 import one.modality.base.shared.entities.Label;
 
 import java.util.Map;
+
+import static one.modality.crm.backoffice.activities.admin.AdminI18nKeys.*;
 
 /**
  * Custom renderers for LabelEditorView grid columns.

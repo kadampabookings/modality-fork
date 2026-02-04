@@ -29,7 +29,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static one.modality.crm.backoffice.activities.admin.Admin18nKeys.*;
+import static one.modality.crm.backoffice.activities.admin.AdminI18nKeys.*;
 
 /**
  * Dialog for creating and editing labels with multilingual support.

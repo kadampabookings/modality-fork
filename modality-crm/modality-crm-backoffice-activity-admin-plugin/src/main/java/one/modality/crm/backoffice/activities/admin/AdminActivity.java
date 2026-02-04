@@ -10,7 +10,7 @@ import one.modality.base.client.tile.TabsBar;
 
 import java.util.List;
 
-import static one.modality.crm.backoffice.activities.admin.Admin18nKeys.*;
+import static one.modality.crm.backoffice.activities.admin.AdminI18nKeys.*;
 
 /**
  * Rights Management activity with two main views:

@@ -32,7 +32,7 @@ import one.modality.crm.backoffice.organization.fx.FXOrganizationId;
 import java.util.HashMap;
 import java.util.Map;
 
-import static one.modality.crm.backoffice.activities.admin.Admin18nKeys.*;
+import static one.modality.crm.backoffice.activities.admin.AdminI18nKeys.*;
 
 /**
  * Label Editor view for managing multilingual labels.
