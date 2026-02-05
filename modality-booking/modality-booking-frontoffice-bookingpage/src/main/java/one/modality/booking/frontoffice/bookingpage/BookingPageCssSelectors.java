@@ -71,6 +71,9 @@ public interface BookingPageCssSelectors {
     String booking_form_user_badge_content = "booking-form-user-badge-content";
     String booking_form_user_dropdown = "booking-form-user-dropdown";
     String booking_form_user_dropdown_header = "booking-form-user-dropdown-header";
+    String bookingpage_attendance_card = "bookingpage-attendance-card";
+    String bookingpage_attendance_icon = "bookingpage-attendance-icon";
+    String bookingpage_attendance_icon_circle = "bookingpage-attendance-icon-circle";
     String bookingpage_badge = "bookingpage-badge";
     String bookingpage_badge_coming_soon = "bookingpage-badge-coming-soon";
     String bookingpage_badge_constraint = "bookingpage-badge-constraint";
@@ -115,8 +118,19 @@ public interface BookingPageCssSelectors {
     String bookingpage_checkbox = "bookingpage-checkbox";
     String bookingpage_checkbox_card = "bookingpage-checkbox-card";
     String bookingpage_checkbox_selected = "bookingpage-checkbox-selected";
+    String bookingpage_childcarer_avatar = "bookingpage-childcarer-avatar";
+    String bookingpage_childcarer_avatar_external = "bookingpage-childcarer-avatar-external";
+    String bookingpage_childcarer_card = "bookingpage-childcarer-card";
+    String bookingpage_childcarer_checkbox = "bookingpage-childcarer-checkbox";
+    String bookingpage_childcarer_external_fields = "bookingpage-childcarer-external-fields";
+    String bookingpage_childcarer_indicator = "bookingpage-childcarer-indicator";
+    String bookingpage_childcarer_policy = "bookingpage-childcarer-policy";
     String bookingpage_confirmation_check_circle = "bookingpage-confirmation-check-circle";
     String bookingpage_date_card_past = "bookingpage-date-card-past";
+    String bookingpage_date_picker_instruction = "bookingpage-date-picker-instruction";
+    String bookingpage_date_selector_card = "bookingpage-date-selector-card";
+    String bookingpage_date_selector_label = "bookingpage-date-selector-label";
+    String bookingpage_date_selector_value = "bookingpage-date-selector-value";
     String bookingpage_decline_reason_card = "bookingpage-decline-reason-card";
     String bookingpage_decline_reason_header = "bookingpage-decline-reason-header";
     String bookingpage_decline_reason_message = "bookingpage-decline-reason-message";
@@ -151,6 +165,7 @@ public interface BookingPageCssSelectors {
     String bookingpage_icon_circle_themed = "bookingpage-icon-circle-themed";
     String bookingpage_icon_dark = "bookingpage-icon-dark";
     String bookingpage_icon_muted = "bookingpage-icon-muted";
+    String bookingpage_icon_on_primary = "bookingpage-icon-on-primary";
     String bookingpage_icon_primary = "bookingpage-icon-primary";
     String bookingpage_info_banner = "bookingpage-info-banner";
     String bookingpage_info_box = "bookingpage-info-box";
@@ -176,6 +191,7 @@ public interface BookingPageCssSelectors {
     String bookingpage_no_accommodation_line = "bookingpage-no-accommodation-line";
     String bookingpage_no_accommodation_pill = "bookingpage-no-accommodation-pill";
     String bookingpage_no_accommodation_text = "bookingpage-no-accommodation-text";
+    String bookingpage_ordained_badge = "bookingpage-ordained-badge";
     String bookingpage_orders_link = "bookingpage-orders-link";
     String bookingpage_parking_subsection = "bookingpage-parking-subsection";
     String bookingpage_parking_type = "bookingpage-parking-type";
@@ -204,6 +220,9 @@ public interface BookingPageCssSelectors {
     String bookingpage_registration_type_icon_circle = "bookingpage-registration-type-icon-circle";
     String bookingpage_registration_type_section = "bookingpage-registration-type-section";
     String bookingpage_required_asterisk = "bookingpage-required-asterisk";
+    String bookingpage_room_checkmark_circle = "bookingpage-room-checkmark-circle";
+    String bookingpage_room_checkmark_icon = "bookingpage-room-checkmark-icon";
+    String bookingpage_room_options_container = "bookingpage-room-options-container";
     String bookingpage_rounded = "bookingpage-rounded";
     String bookingpage_rounded_full = "bookingpage-rounded-full";
     String bookingpage_rounded_lg = "bookingpage-rounded-lg";

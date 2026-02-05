@@ -172,9 +172,12 @@ public interface BookingPageI18nKeys {
     Object CurrentlyProcessingBooking = "CurrentlyProcessingBooking";
     Object CustomAmount = "CustomAmount";
     Object CustomAmountRange = "CustomAmountRange";
+    Object CustomizeYourFestivalExperience = "CustomizeYourFestivalExperience";
     Object Dates = "Dates";
+    Object DatesOfAttendance = "DatesOfAttendance";
     Object DayVisitor = "DayVisitor";
     Object DayVisitorDescription = "DayVisitorDescription";
+    Object DayVisitorInfo = "DayVisitorInfo";
     Object Days = "Days";
     Object DeclineReason = "DeclineReason";
     Object DepartsAt = "DepartsAt";
@@ -198,6 +201,7 @@ public interface BookingPageI18nKeys {
     Object DueToHighDemandSoldOut = "DueToHighDemandSoldOut";
     Object EarlyArrival = "EarlyArrival";
     Object EarlyArrivalMealPrice = "EarlyArrivalMealPrice";
+    Object EarlyArrivalNotAvailable = "EarlyArrivalNotAvailable";
     Object EmailAddress = "EmailAddress";
     Object EmailMayTakeUpTo1Minute = "EmailMayTakeUpTo1Minute";
     Object EmailPlaceholder = "EmailPlaceholder";
@@ -286,9 +290,11 @@ public interface BookingPageI18nKeys {
     Object LastNameRequired = "LastNameRequired";
     Object LateDeparture = "LateDeparture";
     Object LateDepartureMealPrice = "LateDepartureMealPrice";
+    Object LateDepartureNotAvailable = "LateDepartureNotAvailable";
     Object LeaveQueueAndEditBooking = "LeaveQueueAndEditBooking";
     Object LimitedAvailability = "LimitedAvailability";
     Object LimitedParkingAvailable = "LimitedParkingAvailable";
+    Object LivestreamOnlyWarning = "LivestreamOnlyWarning";
     Object Loading = "Loading";
     Object Lunch = "Lunch";
     Object MakingImprovements = "MakingImprovements";
@@ -331,6 +337,9 @@ public interface BookingPageI18nKeys {
     Object Online = "Online";
     Object OnlineDescription = "OnlineDescription";
     Object OnlineRegistration = "OnlineRegistration";
+    Object Onsite = "Onsite";
+    Object OnsiteDescription = "OnsiteDescription";
+    Object Ordained = "Ordained";
     Object Orders = "Orders";
     Object OrdinationCeremony = "OrdinationCeremony";
     Object OrdinationCeremonyInfo = "OrdinationCeremonyInfo";
@@ -392,6 +401,7 @@ public interface BookingPageI18nKeys {
     Object PeopleCount = "PeopleCount";
     Object PeopleOnYourAccount = "PeopleOnYourAccount";
     Object PerClass = "PerClass";
+    Object PerNight = "PerNight";
     Object PerNightFormat = "PerNightFormat";
     Object PerPerson = "PerPerson";
     Object PerRoom = "PerRoom";
@@ -477,8 +487,11 @@ public interface BookingPageI18nKeys {
     Object RoommatesRequiredWarning = "RoommatesRequiredWarning";
     Object Seconds = "Seconds";
     Object Select = "Select";
+    Object SelectArrivalDate = "SelectArrivalDate";
     Object SelectArrivalDateForShuttle = "SelectArrivalDateForShuttle";
     Object SelectClassesPageTitle = "SelectClassesPageTitle";
+    Object SelectDate = "SelectDate";
+    Object SelectDepartureDate = "SelectDepartureDate";
     Object SelectDepartureDateForShuttle = "SelectDepartureDateForShuttle";
     Object SelectFromHousehold = "SelectFromHousehold";
     Object SelectInPerson = "SelectInPerson";
@@ -490,6 +503,7 @@ public interface BookingPageI18nKeys {
     Object SelectPersonOrAddNew = "SelectPersonOrAddNew";
     Object SelectToCreate = "SelectToCreate";
     Object SelectToModify = "SelectToModify";
+    Object SelectYourAccommodation = "SelectYourAccommodation";
     Object SelectYourJourney = "SelectYourJourney";
     Object SendVerificationCode = "SendVerificationCode";
     Object Sending = "Sending";

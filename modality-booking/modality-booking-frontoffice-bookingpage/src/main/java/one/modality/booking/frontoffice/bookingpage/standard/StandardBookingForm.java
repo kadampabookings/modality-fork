@@ -1297,8 +1297,10 @@ public class StandardBookingForm extends MultiPageBookingForm
                         }
                         String familyCode = family != null ? family.getCode() : "";
                         // Pass family and item names separately - sections use UnifiedPriceDisplay for consistent formatting
-                        String familyName = (family != null && family.getName() != null) ? family.getName() : null;
-                        String itemName = item.getName() != null ? item.getName() : "Item";
+                        // Use I18nEntities.translateEntity() to get localized Label, fallback to getName()
+                        String familyName = translateEntityName(family);
+                        String itemName = translateEntityName(item);
+                        if (itemName == null) itemName = "Item";
                         Integer linePriceObj = line.getPriceNet();
                         int linePrice = linePriceObj != null ? linePriceObj : 0;
 
@@ -1781,8 +1783,10 @@ public class StandardBookingForm extends MultiPageBookingForm
                 }
 
                 // Pass family and item names separately - sections use UnifiedPriceDisplay for consistent formatting
-                String familyName = (family != null && family.getName() != null) ? family.getName() : null;
-                String itemName = item.getName() != null ? item.getName() : "Item";
+                // Use I18nEntities.translateEntity() to get localized Label, fallback to getName()
+                String familyName = translateEntityName(family);
+                String itemName = translateEntityName(item);
+                if (itemName == null) itemName = "Item";
 
                 // Get price: use stored price if available, otherwise calculate dynamically
                 Integer linePriceObj = line.getPriceNet();
@@ -1899,8 +1903,10 @@ public class StandardBookingForm extends MultiPageBookingForm
                         }
                         String familyCode = family != null ? family.getCode() : "";
                         // Pass family and item names separately - sections use UnifiedPriceDisplay for consistent formatting
-                        String familyName = (family != null && family.getName() != null) ? family.getName() : null;
-                        String itemName = item.getName() != null ? item.getName() : "Item";
+                        // Use I18nEntities.translateEntity() to get localized Label, fallback to getName()
+                        String familyName = translateEntityName(family);
+                        String itemName = translateEntityName(item);
+                        if (itemName == null) itemName = "Item";
                         Integer linePriceObj = line.getPriceNet();
                         int linePrice = linePriceObj != null ? linePriceObj : 0;
 
@@ -1993,6 +1999,28 @@ public class StandardBookingForm extends MultiPageBookingForm
     @Override
     public Event getEvent() {
         return workingBookingProperties.getEvent();
+    }
+
+    /**
+     * Translates an entity to its localized display name.
+     * Uses the entity's Label if available, otherwise falls back to getName().
+     *
+     * @param entity the entity to translate (Item, ItemFamily, etc.)
+     * @return the translated name, or null if entity is null
+     */
+    private String translateEntityName(dev.webfx.stack.orm.entity.Entity entity) {
+        if (entity == null) return null;
+        // I18nEntities.translateEntity uses i18n(this) which resolves Label -> name fallback
+        String translated = I18nEntities.translateEntity(entity);
+        // Fallback to getName() if translation returns null or empty
+        if (translated == null || translated.isEmpty()) {
+            if (entity instanceof Item) {
+                return ((Item) entity).getName();
+            } else if (entity instanceof ItemFamily) {
+                return ((ItemFamily) entity).getName();
+            }
+        }
+        return translated;
     }
 
     // === Navigation Methods ===

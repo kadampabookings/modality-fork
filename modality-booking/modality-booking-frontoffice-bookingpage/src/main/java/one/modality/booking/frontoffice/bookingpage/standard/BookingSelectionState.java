@@ -1,9 +1,12 @@
 package one.modality.booking.frontoffice.bookingpage.standard;
 
+import dev.webfx.stack.orm.entity.EntityStore;
 import javafx.beans.property.*;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
+import one.modality.base.shared.entities.Document;
 import one.modality.base.shared.entities.Item;
+import one.modality.booking.client.workingbooking.WorkingBooking;
 import one.modality.booking.frontoffice.bookingpage.sections.accommodation.HasAccommodationSelectionSection.AccommodationOption;
 import one.modality.booking.frontoffice.bookingpage.sections.dates.HasFestivalDaySelectionSection.ArrivalDepartureTime;
 import one.modality.booking.frontoffice.bookingpage.sections.options.HasAdditionalOptionsSection.AdditionalOption;
@@ -503,6 +506,8 @@ public class BookingSelectionState {
     private final StringProperty childCarer2Name = new SimpleStringProperty();
     private final StringProperty childCarer2BookingRef = new SimpleStringProperty();
     private final BooleanProperty childPolicyAccepted = new SimpleBooleanProperty(false);
+    private final ObjectProperty<Object> childCarer1DocumentId = new SimpleObjectProperty<>(); // Document ID if carer has existing booking
+    private final ObjectProperty<Object> childCarer2DocumentId = new SimpleObjectProperty<>(); // Document ID if carer has existing booking
 
     public StringProperty childCarer1TypeProperty() {
         return childCarer1Type;
@@ -612,6 +617,30 @@ public class BookingSelectionState {
         childPolicyAccepted.set(accepted);
     }
 
+    public ObjectProperty<Object> childCarer1DocumentIdProperty() {
+        return childCarer1DocumentId;
+    }
+
+    public Object getChildCarer1DocumentId() {
+        return childCarer1DocumentId.get();
+    }
+
+    public void setChildCarer1DocumentId(Object docId) {
+        childCarer1DocumentId.set(docId);
+    }
+
+    public ObjectProperty<Object> childCarer2DocumentIdProperty() {
+        return childCarer2DocumentId;
+    }
+
+    public Object getChildCarer2DocumentId() {
+        return childCarer2DocumentId.get();
+    }
+
+    public void setChildCarer2DocumentId(Object docId) {
+        childCarer2DocumentId.set(docId);
+    }
+
     /**
      * Returns true if at least the first carer is defined (either from household or external).
      */
@@ -636,11 +665,60 @@ public class BookingSelectionState {
         childCarer1PersonId.set(null);
         childCarer1Name.set(null);
         childCarer1BookingRef.set(null);
+        childCarer1DocumentId.set(null);
         childCarer2Type.set(null);
         childCarer2PersonId.set(null);
         childCarer2Name.set(null);
         childCarer2BookingRef.set(null);
+        childCarer2DocumentId.set(null);
         childPolicyAccepted.set(false);
+    }
+
+    /**
+     * Commits child carer information to the working booking.
+     * For household carers: uses Document reference if they have existing booking, otherwise name.
+     * For external carers: uses the entered name.
+     *
+     * @param workingBooking The working booking to update
+     * @param store The entity store for retrieving Document entities
+     */
+    public void commitCarersInfoToBooking(WorkingBooking workingBooking, EntityStore store) {
+        String carer1Name = null;
+        Document carer1Doc = null;
+        String carer2Name = null;
+        Document carer2Doc = null;
+
+        // Carer 1
+        String type1 = getChildCarer1Type();
+        if ("external".equals(type1)) {
+            carer1Name = getChildCarer1Name();
+        } else if ("household".equals(type1)) {
+            Object docId = getChildCarer1DocumentId();
+            if (docId != null && store != null) {
+                carer1Doc = store.getEntity(Document.class, docId);
+            }
+            // Use name as fallback (for carers without existing bookings)
+            if (carer1Doc == null) {
+                carer1Name = getChildCarer1Name();
+            }
+        }
+
+        // Carer 2
+        String type2 = getChildCarer2Type();
+        if ("external".equals(type2)) {
+            carer2Name = getChildCarer2Name();
+        } else if ("household".equals(type2)) {
+            Object docId = getChildCarer2DocumentId();
+            if (docId != null && store != null) {
+                carer2Doc = store.getEntity(Document.class, docId);
+            }
+            // Use name as fallback (for carers without existing bookings)
+            if (carer2Doc == null) {
+                carer2Name = getChildCarer2Name();
+            }
+        }
+
+        workingBooking.setCarersInfo(carer1Name, carer1Doc, carer2Name, carer2Doc);
     }
 
     // === Shuttle Time Slots ===

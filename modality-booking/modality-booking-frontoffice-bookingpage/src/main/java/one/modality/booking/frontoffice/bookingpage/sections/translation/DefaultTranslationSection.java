@@ -6,15 +6,17 @@ import javafx.beans.property.*;
 import javafx.beans.value.ObservableBooleanValue;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.Cursor;
 import javafx.scene.Node;
 import javafx.scene.control.Label;
-import javafx.scene.control.RadioButton;
-import javafx.scene.control.ToggleGroup;
+import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
 import one.modality.booking.frontoffice.bookingpage.components.StyledSectionHeader;
+import one.modality.booking.frontoffice.bookingpage.standard.BookingSelectionState;
 import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
 
 import java.util.ArrayList;
@@ -22,21 +24,26 @@ import java.util.List;
 
 /**
  * Default implementation of the "Translation or Hard of Hearing" section.
- * Provides a toggle to enable translation/hearing assistance and a selection
- * of available languages or hearing assistance options.
+ * Uses a unified card pattern where the language selection pills appear inside
+ * the same card as the checkbox toggle (following the CarPark section pattern).
  *
  * <p>Both translation and hard of hearing options use the same headphone system
  * and share the same API data source.</p>
  *
+ * <p>This section follows the Selection Model Pattern - it does not store data internally
+ * but binds to {@link BookingSelectionState} for centralized state management.</p>
+ *
  * <p>CSS classes used:</p>
  * <ul>
  *   <li>{@code .bookingpage-translation-section} - section container</li>
- *   <li>{@code .bookingpage-translation-toggle} - toggle control</li>
- *   <li>{@code .bookingpage-translation-option} - language/option item</li>
+ *   <li>{@code .bookingpage-checkbox-card} - unified card container</li>
+ *   <li>{@code .bookingpage-translation-subsection} - language pills subsection</li>
+ *   <li>{@code .bookingpage-radio-pill} - language option pill</li>
  * </ul>
  *
  * @author Bruno Salmon
  * @see HasTranslationSection
+ * @see BookingSelectionState
  */
 public class DefaultTranslationSection implements HasTranslationSection {
 
@@ -52,21 +59,19 @@ public class DefaultTranslationSection implements HasTranslationSection {
     // === VISIBILITY ===
     protected final BooleanProperty visibleProperty = new SimpleBooleanProperty(true);
 
-    // === DATA PROPERTIES ===
-    protected final BooleanProperty needsTranslationProperty = new SimpleBooleanProperty(false);
-    protected final StringProperty selectedLanguageProperty = new SimpleStringProperty();
-    protected final List<String> availableLanguages = new ArrayList<>();
-
     // === VALIDATION ===
     protected final BooleanProperty validProperty = new SimpleBooleanProperty(true);
+
+    // === STATE BINDING ===
+    protected BookingSelectionState selectionState;
+
+    // === AVAILABLE LANGUAGES (configuration, not selection state) ===
+    protected final List<String> availableLanguages = new ArrayList<>();
 
     // === UI COMPONENTS ===
     protected final VBox container = new VBox();
     protected HBox sectionHeader;
-    protected VBox toggleContainer;
-    protected VBox languageSelectionContainer;
-    protected ToggleGroup languageToggleGroup;
-    protected List<RadioButton> languageRadioButtons = new ArrayList<>();
+    protected VBox translationCard;  // Single unified card
 
     // === DATA ===
     protected WorkingBookingProperties workingBookingProperties;
@@ -74,7 +79,7 @@ public class DefaultTranslationSection implements HasTranslationSection {
 
     public DefaultTranslationSection() {
         buildUI();
-        setupBindings();
+        setupVisibilityBindings();
         updateValidity();
     }
 
@@ -87,126 +92,183 @@ public class DefaultTranslationSection implements HasTranslationSection {
         sectionHeader = new StyledSectionHeader(TranslationOrHardOfHearing, StyledSectionHeader.ICON_HEADPHONES);
         VBox.setMargin(sectionHeader, new Insets(0, 0, 8, 0));
 
-        // Toggle container with checkbox-style toggle
-        toggleContainer = new VBox(8);
-        toggleContainer.getStyleClass().add("bookingpage-translation-toggle");
+        // Single unified card (will be built when state is bound)
+        translationCard = new VBox(0);
+        translationCard.getStyleClass().add("bookingpage-checkbox-card");
 
-        // Create the toggle as a styled checkbox card
-        Label toggleLabel = I18nControls.newLabel(INeedTranslationOrHearingAssistance);
-        toggleLabel.getStyleClass().add("bookingpage-checkbox-label");
-        HBox toggleCard = BookingPageUIBuilder.createCheckboxCard(
-            toggleLabel,
-            needsTranslationProperty,
-            colorScheme
-        );
-        toggleContainer.getChildren().add(toggleCard);
-
-        // Language selection container (shown when toggle is enabled)
-        languageSelectionContainer = new VBox(8);
-        languageSelectionContainer.setVisible(false);
-        languageSelectionContainer.setManaged(false);
-        languageSelectionContainer.setPadding(new Insets(8, 0, 0, 24)); // Indent under toggle
-
-        Label selectLabel = I18nControls.newLabel(SelectLanguageOrOption);
-        selectLabel.getStyleClass().add("bookingpage-form-label");
-        languageSelectionContainer.getChildren().add(selectLabel);
-
-        languageToggleGroup = new ToggleGroup();
-
-        container.getChildren().addAll(sectionHeader, toggleContainer, languageSelectionContainer);
+        container.getChildren().addAll(sectionHeader, translationCard);
     }
 
     /**
-     * Rebuilds the language radio buttons based on available languages.
+     * Binds this section to a BookingSelectionState for centralized state management.
+     * Must be called before the section can function properly.
+     *
+     * @param state The BookingSelectionState to bind to
      */
-    protected void rebuildLanguageOptions() {
-        // Clear existing options (keep the label)
-        while (languageSelectionContainer.getChildren().size() > 1) {
-            languageSelectionContainer.getChildren().remove(1);
-        }
-        languageRadioButtons.clear();
+    @Override
+    public void bindToSelectionState(BookingSelectionState state) {
+        this.selectionState = state;
+        buildUnifiedTranslationCard();
+        setupStateBindings();
+    }
 
-        // Create radio buttons for each language
+    /**
+     * Builds the unified translation card containing both the checkbox toggle
+     * and the language selection pills (when enabled).
+     */
+    protected void buildUnifiedTranslationCard() {
+        translationCard.getChildren().clear();
+
+        if (selectionState == null) return;
+
+        BooleanProperty needsTranslation = selectionState.needsTranslationProperty();
+
+        // Main row: checkbox indicator + label
+        HBox mainRow = createMainRow(needsTranslation);
+        translationCard.getChildren().add(mainRow);
+
+        // Language subsection (visible only when enabled)
+        if (!availableLanguages.isEmpty()) {
+            VBox languageSubsection = createLanguageSubsection();
+            languageSubsection.visibleProperty().bind(needsTranslation);
+            languageSubsection.managedProperty().bind(needsTranslation);
+            translationCard.getChildren().add(languageSubsection);
+        }
+
+        // Update card selection styling
+        updateCardSelectedClass(needsTranslation.get());
+        needsTranslation.addListener((obs, old, newVal) -> updateCardSelectedClass(newVal));
+    }
+
+    /**
+     * Creates the main row with checkbox indicator and label.
+     */
+    protected HBox createMainRow(BooleanProperty needsTranslation) {
+        HBox row = new HBox(12);
+        row.setAlignment(Pos.CENTER_LEFT);
+        row.setPadding(new Insets(16));
+        row.setCursor(Cursor.HAND);
+
+        // Use standard CSS-based checkbox indicator
+        StackPane checkbox = BookingPageUIBuilder.createCheckboxIndicator(needsTranslation);
+
+        // Label
+        Label label = I18nControls.newLabel(INeedTranslationOrHearingAssistance);
+        label.getStyleClass().addAll("bookingpage-text-base", "bookingpage-font-medium", "bookingpage-text-dark");
+
+        row.getChildren().addAll(checkbox, label);
+
+        // Click toggles selection
+        row.setOnMouseClicked(e -> needsTranslation.set(!needsTranslation.get()));
+
+        return row;
+    }
+
+    /**
+     * Creates the language subsection with pills inside the card.
+     */
+    protected VBox createLanguageSubsection() {
+        VBox subsection = new VBox(10);
+        subsection.getStyleClass().add("bookingpage-translation-subsection");
+        subsection.setPadding(new Insets(0, 16, 16, 48));  // 48px left indent under checkbox
+
+        // "Select language or option:" label
+        Label selectLabel = I18nControls.newLabel(SelectLanguageOrOption);
+        selectLabel.getStyleClass().addAll("bookingpage-text-xs", "bookingpage-font-medium", "bookingpage-text-muted");
+
+        // FlowPane for pills
+        FlowPane pillsContainer = new FlowPane();
+        pillsContainer.setHgap(10);
+        pillsContainer.setVgap(10);
+
+        // Build pills using BookingPageUIBuilder.createRadioPill()
+        ObjectProperty<String> selectedLangWrapper = new SimpleObjectProperty<>();
+        selectedLangWrapper.set(selectionState.getTranslationLanguage());
+
+        // Bidirectional sync with state
+        selectionState.translationLanguageProperty().addListener((obs, old, newVal) -> {
+            if (!java.util.Objects.equals(selectedLangWrapper.get(), newVal)) {
+                selectedLangWrapper.set(newVal);
+            }
+        });
+        selectedLangWrapper.addListener((obs, old, newVal) -> {
+            if (!java.util.Objects.equals(selectionState.getTranslationLanguage(), newVal)) {
+                selectionState.setTranslationLanguage(newVal);
+            }
+        });
+
         for (String language : availableLanguages) {
-            RadioButton radioButton = new RadioButton(language);
-            radioButton.setToggleGroup(languageToggleGroup);
-            radioButton.getStyleClass().add("bookingpage-translation-option");
-            radioButton.setPadding(new Insets(8, 12, 8, 12));
-
-            // Bind selection
-            radioButton.selectedProperty().addListener((obs, oldVal, newVal) -> {
-                if (newVal) {
-                    selectedLanguageProperty.set(language);
-                    notifySelectionChanged();
-                }
-            });
-
-            languageRadioButtons.add(radioButton);
-            languageSelectionContainer.getChildren().add(radioButton);
+            HBox pill = BookingPageUIBuilder.createRadioPill(
+                language,
+                language,
+                selectedLangWrapper,
+                () -> selectionState.setTranslationLanguage(language)
+            );
+            pillsContainer.getChildren().add(pill);
         }
 
-        // Select first option by default if languages are available
-        if (!languageRadioButtons.isEmpty() && needsTranslationProperty.get()) {
-            languageRadioButtons.get(0).setSelected(true);
+        subsection.getChildren().addAll(selectLabel, pillsContainer);
+        return subsection;
+    }
+
+    /**
+     * Updates the card's "selected" CSS class based on state.
+     */
+    protected void updateCardSelectedClass(boolean selected) {
+        if (selected) {
+            if (!translationCard.getStyleClass().contains("selected")) {
+                translationCard.getStyleClass().add("selected");
+            }
+        } else {
+            translationCard.getStyleClass().remove("selected");
         }
     }
 
-    protected void setupBindings() {
-        // Show/hide language selection based on toggle
-        needsTranslationProperty.addListener((obs, oldVal, newVal) -> {
-            languageSelectionContainer.setVisible(newVal);
-            languageSelectionContainer.setManaged(newVal);
+    /**
+     * Sets up bindings to the BookingSelectionState.
+     */
+    protected void setupStateBindings() {
+        if (selectionState == null) return;
 
-            if (newVal && !languageRadioButtons.isEmpty() && selectedLanguageProperty.get() == null) {
-                // Auto-select first option when enabled
-                languageRadioButtons.get(0).setSelected(true);
+        BooleanProperty needsTranslation = selectionState.needsTranslationProperty();
+        StringProperty selectedLanguage = selectionState.translationLanguageProperty();
+
+        // Auto-select first language when enabling
+        needsTranslation.addListener((obs, oldVal, newVal) -> {
+            if (newVal && !availableLanguages.isEmpty()
+                && (selectedLanguage.get() == null || selectedLanguage.get().isEmpty())) {
+                selectedLanguage.set(availableLanguages.get(0));
             } else if (!newVal) {
-                // Clear selection when disabled
-                selectedLanguageProperty.set(null);
-                if (languageToggleGroup.getSelectedToggle() != null) {
-                    languageToggleGroup.getSelectedToggle().setSelected(false);
-                }
+                selectedLanguage.set(null);
             }
-
             updateValidity();
             notifySelectionChanged();
         });
 
-        // Update validity when selection changes
-        selectedLanguageProperty.addListener((obs, oldVal, newVal) -> {
+        selectedLanguage.addListener((obs, oldVal, newVal) -> {
             updateValidity();
+            notifySelectionChanged();
         });
+    }
 
-        // Update visibility
+    /**
+     * Sets up visibility bindings (independent of state).
+     */
+    protected void setupVisibilityBindings() {
         visibleProperty.addListener((obs, oldVal, newVal) -> {
             container.setVisible(newVal);
             container.setManaged(newVal);
             updateValidity();
         });
 
-        // Update toggle card when color scheme changes
+        // Rebuild card when color scheme changes
         colorScheme.addListener((obs, oldVal, newVal) -> {
-            rebuildToggleCard();
+            buildUnifiedTranslationCard();
         });
 
         // Initial visibility
         container.setVisible(visibleProperty.get());
         container.setManaged(visibleProperty.get());
-    }
-
-    /**
-     * Rebuilds the toggle card with the current color scheme.
-     */
-    protected void rebuildToggleCard() {
-        toggleContainer.getChildren().clear();
-        Label toggleLabel = I18nControls.newLabel(INeedTranslationOrHearingAssistance);
-        toggleLabel.getStyleClass().add("bookingpage-checkbox-label");
-        HBox toggleCard = BookingPageUIBuilder.createCheckboxCard(
-            toggleLabel,
-            needsTranslationProperty,
-            colorScheme
-        );
-        toggleContainer.getChildren().add(toggleCard);
     }
 
     /**
@@ -219,8 +281,8 @@ public class DefaultTranslationSection implements HasTranslationSection {
             return;
         }
 
-        if (needsTranslationProperty.get()) {
-            String selected = selectedLanguageProperty.get();
+        if (selectionState != null && selectionState.needsTranslation()) {
+            String selected = selectionState.getTranslationLanguage();
             validProperty.set(selected != null && !selected.isEmpty());
         } else {
             validProperty.set(true);
@@ -288,12 +350,12 @@ public class DefaultTranslationSection implements HasTranslationSection {
 
     @Override
     public BooleanProperty needsTranslationProperty() {
-        return needsTranslationProperty;
+        return selectionState != null ? selectionState.needsTranslationProperty() : new SimpleBooleanProperty(false);
     }
 
     @Override
     public StringProperty selectedLanguageProperty() {
-        return selectedLanguageProperty;
+        return selectionState != null ? selectionState.translationLanguageProperty() : new SimpleStringProperty();
     }
 
     @Override
@@ -307,13 +369,13 @@ public class DefaultTranslationSection implements HasTranslationSection {
         if (languages != null) {
             availableLanguages.addAll(languages);
         }
-        rebuildLanguageOptions();
+        buildUnifiedTranslationCard();  // Rebuild entire card
     }
 
     @Override
     public void clearAvailableLanguages() {
         availableLanguages.clear();
-        rebuildLanguageOptions();
+        buildUnifiedTranslationCard();
     }
 
     @Override
@@ -322,8 +384,8 @@ public class DefaultTranslationSection implements HasTranslationSection {
             return null;
         }
 
-        if (needsTranslationProperty.get()) {
-            String selected = selectedLanguageProperty.get();
+        if (selectionState != null && selectionState.needsTranslation()) {
+            String selected = selectionState.getTranslationLanguage();
             if (selected == null || selected.isEmpty()) {
                 return I18n.getI18nText(TranslationRequiredWarning);
             }
@@ -333,10 +395,9 @@ public class DefaultTranslationSection implements HasTranslationSection {
 
     @Override
     public void reset() {
-        needsTranslationProperty.set(false);
-        selectedLanguageProperty.set(null);
-        if (languageToggleGroup.getSelectedToggle() != null) {
-            languageToggleGroup.getSelectedToggle().setSelected(false);
+        if (selectionState != null) {
+            selectionState.setNeedsTranslation(false);
+            selectionState.setTranslationLanguage(null);
         }
         updateValidity();
     }

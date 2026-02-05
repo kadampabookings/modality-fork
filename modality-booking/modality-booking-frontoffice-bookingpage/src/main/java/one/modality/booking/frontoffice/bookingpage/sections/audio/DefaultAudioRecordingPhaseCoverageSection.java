@@ -15,6 +15,7 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import one.modality.base.client.i18n.I18nEntities;
 import one.modality.base.client.time.ModalityDates;
+import one.modality.base.shared.entities.AttendanceMode;
 import one.modality.base.shared.entities.EventPhaseCoverage;
 import one.modality.base.shared.entities.Item;
 import one.modality.base.shared.entities.ScheduledItem;
@@ -497,7 +498,14 @@ public class DefaultAudioRecordingPhaseCoverageSection implements HasAudioRecord
         WorkingBooking workingBooking = workingBookingProperties.getWorkingBooking();
 
         // Create a temporary WorkingBooking for price calculation
-        WorkingBooking tempWorkingBooking = new WorkingBooking(policyAggregate, workingBooking.getInitialDocumentAggregate());
+        // For existing bookings, use initialDocumentAggregate; for new bookings, use attendanceMode from current document
+        WorkingBooking tempWorkingBooking;
+        if (workingBooking.getInitialDocumentAggregate() != null) {
+            tempWorkingBooking = new WorkingBooking(policyAggregate, workingBooking.getInitialDocumentAggregate());
+        } else {
+            AttendanceMode attendanceMode = workingBooking.getDocument().getAttendanceMode();
+            tempWorkingBooking = new WorkingBooking(policyAggregate, attendanceMode);
+        }
 
         // Calculate price without these items (unbooked)
         tempWorkingBooking.unbookScheduledItems(scheduledItems);

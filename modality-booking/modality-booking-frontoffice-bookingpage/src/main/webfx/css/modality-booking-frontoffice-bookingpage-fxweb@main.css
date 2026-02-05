@@ -909,6 +909,48 @@
     -fx-fill: transparent;
 }
 
+/* Attendance Type Card Icons (Accommodation Section) */
+.bookingpage-attendance-icon-circle {
+    -fx-background-color: #F3F4F6;
+    -fx-background-radius: 28;
+}
+
+.bookingpage-attendance-icon-circle.selected {
+    -fx-background-color: -booking-form-primary;
+}
+
+.bookingpage-attendance-icon {
+    -fx-stroke: #6B7280;
+    -fx-stroke-width: 1.5;
+    -fx-fill: transparent;
+}
+
+.bookingpage-attendance-icon.selected {
+    -fx-stroke: white;
+}
+
+/* Accommodation Room Card Radio Checkmark (24px circular with checkmark) */
+.bookingpage-room-checkmark-circle {
+    -fx-fill: white;
+    -fx-stroke: #D1D5DB;
+    -fx-stroke-width: 2;
+}
+
+.bookingpage-room-checkmark-circle.selected {
+    -fx-fill: -booking-form-primary;
+    -fx-stroke: -booking-form-primary;
+}
+
+.bookingpage-room-checkmark-circle.disabled {
+    -fx-opacity: 0.5;
+}
+
+.bookingpage-room-checkmark-icon {
+    -fx-stroke: white;
+    -fx-stroke-width: 2.5;
+    -fx-fill: transparent;
+}
+
 /* ==========================================
    Booking Form Section Spacing
    ========================================== */
@@ -2703,6 +2745,58 @@
 }
 
 /* ==========================================
+   Date Selector Cards Component
+   ========================================== */
+
+/* Date selector card - clickable arrival/departure selectors */
+.bookingpage-date-selector-card {
+    -fx-background-color: white;
+    -fx-border-color: #dee2e6;
+    -fx-border-width: 2;
+    -fx-border-radius: 10;
+    -fx-background-radius: 10;
+    -fx-cursor: hand;
+}
+
+.bookingpage-date-selector-card:hover {
+    -fx-border-color: -booking-form-hover-border;
+}
+
+/* Date selector card - active (currently selecting) */
+.bookingpage-date-selector-card.active {
+    -fx-border-color: -booking-form-primary;
+}
+
+/* Date selector card - has selected date */
+.bookingpage-date-selector-card.selected {
+    -fx-background-color: -booking-form-selected-bg;
+}
+
+/* Date selector card label (small text like "Arrival", "Departure") */
+.bookingpage-date-selector-label {
+    -fx-font-size: 12px;
+    -fx-text-fill: #6c757d;
+}
+
+/* Date selector card value (the date or "Select date" text) */
+.bookingpage-date-selector-value {
+    -fx-font-size: 16px;
+    -fx-font-weight: 600;
+    -fx-text-fill: #212529;
+}
+
+.bookingpage-date-selector-card.selected .bookingpage-date-selector-value {
+    -fx-text-fill: -booking-form-primary;
+}
+
+/* Date picker instruction label */
+.bookingpage-date-picker-instruction {
+    -fx-font-size: 14px;
+    -fx-font-weight: 500;
+    -fx-text-fill: #495057;
+}
+
+/* ==========================================
    Time Section Component
    ========================================== */
 
@@ -3970,4 +4064,53 @@
 .bookingpage-childcarer-checkbox.selected {
     -fx-background-color: -booking-form-primary;
     -fx-border-color: -booking-form-primary;
+}
+
+/* ==========================================
+   Attendance Type Selection (Onsite vs Day Visitor)
+   ========================================== */
+
+/* Attendance type card - selectable card for Onsite/Day Visitor choice */
+.bookingpage-attendance-card {
+    -fx-background-color: white;
+    -fx-border-color: #E5E7EB;
+    -fx-border-width: 2;
+    -fx-border-radius: 12;
+    -fx-background-radius: 12;
+    -fx-cursor: hand;
+}
+
+.bookingpage-attendance-card:hover {
+    -fx-border-color: -booking-form-hover-border;
+    -fx-background-color: -booking-form-selected-bg;
+}
+
+.bookingpage-attendance-card.selected {
+    -fx-border-color: -booking-form-primary;
+    -fx-background-color: -booking-form-selected-bg;
+}
+
+.bookingpage-attendance-card.selected:hover {
+    -fx-border-color: -booking-form-primary;
+    -fx-background-color: -booking-form-selected-bg;
+}
+
+/* Room options container (gray background when Onsite selected) */
+.bookingpage-room-options-container {
+    -fx-background-color: #f8f9fa;
+    -fx-background-radius: 12;
+}
+
+/* Ordained badge */
+.bookingpage-ordained-badge {
+    -fx-background-color: #EEF2FF;
+    -fx-background-radius: 12;
+    -fx-text-fill: #4338CA;
+    -fx-font-size: 11px;
+    -fx-font-weight: 500;
+}
+
+/* Lighter gray text for event info line */
+.bookingpage-text-muted-light {
+    -fx-text-fill: #9CA3AF;
 }

@@ -210,13 +210,11 @@ public class DefaultRegistrationTypeSection implements BookingFormSection {
             HBox buttonContent = new HBox(8);
             buttonContent.setAlignment(Pos.CENTER);
 
-            Label buttonText = I18nControls.newLabel(BookingPageI18nKeys.SelectInPerson);
-            buttonText.getStyleClass().add(bookingpage_btn_select_type_text);
             Object buttonTextKey = type == RegistrationType.IN_PERSON
                 ? BookingPageI18nKeys.SelectInPerson
                 : BookingPageI18nKeys.SelectOnline;
             Label buttonText = I18nControls.newLabel(buttonTextKey);
-            buttonText.getStyleClass().add("bookingpage-btn-select-type-text");
+            buttonText.getStyleClass().add(bookingpage_btn_select_type_text);
 
             SVGPath arrowIcon = SvgIcons.createStrokeSVGPath(ARROW_ICON_PATH, null, 2.5);
             arrowIcon.getStyleClass().add(bookingpage_btn_select_type_icon);

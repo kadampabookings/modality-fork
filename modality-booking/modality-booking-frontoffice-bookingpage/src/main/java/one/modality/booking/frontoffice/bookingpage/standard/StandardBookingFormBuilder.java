@@ -1,6 +1,7 @@
 package one.modality.booking.frontoffice.bookingpage.standard;
 
 import javafx.scene.Node;
+import one.modality.base.shared.entities.AttendanceMode;
 import one.modality.base.shared.entities.Event;
 import one.modality.booking.client.workingbooking.HasWorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingform.BookingFormEntryPoint;
@@ -90,6 +91,9 @@ public class StandardBookingFormBuilder {
 
     // Comments section configuration
     private boolean showCommentsSection = false;
+
+    // Attendance mode (ONLINE or IN_PERSON) - if set, overrides event default
+    private AttendanceMode attendanceMode;
 
     /**
      * Creates a new builder for a standard booking form.
@@ -275,6 +279,29 @@ public class StandardBookingFormBuilder {
     public StandardBookingFormBuilder withShowCommentsSection(boolean show) {
         this.showCommentsSection = show;
         return this;
+    }
+
+    /**
+     * Sets the attendance mode for the booking.
+     * When set, this overrides the default attendance mode derived from the event settings.
+     * Use this when the form type determines the attendance mode (e.g., online-only forms).
+     *
+     * @param attendanceMode The attendance mode (ONLINE or IN_PERSON)
+     * @return This builder for chaining
+     */
+    public StandardBookingFormBuilder withAttendanceMode(AttendanceMode attendanceMode) {
+        this.attendanceMode = attendanceMode;
+        return this;
+    }
+
+    /**
+     * Returns the configured attendance mode, or null if not explicitly set.
+     * Used by BookEventActivity to determine how to create the WorkingBooking.
+     *
+     * @return the attendance mode, or null
+     */
+    public AttendanceMode getAttendanceMode() {
+        return attendanceMode;
     }
 
     // === Build ===

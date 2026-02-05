@@ -1,27 +1,27 @@
 package one.modality.booking.frontoffice.bookingpage.sections.assistance;
 
-import dev.webfx.extras.i18n.I18n;
 import dev.webfx.extras.i18n.controls.I18nControls;
 import javafx.beans.property.*;
 import javafx.beans.value.ObservableBooleanValue;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
-import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
-import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;
-import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
 import one.modality.booking.frontoffice.bookingpage.components.StyledSectionHeader;
+import one.modality.booking.frontoffice.bookingpage.standard.BookingSelectionState;
 import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
 
 /**
  * Default implementation of the "Assistance Needs" section.
- * Provides checkboxes for mobility, hearing, and visual assistance,
+ * Provides styled checkbox cards for mobility, hearing, and visual assistance,
  * plus a text field for dietary requirements.
+ *
+ * <p>This section follows the Selection Model Pattern - it does not store data internally
+ * but binds to {@link BookingSelectionState} for centralized state management.</p>
  *
  * <p>Note: No "Other" free-text field is provided. Only the specific
  * checkboxes and dietary field are available.</p>
@@ -29,26 +29,24 @@ import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme
  * <p>CSS classes used:</p>
  * <ul>
  *   <li>{@code .bookingpage-assistance-section} - section container</li>
- *   <li>{@code .bookingpage-assistance-checkbox} - checkbox item</li>
+ *   <li>{@code .bookingpage-checkbox-card} - checkbox card styling</li>
  *   <li>{@code .bookingpage-assistance-dietary} - dietary text field</li>
  * </ul>
  *
  * @author Bruno Salmon
  * @see HasAssistanceNeedsSection
+ * @see BookingSelectionState
  */
 public class DefaultAssistanceNeedsSection implements HasAssistanceNeedsSection {
 
     // I18n keys for this section
     private static final String AssistanceNeeds = "AssistanceNeeds";
-    private static final String AssistanceNeedsInfo = "AssistanceNeedsInfo";
     private static final String MobilityAssistance = "MobilityAssistance";
     private static final String MobilityAssistanceDesc = "MobilityAssistanceDesc";
     private static final String HearingAssistance = "HearingAssistance";
     private static final String HearingAssistanceDesc = "HearingAssistanceDesc";
     private static final String VisualAssistance = "VisualAssistance";
     private static final String VisualAssistanceDesc = "VisualAssistanceDesc";
-    private static final String DietaryRequirements = "DietaryRequirements";
-    private static final String DietaryRequirementsPlaceholder = "DietaryRequirementsPlaceholder";
 
     // === COLOR SCHEME ===
     protected final ObjectProperty<BookingFormColorScheme> colorScheme = new SimpleObjectProperty<>(BookingFormColorScheme.DEFAULT);
@@ -56,25 +54,17 @@ public class DefaultAssistanceNeedsSection implements HasAssistanceNeedsSection 
     // === VISIBILITY ===
     protected final BooleanProperty visibleProperty = new SimpleBooleanProperty(true);
 
-    // === DATA PROPERTIES ===
-    protected final BooleanProperty mobilityAssistanceProperty = new SimpleBooleanProperty(false);
-    protected final BooleanProperty hearingAssistanceProperty = new SimpleBooleanProperty(false);
-    protected final BooleanProperty visualAssistanceProperty = new SimpleBooleanProperty(false);
-    protected final StringProperty dietaryRequirementsProperty = new SimpleStringProperty("");
-
     // === VALIDATION ===
     protected final BooleanProperty validProperty = new SimpleBooleanProperty(true);
+
+    // === STATE BINDING ===
+    protected BookingSelectionState selectionState;
 
     // === UI COMPONENTS ===
     protected final VBox container = new VBox();
     protected HBox sectionHeader;
     protected HBox infoBox;
     protected VBox checkboxContainer;
-    protected CheckBox mobilityCheckbox;
-    protected CheckBox hearingCheckbox;
-    protected CheckBox visualCheckbox;
-    protected VBox dietaryFieldContainer;
-    protected TextField dietaryTextField;
 
     // === DATA ===
     protected WorkingBookingProperties workingBookingProperties;
@@ -82,7 +72,7 @@ public class DefaultAssistanceNeedsSection implements HasAssistanceNeedsSection 
 
     public DefaultAssistanceNeedsSection() {
         buildUI();
-        setupBindings();
+        setupVisibilityBindings();
     }
 
     protected void buildUI() {
@@ -95,90 +85,116 @@ public class DefaultAssistanceNeedsSection implements HasAssistanceNeedsSection 
         VBox.setMargin(sectionHeader, new Insets(0, 0, 8, 0));
 
         // Info box explaining available accommodations
-        infoBox = BookingPageUIBuilder.createInfoBox(AssistanceNeedsInfo, BookingPageUIBuilder.InfoBoxType.NEUTRAL);
+        infoBox = BookingPageUIBuilder.createInfoBox(
+            "Please let us know if you require any assistance during the event.",
+            BookingPageUIBuilder.InfoBoxType.NEUTRAL
+        );
         VBox.setMargin(infoBox, new Insets(0, 0, 8, 0));
 
-        // Checkbox container
+        // Checkbox cards container (cards built when state is bound)
         checkboxContainer = new VBox(12);
+        checkboxContainer.setPadding(new Insets(8, 0, 0, 0));
 
-        // Mobility assistance checkbox
-        mobilityCheckbox = new CheckBox();
-        I18n.bindI18nTextProperty(mobilityCheckbox.textProperty(), MobilityAssistance);
-        mobilityCheckbox.getStyleClass().add("bookingpage-assistance-checkbox");
-        mobilityCheckbox.selectedProperty().bindBidirectional(mobilityAssistanceProperty);
-        VBox mobilityBox = createCheckboxWithDescription(mobilityCheckbox, MobilityAssistanceDesc);
-
-        // Hearing assistance checkbox
-        hearingCheckbox = new CheckBox();
-        I18n.bindI18nTextProperty(hearingCheckbox.textProperty(), HearingAssistance);
-        hearingCheckbox.getStyleClass().add("bookingpage-assistance-checkbox");
-        hearingCheckbox.selectedProperty().bindBidirectional(hearingAssistanceProperty);
-        VBox hearingBox = createCheckboxWithDescription(hearingCheckbox, HearingAssistanceDesc);
-
-        // Visual assistance checkbox
-        visualCheckbox = new CheckBox();
-        I18n.bindI18nTextProperty(visualCheckbox.textProperty(), VisualAssistance);
-        visualCheckbox.getStyleClass().add("bookingpage-assistance-checkbox");
-        visualCheckbox.selectedProperty().bindBidirectional(visualAssistanceProperty);
-        VBox visualBox = createCheckboxWithDescription(visualCheckbox, VisualAssistanceDesc);
-
-        checkboxContainer.getChildren().addAll(mobilityBox, hearingBox, visualBox);
-
-        // Dietary requirements text field
-        dietaryFieldContainer = new VBox(6);
-        dietaryFieldContainer.getStyleClass().add("bookingpage-assistance-dietary");
-
-        Label dietaryLabel = I18nControls.newLabel(DietaryRequirements);
-        dietaryLabel.getStyleClass().add("bookingpage-form-label");
-
-        dietaryTextField = new TextField();
-        I18n.bindI18nPromptProperty(dietaryTextField.promptTextProperty(), DietaryRequirementsPlaceholder);
-        dietaryTextField.getStyleClass().add("bookingpage-text-input");
-        dietaryTextField.textProperty().bindBidirectional(dietaryRequirementsProperty);
-        dietaryTextField.setPadding(new Insets(12, 14, 12, 14));
-        dietaryTextField.setMaxWidth(Double.MAX_VALUE);
-        HBox.setHgrow(dietaryTextField, Priority.ALWAYS);
-
-        dietaryFieldContainer.getChildren().addAll(dietaryLabel, dietaryTextField);
-
-        container.getChildren().addAll(sectionHeader, infoBox, checkboxContainer, dietaryFieldContainer);
+        container.getChildren().addAll(sectionHeader, infoBox, checkboxContainer);
     }
 
     /**
-     * Creates a checkbox with an optional description label below it.
+     * Binds this section to a BookingSelectionState for centralized state management.
+     * Must be called before the section can function properly.
+     *
+     * @param state The BookingSelectionState to bind to
      */
-    protected VBox createCheckboxWithDescription(CheckBox checkbox, String descriptionI18nKey) {
-        VBox box = new VBox(4);
-
-        box.getChildren().add(checkbox);
-
-        if (descriptionI18nKey != null) {
-            Label descLabel = I18nControls.newLabel(descriptionI18nKey);
-            descLabel.getStyleClass().add("bookingpage-info-text");
-            descLabel.setWrapText(true);
-            VBox.setMargin(descLabel, new Insets(0, 0, 0, 24)); // Indent under checkbox
-            box.getChildren().add(descLabel);
-        }
-
-        return box;
+    @Override
+    public void bindToSelectionState(BookingSelectionState state) {
+        this.selectionState = state;
+        buildCheckboxCards();
+        setupStateBindings();
+        rebuildColorSchemeBindings();
     }
 
-    protected void setupBindings() {
-        // Update visibility
+    /**
+     * Builds styled checkbox cards for each assistance type.
+     */
+    protected void buildCheckboxCards() {
+        checkboxContainer.getChildren().clear();
+
+        if (selectionState == null) return;
+
+        // Mobility Assistance checkbox card
+        VBox mobilityContent = createCheckboxContent(MobilityAssistance, MobilityAssistanceDesc);
+        HBox mobilityCard = BookingPageUIBuilder.createCheckboxCard(
+            mobilityContent,
+            selectionState.assistanceMobilityProperty(),
+            colorScheme
+        );
+
+        // Hearing Assistance checkbox card
+        VBox hearingContent = createCheckboxContent(HearingAssistance, HearingAssistanceDesc);
+        HBox hearingCard = BookingPageUIBuilder.createCheckboxCard(
+            hearingContent,
+            selectionState.assistanceHearingProperty(),
+            colorScheme
+        );
+
+        // Visual Assistance checkbox card
+        VBox visualContent = createCheckboxContent(VisualAssistance, VisualAssistanceDesc);
+        HBox visualCard = BookingPageUIBuilder.createCheckboxCard(
+            visualContent,
+            selectionState.assistanceVisualProperty(),
+            colorScheme
+        );
+
+        checkboxContainer.getChildren().addAll(mobilityCard, hearingCard, visualCard);
+    }
+
+    /**
+     * Creates the content (label + description) for a checkbox card.
+     */
+    protected VBox createCheckboxContent(Object titleKey, Object descriptionKey) {
+        VBox content = new VBox(4);
+
+        Label titleLabel = I18nControls.newLabel(titleKey);
+        titleLabel.getStyleClass().addAll("bookingpage-text-base", "bookingpage-font-medium", "bookingpage-text-dark");
+
+        Label descLabel = I18nControls.newLabel(descriptionKey);
+        descLabel.getStyleClass().addAll("bookingpage-text-sm", "bookingpage-text-muted");
+        descLabel.setWrapText(true);
+
+        content.getChildren().addAll(titleLabel, descLabel);
+        return content;
+    }
+
+    /**
+     * Sets up bindings to the BookingSelectionState.
+     */
+    protected void setupStateBindings() {
+        if (selectionState == null) return;
+
+        // Listen for selection changes
+        selectionState.assistanceMobilityProperty().addListener((obs, old, newVal) -> notifySelectionChanged());
+        selectionState.assistanceHearingProperty().addListener((obs, old, newVal) -> notifySelectionChanged());
+        selectionState.assistanceVisualProperty().addListener((obs, old, newVal) -> notifySelectionChanged());
+    }
+
+    /**
+     * Sets up visibility bindings (independent of state).
+     */
+    protected void setupVisibilityBindings() {
         visibleProperty.addListener((obs, oldVal, newVal) -> {
             container.setVisible(newVal);
             container.setManaged(newVal);
         });
 
-        // Notify on any selection change
-        mobilityAssistanceProperty.addListener((obs, oldVal, newVal) -> notifySelectionChanged());
-        hearingAssistanceProperty.addListener((obs, oldVal, newVal) -> notifySelectionChanged());
-        visualAssistanceProperty.addListener((obs, oldVal, newVal) -> notifySelectionChanged());
-        dietaryRequirementsProperty.addListener((obs, oldVal, newVal) -> notifySelectionChanged());
-
         // Initial visibility
         container.setVisible(visibleProperty.get());
         container.setManaged(visibleProperty.get());
+    }
+
+    /**
+     * Sets up color scheme change listener to rebuild cards.
+     */
+    protected void rebuildColorSchemeBindings() {
+        colorScheme.addListener((obs, old, newVal) -> buildCheckboxCards());
     }
 
     protected void notifySelectionChanged() {
@@ -242,30 +258,32 @@ public class DefaultAssistanceNeedsSection implements HasAssistanceNeedsSection 
 
     @Override
     public BooleanProperty mobilityAssistanceProperty() {
-        return mobilityAssistanceProperty;
+        return selectionState != null ? selectionState.assistanceMobilityProperty() : new SimpleBooleanProperty(false);
     }
 
     @Override
     public BooleanProperty hearingAssistanceProperty() {
-        return hearingAssistanceProperty;
+        return selectionState != null ? selectionState.assistanceHearingProperty() : new SimpleBooleanProperty(false);
     }
 
     @Override
     public BooleanProperty visualAssistanceProperty() {
-        return visualAssistanceProperty;
+        return selectionState != null ? selectionState.assistanceVisualProperty() : new SimpleBooleanProperty(false);
     }
 
     @Override
     public StringProperty dietaryRequirementsProperty() {
-        return dietaryRequirementsProperty;
+        // Dietary requirements removed - return empty property for interface compatibility
+        return new SimpleStringProperty();
     }
 
     @Override
     public void reset() {
-        mobilityAssistanceProperty.set(false);
-        hearingAssistanceProperty.set(false);
-        visualAssistanceProperty.set(false);
-        dietaryRequirementsProperty.set("");
+        if (selectionState != null) {
+            selectionState.setAssistanceMobility(false);
+            selectionState.setAssistanceHearing(false);
+            selectionState.setAssistanceVisual(false);
+        }
     }
 
     @Override

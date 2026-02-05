@@ -20,6 +20,7 @@ import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
 import one.modality.booking.frontoffice.bookingpage.components.StyledSectionHeader;
+import one.modality.booking.frontoffice.bookingpage.standard.BookingSelectionState;
 import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
 
 import java.util.HashMap;
@@ -111,6 +112,7 @@ public class DefaultChildCarerSection implements HasChildCarerSection {
 
     // === DATA ===
     protected WorkingBookingProperties workingBookingProperties;
+    protected BookingSelectionState selectionState;
     protected Runnable onSelectionChanged;
 
     public DefaultChildCarerSection() {
@@ -294,16 +296,43 @@ public class DefaultChildCarerSection implements HasChildCarerSection {
         card.getProperties().put("personId", personId);
         card.getProperties().put("isExternal", isExternal);
 
-        // Click handler
+        // Click handler - writes directly to SelectionState when available
         card.setOnMouseClicked(e -> {
             if (card.getStyleClass().contains("disabled")) return;
 
             if (isExternal) {
+                // External carer selected
                 typeProperty.set("external");
                 personIdProperty.set(null);
+                if (selectionState != null) {
+                    if (carerNumber == 1) {
+                        selectionState.setChildCarer1Type("external");
+                        selectionState.setChildCarer1PersonId(null);
+                        selectionState.setChildCarer1DocumentId(null);
+                    } else {
+                        selectionState.setChildCarer2Type("external");
+                        selectionState.setChildCarer2PersonId(null);
+                        selectionState.setChildCarer2DocumentId(null);
+                    }
+                }
             } else {
+                // Household carer selected
                 typeProperty.set("household");
                 personIdProperty.set(personId);
+                HouseholdMember member = findMemberByPersonId(personId);
+                if (selectionState != null) {
+                    if (carerNumber == 1) {
+                        selectionState.setChildCarer1Type("household");
+                        selectionState.setChildCarer1PersonId(personId);
+                        selectionState.setChildCarer1Name(member != null ? member.getName() : "");
+                        selectionState.setChildCarer1DocumentId(member != null ? member.getDocumentId() : null);
+                    } else {
+                        selectionState.setChildCarer2Type("household");
+                        selectionState.setChildCarer2PersonId(personId);
+                        selectionState.setChildCarer2Name(member != null ? member.getName() : "");
+                        selectionState.setChildCarer2DocumentId(member != null ? member.getDocumentId() : null);
+                    }
+                }
             }
             updateCarerCardStates(carerNumber);
             showExternalFields(carerNumber, isExternal);
@@ -526,9 +555,13 @@ public class DefaultChildCarerSection implements HasChildCarerSection {
 
         card.getChildren().addAll(checkbox, policyLabel);
 
-        // Click handler
+        // Click handler - writes directly to SelectionState when available
         card.setOnMouseClicked(e -> {
-            policyAcceptedProperty.set(!policyAcceptedProperty.get());
+            boolean newValue = !policyAcceptedProperty.get();
+            policyAcceptedProperty.set(newValue);
+            if (selectionState != null) {
+                selectionState.setChildPolicyAccepted(newValue);
+            }
         });
 
         // Update styling when policy changes
@@ -647,6 +680,19 @@ public class DefaultChildCarerSection implements HasChildCarerSection {
         if (onSelectionChanged != null) {
             onSelectionChanged.run();
         }
+    }
+
+    /**
+     * Finds a HouseholdMember by personId.
+     */
+    protected HouseholdMember findMemberByPersonId(Object personId) {
+        if (personId == null) return null;
+        for (HouseholdMember member : householdMembers) {
+            if (personId.equals(member.getPersonId())) {
+                return member;
+            }
+        }
+        return null;
     }
 
     // ========================================
@@ -846,5 +892,131 @@ public class DefaultChildCarerSection implements HasChildCarerSection {
     @Override
     public void setOnSelectionChanged(Runnable callback) {
         this.onSelectionChanged = callback;
+    }
+
+    // ========================================
+    // BookingSelectionState BINDING
+    // ========================================
+
+    /**
+     * Binds this section to the centralized BookingSelectionState.
+     * Overrides the default interface method to use focus-lost pattern for text fields
+     * and to initialize UI from state when returning to the section.
+     */
+    @Override
+    public void bindToSelectionState(BookingSelectionState state) {
+        this.selectionState = state;
+        if (state == null) return;
+
+        // Set up focus-lost bindings for text fields (update state on focus lost, not every keystroke)
+        setupFocusLostBinding(carer1NameField, () -> {
+            if ("external".equals(state.getChildCarer1Type())) {
+                state.setChildCarer1Name(carer1NameField.getText());
+            }
+        });
+        setupFocusLostBinding(carer1RefField, () -> {
+            if ("external".equals(state.getChildCarer1Type())) {
+                state.setChildCarer1BookingRef(carer1RefField.getText());
+            }
+        });
+        setupFocusLostBinding(carer2NameField, () -> {
+            if ("external".equals(state.getChildCarer2Type())) {
+                state.setChildCarer2Name(carer2NameField.getText());
+            }
+        });
+        setupFocusLostBinding(carer2RefField, () -> {
+            if ("external".equals(state.getChildCarer2Type())) {
+                state.setChildCarer2BookingRef(carer2RefField.getText());
+            }
+        });
+
+        // Listen to policy property to update validity
+        state.childPolicyAcceptedProperty().addListener((obs, o, n) -> updateValidity());
+
+        // Initialize UI from state (for returning to section)
+        initializeFromState();
+    }
+
+    /**
+     * Sets up focus-lost binding for a text field.
+     * Updates SelectionState only when the field loses focus.
+     */
+    protected void setupFocusLostBinding(TextField field, Runnable updateCallback) {
+        if (field != null) {
+            field.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
+                if (!isFocused && selectionState != null) {
+                    updateCallback.run();
+                }
+            });
+        }
+    }
+
+    /**
+     * Initializes the UI from the BookingSelectionState.
+     * Called when binding to state to restore UI state when user returns to this section.
+     */
+    protected void initializeFromState() {
+        if (selectionState == null) return;
+
+        // Carer 1
+        String type1 = selectionState.getChildCarer1Type();
+        if (type1 != null && !type1.isEmpty()) {
+            carer1TypeProperty.set(type1);
+            carer1PersonIdProperty.set(selectionState.getChildCarer1PersonId());
+            carer1NameProperty.set(selectionState.getChildCarer1Name());
+            carer1BookingRefProperty.set(selectionState.getChildCarer1BookingRef());
+
+            // Update UI
+            if ("external".equals(type1)) {
+                showExternalFields(1, true);
+                if (carer1NameField != null) carer1NameField.setText(selectionState.getChildCarer1Name() != null ? selectionState.getChildCarer1Name() : "");
+                if (carer1RefField != null) carer1RefField.setText(selectionState.getChildCarer1BookingRef() != null ? selectionState.getChildCarer1BookingRef() : "");
+            }
+            updateCarerCardStates(1);
+        }
+
+        // Carer 2
+        String type2 = selectionState.getChildCarer2Type();
+        if (type2 != null && !type2.isEmpty()) {
+            carer2TypeProperty.set(type2);
+            carer2PersonIdProperty.set(selectionState.getChildCarer2PersonId());
+            carer2NameProperty.set(selectionState.getChildCarer2Name());
+            carer2BookingRefProperty.set(selectionState.getChildCarer2BookingRef());
+
+            // Update UI
+            if ("external".equals(type2)) {
+                showExternalFields(2, true);
+                if (carer2NameField != null) carer2NameField.setText(selectionState.getChildCarer2Name() != null ? selectionState.getChildCarer2Name() : "");
+                if (carer2RefField != null) carer2RefField.setText(selectionState.getChildCarer2BookingRef() != null ? selectionState.getChildCarer2BookingRef() : "");
+            }
+            updateCarerCardStates(2);
+        }
+
+        // Policy
+        boolean policyAccepted = selectionState.isChildPolicyAccepted();
+        policyAcceptedProperty.set(policyAccepted);
+
+        updateValidity();
+    }
+
+    /**
+     * Syncs any unsaved text field content to state.
+     * Call this before navigating away (e.g., when user clicks Continue without losing focus).
+     */
+    public void syncToState() {
+        if (selectionState == null) return;
+
+        if (carer1NameField != null && "external".equals(selectionState.getChildCarer1Type())) {
+            selectionState.setChildCarer1Name(carer1NameField.getText());
+        }
+        if (carer1RefField != null && "external".equals(selectionState.getChildCarer1Type())) {
+            selectionState.setChildCarer1BookingRef(carer1RefField.getText());
+        }
+        if (carer2NameField != null && "external".equals(selectionState.getChildCarer2Type())) {
+            selectionState.setChildCarer2Name(carer2NameField.getText());
+        }
+        if (carer2RefField != null && "external".equals(selectionState.getChildCarer2Type())) {
+            selectionState.setChildCarer2BookingRef(carer2RefField.getText());
+        }
     }
 }

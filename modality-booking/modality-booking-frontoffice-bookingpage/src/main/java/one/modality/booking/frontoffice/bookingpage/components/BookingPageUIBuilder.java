@@ -7,6 +7,7 @@ import javafx.beans.property.ObjectProperty;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Cursor;
+import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.ContentDisplay;
 import javafx.scene.control.Hyperlink;
@@ -104,6 +105,21 @@ public final class BookingPageUIBuilder {
     public static final String ICON_CLOCK = "M12 3a9 9 0 100 18 9 9 0 000-18z";
     /** Clock hands */
     public static final String ICON_CLOCK_HANDS = "M12 6v6l4 4";
+
+    /** Globe/world icon for translation/language - 24x24 viewBox */
+    public static final String ICON_GLOBE = "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zM11 19.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zM17.9 17.39c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z";
+
+    /** Heart icon for assistance/special needs - 24x24 viewBox */
+    public static final String ICON_HEART = "M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z";
+
+    /** Checkmark circle icon for ordination/confirmation - 24x24 viewBox */
+    public static final String ICON_CHECK_CIRCLE = "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM10 17l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z";
+
+    /** Users/people icon for roommate/group - 24x24 viewBox */
+    public static final String ICON_USERS = "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75";
+
+    /** Headphones icon for audio recording - 24x24 viewBox */
+    public static final String ICON_HEADPHONES = "M3 18v-6a9 9 0 0 1 18 0v6M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z";
 
     // =============================================
     // EFFECTS AND SHADOWS
@@ -294,15 +310,30 @@ public final class BookingPageUIBuilder {
      * @return A StackPane containing the rotated ribbon
      */
     public static StackPane createSoldOutRibbon() {
-        Label label = new Label("SOLD OUT");
-        label.getStyleClass().add(bookingpage_soldout_ribbon_text);
-        label.setPadding(new Insets(4, 40, 4, 40));
-
-        StackPane ribbon = new StackPane(label);
+        // Create a diagonal corner ribbon in the top-right corner
+        // Style: warm gray background (#78716c), light text (#fafaf9), rotated 45deg
+        StackPane ribbon = new StackPane();
         ribbon.getStyleClass().add(bookingpage_soldout_ribbon);
-        // Rotate 45 degrees
-        ribbon.getTransforms().add(new javafx.scene.transform.Rotate(45, 0, 0));
         ribbon.setAlignment(Pos.CENTER);
+
+        // Text styling - font size defined in CSS class
+        Label ribbonText = new Label("SOLD OUT");
+        ribbonText.getStyleClass().add(bookingpage_soldout_ribbon_text);
+
+        // Padding for the ribbon - asymmetric to center text in visible area
+        // More padding on left to shift text towards visible center
+        ribbon.setPadding(new Insets(4, 35, 4, 55));
+
+        ribbon.getChildren().add(ribbonText);
+        ribbon.setMaxWidth(Region.USE_PREF_SIZE);
+        ribbon.setMaxHeight(Region.USE_PREF_SIZE);
+
+        // Rotate for diagonal effect (45deg) - use setRotate for center-based rotation
+        ribbon.setRotate(45);
+
+        // Position: extend to right edge, but low enough for text to be visible
+        ribbon.setTranslateX(30);
+        ribbon.setTranslateY(18);
 
         return ribbon;
     }
@@ -379,7 +410,9 @@ public final class BookingPageUIBuilder {
      * @param selectedProperty      Property to bind selection state
      * @param colorSchemeProperty   Property (ignored - kept for API compatibility, use CSS theme classes instead)
      * @return A StackPane containing the checkbox indicator
+     * @deprecated Use {@link #createCheckboxIndicator(BooleanProperty)} instead. The colorSchemeProperty is ignored; CSS handles theming.
      */
+    @Deprecated
     public static StackPane createCheckboxIndicator(BooleanProperty selectedProperty, ObjectProperty<BookingFormColorScheme> colorSchemeProperty) {
         return createCheckboxIndicator(selectedProperty);
     }
@@ -648,12 +681,12 @@ public final class BookingPageUIBuilder {
     // =============================================
 
     /**
-     * Creates a card with an embedded checkbox indicator on the left, with color scheme support.
-     * Applies border and checkbox colors in Java per project guidelines for WebFX/GWT compatibility.
+     * Creates a card with an embedded checkbox indicator on the left.
+     * Uses CSS-based styling for consistent appearance across all sections.
      *
      * @param content              The content to display (typically labels/descriptions)
      * @param selectedProperty     Property to bind selection state (toggles on click)
-     * @param colorSchemeProperty  Property for color scheme (used for card border and checkbox when selected)
+     * @param colorSchemeProperty  Property for color scheme (kept for API compatibility, CSS handles theming)
      * @return A styled HBox containing checkbox indicator + content
      */
     public static HBox createCheckboxCard(javafx.scene.Node content, BooleanProperty selectedProperty,
@@ -664,8 +697,8 @@ public final class BookingPageUIBuilder {
         card.setCursor(Cursor.HAND);
         card.getStyleClass().add(bookingpage_checkbox_card);
 
-        // Checkbox indicator on left - with color scheme support
-        StackPane checkbox = createColorSchemeCheckboxIndicator(selectedProperty, colorSchemeProperty);
+        // Use CSS-based checkbox indicator for consistent styling
+        StackPane checkbox = createCheckboxIndicator(selectedProperty);
 
         card.getChildren().addAll(checkbox, content);
 
@@ -674,61 +707,6 @@ public final class BookingPageUIBuilder {
         makeSelectable(card, selectedProperty);
 
         return card;
-    }
-
-    /**
-     * Creates a checkbox indicator with color scheme support applied in Java.
-     * For WebFX/GWT compatibility, colors are set programmatically.
-     */
-    private static StackPane createColorSchemeCheckboxIndicator(BooleanProperty selectedProperty,
-            ObjectProperty<BookingFormColorScheme> colorSchemeProperty) {
-        if (colorSchemeProperty == null) {
-            return createCheckboxIndicator(selectedProperty);
-        }
-
-        double size = 20;
-
-        // Background rectangle
-        Rectangle rect = new Rectangle(size, size);
-        rect.setArcWidth(6);
-        rect.setArcHeight(6);
-
-        // Checkmark
-        SVGPath checkmark = new SVGPath();
-        checkmark.setContent(ICON_CHECK);
-        checkmark.setScaleX(0.42);
-        checkmark.setScaleY(0.42);
-        checkmark.setVisible(false);
-
-        StackPane container = new StackPane(rect, checkmark);
-        container.setMinSize(size, size);
-        container.setMaxSize(size, size);
-        container.setAlignment(Pos.CENTER);
-
-        // Apply colors from color scheme in Java
-        Runnable updateStyle = () -> {
-            boolean selected = selectedProperty.get();
-            BookingFormColorScheme scheme = colorSchemeProperty.get();
-            if (scheme == null) scheme = BookingFormColorScheme.DEFAULT;
-
-            if (selected) {
-                rect.setFill(scheme.getPrimary());
-                rect.setStroke(scheme.getPrimary());
-                checkmark.setFill(Color.WHITE);
-                checkmark.setStroke(Color.WHITE);
-                checkmark.setVisible(true);
-            } else {
-                rect.setFill(Color.WHITE);
-                rect.setStroke(Color.web("#D1D5DB"));
-                checkmark.setVisible(false);
-            }
-        };
-
-        updateStyle.run();
-        selectedProperty.addListener((obs, old, val) -> updateStyle.run());
-        colorSchemeProperty.addListener((obs, old, val) -> updateStyle.run());
-
-        return container;
     }
 
     /**
@@ -783,6 +761,331 @@ public final class BookingPageUIBuilder {
     }
 
     // =============================================
+    // ACCOMMODATION CARDS (Responsive)
+    // =============================================
+
+    /**
+     * Configuration for an accommodation option card.
+     * Used with {@link #createAccommodationCard} for consistent card rendering.
+     */
+    public static class AccommodationCardConfig {
+        public final String name;
+        public final String description;
+        public final String constraintText;
+        public final String priceText;
+        public final String pricingTypeText;
+        public final boolean isSelected;
+        public final boolean isSoldOut;
+        public final boolean isAvailable;
+        public final BooleanProperty selectedProperty;
+        public final Runnable onSelect;
+
+        public AccommodationCardConfig(
+                String name,
+                String description,
+                String constraintText,
+                String priceText,
+                String pricingTypeText,
+                boolean isSelected,
+                boolean isSoldOut,
+                boolean isAvailable,
+                BooleanProperty selectedProperty,
+                Runnable onSelect) {
+            this.name = name;
+            this.description = description;
+            this.constraintText = constraintText;
+            this.priceText = priceText;
+            this.pricingTypeText = pricingTypeText;
+            this.isSelected = isSelected;
+            this.isSoldOut = isSoldOut;
+            this.isAvailable = isAvailable;
+            this.selectedProperty = selectedProperty;
+            this.onSelect = onSelect;
+        }
+    }
+
+    /**
+     * Result holder for accommodation card containing the card and the checkmark reference.
+     */
+    public static class AccommodationCardResult {
+        public final VBox card;
+        public final StackPane checkmarkIndicator;
+
+        public AccommodationCardResult(VBox card, StackPane checkmarkIndicator) {
+            this.card = card;
+            this.checkmarkIndicator = checkmarkIndicator;
+        }
+    }
+
+    /**
+     * Creates a responsive accommodation option card with proper layout for all screen sizes.
+     *
+     * <p>Card layout structure:</p>
+     * <ul>
+     *   <li>Left side (roomInfo): Name, Badge (below name), Description</li>
+     *   <li>Right side (priceBox): Price, Pricing type (per person/room)</li>
+     * </ul>
+     *
+     * <p>CSS classes used:</p>
+     * <ul>
+     *   <li>{@code .bookingpage-selectable-card} - card container</li>
+     *   <li>{@code .bookingpage-accommodation-card} - accommodation-specific styling</li>
+     *   <li>{@code .selected} - selected state</li>
+     *   <li>{@code .soldout} - sold out state</li>
+     *   <li>{@code .disabled} - disabled state</li>
+     * </ul>
+     *
+     * @param config The card configuration
+     * @param parentContainer The container that holds cards (for width-based responsive layout)
+     * @return AccommodationCardResult containing the card and checkmark indicator reference
+     */
+    public static AccommodationCardResult createAccommodationCard(AccommodationCardConfig config, Region parentContainer) {
+        // Card structure matches reference: step1-package-room.html
+        // Layout: [room-info (name + badge, description)] [room-price]
+
+        VBox card = new VBox(0);
+        card.setMaxWidth(Double.MAX_VALUE);
+        card.getStyleClass().addAll(bookingpage_selectable_card, "bookingpage-accommodation-card");
+
+        if (config.isSoldOut) {
+            card.getStyleClass().addAll(soldout, disabled);
+        } else if (config.isSelected) {
+            card.getStyleClass().add(selected);
+        }
+
+        // === ROOM INFO (left side) ===
+        VBox roomInfo = new VBox(8);
+        roomInfo.setAlignment(Pos.CENTER_LEFT);
+        HBox.setHgrow(roomInfo, Priority.ALWAYS);
+
+        // Room name (title)
+        Label nameLabel = new Label(config.name != null ? config.name : "");
+        nameLabel.getStyleClass().addAll(bookingpage_text_base, bookingpage_font_semibold);
+        if (config.isSoldOut) {
+            nameLabel.getStyleClass().add(bookingpage_text_muted_light);
+        } else {
+            nameLabel.getStyleClass().add(bookingpage_text_dark);
+        }
+        nameLabel.setWrapText(true);
+        roomInfo.getChildren().add(nameLabel);
+
+        // Constraint badge on its own line below title (if present)
+        if (config.constraintText != null && !config.constraintText.isEmpty()) {
+            HBox constraintBadge = createConstraintBadge(config.constraintText, config.isSoldOut);
+            roomInfo.getChildren().add(constraintBadge);
+        }
+
+        // Description on its own line (if present)
+        if (config.description != null && !config.description.isEmpty()) {
+            Label descLabel = new Label(config.description);
+            descLabel.getStyleClass().addAll(bookingpage_text_sm);
+            if (config.isSoldOut) {
+                descLabel.getStyleClass().add(bookingpage_text_muted_disabled);
+            } else {
+                descLabel.getStyleClass().add(bookingpage_text_muted);
+            }
+            descLabel.setWrapText(true);
+            roomInfo.getChildren().add(descLabel);
+        }
+
+        // === PRICE (right side) ===
+        VBox priceBox = new VBox(2);
+        priceBox.setAlignment(Pos.CENTER_RIGHT);
+        priceBox.setMinWidth(Region.USE_PREF_SIZE);
+
+        // Price label - large and prominent
+        Label priceLabel = new Label(config.priceText != null ? config.priceText : "");
+        priceLabel.getStyleClass().addAll(bookingpage_text_xl, bookingpage_font_bold);
+        if (config.isSoldOut) {
+            priceLabel.getStyleClass().addAll(bookingpage_text_muted_light, "bookingpage-text-strikethrough");
+        } else {
+            priceLabel.getStyleClass().add(bookingpage_text_primary);
+        }
+        priceBox.getChildren().add(priceLabel);
+
+        // Pricing type label (per person / per room) - small text below price
+        if (config.pricingTypeText != null && !config.pricingTypeText.isEmpty()) {
+            Label pricingTypeLabel = new Label(config.pricingTypeText);
+            pricingTypeLabel.getStyleClass().addAll(bookingpage_text_xs, bookingpage_text_muted);
+            priceBox.getChildren().add(pricingTypeLabel);
+        }
+
+        // === MAIN CONTENT ROW ===
+        // Layout: [roomInfo] [priceBox]
+        HBox contentRow = new HBox(16);
+        contentRow.setAlignment(Pos.CENTER_LEFT);
+        contentRow.setPadding(new Insets(24));
+        contentRow.getChildren().addAll(roomInfo, priceBox);
+
+        // For sold out, wrap with ribbon
+        if (config.isSoldOut) {
+            StackPane wrapper = new StackPane(contentRow);
+            wrapper.setMaxWidth(Double.MAX_VALUE);
+
+            Node ribbon = createSoldOutRibbon();
+            wrapper.getChildren().add(ribbon);
+            StackPane.setAlignment(ribbon, Pos.TOP_RIGHT);
+
+            // Clip for rounded corners
+            Rectangle clip = new Rectangle();
+            clip.setArcWidth(24);
+            clip.setArcHeight(24);
+            clip.widthProperty().bind(card.widthProperty());
+            clip.heightProperty().bind(card.heightProperty());
+            card.setClip(clip);
+
+            card.getChildren().add(wrapper);
+        } else {
+            // Add selection checkmark for available cards (positioned top-right)
+            StackPane checkmark = createCheckmarkBadgeCss(32);
+            checkmark.setVisible(config.isSelected);
+
+            StackPane wrapper = new StackPane(contentRow, checkmark);
+            wrapper.setMaxWidth(Double.MAX_VALUE);
+            StackPane.setAlignment(checkmark, Pos.TOP_RIGHT);
+            StackPane.setMargin(checkmark, new Insets(12, 12, 0, 0));
+
+            card.getChildren().add(wrapper);
+
+            // Selection state updates
+            if (config.selectedProperty != null) {
+                config.selectedProperty.addListener((obs, oldVal, newVal) -> {
+                    checkmark.setVisible(newVal);
+                    if (newVal) {
+                        if (!card.getStyleClass().contains(selected)) {
+                            card.getStyleClass().add(selected);
+                        }
+                    } else {
+                        card.getStyleClass().remove(selected);
+                    }
+                });
+            }
+        }
+
+        // Click handler
+        if (config.isAvailable && config.onSelect != null) {
+            card.setCursor(Cursor.HAND);
+            card.setOnMouseClicked(e -> config.onSelect.run());
+        }
+
+        // Return card with null for checkmark (checkmark is internal now, managed by selectedProperty listener)
+        return new AccommodationCardResult(card, null);
+    }
+
+    // =============================================
+    // RADIO PILLS
+    // =============================================
+
+    /**
+     * Creates a radio pill button for single-select option groups.
+     * Uses compact pill styling with rounded corners, suitable for horizontal layouts.
+     *
+     * <p>CSS classes used:</p>
+     * <ul>
+     *   <li>{@code .bookingpage-radio-pill} - pill container</li>
+     *   <li>{@code .bookingpage-radio-pill-outer} - outer circle</li>
+     *   <li>{@code .bookingpage-radio-pill-inner} - inner dot</li>
+     *   <li>{@code .selected} - added when selected</li>
+     * </ul>
+     *
+     * @param text             The label text for the pill
+     * @param value            The value this pill represents (for comparison with selectedProperty)
+     * @param selectedProperty Property containing the currently selected value
+     * @param onSelect         Action when this pill is clicked
+     * @param <T>              The type of the value
+     * @return A styled HBox containing the radio pill
+     */
+    public static <T> HBox createRadioPill(String text, T value, ObjectProperty<T> selectedProperty, Runnable onSelect) {
+        HBox pill = new HBox(6);
+        pill.setAlignment(Pos.CENTER_LEFT);
+        pill.setPadding(new Insets(8, 16, 8, 16));
+        pill.getStyleClass().add(bookingpage_radio_pill);
+        pill.setCursor(Cursor.HAND);
+
+        // Radio indicator (small circular - 14px)
+        StackPane radio = createSmallRadioIndicator(value, selectedProperty);
+        pill.getChildren().add(radio);
+
+        // Label
+        Label label = new Label(text);
+        label.getStyleClass().addAll(bookingpage_text_sm, bookingpage_font_medium, bookingpage_text_dark);
+        pill.getChildren().add(label);
+
+        // Update pill style based on selection
+        Runnable updatePillStyle = () -> {
+            T currentSelected = selectedProperty.get();
+            boolean isSelected = value != null && value.equals(currentSelected);
+            if (isSelected) {
+                if (!pill.getStyleClass().contains(selected)) {
+                    pill.getStyleClass().add(selected);
+                }
+            } else {
+                pill.getStyleClass().remove(selected);
+            }
+        };
+
+        updatePillStyle.run();
+        selectedProperty.addListener((obs, old, newVal) -> updatePillStyle.run());
+
+        // Click handler
+        pill.setOnMouseClicked(e -> {
+            if (onSelect != null) {
+                onSelect.run();
+            }
+        });
+
+        return pill;
+    }
+
+    /**
+     * Creates a small circular radio indicator (14px) for radio pills.
+     * The indicator updates automatically based on the selected property.
+     *
+     * @param value            The value this indicator represents
+     * @param selectedProperty Property containing the currently selected value
+     * @param <T>              The type of the value
+     * @return A StackPane containing the radio indicator
+     */
+    public static <T> StackPane createSmallRadioIndicator(T value, ObjectProperty<T> selectedProperty) {
+        double size = 14;
+        double dotSize = 6;
+
+        // Outer circle
+        Circle outer = new Circle(size / 2);
+        outer.getStyleClass().add(bookingpage_radio_pill_outer);
+
+        // Inner dot
+        Circle inner = new Circle(dotSize / 2);
+        inner.setVisible(false);
+        inner.getStyleClass().add(bookingpage_radio_pill_inner);
+
+        StackPane container = new StackPane(outer, inner);
+        container.setMinSize(size, size);
+        container.setMaxSize(size, size);
+        container.setAlignment(Pos.CENTER);
+
+        // Update indicator based on selection
+        Runnable updateIndicator = () -> {
+            T currentSelected = selectedProperty.get();
+            boolean isSelected = value != null && value.equals(currentSelected);
+            if (isSelected) {
+                outer.getStyleClass().add(selected);
+                inner.setVisible(true);
+                inner.getStyleClass().add(selected);
+            } else {
+                outer.getStyleClass().remove(selected);
+                inner.setVisible(false);
+                inner.getStyleClass().remove(selected);
+            }
+        };
+
+        updateIndicator.run();
+        selectedProperty.addListener((obs, old, newVal) -> updateIndicator.run());
+
+        return container;
+    }
+
+    // =============================================
     // NAVIGATION BUTTONS
     // =============================================
 
@@ -793,7 +1096,9 @@ public final class BookingPageUIBuilder {
      * @param i18nKey            The i18n key for the button text
      * @param colorSchemeProperty Property (ignored - kept for API compatibility, use CSS theme classes instead)
      * @return A styled Button
+     * @deprecated Use {@link #createPrimaryButton(Object)} instead. The colorSchemeProperty is ignored; CSS handles theming.
      */
+    @Deprecated
     public static Button createPrimaryButton(Object i18nKey, ObjectProperty<BookingFormColorScheme> colorSchemeProperty) {
         return createPrimaryButton(i18nKey);
     }

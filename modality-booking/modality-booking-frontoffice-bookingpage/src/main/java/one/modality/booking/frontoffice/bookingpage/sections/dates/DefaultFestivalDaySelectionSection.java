@@ -83,6 +83,7 @@ public class DefaultFestivalDaySelectionSection implements HasFestivalDaySelecti
     protected boolean earlyArrivalAllowed = true; // false to disable dates before mainEventStartDate
     protected boolean lateDepartureAllowed = true; // false to disable dates after mainEventEndDate
     protected String changingDateMode = null; // null, "arrival", or "departure"
+    protected boolean timeSelectionEnabled = true; // false to hide time selection sections (arrival/departure time)
 
     // === DATA ===
     protected List<FestivalDay> festivalDays = new ArrayList<>();
@@ -151,6 +152,16 @@ public class DefaultFestivalDaySelectionSection implements HasFestivalDaySelecti
     protected Label arrivalTimeTitleLabel;  // Title label for arrival time section
     protected Label departureTimeTitleLabel;  // Title label for departure time section
 
+    // === NEW DATE SELECTOR UI COMPONENTS ===
+    protected HBox dateSelectorContainer;       // Contains arrival + departure selectors
+    protected VBox arrivalSelectorCard;         // Clickable card for arrival selection
+    protected VBox departureSelectorCard;       // Clickable card for departure selection
+    protected Label arrivalDateLabel;           // Shows "Select date" or formatted arrival date
+    protected Label departureDateLabel;         // Shows "Select date" or formatted departure date
+    protected HBox constraintInfoBox;           // Shows constraint warnings when date picker is open
+    protected Label datePickerInstruction;      // "Select arrival/departure date:" label
+    protected VBox datePickerContainer;         // Container for instruction + days grid (shown/hidden)
+
     // === CALLBACKS ===
     protected BiConsumer<LocalDate, LocalDate> onDatesChanged;
 
@@ -170,15 +181,28 @@ public class DefaultFestivalDaySelectionSection implements HasFestivalDaySelecti
         // Section header
         HBox sectionHeader = new StyledSectionHeader(BookingPageI18nKeys.YourStayAndFestivalDays, StyledSectionHeader.ICON_CALENDAR);
 
-        // Instruction box with helpful text
-        instructionBox = buildInstructionBox();
+        // Date selector container (two clickable cards: Arrival / Departure)
+        dateSelectorContainer = buildDateSelectorContainer();
+
+        // Constraint info/warning box (shows why dates may be disabled)
+        constraintInfoBox = buildConstraintInfoBox();
 
         // Days container (FlowPane for wrapping like JSX flex-wrap)
         daysContainer = new FlowPane(8, 12); // bigger vertical gap for breathing space above DEPARTURE tag
         daysContainer.setAlignment(Pos.CENTER);
         daysContainer.setPadding(new Insets(8, 0, 20, 0));
 
-        // Change Arrival/Departure buttons (shown when dates are set)
+        // Date picker container (instruction + days grid) - initially hidden
+        datePickerContainer = buildDatePickerContainer();
+        datePickerContainer.setVisible(false);
+        datePickerContainer.setManaged(false);
+
+        // Legacy instruction box (kept for compatibility but hidden in new flow)
+        instructionBox = buildInstructionBox();
+        instructionBox.setVisible(false);
+        instructionBox.setManaged(false);
+
+        // Change Arrival/Departure buttons (hidden - replaced by date selector cards)
         changeDateButtonsBox = buildChangeDateButtons();
         changeDateButtonsBox.setVisible(false);
         changeDateButtonsBox.setManaged(false);
@@ -198,7 +222,7 @@ public class DefaultFestivalDaySelectionSection implements HasFestivalDaySelecti
         departureTimeSection.setVisible(false);
         departureTimeSection.setManaged(false);
 
-        container.getChildren().addAll(sectionHeader, instructionBox, daysContainer, changeDateButtonsBox, timeMealsInfoBox, arrivalTimeSection, departureTimeSection);
+        container.getChildren().addAll(sectionHeader, dateSelectorContainer, constraintInfoBox, datePickerContainer, timeMealsInfoBox, arrivalTimeSection, departureTimeSection);
     }
 
     protected HBox buildInstructionBox() {
@@ -244,6 +268,248 @@ public class DefaultFestivalDaySelectionSection implements HasFestivalDaySelecti
 
         box.getChildren().addAll(changeArrivalBtn, changeDepartureBtn);
         return box;
+    }
+
+    /**
+     * Builds the date selector container with two clickable cards (Arrival/Departure).
+     * Each card shows "Select date" initially, then the formatted date when selected.
+     * Clicking a card opens the date picker grid for that selection type.
+     */
+    protected HBox buildDateSelectorContainer() {
+        HBox container = new HBox(16);
+        container.setAlignment(Pos.CENTER);
+        container.setPadding(new Insets(8, 0, 8, 0));
+
+        // Arrival selector card
+        arrivalSelectorCard = createDateSelectorCard(true);
+
+        // Departure selector card
+        departureSelectorCard = createDateSelectorCard(false);
+
+        container.getChildren().addAll(arrivalSelectorCard, departureSelectorCard);
+        return container;
+    }
+
+    /**
+     * Creates a single date selector card (for arrival or departure).
+     */
+    protected VBox createDateSelectorCard(boolean isArrival) {
+        VBox card = new VBox(4);
+        card.setAlignment(Pos.CENTER_LEFT);
+        card.setPadding(new Insets(12, 20, 12, 20));
+        card.setMinWidth(160);
+        card.setCursor(Cursor.HAND);
+        card.getStyleClass().add("bookingpage-date-selector-card");
+
+        // Label (Arrival/Departure)
+        Label typeLabel = new Label(I18n.getI18nText(isArrival ? BookingPageI18nKeys.Arrival : BookingPageI18nKeys.Departure));
+        typeLabel.getStyleClass().add("bookingpage-date-selector-label");
+
+        // Date value (shows "Select date" initially)
+        Label dateLabel = new Label(I18n.getI18nText(BookingPageI18nKeys.SelectDate));
+        dateLabel.getStyleClass().add("bookingpage-date-selector-value");
+
+        // Store reference for dynamic updates
+        if (isArrival) {
+            arrivalDateLabel = dateLabel;
+        } else {
+            departureDateLabel = dateLabel;
+        }
+
+        card.getChildren().addAll(typeLabel, dateLabel);
+
+        // Click handler - opens date picker for this selection type
+        card.setOnMouseClicked(e -> {
+            changingDateMode = isArrival ? "arrival" : "departure";
+            updateDateSelectorCardStyles();
+            updateSectionVisibility();
+            rebuildDayCards();
+        });
+
+        return card;
+    }
+
+    /**
+     * Updates the visual styles of the date selector cards based on selection state.
+     */
+    protected void updateDateSelectorCardStyles() {
+        LocalDate arrival = arrivalDateProperty.get();
+        LocalDate departure = departureDateProperty.get();
+
+        // Update arrival card styles
+        if (arrivalSelectorCard != null) {
+            arrivalSelectorCard.getStyleClass().removeAll("active", "selected");
+            if ("arrival".equals(changingDateMode)) {
+                arrivalSelectorCard.getStyleClass().add("active");
+            }
+            if (arrival != null) {
+                arrivalSelectorCard.getStyleClass().add("selected");
+            }
+        }
+
+        // Update departure card styles
+        if (departureSelectorCard != null) {
+            departureSelectorCard.getStyleClass().removeAll("active", "selected");
+            if ("departure".equals(changingDateMode)) {
+                departureSelectorCard.getStyleClass().add("active");
+            }
+            if (departure != null) {
+                departureSelectorCard.getStyleClass().add("selected");
+            }
+        }
+    }
+
+    /**
+     * Updates the text displayed in the date selector cards.
+     */
+    protected void updateDateSelectorLabels() {
+        LocalDate arrival = arrivalDateProperty.get();
+        LocalDate departure = departureDateProperty.get();
+
+        if (arrivalDateLabel != null) {
+            if (arrival != null) {
+                arrivalDateLabel.setText(formatDateForSelector(arrival));
+            } else {
+                arrivalDateLabel.setText(I18n.getI18nText(BookingPageI18nKeys.SelectDate));
+            }
+        }
+
+        if (departureDateLabel != null) {
+            if (departure != null) {
+                departureDateLabel.setText(formatDateForSelector(departure));
+            } else {
+                departureDateLabel.setText(I18n.getI18nText(BookingPageI18nKeys.SelectDate));
+            }
+        }
+
+        updateDateSelectorCardStyles();
+    }
+
+    /**
+     * Formats a date for display in the selector card.
+     * Example: "Thu, 21 May"
+     */
+    protected String formatDateForSelector(LocalDate date) {
+        if (date == null) return "";
+        String weekday = date.getDayOfWeek().name().substring(0, 3);
+        weekday = weekday.substring(0, 1).toUpperCase() + weekday.substring(1).toLowerCase();
+        String month = date.getMonth().name().substring(0, 3);
+        month = month.substring(0, 1).toUpperCase() + month.substring(1).toLowerCase();
+        return weekday + ", " + date.getDayOfMonth() + " " + month;
+    }
+
+    /**
+     * Builds the constraint info/warning box that displays messages explaining
+     * why certain dates may not be selectable.
+     */
+    protected HBox buildConstraintInfoBox() {
+        // Create a warning-style info box initially (will update content dynamically)
+        HBox box = new HBox(10);
+        box.setAlignment(Pos.CENTER_LEFT);
+        box.setPadding(new Insets(12, 16, 12, 16));
+        box.getStyleClass().addAll(bookingpage_info_box, bookingpage_info_box_warning);
+        box.setVisible(false);
+        box.setManaged(false);
+
+        return box;
+    }
+
+    /**
+     * Updates the constraint info box with appropriate warnings based on current constraints.
+     */
+    protected void updateConstraintInfoBox() {
+        if (constraintInfoBox == null) return;
+
+        // Clear existing content
+        constraintInfoBox.getChildren().clear();
+
+        // Build constraint message(s)
+        StringBuilder message = new StringBuilder();
+        boolean hasWarning = false;
+
+        // Min nights constraint
+        if (minNightsConstraint > 0) {
+            message.append(I18n.getI18nText(BookingPageI18nKeys.FestivalDaysMinNightsWarning, minNightsConstraint));
+            hasWarning = true;
+        }
+
+        // Early arrival not allowed
+        if (!earlyArrivalAllowed) {
+            if (message.length() > 0) message.append(" ");
+            message.append(I18n.getI18nText(BookingPageI18nKeys.EarlyArrivalNotAvailable));
+            hasWarning = true;
+        }
+
+        // Late departure not allowed
+        if (!lateDepartureAllowed) {
+            if (message.length() > 0) message.append(" ");
+            message.append(I18n.getI18nText(BookingPageI18nKeys.LateDepartureNotAvailable));
+            hasWarning = true;
+        }
+
+        // Day visitor info (informational, not warning)
+        if (isDayVisitor) {
+            if (message.length() > 0) message.append(" ");
+            message.append(I18n.getI18nText(BookingPageI18nKeys.DayVisitorInfo));
+        }
+
+        // Show box if there's any constraint to display and date picker is visible
+        boolean showBox = (hasWarning || isDayVisitor) && changingDateMode != null;
+
+        if (showBox && message.length() > 0) {
+            // Update box style based on warning vs info
+            constraintInfoBox.getStyleClass().removeAll(bookingpage_info_box_warning, bookingpage_info_box_info);
+            constraintInfoBox.getStyleClass().add(hasWarning ? bookingpage_info_box_warning : bookingpage_info_box_info);
+
+            // Add warning icon if it's a warning
+            if (hasWarning) {
+                javafx.scene.shape.SVGPath warningIcon = new javafx.scene.shape.SVGPath();
+                warningIcon.setContent("M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z");
+                warningIcon.setScaleX(0.8);
+                warningIcon.setScaleY(0.8);
+                warningIcon.getStyleClass().add(bookingpage_info_box_icon);
+                constraintInfoBox.getChildren().add(warningIcon);
+            }
+
+            Label messageLabel = new Label(message.toString());
+            messageLabel.setWrapText(true);
+            messageLabel.getStyleClass().add(bookingpage_info_box_message);
+            constraintInfoBox.getChildren().add(messageLabel);
+        }
+
+        constraintInfoBox.setVisible(showBox);
+        constraintInfoBox.setManaged(showBox);
+    }
+
+    /**
+     * Builds the date picker container that wraps the instruction label and days grid.
+     * This container is shown/hidden based on changingDateMode.
+     */
+    protected VBox buildDatePickerContainer() {
+        VBox container = new VBox(12);
+        container.setAlignment(Pos.TOP_CENTER);
+
+        // Instruction label ("Select arrival/departure date:")
+        datePickerInstruction = new Label();
+        datePickerInstruction.getStyleClass().add("bookingpage-date-picker-instruction");
+
+        container.getChildren().addAll(datePickerInstruction, daysContainer);
+        return container;
+    }
+
+    /**
+     * Updates the date picker instruction text based on current mode.
+     */
+    protected void updateDatePickerInstruction() {
+        if (datePickerInstruction == null) return;
+
+        if ("arrival".equals(changingDateMode)) {
+            datePickerInstruction.setText(I18n.getI18nText(BookingPageI18nKeys.SelectArrivalDate));
+        } else if ("departure".equals(changingDateMode)) {
+            datePickerInstruction.setText(I18n.getI18nText(BookingPageI18nKeys.SelectDepartureDate));
+        } else {
+            datePickerInstruction.setText("");
+        }
     }
 
     protected VBox buildTimeSelectionSection(boolean isArrival) {
@@ -706,11 +972,33 @@ public class DefaultFestivalDaySelectionSection implements HasFestivalDaySelecti
         boolean hasArrival = arrival != null;
         boolean hasDeparture = departure != null;
         boolean hasBothDates = hasArrival && hasDeparture;
+        boolean isChangingMode = changingDateMode != null;
 
-        // Hide time sections if arrival and departure are the same day (Day Visitor with 0 nights)
+        // === DATE SELECTOR UPDATES ===
+        // Update the date selector card labels and styles
+        updateDateSelectorLabels();
+
+        // === DATE PICKER CONTAINER VISIBILITY ===
+        // Show date picker container when in changing mode (user clicked a selector card)
+        boolean showDatePicker = isChangingMode;
+        if (datePickerContainer != null) {
+            datePickerContainer.setVisible(showDatePicker);
+            datePickerContainer.setManaged(showDatePicker);
+        }
+
+        // Update date picker instruction text
+        updateDatePickerInstruction();
+
+        // Update constraint info box
+        updateConstraintInfoBox();
+
+        // === TIME SECTIONS ===
+        // Hide time sections if:
+        // - time selection is disabled (timeSelectionEnabled = false)
+        // - arrival and departure are the same day (Day Visitor with 0 nights)
         boolean isSameDay = hasBothDates && arrival.equals(departure);
-        boolean showArrivalTime = hasArrival && !isSameDay;
-        boolean showDepartureTime = hasDeparture && !isSameDay;
+        boolean showArrivalTime = timeSelectionEnabled && hasArrival && !isSameDay;
+        boolean showDepartureTime = timeSelectionEnabled && hasDeparture && !isSameDay;
 
         arrivalTimeSection.setVisible(showArrivalTime);
         arrivalTimeSection.setManaged(showArrivalTime);
@@ -730,13 +1018,16 @@ public class DefaultFestivalDaySelectionSection implements HasFestivalDaySelecti
             departureTimeTitleLabel.setText(I18n.getI18nText(BookingPageI18nKeys.DepartureTimeOnDate, formatDateForTitle(departure)));
         }
 
-        // Show change date buttons only when both dates are set and not in changing mode
-        boolean showChangeButtons = hasBothDates && changingDateMode == null;
-        changeDateButtonsBox.setVisible(showChangeButtons);
-        changeDateButtonsBox.setManaged(showChangeButtons);
+        // === LEGACY COMPONENTS (hidden) ===
+        // Change date buttons are now obsolete - replaced by date selector cards
+        changeDateButtonsBox.setVisible(false);
+        changeDateButtonsBox.setManaged(false);
 
-        // Update instruction text based on current state
-        updateInstructionText();
+        // Legacy instruction box is also hidden
+        if (instructionBox != null) {
+            instructionBox.setVisible(false);
+            instructionBox.setManaged(false);
+        }
     }
 
     /**
@@ -878,12 +1169,20 @@ public class DefaultFestivalDaySelectionSection implements HasFestivalDaySelecti
         card.getStyleClass().add(bookingpage_festival_day_card);
         if (isDisabled) {
             card.getStyleClass().add(disabled);
+        } else if (isChangingMode) {
+            // When in changing mode and clickable, show as selectable (changing class)
+            // Also add arrival/departure class if this is a boundary date being changed
+            card.getStyleClass().add(changing);
+            if (isArrival && !"arrival".equals(changingDateMode)) {
+                card.getStyleClass().add(BookingPageCssSelectors.arrival);
+            }
+            if (isDeparture && !"departure".equals(changingDateMode)) {
+                card.getStyleClass().add(BookingPageCssSelectors.departure);
+            }
         } else if (isArrival) {
             card.getStyleClass().add(BookingPageCssSelectors.arrival);
         } else if (isDeparture) {
             card.getStyleClass().add(BookingPageCssSelectors.departure);
-        } else if (isChangingMode) {
-            card.getStyleClass().add(changing);
         } else if (isInStay) {
             card.getStyleClass().add(in_stay);
         } else if (isFestival) {
@@ -1047,27 +1346,46 @@ public class DefaultFestivalDaySelectionSection implements HasFestivalDaySelecti
     }
 
     protected boolean isDateClickable(LocalDate date, LocalDate arrival, LocalDate departure) {
-        // Check early arrival restriction for initial arrival selection
+        // When in changing mode, dates are clickable (disabled state handled separately)
+        if (changingDateMode != null) {
+            // For arrival selection mode
+            if ("arrival".equals(changingDateMode)) {
+                // Check early arrival restriction
+                if (!earlyArrivalAllowed && mainEventStartDate != null && date.isBefore(mainEventStartDate)) {
+                    return false;
+                }
+                return true;
+            }
+            // For departure selection mode
+            if ("departure".equals(changingDateMode)) {
+                // Check late departure restriction
+                if (!lateDepartureAllowed && mainEventEndDate != null && date.isAfter(mainEventEndDate)) {
+                    return false;
+                }
+                // Day visitors can depart same day as arrival (0 nights)
+                // All others must depart at least 1 day after arrival
+                if (arrival != null) {
+                    return isDayVisitor ? !date.isBefore(arrival) : date.isAfter(arrival);
+                }
+                return true;
+            }
+        }
+
+        // Legacy flow (without explicit changingDateMode)
         if (arrival == null) {
-            // Selecting arrival - check if early arrival is allowed
             if (!earlyArrivalAllowed && mainEventStartDate != null && date.isBefore(mainEventStartDate)) {
-                return false; // Can't select arrival before main event if early arrival not allowed
+                return false;
             }
             return true;
         }
 
-        // When selecting departure:
-        // - Day visitors can depart same day as arrival (0 nights)
-        // - All others must depart at least 1 day after arrival
         if (departure == null) {
-            // Check late departure restriction for initial departure selection
             if (!lateDepartureAllowed && mainEventEndDate != null && date.isAfter(mainEventEndDate)) {
-                return false; // Can't select departure after main event if late departure not allowed
+                return false;
             }
             return isDayVisitor ? !date.isBefore(arrival) : date.isAfter(arrival);
         }
 
-        if (changingDateMode != null) return true;
         return false;
     }
 
@@ -1076,30 +1394,54 @@ public class DefaultFestivalDaySelectionSection implements HasFestivalDaySelecti
         LocalDate arrival = arrivalDateProperty.get();
         LocalDate departure = departureDateProperty.get();
 
-        // If we're in changing mode, handle the date change
-        if (changingDateMode != null && arrival != null && departure != null) {
-            if (changingDateMode.equals("arrival")) {
-                arrivalDateProperty.set(date);
-            } else if (changingDateMode.equals("departure")) {
-                departureDateProperty.set(date);
+        // NEW DESIGN: User explicitly selects via date selector cards
+        // changingDateMode is set when user clicks Arrival or Departure selector
+        if ("arrival".equals(changingDateMode)) {
+            // Setting arrival date
+            arrivalDateProperty.set(date);
+            if (arrival == null) {
+                arrivalTimeProperty.set(defaultArrivalTime);  // Use computed default from boundary meals
             }
-            changingDateMode = null;
+            changingDateMode = null;  // Close the date picker
             updateSectionVisibility();
             rebuildDayCards();
             return;
         }
 
-        // Normal mode: First click sets arrival, second click sets departure
+        if ("departure".equals(changingDateMode)) {
+            // Setting departure date - validate the selection
+            LocalDate currentArrival = arrivalDateProperty.get();
+            boolean validDeparture;
+            if (currentArrival == null) {
+                validDeparture = true;  // No arrival set yet, any date is valid for now
+            } else {
+                // Day visitors can depart same day as arrival (0 nights)
+                // All others must depart at least 1 day after arrival
+                validDeparture = isDayVisitor ? !date.isBefore(currentArrival) : date.isAfter(currentArrival);
+            }
+
+            if (validDeparture) {
+                departureDateProperty.set(date);
+                if (departure == null) {
+                    departureTimeProperty.set(defaultDepartureTime);  // Use computed default from boundary meals
+                }
+                changingDateMode = null;  // Close the date picker
+                updateSectionVisibility();
+                rebuildDayCards();
+            }
+            return;
+        }
+
+        // FALLBACK: Legacy behavior for direct clicks (without explicit selector)
+        // This keeps backward compatibility if date picker is shown without selector clicks
         if (arrival == null) {
             arrivalDateProperty.set(date);
-            arrivalTimeProperty.set(defaultArrivalTime);  // Use computed default from boundary meals
+            arrivalTimeProperty.set(defaultArrivalTime);
         } else if (departure == null) {
-            // Day visitors can depart same day as arrival (0 nights)
-            // All others must depart at least 1 day after arrival
             boolean validDeparture = isDayVisitor ? !date.isBefore(arrival) : date.isAfter(arrival);
             if (validDeparture) {
                 departureDateProperty.set(date);
-                departureTimeProperty.set(defaultDepartureTime);  // Use computed default from boundary meals
+                departureTimeProperty.set(defaultDepartureTime);
             }
         }
     }
@@ -1222,6 +1564,8 @@ public class DefaultFestivalDaySelectionSection implements HasFestivalDaySelecti
         this.isDayVisitor = isDayVisitor;
         // Update validity and rebuild cards when day visitor status changes
         updateValidity();
+        // Also update constraint info box to show day visitor message
+        updateConstraintInfoBox();
     }
 
     @Override
@@ -1236,6 +1580,19 @@ public class DefaultFestivalDaySelectionSection implements HasFestivalDaySelecti
         this.lateDepartureAllowed = allowed;
         // Rebuild cards to reflect constraint changes - dates after main event may now be disabled
         rebuildDayCards();
+    }
+
+    /**
+     * Sets whether time selection sections (arrival/departure time) should be visible.
+     * When disabled, the time sections and time meals info box are hidden.
+     * This is useful for forms that don't require time selection (e.g., international festivals
+     * where arrival/departure time is not relevant).
+     *
+     * @param enabled true to show time selection sections (default), false to hide them
+     */
+    public void setTimeSelectionEnabled(boolean enabled) {
+        this.timeSelectionEnabled = enabled;
+        updateSectionVisibility();
     }
 
     @Override

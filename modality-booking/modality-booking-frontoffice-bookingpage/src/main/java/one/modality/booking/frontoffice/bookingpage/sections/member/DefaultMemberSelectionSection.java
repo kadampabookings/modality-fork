@@ -78,6 +78,7 @@ public class DefaultMemberSelectionSection implements HasMemberSelectionSection 
     // === MEMBERS LIST ===
     protected final ObservableList<MemberInfo> householdMembers = FXCollections.observableArrayList();
     protected final Set<Object> alreadyBookedPersonIds = new HashSet<>();
+    protected final Map<Object, Object> personDocumentMap = new HashMap<>(); // personId -> documentId mapping for existing bookings
     protected final BooleanProperty hasAvailableMembers = new SimpleBooleanProperty(false);
 
     // === UI COMPONENTS ===
@@ -635,6 +636,24 @@ public class DefaultMemberSelectionSection implements HasMemberSelectionSection 
         updateHasAvailableMembers();
     }
 
+    /**
+     * Sets the mapping of personId to documentId for members with existing bookings.
+     * This is used to populate child carer document references.
+     */
+    public void setPersonDocumentMap(Map<Object, Object> map) {
+        personDocumentMap.clear();
+        if (map != null) {
+            personDocumentMap.putAll(map);
+        }
+    }
+
+    /**
+     * Gets the document ID for a person if they have an existing booking.
+     */
+    public Object getDocumentIdForPerson(Object personId) {
+        return personDocumentMap.get(personId);
+    }
+
     @Override
     public void clearAlreadyBooked() {
         alreadyBookedPersonIds.clear();
@@ -788,6 +807,7 @@ public class DefaultMemberSelectionSection implements HasMemberSelectionSection 
     /**
      * Converts adult household members to HouseholdMember objects for the child carer section.
      * Excludes the selected child and members under 18.
+     * Includes documentId if the member has an existing booking for the event.
      *
      * @param selectedChild The currently selected child member (to exclude from the list)
      * @return List of adult household members as HouseholdMember objects
@@ -816,6 +836,9 @@ public class DefaultMemberSelectionSection implements HasMemberSelectionSection 
                 }
             }
 
+            // Get document ID if this person has an existing booking for the event
+            Object documentId = personDocumentMap.get(member.getPersonId());
+
             // Convert MemberInfo to HouseholdMember
             // isSelf = true if this is the account owner (OWNER status)
             boolean isSelf = member.getStatus() == MemberStatus.OWNER;
@@ -823,7 +846,8 @@ public class DefaultMemberSelectionSection implements HasMemberSelectionSection 
                 member.getPersonId(),
                 member.getName(),
                 isSelf,
-                true // isAdult - we've already filtered adults
+                true, // isAdult - we've already filtered adults
+                documentId // Document ID for existing booking (null if no booking)
             ));
         }
 

@@ -65,7 +65,10 @@ module modality.booking.frontoffice.bookingpage {
     exports one.modality.booking.frontoffice.bookingpage.pages.countdown;
     exports one.modality.booking.frontoffice.bookingpage.pages.offline;
     exports one.modality.booking.frontoffice.bookingpage.sections.accommodation;
+    exports one.modality.booking.frontoffice.bookingpage.sections.assistance;
     exports one.modality.booking.frontoffice.bookingpage.sections.audio;
+    exports one.modality.booking.frontoffice.bookingpage.sections.booking;
+    exports one.modality.booking.frontoffice.bookingpage.sections.childcarer;
     exports one.modality.booking.frontoffice.bookingpage.sections.confirmation;
     exports one.modality.booking.frontoffice.bookingpage.sections.dates;
     exports one.modality.booking.frontoffice.bookingpage.sections.existing;
@@ -73,11 +76,13 @@ module modality.booking.frontoffice.bookingpage {
     exports one.modality.booking.frontoffice.bookingpage.sections.meals;
     exports one.modality.booking.frontoffice.bookingpage.sections.member;
     exports one.modality.booking.frontoffice.bookingpage.sections.options;
+    exports one.modality.booking.frontoffice.bookingpage.sections.ordination;
     exports one.modality.booking.frontoffice.bookingpage.sections.payment;
     exports one.modality.booking.frontoffice.bookingpage.sections.prerequisite;
     exports one.modality.booking.frontoffice.bookingpage.sections.queue;
     exports one.modality.booking.frontoffice.bookingpage.sections.roommate;
     exports one.modality.booking.frontoffice.bookingpage.sections.summary;
+    exports one.modality.booking.frontoffice.bookingpage.sections.translation;
     exports one.modality.booking.frontoffice.bookingpage.sections.transport;
     exports one.modality.booking.frontoffice.bookingpage.sections.user;
     exports one.modality.booking.frontoffice.bookingpage.standard;

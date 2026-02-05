@@ -55,18 +55,25 @@ public interface HasChildCarerSection extends BookingFormSection, ResettableSect
         private final String name;
         private final boolean isSelf;
         private final boolean isAdult;
+        private final Object documentId; // Document ID if this person has an existing booking for the event
 
         public HouseholdMember(Object personId, String name, boolean isSelf, boolean isAdult) {
+            this(personId, name, isSelf, isAdult, null);
+        }
+
+        public HouseholdMember(Object personId, String name, boolean isSelf, boolean isAdult, Object documentId) {
             this.personId = personId;
             this.name = name;
             this.isSelf = isSelf;
             this.isAdult = isAdult;
+            this.documentId = documentId;
         }
 
         public Object getPersonId() { return personId; }
         public String getName() { return name; }
         public boolean isSelf() { return isSelf; }
         public boolean isAdult() { return isAdult; }
+        public Object getDocumentId() { return documentId; }
 
         @Override
         public String toString() {

@@ -26,10 +26,12 @@ import one.modality.booking.frontoffice.bookingpage.*;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
 import one.modality.booking.frontoffice.bookingpage.components.StickyPriceHeader;
 import one.modality.booking.frontoffice.bookingpage.components.ValidationWarningZone;
+import one.modality.booking.frontoffice.bookingpage.sections.accommodation.AccommodationPageHeaderSection;
 import one.modality.booking.frontoffice.bookingpage.sections.accommodation.DefaultAccommodationSelectionSection;
 import one.modality.booking.frontoffice.bookingpage.sections.accommodation.HasAccommodationSelectionSection;
 import one.modality.booking.frontoffice.bookingpage.sections.assistance.DefaultAssistanceNeedsSection;
 import one.modality.booking.frontoffice.bookingpage.sections.audio.DefaultAudioRecordingPhaseCoverageSection;
+import one.modality.booking.frontoffice.bookingpage.sections.booking.BookingDetailsPageHeaderSection;
 import one.modality.booking.frontoffice.bookingpage.sections.childcarer.DefaultChildCarerSection;
 import one.modality.booking.frontoffice.bookingpage.sections.childcarer.HasChildCarerSection;
 import one.modality.booking.frontoffice.bookingpage.sections.dates.DefaultFestivalDaySelectionSection;
@@ -46,8 +48,15 @@ import one.modality.crm.shared.services.authn.fx.FXUserPerson;
 import one.modality.ecommerce.policy.service.PolicyAggregate;
 import one.modality.event.frontoffice.activities.book.event.EventBookingFormSettings;
 
+import one.modality.base.shared.entities.Period;
+import one.modality.base.shared.entities.util.ScheduledBoundaries;
+import one.modality.booking.frontoffice.bookingpage.sections.dates.HasFestivalDaySelectionSection;
+import one.modality.booking.frontoffice.bookingpage.util.BookingDateFormatter;
+import one.modality.ecommerce.shared.pricecalculator.PriceCalculator;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -120,12 +129,12 @@ public abstract class AbstractSinglePeriodInternationalFestival implements Stand
 
     // Step 3: Accommodation Page
     protected CompositeBookingFormPage accommodationPage;
-    protected DefaultEventHeaderSection accommodationEventHeader;
+    protected AccommodationPageHeaderSection accommodationPageHeader;
     protected DefaultAccommodationSelectionSection accommodationSection;
 
     // Step 4: Booking Details Page
     protected CompositeBookingFormPage bookingDetailsPage;
-    protected DefaultEventHeaderSection bookingDetailsEventHeader;
+    protected BookingDetailsPageHeaderSection bookingDetailsPageHeader;
     protected DefaultFestivalDaySelectionSection festivalDaySection;
     protected DefaultOrdinationCeremonySection ordinationSection;
     protected DefaultMealsSelectionSection mealsSection;
@@ -402,15 +411,17 @@ public abstract class AbstractSinglePeriodInternationalFestival implements Stand
 
     /**
      * Creates the Accommodation page (Step 3).
+     * Uses centered header matching JSX mockup design.
      */
     protected CompositeBookingFormPage createAccommodationPage() {
-        accommodationEventHeader = new DefaultEventHeaderSection();
+        // Use new centered header for accommodation page (matching JSX mockup)
+        accommodationPageHeader = new AccommodationPageHeaderSection();
 
         accommodationSection = new DefaultAccommodationSelectionSection();
         accommodationSection.setColorScheme(getColorScheme());
 
         accommodationPage = new CompositeBookingFormPage("Accommodation",
-            accommodationEventHeader,
+            accommodationPageHeader,
             accommodationSection)
             .setStep(true);
 
@@ -421,10 +432,12 @@ public abstract class AbstractSinglePeriodInternationalFestival implements Stand
      * Creates the Booking Details page (Step 4).
      */
     protected CompositeBookingFormPage createBookingDetailsPage() {
-        bookingDetailsEventHeader = new DefaultEventHeaderSection();
+        // Page header: "Booking Details" with subtitle
+        bookingDetailsPageHeader = new BookingDetailsPageHeaderSection();
 
         festivalDaySection = new DefaultFestivalDaySelectionSection();
         festivalDaySection.setColorScheme(getColorScheme());
+        festivalDaySection.setTimeSelectionEnabled(false); // International festivals don't need time selection
 
         ordinationSection = new DefaultOrdinationCeremonySection();
         ordinationSection.setColorScheme(getColorScheme());
@@ -452,7 +465,7 @@ public abstract class AbstractSinglePeriodInternationalFestival implements Stand
         roommateSection.setVisible(false);
 
         bookingDetailsPage = new CompositeBookingFormPage(BookingPageI18nKeys.BookingDetails,
-            bookingDetailsEventHeader,
+            bookingDetailsPageHeader,
             festivalDaySection,
             ordinationSection,
             mealsSection,
@@ -598,10 +611,15 @@ public abstract class AbstractSinglePeriodInternationalFestival implements Stand
     }
 
     protected void setupChildCarerCallbacks() {
-        if (childCarerSection == null) return;
+        // Get the child carer section - either standalone or inline from member selection
+        DefaultChildCarerSection effectiveChildCarerSection = childCarerSection;
+        if (effectiveChildCarerSection == null && memberSelectionSection != null) {
+            effectiveChildCarerSection = memberSelectionSection.getChildCarerSection();
+        }
+        if (effectiveChildCarerSection == null) return;
 
-        childCarerSection.setOnSelectionChanged(() -> {
-            // Update validation state
+        effectiveChildCarerSection.setOnSelectionChanged(() -> {
+            commitChildCarerInfoToWorkingBooking();
         });
     }
 
@@ -609,7 +627,8 @@ public abstract class AbstractSinglePeriodInternationalFestival implements Stand
         if (accommodationSection == null) return;
 
         accommodationSection.setOnOptionSelected(option -> {
-            bookSelectedItemsIntoWorkingBooking();
+            bookAccommodationItemsOnly();
+            autoIncludeBreakfastWithAccommodation();
             updateStickyPriceHeader();
             updateRoommateSectionVisibility();
         });
@@ -630,12 +649,18 @@ public abstract class AbstractSinglePeriodInternationalFestival implements Stand
         if (festivalDaySection == null) return;
 
         festivalDaySection.arrivalDateProperty().addListener((obs, old, newVal) -> {
-            bookSelectedItemsIntoWorkingBooking();
+            // Only book teachings after initial population (user interaction)
+            if (festivalDaysPopulated) {
+                bookTeachingItemsOnly();
+            }
             updateStickyPriceHeader();
         });
 
         festivalDaySection.departureDateProperty().addListener((obs, old, newVal) -> {
-            bookSelectedItemsIntoWorkingBooking();
+            // Only book teachings after initial population (user interaction)
+            if (festivalDaysPopulated) {
+                bookTeachingItemsOnly();
+            }
             updateStickyPriceHeader();
         });
     }
@@ -644,15 +669,15 @@ public abstract class AbstractSinglePeriodInternationalFestival implements Stand
         if (mealsSection == null) return;
 
         mealsSection.wantsBreakfastProperty().addListener((obs, old, newVal) -> {
-            bookSelectedItemsIntoWorkingBooking();
+            bookMealsItemsOnly();
         });
 
         mealsSection.wantsLunchProperty().addListener((obs, old, newVal) -> {
-            bookSelectedItemsIntoWorkingBooking();
+            bookMealsItemsOnly();
         });
 
         mealsSection.wantsDinnerProperty().addListener((obs, old, newVal) -> {
-            bookSelectedItemsIntoWorkingBooking();
+            bookMealsItemsOnly();
         });
     }
 
@@ -660,7 +685,7 @@ public abstract class AbstractSinglePeriodInternationalFestival implements Stand
         if (translationSection == null) return;
 
         translationSection.setOnSelectionChanged(() -> {
-            bookSelectedItemsIntoWorkingBooking();
+            // Translation selection is stored in BookingSelectionState, booked in onBeforeSummary
         });
     }
 
@@ -668,7 +693,7 @@ public abstract class AbstractSinglePeriodInternationalFestival implements Stand
         if (ordinationSection == null) return;
 
         ordinationSection.setOnSelectionChanged(() -> {
-            bookSelectedItemsIntoWorkingBooking();
+            // Ordination selection is stored in BookingSelectionState, booked in onBeforeSummary
         });
     }
 
@@ -676,7 +701,7 @@ public abstract class AbstractSinglePeriodInternationalFestival implements Stand
         if (transportSection == null) return;
 
         transportSection.setOnSelectionChanged(() -> {
-            bookSelectedItemsIntoWorkingBooking();
+            // Transport selection is stored in BookingSelectionState, booked in onBeforeSummary
         });
     }
 
@@ -684,7 +709,7 @@ public abstract class AbstractSinglePeriodInternationalFestival implements Stand
         if (audioSection == null) return;
 
         audioSection.setOnOptionSelected(option -> {
-            bookSelectedItemsIntoWorkingBooking();
+            // Audio selection is stored in BookingSelectionState, booked in onBeforeSummary
         });
     }
 
@@ -870,8 +895,95 @@ public abstract class AbstractSinglePeriodInternationalFestival implements Stand
         PolicyAggregate policyAggregate = workingBookingProperties.getPolicyAggregate();
         if (policyAggregate == null) return;
 
-        // Implementation follows same pattern as AbstractSinglePeriodInPersonBookingForm
-        // ... (abbreviated for clarity, would contain full accommodation population logic)
+        LocalDate arrivalDate = eventStartDate;
+        LocalDate departureDate = eventEndDate;
+        if (arrivalDate == null || departureDate == null) return;
+
+        accommodationSection.clearOptions();
+
+        List<ScheduledItem> accommodationItems = policyAggregate.filterAccommodationScheduledItems();
+        Map<Item, List<ScheduledItem>> itemScheduledItemsMap = accommodationItems.stream()
+            .filter(si -> si.getItem() != null)
+            .collect(Collectors.groupingBy(ScheduledItem::getItem));
+
+        List<Map.Entry<Item, List<ScheduledItem>>> sortedEntries = itemScheduledItemsMap.entrySet().stream()
+            .sorted(Comparator.comparing(e -> e.getKey().getOrd() != null ? e.getKey().getOrd() : Integer.MAX_VALUE))
+            .collect(Collectors.toList());
+
+        for (Map.Entry<Item, List<ScheduledItem>> entry : sortedEntries) {
+            Item item = entry.getKey();
+            List<ScheduledItem> scheduledItems = entry.getValue();
+
+            int minAvailability = scheduledItems.stream()
+                .mapToInt(si -> si.getGuestsAvailability() != null ? si.getGuestsAvailability() : 0)
+                .min()
+                .orElse(0);
+
+            HasAccommodationSelectionSection.AvailabilityStatus status;
+            if (minAvailability <= 0) {
+                status = HasAccommodationSelectionSection.AvailabilityStatus.SOLD_OUT;
+            } else if (minAvailability <= 5) {
+                status = HasAccommodationSelectionSection.AvailabilityStatus.LIMITED;
+            } else {
+                status = HasAccommodationSelectionSection.AvailabilityStatus.AVAILABLE;
+            }
+
+            ItemPolicy itemPolicy = policyAggregate.getItemPolicy(item);
+            HasAccommodationSelectionSection.ConstraintType constraintType = HasAccommodationSelectionSection.ConstraintType.NONE;
+            String constraintLabel = null;
+            int minNights = 0;
+
+            if (itemPolicy != null && itemPolicy.getMinDay() != null && itemPolicy.getMinDay() > 0) {
+                constraintType = HasAccommodationSelectionSection.ConstraintType.MIN_NIGHTS;
+                minNights = itemPolicy.getMinDay();
+                constraintLabel = I18n.getI18nText(BookingPageI18nKeys.MinNights, minNights);
+            }
+
+            // Read early arrival / late departure restrictions from ItemPolicy
+            boolean earlyArrivalAllowed = itemPolicy == null || !Boolean.FALSE.equals(itemPolicy.isEarlyAccommodationAllowed());
+            boolean lateDepartureAllowed = itemPolicy == null || !Boolean.FALSE.equals(itemPolicy.isLateAccommodationAllowed());
+
+            // Get price and perPerson flag from rates
+            Rate itemRate = policyAggregate.filterDailyRatesStreamOfSiteAndItem(null, item)
+                .findFirst()
+                .orElseGet(() -> policyAggregate.getDailyRatesStream()
+                    .filter(r -> r.getItem() != null && Entities.samePrimaryKey(r.getItem(), item))
+                    .findFirst()
+                    .orElse(null));
+
+            int pricePerNight = itemRate != null && itemRate.getPrice() != null ? itemRate.getPrice() : 0;
+            boolean perPerson = itemRate == null || !Boolean.FALSE.equals(itemRate.isPerPerson());
+
+            // Calculate price with breakdown
+            AccommodationPriceResult priceResult = calculateAccommodationPriceWithBreakdown(policyAggregate, item, arrivalDate, departureDate, minAvailability);
+
+            // Store the breakdown for this option
+            accommodationSection.setBreakdownForOption(item.getPrimaryKey(), priceResult.breakdown);
+
+            HasAccommodationSelectionSection.AccommodationOption option = new HasAccommodationSelectionSection.AccommodationOption(
+                item.getPrimaryKey(),
+                item,
+                item.getName() != null ? item.getName() : "",
+                "",
+                pricePerNight,
+                status,
+                constraintType,
+                constraintLabel,
+                minNights,
+                false,
+                null,
+                perPerson,
+                priceResult.totalPrice,
+                earlyArrivalAllowed,
+                lateDepartureAllowed
+            );
+
+            accommodationSection.addAccommodationOption(option);
+        }
+
+        // Note: Share Accommodation removed - now users select their attendance type first
+        // Day Visitor option is still needed for auto-selection when user chooses Day Visitor attendance type
+        addDayVisitorOption(policyAggregate, arrivalDate, departureDate);
 
         accommodationOptionsPopulated = true;
     }
@@ -880,16 +992,114 @@ public abstract class AbstractSinglePeriodInternationalFestival implements Stand
         if (festivalDaysPopulated || festivalDaySection == null) return;
         if (workingBookingProperties == null || workingBookingProperties.getWorkingBooking() == null) return;
 
-        // Implementation follows same pattern as AbstractSinglePeriodInPersonBookingForm
+        PolicyAggregate policyAggregate = workingBookingProperties.getPolicyAggregate();
+        if (policyAggregate == null) return;
 
+        EventPart mainEventPart = findMainEventPart(policyAggregate);
+
+        if (mainEventPart != null) {
+            LocalDate mainStartDate = mainEventPart.getStartDate();
+            LocalDate mainEndDate = mainEventPart.getEndDate();
+
+            if (mainStartDate != null) {
+                festivalDaySection.setMainEventStartDate(mainStartDate);
+            }
+            if (mainEndDate != null) {
+                festivalDaySection.setMainEventEndDate(mainEndDate);
+            }
+        }
+
+        EventPart lateDeparturePart = policyAggregate.getLateDeparturePart();
+        if (lateDeparturePart == null && mainEventPart != null) {
+            LocalDate mainEndDate = mainEventPart.getEndDate();
+            if (policyAggregate.getEventParts() != null && mainEndDate != null) {
+                for (EventPart part : policyAggregate.getEventParts()) {
+                    if (Entities.samePrimaryKey(part, mainEventPart)) continue;
+                    LocalDate partStartDate = part.getStartDate();
+                    if (partStartDate != null && !partStartDate.isBefore(mainEndDate)) {
+                        lateDeparturePart = part;
+                        break;
+                    }
+                }
+            }
+        }
+
+        festivalDaySection.setHasLateDeparturePart(lateDeparturePart != null);
+
+        if (lateDeparturePart != null) {
+            LocalDate lateDepartureEndDate = lateDeparturePart.getEndDate();
+            if (lateDepartureEndDate != null) {
+                festivalDaySection.setLateDepartureEndDate(lateDepartureEndDate);
+            }
+        }
+
+        festivalDaySection.populateFromPolicyAggregate(policyAggregate);
         festivalDaysPopulated = true;
+
+        // Synchronize initial dates/times to BookingSelectionState
+        syncFestivalDaySelectionToState();
     }
 
     protected void populateMealsOptions() {
         if (mealsOptionsPopulated || mealsSection == null) return;
         if (workingBookingProperties == null || workingBookingProperties.getWorkingBooking() == null) return;
 
-        // Implementation follows same pattern as AbstractSinglePeriodInPersonBookingForm
+        PolicyAggregate policyAggregate = workingBookingProperties.getPolicyAggregate();
+        if (policyAggregate == null) return;
+
+        EventPart mainEventPart = findMainEventPart(policyAggregate);
+
+        if (mainEventPart != null) {
+            LocalDate mainStartDate = mainEventPart.getStartDate();
+            LocalDate mainEndDate = mainEventPart.getEndDate();
+
+            if (mainStartDate != null) {
+                mealsSection.setEventBoundaryStartDate(mainStartDate);
+            }
+            if (mainEndDate != null) {
+                mealsSection.setEventBoundaryEndDate(mainEndDate);
+            }
+
+            // Extract and set boundary meals from EventPart based on time of day
+            ScheduledBoundary startBoundary = mainEventPart.getStartBoundary();
+            ScheduledBoundary endBoundary = mainEventPart.getEndBoundary();
+
+            if (startBoundary != null) {
+                LocalTime startTime = getBoundaryTime(startBoundary, false);
+                if (startTime != null) {
+                    mealsSection.setEventBoundaryStartMeal(getMealBoundaryFromTime(startTime));
+                }
+            }
+
+            if (endBoundary != null) {
+                LocalTime endTime = getBoundaryTime(endBoundary, true);
+                if (endTime != null) {
+                    mealsSection.setEventBoundaryEndMeal(getMealBoundaryFromTime(endTime));
+                }
+            }
+
+            // Set the main event period for isInPeriod checks
+            mealsSection.setMainEventPeriod(mainEventPart);
+
+            List<ScheduledItem> mealItems = policyAggregate.filterScheduledItemsOfFamily(KnownItemFamily.MEALS);
+            mealsSection.setMealScheduledItems(mealItems);
+        } else {
+            if (eventStartDate != null) {
+                mealsSection.setEventBoundaryStartDate(eventStartDate);
+            }
+            if (eventEndDate != null) {
+                mealsSection.setEventBoundaryEndDate(eventEndDate);
+            }
+            List<ScheduledItem> mealItems = policyAggregate.filterScheduledItemsOfFamily(KnownItemFamily.MEALS);
+            mealsSection.setMealScheduledItems(mealItems);
+        }
+
+        mealsSection.populateFromPolicyAggregate(policyAggregate);
+
+        WorkingBooking workingBooking = workingBookingProperties.getWorkingBooking();
+        if (workingBooking != null) {
+            mealsSection.setWorkingBooking(workingBooking);
+        }
 
         mealsOptionsPopulated = true;
     }
@@ -928,7 +1138,20 @@ public abstract class AbstractSinglePeriodInternationalFestival implements Stand
         if (audioOptionsPopulated || audioSection == null) return;
         if (workingBookingProperties == null || workingBookingProperties.getWorkingBooking() == null) return;
 
-        // Implementation follows same pattern as AbstractSinglePeriodInPersonBookingForm
+        PolicyAggregate policyAggregate = workingBookingProperties.getPolicyAggregate();
+        if (policyAggregate == null) return;
+
+        List<EventPhaseCoverage> phaseCoverages = policyAggregate.getAudioRecordingPhaseCoverages();
+
+        if (phaseCoverages == null || phaseCoverages.size() <= 1) {
+            audioSection.setVisible(false);
+            audioOptionsPopulated = true;
+            return;
+        }
+
+        audioSection.setWorkingBookingProperties(workingBookingProperties);
+        audioSection.populateFromPolicyAggregate(policyAggregate);
+        audioSection.setVisible(true);
 
         audioOptionsPopulated = true;
     }
@@ -938,8 +1161,118 @@ public abstract class AbstractSinglePeriodInternationalFestival implements Stand
     // ========================================
 
     protected void bookSelectedItemsIntoWorkingBooking() {
-        // Book items based on current selections
-        // Implementation follows same pattern as AbstractSinglePeriodInPersonBookingForm
+        if (workingBookingProperties == null || workingBookingProperties.getWorkingBooking() == null) return;
+
+        WorkingBooking workingBooking = workingBookingProperties.getWorkingBooking();
+        PolicyAggregate policyAggregate = workingBookingProperties.getPolicyAggregate();
+        if (policyAggregate == null) return;
+
+        bookTeachingItems(workingBooking, policyAggregate);
+        bookAccommodationItems(workingBooking, policyAggregate);
+        bookMealsItems(workingBooking, policyAggregate);
+
+        // Push roommate names from section to selection state before storing
+        if (roommateSection != null && roommateSection.isVisible()) {
+            roommateSection.pushRoommateNamesToState(form.getSelectionState());
+        }
+        storeRoommateInfoOnDocumentLines(workingBooking);
+
+        // Commit child carer information to working booking
+        form.getSelectionState().commitCarersInfoToBooking(workingBooking, policyAggregate.getEntityStore());
+
+        if (mealsSection != null) {
+            mealsSection.populateFromDocumentBill();
+        }
+    }
+
+    /**
+     * Commits only the child carer information to the working booking.
+     * Called when a carer is selected, without booking other items like teachings or meals.
+     */
+    protected void commitChildCarerInfoToWorkingBooking() {
+        if (workingBookingProperties == null || workingBookingProperties.getWorkingBooking() == null) return;
+
+        WorkingBooking workingBooking = workingBookingProperties.getWorkingBooking();
+        PolicyAggregate policyAggregate = workingBookingProperties.getPolicyAggregate();
+        if (policyAggregate == null) return;
+
+        form.getSelectionState().commitCarersInfoToBooking(workingBooking, policyAggregate.getEntityStore());
+    }
+
+    /**
+     * Resets child carer information in both BookingSelectionState and WorkingBooking.
+     * Called when a different household member is selected.
+     */
+    protected void resetChildCarerInfo() {
+        // Reset in BookingSelectionState
+        form.getSelectionState().resetChildCarerInfo();
+
+        // Reset in WorkingBooking
+        if (workingBookingProperties != null && workingBookingProperties.getWorkingBooking() != null) {
+            workingBookingProperties.getWorkingBooking().setCarersInfo(null, null, null, null);
+        }
+
+        // Reset the inline child carer section UI
+        DefaultChildCarerSection inlineChildCarer = memberSelectionSection != null
+            ? memberSelectionSection.getChildCarerSection() : null;
+        if (inlineChildCarer != null) {
+            inlineChildCarer.reset();
+        }
+
+        // Reset the standalone child carer section UI (if exists)
+        if (childCarerSection != null) {
+            childCarerSection.reset();
+        }
+    }
+
+    /**
+     * Books only teaching items into the working booking.
+     * Called when user selects dates.
+     */
+    protected void bookTeachingItemsOnly() {
+        if (workingBookingProperties == null || workingBookingProperties.getWorkingBooking() == null) return;
+        WorkingBooking workingBooking = workingBookingProperties.getWorkingBooking();
+        PolicyAggregate policyAggregate = workingBookingProperties.getPolicyAggregate();
+        if (policyAggregate == null) return;
+        bookTeachingItems(workingBooking, policyAggregate);
+    }
+
+    /**
+     * Books only accommodation items into the working booking.
+     * Called when user selects accommodation.
+     */
+    protected void bookAccommodationItemsOnly() {
+        if (workingBookingProperties == null || workingBookingProperties.getWorkingBooking() == null) return;
+        WorkingBooking workingBooking = workingBookingProperties.getWorkingBooking();
+        PolicyAggregate policyAggregate = workingBookingProperties.getPolicyAggregate();
+        if (policyAggregate == null) return;
+        bookAccommodationItems(workingBooking, policyAggregate);
+    }
+
+    /**
+     * Books only meal items into the working booking.
+     * Called when user explicitly selects meals.
+     */
+    protected void bookMealsItemsOnly() {
+        if (workingBookingProperties == null || workingBookingProperties.getWorkingBooking() == null) return;
+        WorkingBooking workingBooking = workingBookingProperties.getWorkingBooking();
+        PolicyAggregate policyAggregate = workingBookingProperties.getPolicyAggregate();
+        if (policyAggregate == null) return;
+        bookMealsItems(workingBooking, policyAggregate);
+    }
+
+    /**
+     * Auto-includes breakfast when accommodation is selected, removes it when accommodation is reset.
+     * Breakfast is included with overnight accommodation but not for day visitors.
+     */
+    protected void autoIncludeBreakfastWithAccommodation() {
+        var selectionState = form.getSelectionState();
+        var selectedAccommodation = selectionState.getSelectedAccommodation();
+        if (selectedAccommodation != null && !selectedAccommodation.isDayVisitor()) {
+            selectionState.setWantsBreakfast(true);
+        } else {
+            selectionState.setWantsBreakfast(false);
+        }
     }
 
     protected void updateStickyPriceHeader() {
@@ -1004,5 +1337,710 @@ public abstract class AbstractSinglePeriodInternationalFestival implements Stand
         if (assistanceSection != null) {
             assistanceSection.reset();
         }
+    }
+
+    // ========================================
+    // Price Calculation Helper Methods
+    // ========================================
+
+    /**
+     * Result class holding both the total price and the breakdown items.
+     */
+    protected static class AccommodationPriceResult {
+        public final int totalPrice;
+        public final List<DefaultAccommodationSelectionSection.PriceBreakdownItem> breakdown;
+
+        public AccommodationPriceResult(int totalPrice, List<DefaultAccommodationSelectionSection.PriceBreakdownItem> breakdown) {
+            this.totalPrice = totalPrice;
+            this.breakdown = breakdown;
+        }
+    }
+
+    /**
+     * Container for boundary time information.
+     */
+    protected static class BoundaryTimeInfo {
+        public final LocalDate date;
+        public final LocalTime time;
+
+        public BoundaryTimeInfo(LocalDate date, LocalTime time) {
+            this.date = date;
+            this.time = time;
+        }
+    }
+
+    /**
+     * Calculates accommodation price with detailed breakdown.
+     */
+    protected AccommodationPriceResult calculateAccommodationPriceWithBreakdown(PolicyAggregate policyAggregate, Item accommodationItem,
+                                                                                 LocalDate arrivalDate, LocalDate departureDate, Integer accommodationAvailability) {
+        WorkingBooking tempBooking = new WorkingBooking(policyAggregate, AttendanceMode.IN_PERSON);
+
+        LocalDate teachingMinDate = null;
+        LocalDate teachingMaxDate = null;
+        int accommodationNightsCount = 0;
+
+        // Book teachings (inclusive period: arrivalDate to departureDate)
+        Period teachingPeriod = createSimplePeriod(arrivalDate, departureDate);
+        List<ScheduledItem> teachingItems = ScheduledItems.filterOverPeriod(policyAggregate.filterTeachingScheduledItems(), teachingPeriod);
+        if (!teachingItems.isEmpty()) {
+            tempBooking.bookScheduledItems(teachingItems, true);
+            for (ScheduledItem si : teachingItems) {
+                LocalDate d = si.getDate();
+                if (teachingMinDate == null || d.isBefore(teachingMinDate)) teachingMinDate = d;
+                if (teachingMaxDate == null || d.isAfter(teachingMaxDate)) teachingMaxDate = d;
+            }
+        }
+
+        // Book accommodation (exclusive end: arrivalDate to departureDate - 1)
+        List<ScheduledItem> accommodationScheduledItems = new ArrayList<>();
+        if (accommodationItem != null) {
+            List<ScheduledItem> itemAccoItems = policyAggregate.filterAccommodationScheduledItems().stream()
+                .filter(si -> Entities.samePrimaryKey(si.getItem(), accommodationItem))
+                .collect(Collectors.toList());
+            Period accoPeriod = createSimplePeriod(arrivalDate, departureDate.minusDays(1));
+            accommodationScheduledItems = ScheduledItems.filterOverPeriod(itemAccoItems, accoPeriod);
+            if (!accommodationScheduledItems.isEmpty()) {
+                tempBooking.bookScheduledItems(accommodationScheduledItems, true);
+                accommodationNightsCount = accommodationScheduledItems.size();
+            }
+        }
+
+        // Book meals
+        bookMealsForPriceCalculation(tempBooking, policyAggregate, arrivalDate, departureDate, accommodationItem != null);
+
+        // Build breakdown
+        List<DefaultAccommodationSelectionSection.PriceBreakdownItem> breakdown = new ArrayList<>();
+        PriceCalculator calc = tempBooking.getLatestBookingPriceCalculator();
+
+        // Teaching breakdown
+        List<DocumentLine> teachingLines = tempBooking.getFamilyDocumentLines(KnownItemFamily.TEACHING);
+        if (!teachingLines.isEmpty()) {
+            int teachingPrice = calc.calculateDocumentLinesPrice(teachingLines);
+            String teachingDateRange = BookingDateFormatter.formatDateRange(teachingMinDate, teachingMaxDate);
+            breakdown.add(new DefaultAccommodationSelectionSection.PriceBreakdownItem(
+                "Teachings", teachingDateRange, teachingPrice));
+        }
+
+        // Accommodation breakdown
+        List<DocumentLine> accoLines = tempBooking.getFamilyDocumentLines(KnownItemFamily.ACCOMMODATION);
+        if (!accoLines.isEmpty()) {
+            int accoPrice = calc.calculateDocumentLinesPrice(accoLines);
+            String accoDateRange = accommodationNightsCount + " night" + (accommodationNightsCount != 1 ? "s" : "");
+            breakdown.add(new DefaultAccommodationSelectionSection.PriceBreakdownItem(
+                "Accommodation", accoDateRange, accoPrice, accommodationAvailability));
+        }
+
+        // Meals breakdown
+        addMealsBreakdown(breakdown, tempBooking, policyAggregate);
+
+        int breakdownTotal = breakdown.stream().mapToInt(DefaultAccommodationSelectionSection.PriceBreakdownItem::getPrice).sum();
+
+        return new AccommodationPriceResult(breakdownTotal, breakdown);
+    }
+
+    /**
+     * Adds the Share Accommodation option.
+     */
+    protected void addShareAccommodationOption(PolicyAggregate policyAggregate, LocalDate arrivalDate, LocalDate departureDate) {
+        if (accommodationSection == null) return;
+
+        ItemPolicy sharingItemPolicy = policyAggregate.getSharingAccommodationItemPolicy();
+        if (sharingItemPolicy == null) return;
+
+        Item sharingItem = sharingItemPolicy.getItem();
+        if (sharingItem == null) return;
+
+        // Calculate price with breakdown
+        AccommodationPriceResult priceResult = calculateShareAccommodationPriceWithBreakdown(policyAggregate, sharingItem, arrivalDate, departureDate);
+
+        // Store the breakdown
+        accommodationSection.setBreakdownForOption(sharingItem.getPrimaryKey(), priceResult.breakdown);
+
+        // Try to find rate for this item
+        Rate itemRate = policyAggregate.filterDailyRatesStreamOfSiteAndItem(null, sharingItem)
+            .findFirst()
+            .orElseGet(() -> policyAggregate.getDailyRatesStream()
+                .filter(r -> r.getItem() != null && Entities.samePrimaryKey(r.getItem(), sharingItem))
+                .findFirst()
+                .orElse(null));
+        int pricePerNight = itemRate != null && itemRate.getPrice() != null ? itemRate.getPrice() : 0;
+
+        HasAccommodationSelectionSection.ConstraintType constraintType = HasAccommodationSelectionSection.ConstraintType.NONE;
+        String constraintLabel = null;
+        int minNights = 0;
+        if (sharingItemPolicy.getMinDay() != null && sharingItemPolicy.getMinDay() > 0) {
+            constraintType = HasAccommodationSelectionSection.ConstraintType.MIN_NIGHTS;
+            minNights = sharingItemPolicy.getMinDay();
+            constraintLabel = I18n.getI18nText(BookingPageI18nKeys.MinNights, minNights);
+        }
+
+        boolean earlyArrivalAllowed = !Boolean.FALSE.equals(sharingItemPolicy.isEarlyAccommodationAllowed());
+        boolean lateDepartureAllowed = !Boolean.FALSE.equals(sharingItemPolicy.isLateAccommodationAllowed());
+
+        HasAccommodationSelectionSection.AccommodationOption option = new HasAccommodationSelectionSection.AccommodationOption(
+            sharingItem.getPrimaryKey(),
+            sharingItem,
+            sharingItem.getName() != null ? sharingItem.getName() : I18n.getI18nText(BookingPageI18nKeys.ShareAccommodation),
+            "",
+            pricePerNight,
+            HasAccommodationSelectionSection.AvailabilityStatus.AVAILABLE,
+            constraintType,
+            constraintLabel,
+            minNights,
+            false,
+            null,
+            true,
+            priceResult.totalPrice,
+            earlyArrivalAllowed,
+            lateDepartureAllowed
+        );
+
+        accommodationSection.addAccommodationOption(option);
+    }
+
+    /**
+     * Calculates share accommodation price with detailed breakdown.
+     */
+    protected AccommodationPriceResult calculateShareAccommodationPriceWithBreakdown(PolicyAggregate policyAggregate, Item sharingItem,
+                                                                                      LocalDate arrivalDate, LocalDate departureDate) {
+        WorkingBooking tempBooking = new WorkingBooking(policyAggregate, AttendanceMode.IN_PERSON);
+
+        LocalDate teachingMinDate = null;
+        LocalDate teachingMaxDate = null;
+
+        // Book teachings
+        Period teachingPeriod = createSimplePeriod(arrivalDate, departureDate);
+        List<ScheduledItem> teachingItems = ScheduledItems.filterOverPeriod(policyAggregate.filterTeachingScheduledItems(), teachingPeriod);
+        if (!teachingItems.isEmpty()) {
+            tempBooking.bookScheduledItems(teachingItems, true);
+            for (ScheduledItem si : teachingItems) {
+                LocalDate d = si.getDate();
+                if (teachingMinDate == null || d.isBefore(teachingMinDate)) teachingMinDate = d;
+                if (teachingMaxDate == null || d.isAfter(teachingMaxDate)) teachingMaxDate = d;
+            }
+        }
+
+        // Calculate sharing accommodation price from rate
+        int accommodationNightsCount = 0;
+        LocalDate current = arrivalDate;
+        while (current.isBefore(departureDate)) {
+            accommodationNightsCount++;
+            current = current.plusDays(1);
+        }
+
+        Rate itemRate = policyAggregate.filterDailyRatesStreamOfSiteAndItem(null, sharingItem)
+            .findFirst()
+            .orElseGet(() -> policyAggregate.getDailyRatesStream()
+                .filter(r -> r.getItem() != null && Entities.samePrimaryKey(r.getItem(), sharingItem))
+                .findFirst()
+                .orElse(null));
+        int pricePerNight = itemRate != null && itemRate.getPrice() != null ? itemRate.getPrice() : 0;
+        int sharingAccommodationPrice = pricePerNight * accommodationNightsCount;
+
+        // Book meals (with breakfast since sharing guests stay overnight)
+        bookMealsForPriceCalculation(tempBooking, policyAggregate, arrivalDate, departureDate, true);
+
+        // Build breakdown
+        List<DefaultAccommodationSelectionSection.PriceBreakdownItem> breakdown = new ArrayList<>();
+        PriceCalculator calc = tempBooking.getLatestBookingPriceCalculator();
+
+        List<DocumentLine> teachingLines = tempBooking.getFamilyDocumentLines(KnownItemFamily.TEACHING);
+        if (!teachingLines.isEmpty()) {
+            int teachingPrice = calc.calculateDocumentLinesPrice(teachingLines);
+            String teachingDateRange = BookingDateFormatter.formatDateRange(teachingMinDate, teachingMaxDate);
+            breakdown.add(new DefaultAccommodationSelectionSection.PriceBreakdownItem(
+                "Teachings", teachingDateRange, teachingPrice));
+        }
+
+        if (sharingAccommodationPrice > 0) {
+            String accoDateRange = accommodationNightsCount + " night" + (accommodationNightsCount != 1 ? "s" : "");
+            breakdown.add(new DefaultAccommodationSelectionSection.PriceBreakdownItem(
+                "Accommodation", accoDateRange, sharingAccommodationPrice));
+        }
+
+        addMealsBreakdown(breakdown, tempBooking, policyAggregate);
+
+        int breakdownTotal = breakdown.stream().mapToInt(DefaultAccommodationSelectionSection.PriceBreakdownItem::getPrice).sum();
+
+        return new AccommodationPriceResult(breakdownTotal, breakdown);
+    }
+
+    /**
+     * Adds the Day Visitor option.
+     */
+    protected void addDayVisitorOption(PolicyAggregate policyAggregate, LocalDate arrivalDate, LocalDate departureDate) {
+        if (accommodationSection == null) return;
+
+        // Calculate price with breakdown
+        AccommodationPriceResult priceResult = calculateDayVisitorPriceWithBreakdown(policyAggregate, arrivalDate, departureDate);
+
+        // Store the breakdown
+        accommodationSection.setBreakdownForOption("DAY_VISITOR", priceResult.breakdown);
+
+        HasAccommodationSelectionSection.AccommodationOption option = new HasAccommodationSelectionSection.AccommodationOption(
+            "DAY_VISITOR",
+            null,
+            I18n.getI18nText(BookingPageI18nKeys.DayVisitor),
+            "",
+            0,
+            HasAccommodationSelectionSection.AvailabilityStatus.AVAILABLE,
+            HasAccommodationSelectionSection.ConstraintType.NONE,
+            null,
+            0,
+            true,
+            null,
+            true,
+            priceResult.totalPrice,
+            false,  // No early arrival for day visitors
+            false   // No late departure for day visitors
+        );
+
+        accommodationSection.addAccommodationOption(option);
+    }
+
+    /**
+     * Calculates day visitor price with detailed breakdown.
+     */
+    protected AccommodationPriceResult calculateDayVisitorPriceWithBreakdown(PolicyAggregate policyAggregate, LocalDate arrivalDate, LocalDate departureDate) {
+        WorkingBooking tempBooking = new WorkingBooking(policyAggregate, AttendanceMode.IN_PERSON);
+
+        LocalDate teachingMinDate = null;
+        LocalDate teachingMaxDate = null;
+
+        // Book teachings
+        Period teachingPeriod = createSimplePeriod(arrivalDate, departureDate);
+        List<ScheduledItem> teachingItems = ScheduledItems.filterOverPeriod(policyAggregate.filterTeachingScheduledItems(), teachingPeriod);
+        if (!teachingItems.isEmpty()) {
+            tempBooking.bookScheduledItems(teachingItems, true);
+            for (ScheduledItem si : teachingItems) {
+                LocalDate d = si.getDate();
+                if (teachingMinDate == null || d.isBefore(teachingMinDate)) teachingMinDate = d;
+                if (teachingMaxDate == null || d.isAfter(teachingMaxDate)) teachingMaxDate = d;
+            }
+        }
+
+        // Book meals (no breakfast for day visitors)
+        bookMealsForPriceCalculation(tempBooking, policyAggregate, arrivalDate, departureDate, false);
+
+        // Build breakdown
+        List<DefaultAccommodationSelectionSection.PriceBreakdownItem> breakdown = new ArrayList<>();
+        PriceCalculator calc = tempBooking.getLatestBookingPriceCalculator();
+
+        List<DocumentLine> teachingLines = tempBooking.getFamilyDocumentLines(KnownItemFamily.TEACHING);
+        if (!teachingLines.isEmpty()) {
+            int teachingPrice = calc.calculateDocumentLinesPrice(teachingLines);
+            String teachingDateRange = BookingDateFormatter.formatDateRange(teachingMinDate, teachingMaxDate);
+            breakdown.add(new DefaultAccommodationSelectionSection.PriceBreakdownItem(
+                "Teachings", teachingDateRange, teachingPrice));
+        }
+
+        addMealsBreakdown(breakdown, tempBooking, policyAggregate);
+
+        int breakdownTotal = breakdown.stream().mapToInt(DefaultAccommodationSelectionSection.PriceBreakdownItem::getPrice).sum();
+
+        return new AccommodationPriceResult(breakdownTotal, breakdown);
+    }
+
+    /**
+     * Books meals for price calculation.
+     */
+    protected void bookMealsForPriceCalculation(WorkingBooking tempBooking, PolicyAggregate policyAggregate,
+                                                 LocalDate arrivalDate, LocalDate departureDate, boolean hasAccommodation) {
+        Map<String, BoundaryTimeInfo> boundaryInfo = extractBoundaryTimeInfo(policyAggregate);
+        BoundaryTimeInfo startBoundary = boundaryInfo.get("startBoundary");
+        BoundaryTimeInfo endBoundary = boundaryInfo.get("endBoundary");
+
+        Timeline breakfastTimeline = policyAggregate.getBreakfastTimeline();
+        Timeline lunchTimeline = policyAggregate.getLunchTimeline();
+        Timeline dinnerTimeline = policyAggregate.getDinnerTimeline();
+
+        List<ScheduledItem> allMeals = policyAggregate.filterScheduledItemsOfFamily(KnownItemFamily.MEALS);
+
+        Set<LocalDate> accommodationNights = new HashSet<>();
+        if (hasAccommodation) {
+            LocalDate current = arrivalDate;
+            while (current.isBefore(departureDate)) {
+                accommodationNights.add(current);
+                current = current.plusDays(1);
+            }
+        }
+
+        Set<Object> processedTimelines = new HashSet<>();
+
+        for (ScheduledItem si : allMeals) {
+            Timeline timeline = si.getTimeline();
+            if (timeline == null) continue;
+
+            Object timelinePk = Entities.getPrimaryKey(timeline);
+            if (processedTimelines.contains(timelinePk)) continue;
+            processedTimelines.add(timelinePk);
+
+            boolean isBreakfast = Entities.samePrimaryKey(timeline, breakfastTimeline);
+            boolean isLunch = Entities.samePrimaryKey(timeline, lunchTimeline);
+            boolean isDinner = Entities.samePrimaryKey(timeline, dinnerTimeline);
+
+            LocalTime mealTime = timeline.getStartTime();
+
+            List<ScheduledItem> timelineScheduledItems = allMeals.stream()
+                .filter(msi -> Entities.samePrimaryKey(msi.getTimeline(), timeline))
+                .collect(Collectors.toList());
+
+            if (isBreakfast && hasAccommodation) {
+                timelineScheduledItems = timelineScheduledItems.stream()
+                    .filter(msi -> {
+                        LocalDate mealDate = msi.getDate();
+                        if (mealDate == null) return false;
+                        LocalDate nightBefore = mealDate.minusDays(1);
+                        if (!accommodationNights.contains(nightBefore)) return false;
+                        return isMealWithinBoundaries(mealTime, mealDate, arrivalDate, departureDate, startBoundary, endBoundary);
+                    })
+                    .collect(Collectors.toList());
+            } else if (isBreakfast) {
+                timelineScheduledItems = java.util.Collections.emptyList();
+            } else if (isLunch || isDinner) {
+                timelineScheduledItems = timelineScheduledItems.stream()
+                    .filter(msi -> {
+                        LocalDate mealDate = msi.getDate();
+                        if (mealDate == null) return false;
+                        if (mealDate.isBefore(arrivalDate) || mealDate.isAfter(departureDate)) return false;
+                        return isMealWithinBoundaries(mealTime, mealDate, arrivalDate, departureDate, startBoundary, endBoundary);
+                    })
+                    .collect(Collectors.toList());
+            }
+
+            if (!timelineScheduledItems.isEmpty()) {
+                tempBooking.bookScheduledItems(timelineScheduledItems, false);
+            }
+        }
+    }
+
+    /**
+     * Adds meal breakdown items to the breakdown list.
+     */
+    protected void addMealsBreakdown(List<DefaultAccommodationSelectionSection.PriceBreakdownItem> breakdown,
+                                      WorkingBooking tempBooking, PolicyAggregate policyAggregate) {
+        List<DocumentLine> mealDocumentLines = tempBooking.getFamilyDocumentLines(KnownItemFamily.MEALS);
+
+        List<DocumentLine> breakfastLines = new ArrayList<>();
+        List<DocumentLine> lunchLines = new ArrayList<>();
+        List<DocumentLine> dinnerLines = new ArrayList<>();
+
+        for (DocumentLine dl : mealDocumentLines) {
+            Item item = dl.getItem();
+            if (item == null) continue;
+
+            String itemName = item.getName() != null ? item.getName().toLowerCase() : "";
+
+            if (itemName.contains("breakfast") || itemName.contains("morning")) {
+                breakfastLines.add(dl);
+            } else if (itemName.contains("lunch") || itemName.contains("midday")) {
+                lunchLines.add(dl);
+            } else if (itemName.contains("dinner") || itemName.contains("evening") || itemName.contains("supper")) {
+                dinnerLines.add(dl);
+            }
+        }
+
+        PriceCalculator calc = tempBooking.getLatestBookingPriceCalculator();
+
+        addMealDocumentLineBreakdown(breakdown, calc, tempBooking, "Breakfast", breakfastLines);
+        addMealDocumentLineBreakdown(breakdown, calc, tempBooking, "Lunch", lunchLines);
+        addMealDocumentLineBreakdown(breakdown, calc, tempBooking, "Dinner", dinnerLines);
+    }
+
+    /**
+     * Adds a single meal breakdown item.
+     */
+    protected void addMealDocumentLineBreakdown(List<DefaultAccommodationSelectionSection.PriceBreakdownItem> breakdown,
+                                                 PriceCalculator calc, WorkingBooking tempBooking,
+                                                 String mealName, List<DocumentLine> mealLines) {
+        if (mealLines.isEmpty()) return;
+
+        int mealCount = 0;
+        for (DocumentLine dl : mealLines) {
+            List<Attendance> lineAttendances = tempBooking.getLastestDocumentAggregate().getLineAttendances(dl);
+            mealCount += lineAttendances != null ? lineAttendances.size() : 0;
+        }
+
+        if (mealCount == 0) return;
+
+        int totalPrice = calc.calculateDocumentLinesPrice(mealLines);
+        String dateRange = mealCount + " " + mealName.toLowerCase() + (mealCount != 1 ? "s" : "");
+
+        breakdown.add(new DefaultAccommodationSelectionSection.PriceBreakdownItem(mealName, dateRange, totalPrice));
+    }
+
+    // ========================================
+    // Booking Helper Methods
+    // ========================================
+
+    protected void bookTeachingItems(WorkingBooking workingBooking, PolicyAggregate policyAggregate) {
+        List<ScheduledItem> allTeachingItems = policyAggregate.filterTeachingScheduledItems();
+
+        var selectionState = form.getSelectionState();
+        LocalDate arrivalDate = selectionState.getArrivalDate();
+        LocalDate departureDate = selectionState.getDepartureDate();
+
+        if (arrivalDate != null && departureDate != null) {
+            Period teachingPeriod = createSimplePeriod(arrivalDate, departureDate);
+            workingBooking.bookScheduledItemsOverPeriod(allTeachingItems, teachingPeriod, true);
+        } else if (!allTeachingItems.isEmpty()) {
+            workingBooking.bookScheduledItems(allTeachingItems, true);
+        }
+    }
+
+    protected void bookAccommodationItems(WorkingBooking workingBooking, PolicyAggregate policyAggregate) {
+        var selectionState = form.getSelectionState();
+        HasAccommodationSelectionSection.AccommodationOption selectedOption = selectionState.getSelectedAccommodation();
+        if (selectedOption == null) return;
+
+        if (selectionState.isDayVisitor()) return;
+
+        Item selectedItem = selectionState.getSelectedAccommodationItem();
+        if (selectedItem == null) return;
+
+        if (Boolean.TRUE.equals(selectedItem.isShare_mate())) {
+            bookShareAccommodationItem(workingBooking, policyAggregate, selectedItem);
+            return;
+        }
+
+        LocalDate arrivalDate = selectionState.getArrivalDate();
+        LocalDate departureDate = selectionState.getDepartureDate();
+
+        if (arrivalDate == null || departureDate == null) {
+            List<ScheduledItem> teachingItems = policyAggregate.filterTeachingScheduledItems();
+            List<LocalDate> teachingDatesSorted = teachingItems.stream()
+                .map(ScheduledItem::getDate)
+                .filter(Objects::nonNull)
+                .sorted()
+                .collect(Collectors.toList());
+            if (!teachingDatesSorted.isEmpty()) {
+                arrivalDate = teachingDatesSorted.get(0);
+                departureDate = teachingDatesSorted.get(teachingDatesSorted.size() - 1).plusDays(1);
+            }
+        }
+
+        List<ScheduledItem> itemAccoItems = policyAggregate.filterAccommodationScheduledItems().stream()
+            .filter(si -> Entities.samePrimaryKey(si.getItem(), selectedItem))
+            .collect(Collectors.toList());
+
+        if (arrivalDate != null && departureDate != null) {
+            Period accoPeriod = createSimplePeriod(arrivalDate, departureDate.minusDays(1));
+            List<ScheduledItem> filteredItems = ScheduledItems.filterOverPeriod(itemAccoItems, accoPeriod);
+            if (!filteredItems.isEmpty()) {
+                workingBooking.bookScheduledItems(filteredItems, true);
+            } else if (!itemAccoItems.isEmpty()) {
+                workingBooking.bookScheduledItems(itemAccoItems, true);
+            }
+        } else if (!itemAccoItems.isEmpty()) {
+            workingBooking.bookScheduledItems(itemAccoItems, true);
+        }
+    }
+
+    protected void bookShareAccommodationItem(WorkingBooking workingBooking, PolicyAggregate policyAggregate, Item sharingItem) {
+        var selectionState = form.getSelectionState();
+        LocalDate arrivalDate = selectionState.getArrivalDate();
+        LocalDate departureDate = selectionState.getDepartureDate();
+
+        if (arrivalDate == null || departureDate == null) {
+            List<ScheduledItem> teachingItems = policyAggregate.filterTeachingScheduledItems();
+            List<LocalDate> teachingDatesSorted = teachingItems.stream()
+                .map(ScheduledItem::getDate)
+                .filter(Objects::nonNull)
+                .sorted()
+                .collect(Collectors.toList());
+            if (!teachingDatesSorted.isEmpty()) {
+                arrivalDate = teachingDatesSorted.get(0);
+                departureDate = teachingDatesSorted.get(teachingDatesSorted.size() - 1).plusDays(1);
+            }
+        }
+
+        if (arrivalDate == null || departureDate == null) return;
+
+        List<LocalDate> accommodationDates = new ArrayList<>();
+        LocalDate current = arrivalDate;
+        while (current.isBefore(departureDate)) {
+            accommodationDates.add(current);
+            current = current.plusDays(1);
+        }
+
+        if (accommodationDates.isEmpty()) return;
+
+        Site site = null;
+        ItemPolicy itemPolicy = policyAggregate.getItemPolicy(sharingItem);
+        if (itemPolicy != null && itemPolicy.getScope() != null) {
+            site = itemPolicy.getScope().getSite();
+        }
+
+        workingBooking.bookTemporalButNonScheduledItem(site, sharingItem, accommodationDates, true);
+    }
+
+    protected void bookMealsItems(WorkingBooking workingBooking, PolicyAggregate policyAggregate) {
+        var selectionState = form.getSelectionState();
+
+        List<ScheduledItem> mealsItems = policyAggregate.filterScheduledItemsOfFamily(KnownItemFamily.MEALS);
+        if (mealsItems.isEmpty()) return;
+
+        LocalDate arrivalDate = selectionState.getArrivalDate();
+        LocalDate departureDate = selectionState.getDepartureDate();
+
+        if (arrivalDate == null || departureDate == null) {
+            List<ScheduledItem> teachingItems = policyAggregate.filterTeachingScheduledItems();
+            List<LocalDate> teachingDatesSorted = teachingItems.stream()
+                .map(ScheduledItem::getDate)
+                .filter(Objects::nonNull)
+                .sorted()
+                .collect(Collectors.toList());
+            if (!teachingDatesSorted.isEmpty()) {
+                arrivalDate = teachingDatesSorted.get(0);
+                departureDate = teachingDatesSorted.get(teachingDatesSorted.size() - 1);
+            }
+        }
+
+        if (arrivalDate == null || departureDate == null) return;
+
+        boolean hasAccommodation = !selectionState.isDayVisitor() && selectionState.getSelectedAccommodationItem() != null;
+
+        Period mealsPeriod = createSimplePeriod(arrivalDate, departureDate);
+        List<ScheduledItem> filteredMeals = ScheduledItems.filterOverPeriod(mealsItems, mealsPeriod);
+
+        if (!filteredMeals.isEmpty()) {
+            workingBooking.bookScheduledItems(filteredMeals, false);
+        }
+    }
+
+    protected void storeRoommateInfoOnDocumentLines(WorkingBooking workingBooking) {
+        var selectionState = form.getSelectionState();
+        List<String> roommateNamesList = selectionState.getRoommateNames();
+        if (roommateNamesList == null || roommateNamesList.isEmpty()) return;
+
+        String roommateNames = String.join(", ", roommateNamesList);
+        if (roommateNames.isEmpty()) return;
+
+        List<DocumentLine> accoLines = workingBooking.getFamilyDocumentLines(KnownItemFamily.ACCOMMODATION);
+        for (DocumentLine dl : accoLines) {
+            dl.setFieldValue("comment", roommateNames);
+        }
+    }
+
+    // ========================================
+    // Utility Helper Methods
+    // ========================================
+
+    protected EventPart findMainEventPart(PolicyAggregate policyAggregate) {
+        if (policyAggregate.getEventParts() == null) return null;
+
+        for (EventPart part : policyAggregate.getEventParts()) {
+            if (policyAggregate.getEarlyArrivalPart() != null &&
+                Entities.samePrimaryKey(part, policyAggregate.getEarlyArrivalPart())) continue;
+            if (policyAggregate.getLateDeparturePart() != null &&
+                Entities.samePrimaryKey(part, policyAggregate.getLateDeparturePart())) continue;
+            return part;
+        }
+
+        return null;
+    }
+
+    protected void syncFestivalDaySelectionToState() {
+        if (festivalDaySection == null) return;
+
+        LocalDate currentArrival = festivalDaySection.arrivalDateProperty().get();
+        LocalDate currentDeparture = festivalDaySection.departureDateProperty().get();
+        HasFestivalDaySelectionSection.ArrivalDepartureTime currentArrivalTime = festivalDaySection.arrivalTimeProperty().get();
+        HasFestivalDaySelectionSection.ArrivalDepartureTime currentDepartureTime = festivalDaySection.departureTimeProperty().get();
+
+        BookingSelectionState selectionState = form.getSelectionState();
+        if (currentArrival != null) {
+            selectionState.setArrivalDate(currentArrival);
+        }
+        if (currentDeparture != null) {
+            selectionState.setDepartureDate(currentDeparture);
+        }
+        if (currentArrivalTime != null) {
+            selectionState.setArrivalTime(currentArrivalTime);
+        }
+        if (currentDepartureTime != null) {
+            selectionState.setDepartureTime(currentDepartureTime);
+        }
+    }
+
+    protected LocalTime getBoundaryTime(ScheduledBoundary boundary, boolean isEnd) {
+        return ScheduledBoundaries.getTime(boundary, isEnd);
+    }
+
+    protected DefaultMealsSelectionSection.MealBoundary getMealBoundaryFromTime(LocalTime time) {
+        if (time == null) return DefaultMealsSelectionSection.MealBoundary.LUNCH;
+        int hour = time.getHour();
+        if (hour < 10) return DefaultMealsSelectionSection.MealBoundary.BREAKFAST;
+        if (hour < 14) return DefaultMealsSelectionSection.MealBoundary.LUNCH;
+        return DefaultMealsSelectionSection.MealBoundary.DINNER;
+    }
+
+    protected Map<String, BoundaryTimeInfo> extractBoundaryTimeInfo(PolicyAggregate policyAggregate) {
+        Map<String, BoundaryTimeInfo> result = new HashMap<>();
+
+        EventPart mainEventPart = findMainEventPart(policyAggregate);
+
+        ScheduledBoundary effectiveStartBoundary = null;
+        if (mainEventPart != null) {
+            effectiveStartBoundary = mainEventPart.getStartBoundary();
+        }
+
+        ScheduledBoundary effectiveEndBoundary = null;
+        if (mainEventPart != null) {
+            effectiveEndBoundary = mainEventPart.getEndBoundary();
+        }
+
+        if (effectiveStartBoundary != null) {
+            LocalDate date = ScheduledBoundaries.getDate(effectiveStartBoundary, false);
+            LocalTime time = ScheduledBoundaries.getTime(effectiveStartBoundary, false);
+            if (date != null && time != null) {
+                result.put("startBoundary", new BoundaryTimeInfo(date, time));
+            }
+        }
+
+        if (effectiveEndBoundary != null) {
+            LocalDate date = ScheduledBoundaries.getDate(effectiveEndBoundary, true);
+            LocalTime time = ScheduledBoundaries.getTime(effectiveEndBoundary, true);
+            if (date != null && time != null) {
+                result.put("endBoundary", new BoundaryTimeInfo(date, time));
+            }
+        }
+
+        return result;
+    }
+
+    protected boolean isMealWithinBoundaries(LocalTime mealTime, LocalDate mealDate,
+                                              LocalDate arrivalDate, LocalDate departureDate,
+                                              BoundaryTimeInfo startBoundary, BoundaryTimeInfo endBoundary) {
+        if (mealTime == null) {
+            return true;
+        }
+
+        if (mealDate.equals(arrivalDate) && startBoundary != null && mealDate.equals(startBoundary.date)) {
+            if (mealTime.isBefore(startBoundary.time)) {
+                return false;
+            }
+        }
+
+        if (mealDate.equals(departureDate) && endBoundary != null && mealDate.equals(endBoundary.date)) {
+            if (mealTime.isAfter(endBoundary.time)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Creates a simple Period from start and end dates.
+     */
+    protected Period createSimplePeriod(LocalDate startDate, LocalDate endDate) {
+        return new Period() {
+            @Override public LocalDate getStartDate() { return startDate; }
+            @Override public LocalTime getStartTime() { return LocalTime.MIN; }
+            @Override public LocalDate getEndDate() { return endDate; }
+            @Override public LocalTime getEndTime() { return LocalTime.MAX; }
+        };
     }
 }

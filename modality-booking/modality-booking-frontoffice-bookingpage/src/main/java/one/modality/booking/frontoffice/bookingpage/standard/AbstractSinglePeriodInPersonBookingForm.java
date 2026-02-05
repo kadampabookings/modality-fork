@@ -626,7 +626,11 @@ public abstract class AbstractSinglePeriodInPersonBookingForm implements Standar
         if (accommodationSection != null) {
             accommodationWarningZone.addValidationSource(
                 accommodationSection.validProperty(),
-                () -> I18n.getI18nText("AccommodationRequiredWarning")
+                accommodationSection::getValidationMessage
+            );
+            // Refresh warning when attendance type changes (validProperty may not change)
+            accommodationSection.attendanceTypeProperty().addListener((obs, oldVal, newVal) ->
+                accommodationWarningZone.refresh()
             );
         }
 
@@ -1115,7 +1119,7 @@ public abstract class AbstractSinglePeriodInPersonBookingForm implements Standar
      */
     protected int calculateAccommodationPrice(PolicyAggregate policyAggregate, Item accommodationItem,
                                                LocalDate arrivalDate, LocalDate departureDate) {
-        WorkingBooking tempBooking = new WorkingBooking(policyAggregate, null);
+        WorkingBooking tempBooking = new WorkingBooking(policyAggregate, AttendanceMode.IN_PERSON);
 
         // Book teachings (inclusive period: arrivalDate to departureDate)
         Period teachingPeriod = createSimplePeriod(arrivalDate, departureDate);
@@ -1199,7 +1203,7 @@ public abstract class AbstractSinglePeriodInPersonBookingForm implements Standar
 
     protected int calculateShareAccommodationPrice(PolicyAggregate policyAggregate, Item sharingItem,
                                                     LocalDate arrivalDate, LocalDate departureDate) {
-        WorkingBooking tempBooking = new WorkingBooking(policyAggregate, null);
+        WorkingBooking tempBooking = new WorkingBooking(policyAggregate, AttendanceMode.IN_PERSON);
 
         // Book teachings (inclusive period: arrivalDate to departureDate)
         Period teachingPeriod = createSimplePeriod(arrivalDate, departureDate);
@@ -1265,7 +1269,7 @@ public abstract class AbstractSinglePeriodInPersonBookingForm implements Standar
     }
 
     protected int calculateDayVisitorPrice(PolicyAggregate policyAggregate, LocalDate arrivalDate, LocalDate departureDate) {
-        WorkingBooking tempBooking = new WorkingBooking(policyAggregate, null);
+        WorkingBooking tempBooking = new WorkingBooking(policyAggregate, AttendanceMode.IN_PERSON);
 
         // Book teachings (inclusive period: arrivalDate to departureDate)
         Period teachingPeriod = createSimplePeriod(arrivalDate, departureDate);
@@ -1655,7 +1659,7 @@ public abstract class AbstractSinglePeriodInPersonBookingForm implements Standar
      */
     protected AccommodationPriceResult calculateAccommodationPriceWithBreakdown(PolicyAggregate policyAggregate, Item accommodationItem,
                                                                                  LocalDate arrivalDate, LocalDate departureDate, Integer accommodationAvailability) {
-        WorkingBooking tempBooking = new WorkingBooking(policyAggregate, null);
+        WorkingBooking tempBooking = new WorkingBooking(policyAggregate, AttendanceMode.IN_PERSON);
 
         LocalDate teachingMinDate = null;
         LocalDate teachingMaxDate = null;
@@ -1725,7 +1729,7 @@ public abstract class AbstractSinglePeriodInPersonBookingForm implements Standar
      */
     protected AccommodationPriceResult calculateShareAccommodationPriceWithBreakdown(PolicyAggregate policyAggregate, Item sharingItem,
                                                                                       LocalDate arrivalDate, LocalDate departureDate) {
-        WorkingBooking tempBooking = new WorkingBooking(policyAggregate, null);
+        WorkingBooking tempBooking = new WorkingBooking(policyAggregate, AttendanceMode.IN_PERSON);
 
         LocalDate teachingMinDate = null;
         LocalDate teachingMaxDate = null;
@@ -1795,7 +1799,7 @@ public abstract class AbstractSinglePeriodInPersonBookingForm implements Standar
      * Calculates day visitor price with detailed breakdown.
      */
     protected AccommodationPriceResult calculateDayVisitorPriceWithBreakdown(PolicyAggregate policyAggregate, LocalDate arrivalDate, LocalDate departureDate) {
-        WorkingBooking tempBooking = new WorkingBooking(policyAggregate, null);
+        WorkingBooking tempBooking = new WorkingBooking(policyAggregate, AttendanceMode.IN_PERSON);
 
         LocalDate teachingMinDate = null;
         LocalDate teachingMaxDate = null;

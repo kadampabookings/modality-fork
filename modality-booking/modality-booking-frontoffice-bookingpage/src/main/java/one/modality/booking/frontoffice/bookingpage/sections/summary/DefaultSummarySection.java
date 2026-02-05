@@ -483,10 +483,12 @@ public class DefaultSummarySection implements HasSummarySection {
         VBox labelBox = new VBox(2);
         HBox.setHgrow(labelBox, Priority.ALWAYS);
 
-        // Format display name: "Family - Item" if family exists, otherwise just "Item"
+        // Format display name: "Family - Item" if family exists and differs from item, otherwise just "Item"
         String familyName = line.getFamilyName();
         String itemName = line.getItemName() != null ? line.getItemName() : "Item";
-        String displayName = familyName != null ? familyName + " - " + itemName : itemName;
+        // Avoid redundant display like "Teaching - Teaching" when names are the same
+        boolean sameNames = familyName != null && familyName.equalsIgnoreCase(itemName);
+        String displayName = (familyName != null && !sameNames) ? familyName + " - " + itemName : itemName;
 
         Label nameLabel = new Label(displayName);
         nameLabel.getStyleClass().addAll(bookingpage_text_base, bookingpage_font_medium, bookingpage_text_dark);

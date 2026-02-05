@@ -30,21 +30,6 @@ import one.modality.event.frontoffice.activities.book.event.EventBookingFormSett
 public class DefaultOnlineEventBookingForm extends AbstractOnlineEventBookingForm {
 
     /**
-     * Creates a default online booking form with event-resolved color scheme.
-     *
-     * @param activity   the activity providing WorkingBookingProperties
-     * @param settings   the event booking form settings
-     * @param entryPoint the entry point (NEW_BOOKING, MODIFY_BOOKING, etc.)
-     */
-    public DefaultOnlineEventBookingForm(
-            HasWorkingBookingProperties activity,
-            EventBookingFormSettings settings,
-            BookingFormEntryPoint entryPoint) {
-        this(activity, settings, entryPoint,
-             BookingFormColorScheme.resolveFromEvent(settings.event()));
-    }
-
-    /**
      * Creates a default online booking form with specified color scheme.
      *
      * @param activity    the activity providing WorkingBookingProperties

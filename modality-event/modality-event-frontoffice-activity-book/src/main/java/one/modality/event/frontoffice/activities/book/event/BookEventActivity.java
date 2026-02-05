@@ -27,6 +27,7 @@ import javafx.scene.control.Labeled;
 import javafx.scene.text.Font;
 import one.modality.base.client.mainframe.fx.FXMainFrameOverlayArea;
 import one.modality.base.frontoffice.mainframe.fx.FXCollapseMenu;
+import one.modality.base.shared.entities.AttendanceMode;
 import one.modality.base.shared.entities.Document;
 import one.modality.base.shared.entities.Event;
 import one.modality.base.shared.entities.MoneyTransfer;
@@ -297,39 +298,58 @@ public final class BookEventActivity extends ViewDomainActivityBase implements B
                 policyAggregate.rebuildEntities(event);
             }
 
-            // We also pass getPayOrderDocumentId() which will be used to initialize paymentRequestedByUser in WorkingBooking
-            WorkingBooking workingBooking = new WorkingBooking(policyAggregate, existingBooking, getPayOrderDocumentId());
-            workingBookingProperties.setWorkingBooking(workingBooking);
-
-            // For modification flow, use the unified provider-based approach
-            // Capture event in effectively final variable for lambda
+            // Determine entry point first, as it affects how we create the WorkingBooking
             BookingFormEntryPoint entryPoint = getModifyOrderDocumentId() != null ? BookingFormEntryPoint.MODIFY_BOOKING :
                 getPayOrderDocumentId() != null ? BookingFormEntryPoint.PAY_BOOKING :
                 getResumePaymentMoneyTransferId() != null ? BookingFormEntryPoint.RESUME_PAYMENT :
                     BookingFormEntryPoint.NEW_BOOKING;
+
+            // Find the booking form provider (may specify attendance mode)
+            Event finalEvent = event;
+            BookingFormProvider bookingFormProvider = Collections.findFirst(ALL_BOOKING_FORM_PROVIDERS_SORTED_BY_PRIORITY,
+                provider -> provider.acceptEvent(finalEvent));
+
+            // Create WorkingBooking based on whether we have an existing booking or not
+            WorkingBooking workingBooking;
+            if (existingBooking != null) {
+                // Modifying or paying existing booking - attendanceMode comes from document
+                // We also pass getPayOrderDocumentId() which will be used to initialize paymentRequestedByUser in WorkingBooking
+                workingBooking = new WorkingBooking(policyAggregate, existingBooking, getPayOrderDocumentId());
+            } else {
+                // New booking - determine AttendanceMode from provider or event settings
+                AttendanceMode attendanceMode = null;
+                if (bookingFormProvider != null) {
+                    attendanceMode = bookingFormProvider.getAttendanceMode(event);
+                }
+                if (attendanceMode == null) {
+                    // Fallback to event settings
+                    attendanceMode = Boolean.TRUE.equals(event.isInPersonAllowed())
+                        ? AttendanceMode.IN_PERSON
+                        : AttendanceMode.ONLINE;
+                }
+                workingBooking = new WorkingBooking(policyAggregate, attendanceMode);
+            }
+            workingBookingProperties.setWorkingBooking(workingBooking);
+
+            // For modification flow, use the unified provider-based approach
             if (entryPoint == BookingFormEntryPoint.NEW_BOOKING) {
                 // For new booking and payment flows, use the legacy approach (for now)
                 activityContainer.setPadding(Insets.EMPTY); // Removing new approach padding
                 lettersSlideController.onEventChanged(event);
                 lettersSlideController.onWorkingBookingLoaded();
-            } else if (event != null) { // Modifying, paying or resuming payment
-                Event finalEvent = event;
-                BookingFormProvider bookingFormProvider = Collections.findFirst(ALL_BOOKING_FORM_PROVIDERS_SORTED_BY_PRIORITY,
-                    provider -> provider.acceptEvent(finalEvent));
-                if (bookingFormProvider != null) {
-                    BookingForm bookingForm = bookingFormProvider.createBookingForm(finalEvent, this, entryPoint);
-                    Node bookingFormView = bookingForm.getView();
-                    if (bookingFormView != null) {
-                        activityContainer.setPadding(new Insets(50, 0, 0, 0)); // Adding 50px padding to match legacy approach padding
-                        activityContainer.setContent(bookingFormView);
-                        // Trigger the form to initialize with the working booking
-                        // This is especially important for RESUME_PAYMENT to navigate to confirmation
-                        bookingForm.onWorkingBookingLoaded();
-                        // Add sticky header to the main frame overlay area (if the form has one)
-                        Node stickyHeader = bookingForm.getStickyHeader();
-                        if (stickyHeader != null && !FXMainFrameOverlayArea.getOverlayChildren().contains(stickyHeader)) {
-                            FXMainFrameOverlayArea.getOverlayChildren().add(stickyHeader);
-                        }
+            } else if (bookingFormProvider != null) { // Modifying, paying or resuming payment
+                BookingForm bookingForm = bookingFormProvider.createBookingForm(finalEvent, this, entryPoint);
+                Node bookingFormView = bookingForm.getView();
+                if (bookingFormView != null) {
+                    activityContainer.setPadding(new Insets(50, 0, 0, 0)); // Adding 50px padding to match legacy approach padding
+                    activityContainer.setContent(bookingFormView);
+                    // Trigger the form to initialize with the working booking
+                    // This is especially important for RESUME_PAYMENT to navigate to confirmation
+                    bookingForm.onWorkingBookingLoaded();
+                    // Add sticky header to the main frame overlay area (if the form has one)
+                    Node stickyHeader = bookingForm.getStickyHeader();
+                    if (stickyHeader != null && !FXMainFrameOverlayArea.getOverlayChildren().contains(stickyHeader)) {
+                        FXMainFrameOverlayArea.getOverlayChildren().add(stickyHeader);
                     }
                 }
             }

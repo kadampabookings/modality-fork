@@ -1,11 +1,15 @@
 package one.modality.booking.frontoffice.bookingpage.standard;
 
+import one.modality.base.shared.entities.AttendanceMode;
 import one.modality.booking.client.workingbooking.HasWorkingBookingProperties;
+import one.modality.booking.client.workingbooking.WorkingBooking;
+import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingform.BookingForm;
 import one.modality.booking.frontoffice.bookingform.BookingFormEntryPoint;
 import one.modality.booking.frontoffice.bookingpage.AbstractEntryForm;
 import one.modality.booking.frontoffice.bookingpage.sections.options.DefaultRegistrationTypeSection;
 import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
+import one.modality.ecommerce.policy.service.PolicyAggregate;
 import one.modality.event.frontoffice.activities.book.event.EventBookingFormSettings;
 
 /**
@@ -150,8 +154,12 @@ public abstract class AbstractRegistrationTypeEntryForm extends AbstractEntryFor
     private void setupCallbacks() {
         registrationTypeSection.setOnTypeSelected(type -> {
             if (type == DefaultRegistrationTypeSection.RegistrationType.IN_PERSON) {
+                // Create new WorkingBooking with IN_PERSON attendance mode
+                recreateWorkingBookingWithAttendanceMode(AttendanceMode.IN_PERSON);
                 swapToForm(createInPersonForm());
             } else if (type == DefaultRegistrationTypeSection.RegistrationType.ONLINE) {
+                // Create new WorkingBooking with ONLINE attendance mode
+                recreateWorkingBookingWithAttendanceMode(AttendanceMode.ONLINE);
                 swapToForm(createOnlineForm());
             }
         });
@@ -159,6 +167,33 @@ public abstract class AbstractRegistrationTypeEntryForm extends AbstractEntryFor
         // Override the continue callback to prevent auto-navigation within RegistrationTypeSection
         // The form swap handles the navigation
         registrationTypeSection.setOnContinuePressed(null);
+    }
+
+    /**
+     * Recreates the WorkingBooking with the specified attendance mode.
+     * This is called when the user selects their registration type (In-Person or Online).
+     *
+     * <p>At this point, nothing has been booked yet in the WorkingBooking, so discarding
+     * the old one and creating a new one with the correct attendance mode is safe.</p>
+     *
+     * @param attendanceMode the attendance mode for the new WorkingBooking
+     */
+    private void recreateWorkingBookingWithAttendanceMode(AttendanceMode attendanceMode) {
+        WorkingBookingProperties props = getActivity().getWorkingBookingProperties();
+        if (props == null) return;
+
+        WorkingBooking currentWorkingBooking = props.getWorkingBooking();
+        if (currentWorkingBooking == null) return;
+
+        // Get the PolicyAggregate from the current WorkingBooking
+        PolicyAggregate policyAggregate = currentWorkingBooking.getPolicyAggregate();
+        if (policyAggregate == null) return;
+
+        // Create a new WorkingBooking with the correct attendance mode
+        WorkingBooking newWorkingBooking = new WorkingBooking(policyAggregate, attendanceMode);
+
+        // Update the WorkingBookingProperties with the new WorkingBooking
+        props.setWorkingBooking(newWorkingBooking);
     }
 
     // ========================================

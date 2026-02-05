@@ -78,10 +78,10 @@ public class DefaultMealsSelectionSection implements HasMealsSelectionSection {
     protected boolean hasExtendedStay = false;
 
     // === MEAL SELECTION ===
-    // Meals are selected by default since accommodation price includes meals
-    protected final BooleanProperty wantsBreakfast = new SimpleBooleanProperty(true);  // Auto-included with accommodation
-    protected final BooleanProperty wantsLunch = new SimpleBooleanProperty(true);
-    protected final BooleanProperty wantsDinner = new SimpleBooleanProperty(true);
+    // Meals default to false - breakfast is auto-included when accommodation is selected
+    protected final BooleanProperty wantsBreakfast = new SimpleBooleanProperty(false);
+    protected final BooleanProperty wantsLunch = new SimpleBooleanProperty(false);
+    protected final BooleanProperty wantsDinner = new SimpleBooleanProperty(false);
     @Deprecated
     protected final ObjectProperty<DietaryPreference> dietaryPreference = new SimpleObjectProperty<>(DietaryPreference.VEGETARIAN);
     protected final ObjectProperty<Item> selectedDietaryItem = new SimpleObjectProperty<>();  // API-driven dietary option

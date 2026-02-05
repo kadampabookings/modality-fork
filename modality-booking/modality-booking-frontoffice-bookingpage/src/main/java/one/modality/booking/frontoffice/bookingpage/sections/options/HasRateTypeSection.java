@@ -60,4 +60,30 @@ public interface HasRateTypeSection extends BookingFormSection {
      * Sets the callback for when the rate type changes.
      */
     void setOnRateTypeChanged(Consumer<RateType> handler);
+
+    /**
+     * Sets the displayed price for Standard rate.
+     * Price should be calculated externally using WorkingBooking + PriceCalculator.
+     *
+     * <p>Default implementation does nothing. Override in implementations
+     * that support externally calculated prices.</p>
+     *
+     * @param priceInCents the price in cents
+     */
+    default void setStandardPrice(int priceInCents) {
+        // Default: no-op. Override in implementations that support external price setting.
+    }
+
+    /**
+     * Sets the displayed price for Member rate.
+     * Price should be calculated externally using WorkingBooking + PriceCalculator.
+     *
+     * <p>Default implementation does nothing. Override in implementations
+     * that support externally calculated prices.</p>
+     *
+     * @param priceInCents the price in cents
+     */
+    default void setMemberPrice(int priceInCents) {
+        // Default: no-op. Override in implementations that support external price setting.
+    }
 }

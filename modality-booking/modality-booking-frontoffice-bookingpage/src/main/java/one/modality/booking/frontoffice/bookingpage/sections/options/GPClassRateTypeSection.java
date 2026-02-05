@@ -36,15 +36,15 @@ import java.util.function.Consumer;
 import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelectors.*;
 
 /**
- * Default rate selection section for booking forms.
- * Allows users to choose between Standard Rate and Member Rate.
+ * Rate selection section for General Program (GP) class booking forms.
+ * Allows users to choose between Standard Rate and Member Rate with per-class pricing.
  *
- * <p>This is the default implementation of {@link HasRateTypeSection} that can be used
- * as-is or extended for organization-specific customizations.</p>
+ * <p>This section is specifically designed for GP Class bookings where pricing is per class.
+ * For online event forms, use {@link DefaultRateTypeSection} instead.</p>
  *
  * @author Claude
  */
-public class DefaultRateSection implements BookingFormSection, HasRateTypeSection {
+public class GPClassRateTypeSection implements BookingFormSection, HasRateTypeSection {
 
     // UI Components
     private final VBox container = new VBox(16);
@@ -66,7 +66,7 @@ public class DefaultRateSection implements BookingFormSection, HasRateTypeSectio
     // Callbacks
     private Consumer<RateType> onRateTypeChanged;
 
-    public DefaultRateSection() {
+    public GPClassRateTypeSection() {
         buildUI();
     }
 
