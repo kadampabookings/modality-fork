@@ -12,6 +12,7 @@ public interface PoolAllocation extends
 
     String pool = "pool";
     String quantity = "quantity";
+    String publicBookingEnabled = "publicBookingEnabled";
 
     default void setPool(Object value) {
         setForeignField(pool, value);
@@ -33,4 +34,11 @@ public interface PoolAllocation extends
         setFieldValue(quantity, value);
     }
 
+    default Boolean isPublicBookingEnabled() {
+        return getBooleanFieldValue(publicBookingEnabled);
+    }
+
+    default void setPublicBookingEnabled(Boolean value) {
+        setFieldValue(publicBookingEnabled, value);
+    }
 }
