@@ -90,10 +90,10 @@ public final class WorkingBooking {
     private WorkingBooking(PolicyAggregate policyAggregate, DocumentAggregate initialDocumentAggregate, AttendanceMode attendanceMode, Object paymentRequestedByUserDocumentId) {
         this.policyAggregate = policyAggregate;
         this.initialDocumentAggregate = initialDocumentAggregate;
-        this.attendanceMode = initialDocumentAggregate != null ? initialDocumentAggregate.getDocument().getAttendanceMode() : attendanceMode;
         if (initialDocumentAggregate != null) // Case of existing booking
             initialDocumentAggregate.setPolicyAggregate(policyAggregate);
         cancelChanges(); // sounds a bit weired, but this will actually initialize the document
+        this.attendanceMode = initialDocumentAggregate != null ? initialDocumentAggregate.getDocument().getAttendanceMode() : attendanceMode;
         paymentRequestedByUser = Entities.samePrimaryKey(documentPrimaryKey, paymentRequestedByUserDocumentId);
     }
 
