@@ -22,7 +22,7 @@ import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
 import one.modality.booking.frontoffice.bookingpage.components.StyledSectionHeader;
 import one.modality.booking.frontoffice.bookingpage.components.price.UnifiedPriceDisplay;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
+
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -42,7 +42,6 @@ import static one.modality.booking.frontoffice.bookingpage.components.BookingPag
 public class DefaultSummarySection implements HasSummarySection {
 
     // === PROPERTIES ===
-    protected final ObjectProperty<BookingFormColorScheme> colorScheme = new SimpleObjectProperty<>(BookingFormColorScheme.DEFAULT);
     protected final SimpleBooleanProperty validProperty = new SimpleBooleanProperty(true);
 
     // === ATTENDEE INFO ===
@@ -91,7 +90,7 @@ public class DefaultSummarySection implements HasSummarySection {
     protected void buildUI() {
         container.setAlignment(Pos.TOP_CENTER);
         container.setSpacing(0);
-        container.getStyleClass().add("bookingpage-summary-section");
+        container.getStyleClass().add(bookingpage_summary_section);
 
         // Page title: "Review Your Booking"
         Label title = createPageTitle();
@@ -629,26 +628,6 @@ public class DefaultSummarySection implements HasSummarySection {
     // HasSummarySection INTERFACE
     // ========================================
 
-    /**
-     * @deprecated Color scheme is now handled via CSS classes on parent container.
-     * Use theme classes like "theme-wisdom-blue" on a parent element instead.
-     * This property is kept for icon and dynamic element coloring which requires Java.
-     */
-    @Deprecated
-    @Override
-    public ObjectProperty<BookingFormColorScheme> colorSchemeProperty() {
-        return colorScheme;
-    }
-
-    /**
-     * @deprecated Use CSS theme classes instead.
-     */
-    @Deprecated
-    @Override
-    public void setColorScheme(BookingFormColorScheme scheme) {
-        this.colorScheme.set(scheme);
-    }
-
     @Override
     public void setAttendeeName(String name) {
         attendeeNameProperty.set(name);
@@ -678,13 +657,6 @@ public class DefaultSummarySection implements HasSummarySection {
     @Override
     public void addPriceLine(String familyName, String itemName, String dates, int amount) {
         priceLines.add(new PriceLine(familyName, itemName, dates, amount));
-        refreshPriceBreakdown();
-    }
-
-    @Override
-    public void addPriceLine(String name, String description, int amount) {
-        // Backward compatibility: treat name as itemName, familyName as null
-        priceLines.add(new PriceLine(null, name, description, amount));
         refreshPriceBreakdown();
     }
 

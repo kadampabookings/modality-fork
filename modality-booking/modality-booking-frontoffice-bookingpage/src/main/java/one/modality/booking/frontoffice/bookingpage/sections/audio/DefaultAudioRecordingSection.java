@@ -16,27 +16,24 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import one.modality.base.client.i18n.I18nEntities;
+import one.modality.base.shared.entities.AttendanceMode;
 import one.modality.base.shared.entities.BookablePeriod;
 import one.modality.base.shared.entities.Item;
-import one.modality.base.shared.entities.Rate;
 import one.modality.base.shared.entities.Event;
 import one.modality.base.shared.entities.ScheduledItem;
 import one.modality.base.shared.entities.formatters.EventPriceFormatter;
-import one.modality.base.shared.entities.util.Items;
-import one.modality.base.shared.knownitems.KnownItemFamily;
 import one.modality.booking.client.workingbooking.WorkingBooking;
 import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
+import one.modality.booking.frontoffice.bookingpage.components.PreviewPriceCalculator;
 import one.modality.booking.frontoffice.bookingpage.components.StyledSectionHeader;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
 import one.modality.ecommerce.document.service.DocumentAggregate;
 import one.modality.ecommerce.policy.service.PolicyAggregate;
 
 import java.time.LocalDate;
 import java.util.*;
 import java.util.function.Consumer;
-import java.util.stream.Collectors;
 
 import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelectors.*;
 
@@ -61,8 +58,6 @@ public class DefaultAudioRecordingSection implements HasAudioRecordingSection {
     protected final VBox container = new VBox(20);
     protected final VBox cardsPane = new VBox(12);
     protected final SimpleBooleanProperty validProperty = new SimpleBooleanProperty(true);
-    // Kept for API compatibility - theming is now CSS-based
-    protected final ObjectProperty<BookingFormColorScheme> colorScheme = new SimpleObjectProperty<>(BookingFormColorScheme.DEFAULT);
 
     protected final Set<Item> selectedRecordingItems = new HashSet<>();
     // Items that were already booked in the initial booking and cannot be deselected
@@ -85,7 +80,6 @@ public class DefaultAudioRecordingSection implements HasAudioRecordingSection {
                 BookingPageI18nKeys.AudioRecording,
                 StyledSectionHeader.ICON_HEADPHONES
         );
-        header.colorSchemeProperty().bind(colorScheme);
 
         // Info box - outline style with primary color border
         HBox infoBox = BookingPageUIBuilder.createInfoBox(
@@ -145,15 +139,12 @@ public class DefaultAudioRecordingSection implements HasAudioRecordingSection {
 
         List<LocalDate> programmeDates = getProgrammeDates(policyAggregate);
 
-        List<Rate> audioRecordingRates = policyAggregate.getDailyRates().stream()
-                .filter(rate -> Items.isOfFamily(rate.getItem(), KnownItemFamily.AUDIO_RECORDING))
-                .collect(Collectors.toList());
-
         for (Map.Entry<Item, List<ScheduledItem>> entry : audioRecordingsByItem.entrySet()) {
             Item recordingItem = entry.getKey();
-            List<ScheduledItem> scheduledItems = entry.getValue();
 
-            int totalPrice = calculatePriceForItem(recordingItem, scheduledItems, programmeDates, audioRecordingRates);
+            // Use WorkingBooking engine for accurate pricing (includes discounts, rate variations)
+            int totalPrice = PreviewPriceCalculator.calculateItemPrice(
+                policyAggregate, recordingItem, programmeDates, AttendanceMode.IN_PERSON);
             boolean isLocked = lockedItems.contains(recordingItem);
 
             createRecordingCard(recordingItem, totalPrice, isLocked);
@@ -241,43 +232,11 @@ public class DefaultAudioRecordingSection implements HasAudioRecordingSection {
         return dates;
     }
 
-    protected int calculatePriceForItem(Item recordingItem, List<ScheduledItem> scheduledItems,
-                                         List<LocalDate> programmeDates, List<Rate> rates) {
-        int totalPrice = 0;
-
-        Rate itemRate = null;
-        for (Rate rate : rates) {
-            if (rate.getItem() != null && rate.getItem().getPrimaryKey().equals(recordingItem.getPrimaryKey())) {
-                itemRate = rate;
-                break;
-            }
-        }
-
-        if (itemRate == null && !rates.isEmpty()) {
-            itemRate = rates.get(0);
-        }
-
-        if (itemRate != null && itemRate.getPrice() != null) {
-            int daysCount = 0;
-            for (ScheduledItem si : scheduledItems) {
-                if (si.getDate() != null && programmeDates.contains(si.getDate())) {
-                    daysCount++;
-                }
-            }
-
-            if (daysCount == 0) {
-                daysCount = programmeDates.size();
-            }
-
-            totalPrice = itemRate.getPrice() * daysCount;
-        }
-
-        return totalPrice;
-    }
+    // Price calculation is now handled by PreviewPriceCalculator.calculateItemPrice()
 
     protected void createRecordingCard(Item recordingItem, int price, boolean isLocked) {
         Event event = workingBookingProperties != null ? workingBookingProperties.getEvent() : null;
-        AudioRecordingCard card = new AudioRecordingCard(recordingItem, price, isLocked, colorScheme, event);
+        AudioRecordingCard card = new AudioRecordingCard(recordingItem, price, isLocked, event);
         card.setOnClick(() -> handleCardSelection(card, recordingItem));
 
         I18nEntities.bindTranslatedEntityToTextProperty(card.getTitleLabel(), recordingItem);
@@ -366,25 +325,6 @@ public class DefaultAudioRecordingSection implements HasAudioRecordingSection {
 
     // === HasAudioRecordingSection interface ===
 
-    /**
-     * @deprecated Color scheme is now handled via CSS classes on parent container.
-     * Use theme classes like "theme-wisdom-blue" on a parent element instead.
-     */
-    @Deprecated
-    @Override
-    public ObjectProperty<BookingFormColorScheme> colorSchemeProperty() {
-        return colorScheme;
-    }
-
-    /**
-     * @deprecated Use CSS theme classes instead.
-     */
-    @Deprecated
-    @Override
-    public void setColorScheme(BookingFormColorScheme scheme) {
-        this.colorScheme.set(scheme);
-    }
-
     @Override
     public List<ScheduledItem> getScheduledItemsForRecording(Item recordingItem) {
         if (recordingItem == null || audioRecordingsByItem == null) {
@@ -466,12 +406,12 @@ public class DefaultAudioRecordingSection implements HasAudioRecordingSection {
 
         private Runnable onClick;
 
-        AudioRecordingCard(Item recordingItem, int price, boolean locked, ObjectProperty<BookingFormColorScheme> colorSchemeProperty, Event event) {
+        AudioRecordingCard(Item recordingItem, int price, boolean locked, Event event) {
             this.recordingItem = recordingItem;
             this.locked = locked;
 
-            // Checkbox indicator using BookingPageUIBuilder - pass property for reactive theme updates
-            StackPane checkboxIndicator = BookingPageUIBuilder.createCheckboxIndicator(selected, colorSchemeProperty);
+            // Checkbox indicator using BookingPageUIBuilder
+            StackPane checkboxIndicator = BookingPageUIBuilder.createCheckboxIndicator(selected);
 
             // Title container with optional "PURCHASED" badge for locked items
             VBox titleContainer = new VBox(2);

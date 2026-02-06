@@ -271,7 +271,6 @@ public abstract class AbstractSinglePeriodInPersonBookingForm implements Standar
      */
     protected DefaultAccommodationSelectionSection createAccommodationSection() {
         DefaultAccommodationSelectionSection section = new DefaultAccommodationSelectionSection();
-        section.setColorScheme(getColorScheme());
         return section;
     }
 
@@ -373,24 +372,18 @@ public abstract class AbstractSinglePeriodInPersonBookingForm implements Standar
         step2EventHeaderSection = new DefaultEventHeaderSection();
 
         festivalDaySection = new DefaultFestivalDaySelectionSection();
-        festivalDaySection.setColorScheme(getColorScheme());
 
         mealsSection = new DefaultMealsSelectionSection();
-        mealsSection.setColorScheme(getColorScheme());
 
         audioRecordingPhaseSection = new DefaultAudioRecordingPhaseCoverageSection();
-        audioRecordingPhaseSection.setColorScheme(getColorScheme());
         audioRecordingPhaseSection.setVisible(false);
 
         transportSection = new DefaultTransportSection();
-        transportSection.setColorScheme(getColorScheme());
         transportSection.setVisible(false);
 
         additionalOptionsSection = new DefaultAdditionalOptionsSection();
-        additionalOptionsSection.setColorScheme(getColorScheme());
 
         roommateInfoSection = new DefaultRoommateInfoSection();
-        roommateInfoSection.setColorScheme(getColorScheme());
         roommateInfoSection.setVisible(false);
 
         bookingDetailsPage = new CompositeBookingFormPage(BookingPageI18nKeys.BookingDetails,
@@ -413,7 +406,6 @@ public abstract class AbstractSinglePeriodInPersonBookingForm implements Standar
         yourInfoEventHeaderSection = new DefaultEventHeaderSection();
 
         yourInformationSection = new DefaultYourInformationSection();
-        yourInformationSection.setColorScheme(getColorScheme());
         yourInformationSection.setBackButtonVisible(true);
 
         return new CompositeBookingFormPage(BookingPageI18nKeys.YourInformation,
@@ -435,7 +427,6 @@ public abstract class AbstractSinglePeriodInPersonBookingForm implements Standar
         memberSelectionEventHeaderSection = new DefaultEventHeaderSection();
 
         memberSelectionSection = new DefaultMemberSelectionSection();
-        memberSelectionSection.setColorScheme(getColorScheme());
         memberSelectionSection.setBackButtonVisible(true);
 
         return new CompositeBookingFormPage(BookingPageI18nKeys.MemberSelection,

@@ -82,9 +82,6 @@ public class DefaultYourInformationSection implements HasYourInformationSection 
 
     protected final ObjectProperty<FlowState> flowStateProperty = new SimpleObjectProperty<>(FlowState.EMAIL_INPUT);
 
-    // === COLOR SCHEME ===
-    protected final ObjectProperty<BookingFormColorScheme> colorScheme = new SimpleObjectProperty<>(BookingFormColorScheme.DEFAULT);
-
     protected final SimpleBooleanProperty validProperty = new SimpleBooleanProperty(false);
     protected final SimpleBooleanProperty emailValidProperty = new SimpleBooleanProperty(false);
 
@@ -208,7 +205,7 @@ public class DefaultYourInformationSection implements HasYourInformationSection 
     protected void buildUI() {
         container.setAlignment(Pos.TOP_CENTER);
         container.setSpacing(0);
-        container.getStyleClass().add("bookingpage-your-information-section");
+        container.getStyleClass().add(bookingpage_your_information_section);
 
         // Create all form fields
         createFormFields();
@@ -429,7 +426,7 @@ public class DefaultYourInformationSection implements HasYourInformationSection 
         ageTermsToggleContainer.getChildren().addAll(ageTermsCheckBox, toggleLabels);
 
         // Email verification - Send button with spinner
-        sendVerificationButton = BookingPageUIBuilder.createPrimaryButton(BookingPageI18nKeys.SendVerificationCode, colorScheme);
+        sendVerificationButton = BookingPageUIBuilder.createPrimaryButton(BookingPageI18nKeys.SendVerificationCode);
         sendVerificationButton.setOnAction(e -> handleSendVerificationCode());
 
         // Email verification - Success box
@@ -1089,7 +1086,7 @@ public class DefaultYourInformationSection implements HasYourInformationSection 
      * Used when forceAccountCreation is false.
      */
     protected VBox buildCreateAccountBoxHeaderOnly() {
-        BookingFormColorScheme colors = colorScheme.get();
+        BookingFormColorScheme colors = BookingFormColorScheme.DEFAULT;
 
         // Clear any existing references
         benefitCheckIcons.clear();
@@ -1605,7 +1602,7 @@ public class DefaultYourInformationSection implements HasYourInformationSection 
     }
 
     protected Button createPrimaryButton(Object i18nKey) {
-        return BookingPageUIBuilder.createPrimaryButton(i18nKey, colorScheme);
+        return BookingPageUIBuilder.createPrimaryButton(i18nKey);
     }
 
     // ========================================
@@ -1888,8 +1885,7 @@ public class DefaultYourInformationSection implements HasYourInformationSection 
                     resendLink.setDisable(false);
                     resendLink.getStyleClass().remove(bookingpage_text_disabled);
                     I18nControls.bindI18nTextProperty(resendLink, BookingPageI18nKeys.ResendCode);
-                    BookingFormColorScheme colors = colorScheme.get();
-                    Color linkColor = colors != null ? colors.getPrimary() : Color.web("#0d6efd");
+                    Color linkColor = BookingFormColorScheme.DEFAULT.getPrimary();
                     resendLink.setTextFill(linkColor);
                 }
             })
@@ -1936,8 +1932,7 @@ public class DefaultYourInformationSection implements HasYourInformationSection 
                     resendVerificationLink.setDisable(false);
                     resendVerificationLink.getStyleClass().remove(bookingpage_text_disabled);
                     I18nControls.bindI18nTextProperty(resendVerificationLink, BookingPageI18nKeys.ResendCode);
-                    BookingFormColorScheme colors = colorScheme.get();
-                    Color linkColor = colors != null ? colors.getPrimary() : Color.web("#0d6efd");
+                    Color linkColor = BookingFormColorScheme.DEFAULT.getPrimary();
                     resendVerificationLink.setTextFill(linkColor);
                 }
             })
@@ -2448,16 +2443,6 @@ public class DefaultYourInformationSection implements HasYourInformationSection 
     // ========================================
     // HasYourInformationSection INTERFACE
     // ========================================
-
-    @Override
-    public ObjectProperty<BookingFormColorScheme> colorSchemeProperty() {
-        return colorScheme;
-    }
-
-    @Override
-    public void setColorScheme(BookingFormColorScheme scheme) {
-        this.colorScheme.set(scheme);
-    }
 
     @Override
     public void setOnLoginSuccess(Consumer<Person> callback) {

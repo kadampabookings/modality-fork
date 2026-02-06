@@ -32,7 +32,7 @@ import one.modality.booking.client.workingbooking.WorkingBooking;
 import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.BookingFormSection;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
-import one.modality.booking.frontoffice.bookingpage.PriceFormatter;
+import one.modality.base.shared.entities.formatters.EventPriceFormatter;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
 import one.modality.booking.frontoffice.bookingpage.components.StyledSectionHeader;
 import one.modality.booking.frontoffice.bookingpage.sections.member.HasMemberSelectionSection.MemberInfo;
@@ -167,7 +167,7 @@ public class DefaultExistingBookingSection implements BookingFormSection, HasExi
     private void buildUI() {
         container.setAlignment(Pos.TOP_CENTER);
         container.setSpacing(0);
-        container.getStyleClass().add("bookingpage-existing-booking-section");
+        container.getStyleClass().add(bookingpage_existing_booking_section);
         container.setMaxWidth(800);
 
         // Info notice box
@@ -695,7 +695,7 @@ public class DefaultExistingBookingSection implements BookingFormSection, HasExi
     }
 
     private String formatCurrency(int amountInCents) {
-        return PriceFormatter.formatPriceWithCurrencyWithDecimals(amountInCents);
+        return EventPriceFormatter.formatWithCurrency(amountInCents, workingBookingProperties != null ? workingBookingProperties.getEvent() : null);
     }
 
     // === DATA LOADING ===

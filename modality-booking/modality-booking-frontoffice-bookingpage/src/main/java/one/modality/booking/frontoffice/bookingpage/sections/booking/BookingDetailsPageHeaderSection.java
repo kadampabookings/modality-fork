@@ -12,6 +12,8 @@ import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.BookingFormSection;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
 
+import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelectors.*;
+
 /**
  * Centered header for the Booking Details page (Step 4) matching JSX mockup design:
  * <ul>
@@ -36,11 +38,11 @@ public class BookingDetailsPageHeaderSection implements BookingFormSection {
 
         // Title: "Booking Details"
         Label titleLabel = I18nControls.newLabel(BookingPageI18nKeys.BookingDetails);
-        titleLabel.getStyleClass().addAll("bookingpage-text-2xl", "bookingpage-font-bold");
+        titleLabel.getStyleClass().addAll(bookingpage_text_2xl, bookingpage_font_bold);
 
         // Subtitle: "Customize your festival experience"
         Label subtitleLabel = I18nControls.newLabel(BookingPageI18nKeys.CustomizeYourFestivalExperience);
-        subtitleLabel.getStyleClass().addAll("bookingpage-text-sm", "bookingpage-text-muted");
+        subtitleLabel.getStyleClass().addAll(bookingpage_text_sm, bookingpage_text_muted);
 
         container.getChildren().addAll(titleLabel, subtitleLabel);
     }

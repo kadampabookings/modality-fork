@@ -98,19 +98,19 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
         dateCardsContainer.setVgap(12);
         dateCardsContainer.setPadding(new Insets(0));
         dateCardsContainer.setAlignment(Pos.TOP_LEFT);
-        dateCardsContainer.getStyleClass().add("gpclass-date-cards-container");
+        dateCardsContainer.getStyleClass().add(gpclass_date_cards_container);
 
         // Select all bar
         buildSelectAllBar();
 
         // Price summary
         priceSummaryBox.setPadding(new Insets(24));
-        priceSummaryBox.getStyleClass().addAll(bookingpage_card_static, "gpclass-price-summary");
+        priceSummaryBox.getStyleClass().addAll(bookingpage_card_static, gpclass_price_summary);
         priceSummaryBox.setVisible(false);
         priceSummaryBox.setManaged(false);
 
         container.getChildren().addAll(header, dateCardsContainer, selectAllBar, priceSummaryBox);
-        container.getStyleClass().add("gpclass-date-selection-section");
+        container.getStyleClass().add(gpclass_date_selection_section);
         container.setMinWidth(0);
     }
 
@@ -547,7 +547,7 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
         totalRow.setAlignment(Pos.CENTER_LEFT);
         totalRow.setPadding(new Insets(0, 12, 0, 12)); // Match subtotal row padding for value alignment
 
-        Label totalLabel = new Label(I18n.getI18nText(BookingPageI18nKeys.Total));
+        Label totalLabel = I18nControls.newLabel(BookingPageI18nKeys.Total);
         totalLabel.getStyleClass().add(gpclass_price_summary_total_label);
 
         Region totalSpacer = new Region();

@@ -65,6 +65,7 @@ public class RegistrationOfflinePage implements BookingFormPage {
     private WorkingBookingProperties workingBookingProperties;
     private VBox view;
     private BookingFormButton[] buttons;
+    private String contactEmail = ""; // Set via setContactEmail() from event/organization config
 
     /**
      * Creates a new offline page.
@@ -122,6 +123,14 @@ public class RegistrationOfflinePage implements BookingFormPage {
 
     public RegistrationOfflinePage setButtons(BookingFormButton... buttons) {
         this.buttons = buttons;
+        return this;
+    }
+
+    /**
+     * Sets the contact email for this page. Should come from event/organization configuration.
+     */
+    public RegistrationOfflinePage setContactEmail(String email) {
+        this.contactEmail = email != null ? email : "";
         return this;
     }
 
@@ -367,11 +376,12 @@ public class RegistrationOfflinePage implements BookingFormPage {
         Label questionLabel = I18nControls.newLabel(BookingPageI18nKeys.QuestionsContactUs);
         questionLabel.getStyleClass().addAll(bookingpage_text_sm, registration_offline_text_gray);
 
-        Hyperlink emailLink = new Hyperlink("kbs@kadampa.net");
+        Hyperlink emailLink = new Hyperlink(contactEmail);
         emailLink.getStyleClass().add(registration_offline_email_link);
         emailLink.setOnAction(e -> {
-            // In a real app, this would open the email client
-            // For now, just log it
+            if (contactEmail != null && !contactEmail.isEmpty()) {
+                dev.webfx.platform.windowlocation.WindowLocation.assignHref("mailto:" + contactEmail);
+            }
         });
 
         textContainer.getChildren().addAll(questionLabel, emailLink);

@@ -289,7 +289,6 @@ public class BookingFormQueueHandler {
     private CompositeBookingFormPage getOrCreateUnifiedQueuePage() {
         if (unifiedQueuePage == null) {
             unifiedQueueSection = new DefaultUnifiedQueueSection();
-            unifiedQueueSection.setColorScheme(callback.getColorScheme());
             unifiedQueueSection.setWorkingBookingProperties(callback.getWorkingBookingProperties());
 
             unifiedQueuePage = new CompositeBookingFormPage(

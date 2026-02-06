@@ -3,7 +3,6 @@ package one.modality.booking.frontoffice.bookingpage.sections.member;
 import dev.webfx.extras.i18n.I18n;
 import dev.webfx.extras.i18n.controls.I18nControls;
 import dev.webfx.extras.webtext.HtmlText;
-import dev.webfx.kit.util.properties.FXProperties;
 import dev.webfx.platform.uischeduler.UiScheduler;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.ObjectProperty;
@@ -31,7 +30,7 @@ import one.modality.booking.frontoffice.bookingpage.components.StyledSectionHead
 import one.modality.booking.frontoffice.bookingpage.sections.childcarer.DefaultChildCarerSection;
 import one.modality.booking.frontoffice.bookingpage.sections.childcarer.HasChildCarerSection.HouseholdMember;
 import one.modality.booking.frontoffice.bookingpage.standard.BookingSelectionState;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
+
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -64,10 +63,6 @@ import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelecto
  * @author Bruno Salmon
  */
 public class DefaultMemberSelectionSection implements HasMemberSelectionSection {
-
-    // === COLOR SCHEME ===
-    // Kept for API compatibility - theming is now CSS-based
-    protected final ObjectProperty<BookingFormColorScheme> colorScheme = new SimpleObjectProperty<>(BookingFormColorScheme.DEFAULT);
 
     // === VALIDITY ===
     protected final SimpleBooleanProperty validProperty = new SimpleBooleanProperty(false);
@@ -114,7 +109,7 @@ public class DefaultMemberSelectionSection implements HasMemberSelectionSection 
     protected void buildUI() {
         container.setAlignment(Pos.TOP_CENTER);
         container.setSpacing(0);
-        container.getStyleClass().add("bookingpage-member-selection-section");
+        container.getStyleClass().add(bookingpage_member_selection_section);
 
         // Title - styled via CSS
         Label title = createPageTitle();
@@ -294,10 +289,8 @@ public class DefaultMemberSelectionSection implements HasMemberSelectionSection 
         // Info text with HTML link support
         HtmlText infoText = new HtmlText();
         infoText.getStyleClass().addAll(bookingpage_text_sm, bookingpage_text_warning);
-        // Update text when language changes
-        FXProperties.runNowAndOnPropertiesChange(() -> {
-            infoText.setText(I18n.getI18nText(BookingPageI18nKeys.MemberSelectionInfoText));
-        }, I18n.dictionaryProperty());
+        // Update text when language changes (HtmlText is not Labeled, so bind textProperty directly)
+        infoText.textProperty().bind(I18n.i18nTextProperty(BookingPageI18nKeys.MemberSelectionInfoText));
         HBox.setHgrow(infoText, Priority.ALWAYS);
 
         box.getChildren().addAll(icon, infoText);
@@ -380,7 +373,7 @@ public class DefaultMemberSelectionSection implements HasMemberSelectionSection 
             VBox.setMargin(emailLabel, new Insets(0, 0, 8, 0));
             contentBox.getChildren().add(createStatusBadge("✗", BookingPageI18nKeys.AlreadyBookedForEvent, "#dc3545", "#dc3545")); // ✗
             card.setOpacity(0.6);
-            card.getStyleClass().add("already-booked");
+            card.getStyleClass().add(bookingpage_already_booked);
         } else if (status == MemberStatus.PENDING_INVITATION) {
             VBox.setMargin(emailLabel, new Insets(0, 0, 8, 0));
             contentBox.getChildren().add(createStatusBadge("⏳", BookingPageI18nKeys.Pending, "#6c757d", "#6c757d")); // ⏳
@@ -454,10 +447,10 @@ public class DefaultMemberSelectionSection implements HasMemberSelectionSection 
         HBox badge = new HBox();
         badge.setAlignment(Pos.CENTER_LEFT);
         badge.setPadding(new Insets(4, 12, 4, 12));
-        badge.setStyle("-fx-background-color: #FEF3C7; -fx-background-radius: 20;");
+        badge.getStyleClass().add(bookingpage_child_age_badge);
 
         Label label = I18nControls.newLabel(BookingPageI18nKeys.ChildAge, age);
-        label.setStyle("-fx-text-fill: #92400E; -fx-font-size: 12px; -fx-font-weight: 500;");
+        label.getStyleClass().add(bookingpage_child_age_badge_text);
 
         badge.getChildren().add(label);
         return badge;
@@ -499,7 +492,7 @@ public class DefaultMemberSelectionSection implements HasMemberSelectionSection 
     }
 
     protected Button createPrimaryButton() {
-        return BookingPageUIBuilder.createPrimaryButton(BookingPageI18nKeys.Continue, colorScheme);
+        return BookingPageUIBuilder.createPrimaryButton(BookingPageI18nKeys.Continue);
     }
 
     // ========================================
@@ -572,25 +565,6 @@ public class DefaultMemberSelectionSection implements HasMemberSelectionSection 
     // ========================================
     // HasMemberSelectionSection INTERFACE
     // ========================================
-
-    /**
-     * @deprecated Color scheme is now handled via CSS classes on parent container.
-     * Use theme classes like "theme-wisdom-blue" on a parent element instead.
-     */
-    @Deprecated
-    @Override
-    public ObjectProperty<BookingFormColorScheme> colorSchemeProperty() {
-        return colorScheme;
-    }
-
-    /**
-     * @deprecated Use CSS theme classes instead.
-     */
-    @Deprecated
-    @Override
-    public void setColorScheme(BookingFormColorScheme scheme) {
-        this.colorScheme.set(scheme);
-    }
 
     @Override
     public void setOnMemberSelected(Consumer<MemberInfo> callback) {
@@ -735,11 +709,10 @@ public class DefaultMemberSelectionSection implements HasMemberSelectionSection 
         childCarerContainer = new VBox(16);
         childCarerContainer.setVisible(false);
         childCarerContainer.setManaged(false);
-        childCarerContainer.getStyleClass().add("bookingpage-inline-childcarer");
+        childCarerContainer.getStyleClass().add(bookingpage_inline_childcarer);
         VBox.setMargin(childCarerContainer, new Insets(24, 0, 0, 0));
 
         childCarerSection = new DefaultChildCarerSection();
-        childCarerSection.setColorScheme(colorScheme.get());
         childCarerContainer.getChildren().add(childCarerSection.getView());
 
         // Bind to selection state for centralized data management

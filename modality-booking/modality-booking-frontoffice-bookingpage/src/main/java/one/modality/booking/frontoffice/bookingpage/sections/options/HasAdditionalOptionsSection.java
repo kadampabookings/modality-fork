@@ -9,7 +9,6 @@ import one.modality.base.shared.knownitems.KnownItemFamily;
 import one.modality.booking.frontoffice.bookingpage.BookingFormSection;
 import one.modality.booking.frontoffice.bookingpage.ResettableSection;
 import one.modality.booking.frontoffice.bookingpage.standard.BookingSelectionState;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
 import one.modality.ecommerce.policy.service.PolicyAggregate;
 
 import java.time.LocalDate;
@@ -134,16 +133,6 @@ public interface HasAdditionalOptionsSection extends BookingFormSection, Resetta
     }
 
     // === Configuration ===
-
-    /**
-     * Returns the color scheme property for theming.
-     */
-    ObjectProperty<BookingFormColorScheme> colorSchemeProperty();
-
-    /**
-     * Sets the color scheme for this section.
-     */
-    void setColorScheme(BookingFormColorScheme scheme);
 
     /**
      * Sets the parking price per day.

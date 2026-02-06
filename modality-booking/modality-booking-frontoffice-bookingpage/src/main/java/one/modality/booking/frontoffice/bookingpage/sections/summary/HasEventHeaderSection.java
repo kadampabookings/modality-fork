@@ -1,8 +1,6 @@
 package one.modality.booking.frontoffice.bookingpage.sections.summary;
 
-import javafx.beans.property.ObjectProperty;
 import one.modality.booking.frontoffice.bookingpage.BookingFormSection;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
 
 /**
  * Interface for the event header section of a booking form.
@@ -16,20 +14,5 @@ import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme
  * @see DefaultEventHeaderSection
  */
 public interface HasEventHeaderSection extends BookingFormSection {
-
-    /**
-     * Returns the color scheme property for theming.
-     */
-    ObjectProperty<BookingFormColorScheme> colorSchemeProperty();
-
-    /**
-     * Returns the current color scheme.
-     */
-    BookingFormColorScheme getColorScheme();
-
-    /**
-     * Sets the color scheme for this section.
-     */
-    void setColorScheme(BookingFormColorScheme scheme);
 
 }

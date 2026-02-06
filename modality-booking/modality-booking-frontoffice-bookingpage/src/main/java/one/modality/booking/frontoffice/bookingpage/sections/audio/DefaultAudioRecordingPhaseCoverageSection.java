@@ -25,7 +25,8 @@ import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
 import one.modality.booking.frontoffice.bookingpage.components.StyledSectionHeader;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
+import one.modality.base.shared.entities.formatters.EventPriceFormatter;
+
 import one.modality.ecommerce.policy.service.PolicyAggregate;
 import one.modality.ecommerce.shared.pricecalculator.PriceCalculator;
 
@@ -61,9 +62,6 @@ import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelecto
  */
 public class DefaultAudioRecordingPhaseCoverageSection implements HasAudioRecordingPhaseCoverageSection {
 
-    // === COLOR SCHEME ===
-    protected final ObjectProperty<BookingFormColorScheme> colorScheme = new SimpleObjectProperty<>(BookingFormColorScheme.DEFAULT);
-
     // === DATE PROPERTIES (for availability) ===
     protected final ObjectProperty<LocalDate> arrivalDateProperty = new SimpleObjectProperty<>();
     protected final ObjectProperty<LocalDate> departureDateProperty = new SimpleObjectProperty<>();
@@ -93,7 +91,7 @@ public class DefaultAudioRecordingPhaseCoverageSection implements HasAudioRecord
     protected void buildUI() {
         container.setAlignment(Pos.TOP_LEFT);
         container.setSpacing(12);
-        container.getStyleClass().add("bookingpage-audio-phase-section");
+        container.getStyleClass().add(bookingpage_audio_phase_section);
 
         // Section header with headphones icon
         HBox sectionHeader = new StyledSectionHeader(BookingPageI18nKeys.AudioRecording, StyledSectionHeader.ICON_HEADPHONES);
@@ -157,7 +155,7 @@ public class DefaultAudioRecordingPhaseCoverageSection implements HasAudioRecord
         // Unavailable message (shown when option is disabled)
         Label unavailableLabel = new Label();
         unavailableLabel.textProperty().bind(I18n.i18nTextProperty(BookingPageI18nKeys.AudioRecordingUnavailable));
-        unavailableLabel.getStyleClass().addAll(bookingpage_text_xs, "bookingpage-text-error");
+        unavailableLabel.getStyleClass().addAll(bookingpage_text_xs, bookingpage_text_error);
         unavailableLabel.setVisible(false);
         unavailableLabel.setManaged(false);
         textContent.getChildren().add(unavailableLabel);
@@ -259,10 +257,7 @@ public class DefaultAudioRecordingPhaseCoverageSection implements HasAudioRecord
      * Formats a price in cents for display.
      */
     protected String formatPrice(int priceInCents) {
-        if (priceInCents == 0) {
-            return "$0";
-        }
-        return "$" + (priceInCents / 100);
+        return EventPriceFormatter.formatWithCurrency(priceInCents, workingBookingProperties != null ? workingBookingProperties.getEvent() : null);
     }
 
     // ========================================
@@ -293,16 +288,6 @@ public class DefaultAudioRecordingPhaseCoverageSection implements HasAudioRecord
     // ========================================
     // HasAudioRecordingPhaseCoverageSection INTERFACE
     // ========================================
-
-    @Override
-    public ObjectProperty<BookingFormColorScheme> colorSchemeProperty() {
-        return colorScheme;
-    }
-
-    @Override
-    public void setColorScheme(BookingFormColorScheme scheme) {
-        this.colorScheme.set(scheme);
-    }
 
     @Override
     public ObjectProperty<LocalDate> arrivalDateProperty() {

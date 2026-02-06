@@ -24,7 +24,8 @@ import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
 import one.modality.booking.frontoffice.bookingpage.components.StyledSectionHeader;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
+import one.modality.base.shared.entities.formatters.EventPriceFormatter;
+
 import one.modality.ecommerce.policy.service.PolicyAggregate;
 
 import java.time.format.DateTimeFormatter;
@@ -59,9 +60,6 @@ import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelecto
  */
 public class DefaultAdditionalOptionsSection implements HasAdditionalOptionsSection {
 
-    // === COLOR SCHEME ===
-    protected final ObjectProperty<BookingFormColorScheme> colorScheme = new SimpleObjectProperty<>(BookingFormColorScheme.DEFAULT);
-
     // === DYNAMIC OPTIONS ===
     protected final List<AdditionalOption> options = new ArrayList<>();
     protected final List<CeremonyOption> ceremonyOptions = new ArrayList<>();
@@ -95,7 +93,7 @@ public class DefaultAdditionalOptionsSection implements HasAdditionalOptionsSect
     protected void buildUI() {
         container.setAlignment(Pos.TOP_LEFT);
         container.setSpacing(12);
-        container.getStyleClass().add("bookingpage-additional-options-section");
+        container.getStyleClass().add(bookingpage_additional_options_section);
 
         // Section header
         HBox sectionHeader = new StyledSectionHeader(BookingPageI18nKeys.AdditionalOptions, StyledSectionHeader.ICON_PLUS_CIRCLE);
@@ -159,7 +157,7 @@ public class DefaultAdditionalOptionsSection implements HasAdditionalOptionsSect
         mainRow.setCursor(Cursor.HAND);
 
         // Checkbox indicator
-        StackPane checkbox = BookingPageUIBuilder.createCheckboxIndicator(option.selectedProperty(), colorScheme);
+        StackPane checkbox = BookingPageUIBuilder.createCheckboxIndicator(option.selectedProperty());
 
         // Icon (if available)
         Node iconNode = null;
@@ -243,7 +241,7 @@ public class DefaultAdditionalOptionsSection implements HasAdditionalOptionsSect
             return "Free";
         }
 
-        String priceStr = "$" + (option.getPrice() / 100);
+        String priceStr = EventPriceFormatter.formatWithCurrency(option.getPrice(), workingBookingProperties != null ? workingBookingProperties.getEvent() : null);
         if (option.isPerDay()) {
             priceStr += "/day";
         }
@@ -268,7 +266,7 @@ public class DefaultAdditionalOptionsSection implements HasAdditionalOptionsSect
 
         // Checkbox indicator
         StackPane checkbox = BookingPageUIBuilder.createCheckboxIndicator(
-            ceremony.selectedProperty(), colorScheme);
+            ceremony.selectedProperty());
 
         // Text content
         VBox textContent = new VBox(4);
@@ -390,16 +388,6 @@ public class DefaultAdditionalOptionsSection implements HasAdditionalOptionsSect
     // ========================================
     // HasAdditionalOptionsSection INTERFACE
     // ========================================
-
-    @Override
-    public ObjectProperty<BookingFormColorScheme> colorSchemeProperty() {
-        return colorScheme;
-    }
-
-    @Override
-    public void setColorScheme(BookingFormColorScheme scheme) {
-        this.colorScheme.set(scheme);
-    }
 
     @Override
     public void setParkingPricePerDay(int price) {

@@ -135,7 +135,7 @@ public class DefaultPrerequisiteSection implements HasPrerequisiteSection {
         confirmBox = createConfirmationBox();
 
         container.getChildren().addAll(header, importantInfoBox, confirmBox);
-        container.getStyleClass().add("booking-form-prerequisite-section");
+        container.getStyleClass().add(booking_form_prerequisite_section);
         container.setMinWidth(0);
     }
 

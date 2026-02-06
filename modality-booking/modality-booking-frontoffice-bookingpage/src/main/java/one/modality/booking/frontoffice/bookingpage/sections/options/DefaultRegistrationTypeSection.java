@@ -19,7 +19,7 @@ import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.BookingFormSection;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
 import one.modality.booking.frontoffice.bookingpage.sections.summary.DefaultEventHeaderSection;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
+
 
 import java.util.function.Consumer;
 
@@ -69,9 +69,6 @@ public class DefaultRegistrationTypeSection implements BookingFormSection {
         IN_PERSON,
         ONLINE
     }
-
-    // === COLOR SCHEME ===
-    private final ObjectProperty<BookingFormColorScheme> colorScheme = new SimpleObjectProperty<>(BookingFormColorScheme.DEFAULT);
 
     // === VALIDITY ===
     private final SimpleBooleanProperty validProperty = new SimpleBooleanProperty(false);
@@ -290,14 +287,6 @@ public class DefaultRegistrationTypeSection implements BookingFormSection {
     // ========================================
     // Configuration Methods
     // ========================================
-
-    public void setColorScheme(BookingFormColorScheme scheme) {
-        this.colorScheme.set(scheme);
-    }
-
-    public ObjectProperty<BookingFormColorScheme> colorSchemeProperty() {
-        return colorScheme;
-    }
 
     /**
      * Sets whether the online registration option is enabled.

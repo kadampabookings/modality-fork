@@ -21,7 +21,9 @@ import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
 import one.modality.booking.frontoffice.bookingpage.components.StyledSectionHeader;
 import one.modality.booking.frontoffice.bookingpage.standard.BookingSelectionState;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
+
+
+import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelectors.*;
 
 import java.util.HashMap;
 import java.util.List;
@@ -53,9 +55,6 @@ import java.util.Map;
  * @see HasChildCarerSection
  */
 public class DefaultChildCarerSection implements HasChildCarerSection {
-
-    // === COLOR SCHEME ===
-    protected final ObjectProperty<BookingFormColorScheme> colorScheme = new SimpleObjectProperty<>(BookingFormColorScheme.DEFAULT);
 
     // === VISIBILITY ===
     protected final BooleanProperty visibleProperty = new SimpleBooleanProperty(false);
@@ -124,7 +123,7 @@ public class DefaultChildCarerSection implements HasChildCarerSection {
     protected void buildUI() {
         container.setAlignment(Pos.TOP_LEFT);
         container.setSpacing(16);
-        container.getStyleClass().add("bookingpage-childcarer-section");
+        container.getStyleClass().add(bookingpage_childcarer_section);
 
         // Section header with users icon
         sectionHeader = new StyledSectionHeader(BookingPageI18nKeys.ChildCarerSelection, StyledSectionHeader.ICON_USERS);
@@ -136,7 +135,7 @@ public class DefaultChildCarerSection implements HasChildCarerSection {
 
         // Requirement label (shows how many carers needed)
         requirementLabel = new Label();
-        requirementLabel.getStyleClass().addAll("bookingpage-form-label", "bookingpage-text-primary");
+        requirementLabel.getStyleClass().addAll(bookingpage_form_label, bookingpage_text_primary);
         requirementLabel.setWrapText(true);
         VBox.setMargin(requirementLabel, new Insets(0, 0, 16, 0));
 
@@ -179,7 +178,7 @@ public class DefaultChildCarerSection implements HasChildCarerSection {
         // Slot label
         String labelKey = carerNumber == 1 ? "Carer1Label" : "Carer2Label";
         Label slotLabel = I18nControls.newLabel(labelKey);
-        slotLabel.getStyleClass().addAll("bookingpage-font-semibold", "bookingpage-text-primary");
+        slotLabel.getStyleClass().addAll(bookingpage_font_semibold, bookingpage_text_primary);
 
         // Card container (vertical stack - full width cards)
         VBox cardContainer = new VBox(8);
@@ -270,7 +269,7 @@ public class DefaultChildCarerSection implements HasChildCarerSection {
         card.setPadding(new Insets(12, 16, 12, 16));
         card.setMaxWidth(Double.MAX_VALUE);
         card.setCursor(Cursor.HAND);
-        card.getStyleClass().add("bookingpage-childcarer-card");
+        card.getStyleClass().add(bookingpage_childcarer_card);
 
         // Avatar/Icon
         StackPane avatar = createAvatar(displayName, isExternal);
@@ -282,7 +281,7 @@ public class DefaultChildCarerSection implements HasChildCarerSection {
         } else {
             nameLabel = new Label(displayName);
         }
-        nameLabel.getStyleClass().addAll("bookingpage-font-medium", "bookingpage-text-primary");
+        nameLabel.getStyleClass().addAll(bookingpage_font_medium, bookingpage_text_primary);
         HBox.setHgrow(nameLabel, Priority.ALWAYS);
 
         // Selection indicator using the existing radio indicator from BookingPageUIBuilder
@@ -298,7 +297,7 @@ public class DefaultChildCarerSection implements HasChildCarerSection {
 
         // Click handler - writes directly to SelectionState when available
         card.setOnMouseClicked(e -> {
-            if (card.getStyleClass().contains("disabled")) return;
+            if (card.getStyleClass().contains(disabled)) return;
 
             if (isExternal) {
                 // External carer selected
@@ -355,13 +354,13 @@ public class DefaultChildCarerSection implements HasChildCarerSection {
         avatar.setMaxSize(36, 36);
 
         Circle circle = new Circle(18);
-        circle.getStyleClass().add(isExternal ? "bookingpage-childcarer-avatar-external" : "bookingpage-childcarer-avatar");
+        circle.getStyleClass().add(isExternal ? bookingpage_childcarer_avatar_external : bookingpage_childcarer_avatar);
 
         if (isExternal) {
             // Group icon for "Someone else" - stroke-based like other icons in the project
             SVGPath icon = new SVGPath();
             icon.setContent(ICON_USERS);
-            icon.getStyleClass().add("bookingpage-icon-on-primary");
+            icon.getStyleClass().add(bookingpage_icon_on_primary);
             icon.setStrokeWidth(2);
             icon.setScaleX(0.6);
             icon.setScaleY(0.6);
@@ -370,7 +369,7 @@ public class DefaultChildCarerSection implements HasChildCarerSection {
             // Initials for household members
             String initials = getInitials(name);
             Label initialsLabel = new Label(initials);
-            initialsLabel.getStyleClass().addAll("bookingpage-font-semibold", "bookingpage-text-secondary");
+            initialsLabel.getStyleClass().addAll(bookingpage_font_semibold, bookingpage_text_secondary);
             avatar.getChildren().addAll(circle, initialsLabel);
         }
 
@@ -415,14 +414,14 @@ public class DefaultChildCarerSection implements HasChildCarerSection {
             boolean isDisabled = personId.equals(otherCarerPersonId);
 
             // Update CSS classes on card
-            card.getStyleClass().removeAll("selected", "disabled");
+            card.getStyleClass().removeAll(selected, disabled);
 
             if (isDisabled) {
-                card.getStyleClass().add("disabled");
+                card.getStyleClass().add(disabled);
                 card.setCursor(Cursor.DEFAULT);
                 if (selectedProperty != null) selectedProperty.set(false);
             } else if (isSelected) {
-                card.getStyleClass().add("selected");
+                card.getStyleClass().add(selected);
                 card.setCursor(Cursor.HAND);
                 if (selectedProperty != null) selectedProperty.set(true);
             } else {
@@ -436,10 +435,10 @@ public class DefaultChildCarerSection implements HasChildCarerSection {
             BooleanProperty selectedProperty = (BooleanProperty) externalCard.getProperties().get("selectedProperty");
             boolean isSelected = "external".equals(currentType);
 
-            externalCard.getStyleClass().removeAll("selected", "disabled");
+            externalCard.getStyleClass().removeAll(selected, disabled);
 
             if (isSelected) {
-                externalCard.getStyleClass().add("selected");
+                externalCard.getStyleClass().add(selected);
                 if (selectedProperty != null) selectedProperty.set(true);
             } else {
                 if (selectedProperty != null) selectedProperty.set(false);
@@ -479,22 +478,22 @@ public class DefaultChildCarerSection implements HasChildCarerSection {
     protected VBox createExternalCarerFields(int carerNumber) {
         VBox fieldsContainer = new VBox(12);
         fieldsContainer.setPadding(new Insets(16));
-        fieldsContainer.getStyleClass().add("bookingpage-childcarer-external-fields");
+        fieldsContainer.getStyleClass().add(bookingpage_childcarer_external_fields);
 
         // Name field (required)
         VBox nameFieldContainer = new VBox(4);
         Label nameLabel = I18nControls.newLabel(BookingPageI18nKeys.CarerNamePlaceholder);
-        nameLabel.getStyleClass().addAll("bookingpage-font-medium", "bookingpage-text-primary");
+        nameLabel.getStyleClass().addAll(bookingpage_font_medium, bookingpage_text_primary);
 
         // Required asterisk
         Label asterisk = new Label(" *");
-        asterisk.getStyleClass().add("bookingpage-text-danger");
+        asterisk.getStyleClass().add(bookingpage_text_danger);
         HBox nameLabelRow = new HBox(nameLabel, asterisk);
         nameLabelRow.setAlignment(Pos.CENTER_LEFT);
 
         TextField nameField = new TextField();
         I18n.bindI18nPromptProperty(nameField.promptTextProperty(), BookingPageI18nKeys.CarerNamePlaceholder);
-        nameField.getStyleClass().add("bookingpage-text-input");
+        nameField.getStyleClass().add(bookingpage_text_input);
         nameField.setPadding(new Insets(12, 14, 12, 14));
         nameField.setMaxWidth(Double.MAX_VALUE);
 
@@ -503,16 +502,16 @@ public class DefaultChildCarerSection implements HasChildCarerSection {
         // Booking reference field (optional)
         VBox refFieldContainer = new VBox(4);
         Label refLabel = I18nControls.newLabel(BookingPageI18nKeys.BookingReferencePlaceholder);
-        refLabel.getStyleClass().addAll("bookingpage-font-medium", "bookingpage-text-primary");
+        refLabel.getStyleClass().addAll(bookingpage_font_medium, bookingpage_text_primary);
 
         TextField refField = new TextField();
         I18n.bindI18nPromptProperty(refField.promptTextProperty(), BookingPageI18nKeys.BookingReferencePlaceholder);
-        refField.getStyleClass().add("bookingpage-text-input");
+        refField.getStyleClass().add(bookingpage_text_input);
         refField.setPadding(new Insets(12, 14, 12, 14));
         refField.setMaxWidth(Double.MAX_VALUE);
 
         Label refHint = I18nControls.newLabel(BookingPageI18nKeys.BookingReferenceOptional);
-        refHint.getStyleClass().addAll("bookingpage-text-sm", "bookingpage-text-secondary");
+        refHint.getStyleClass().addAll(bookingpage_text_sm, bookingpage_text_secondary);
         refHint.setWrapText(true);
 
         refFieldContainer.getChildren().addAll(refLabel, refField, refHint);
@@ -539,17 +538,17 @@ public class DefaultChildCarerSection implements HasChildCarerSection {
         card.setAlignment(Pos.TOP_LEFT);
         card.setPadding(new Insets(16));
         card.setCursor(Cursor.HAND);
-        card.getStyleClass().add("bookingpage-childcarer-policy");
+        card.getStyleClass().add(bookingpage_childcarer_policy);
 
         // Checkbox indicator
         Region checkbox = new Region();
         checkbox.setMinSize(22, 22);
         checkbox.setMaxSize(22, 22);
-        checkbox.getStyleClass().add("bookingpage-childcarer-checkbox");
+        checkbox.getStyleClass().add(bookingpage_childcarer_checkbox);
 
         // Policy text
         Label policyLabel = I18nControls.newLabel(BookingPageI18nKeys.ChildSafetyPolicy);
-        policyLabel.getStyleClass().addAll("bookingpage-text-sm", "bookingpage-text-primary");
+        policyLabel.getStyleClass().addAll(bookingpage_text_sm, bookingpage_text_primary);
         policyLabel.setWrapText(true);
         HBox.setHgrow(policyLabel, Priority.ALWAYS);
 
@@ -566,11 +565,11 @@ public class DefaultChildCarerSection implements HasChildCarerSection {
 
         // Update styling when policy changes
         policyAcceptedProperty.addListener((obs, oldVal, newVal) -> {
-            card.getStyleClass().remove("selected");
-            checkbox.getStyleClass().remove("selected");
+            card.getStyleClass().remove(selected);
+            checkbox.getStyleClass().remove(selected);
             if (newVal) {
-                card.getStyleClass().add("selected");
-                checkbox.getStyleClass().add("selected");
+                card.getStyleClass().add(selected);
+                checkbox.getStyleClass().add(selected);
             }
         });
 
@@ -722,16 +721,6 @@ public class DefaultChildCarerSection implements HasChildCarerSection {
     // ========================================
     // HasChildCarerSection INTERFACE
     // ========================================
-
-    @Override
-    public ObjectProperty<BookingFormColorScheme> colorSchemeProperty() {
-        return colorScheme;
-    }
-
-    @Override
-    public void setColorScheme(BookingFormColorScheme scheme) {
-        this.colorScheme.set(scheme);
-    }
 
     @Override
     public BooleanProperty visibleProperty() {

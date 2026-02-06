@@ -75,12 +75,8 @@ public class CompositeBookingFormPage implements BookingFormPage {
 
     @Override
     public boolean isApplicableToBooking(WorkingBooking workingBooking) {
-        // If any section is applicable, the page is applicable?
-        // Or should it be if ALL are applicable?
-        // Or maybe we filter out non-applicable sections but still show the page if at
-        // least one remains?
-        // For now, let's say the page is applicable if at least one section is
-        // applicable.
+        // Page is shown if at least one section is applicable; non-applicable sections
+        // are filtered out in setWorkingBookingProperties().
         for (BookingFormSection section : sections) {
             if (section.isApplicableToBooking(workingBooking)) {
                 return true;

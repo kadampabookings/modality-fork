@@ -51,49 +51,35 @@ import java.util.function.Supplier;
  */
 public class StandardBookingFormBuilder {
 
-    private final HasWorkingBookingProperties activity;
-    private final EventBookingFormSettings settings;
+    // All fields are package-private so StandardBookingForm can read them directly
+    // from the builder (config object pattern - eliminates 19-parameter constructor)
 
-    // Custom steps (form-specific, any number)
-    private final List<BookingFormPage> customSteps = new ArrayList<>();
+    final HasWorkingBookingProperties activity;
+    final EventBookingFormSettings settings;
+    final List<BookingFormPage> customSteps = new ArrayList<>();
 
-    // Common step overrides (optional - defaults will be used if not set)
-    private Supplier<BookingFormPage> yourInformationPageSupplier;
-    private Supplier<BookingFormPage> memberSelectionPageSupplier;
-    private Supplier<BookingFormPage> summaryPageSupplier;
-    private Supplier<BookingFormPage> pendingBookingsPageSupplier;
-    private Supplier<BookingFormPage> paymentPageSupplier;
-    private Supplier<BookingFormPage> confirmationPageSupplier;
+    Supplier<BookingFormPage> yourInformationPageSupplier;
+    Supplier<BookingFormPage> memberSelectionPageSupplier;
+    Supplier<BookingFormPage> summaryPageSupplier;
+    Supplier<BookingFormPage> pendingBookingsPageSupplier;
+    Supplier<BookingFormPage> paymentPageSupplier;
+    Supplier<BookingFormPage> confirmationPageSupplier;
 
-    // Theme
-    private BookingFormColorScheme colorScheme = BookingFormColorScheme.DEFAULT;
+    BookingFormColorScheme colorScheme = BookingFormColorScheme.DEFAULT;
+    boolean showUserBadge = false;
+    StandardBookingFormCallbacks callbacks;
+    boolean cardPaymentOnly = false;
+    BookingFormEntryPoint entryPoint = BookingFormEntryPoint.NEW_BOOKING;
+    boolean skipMemberSelection = false;
+    boolean navigationClickable = true;
+    Node stickyHeader;
+    boolean showCommentsSection = false;
+    AttendanceMode attendanceMode;
 
-    // Header options
-    private boolean showUserBadge = false; // Hide user badge in header by default
-
-    // Callbacks for inter-step communication
-    private StandardBookingFormCallbacks callbacks;
-
-    // Payment configuration
-    private boolean cardPaymentOnly = false;
-
-    // Entry point for the booking form (new booking, modify, resume payment)
-    private BookingFormEntryPoint entryPoint = BookingFormEntryPoint.NEW_BOOKING;
-
-    // Step skip flags
-    private boolean skipMemberSelection = false;
-
-    // Navigation configuration
-    private boolean navigationClickable = true;
-
-    // Sticky header (appears fixed at top of the form, e.g., for price display)
-    private Node stickyHeader;
-
-    // Comments section configuration
-    private boolean showCommentsSection = false;
-
-    // Attendance mode (ONLINE or IN_PERSON) - if set, overrides event default
-    private AttendanceMode attendanceMode;
+    // Resolved values (computed during build())
+    BookingFormColorScheme resolvedColorScheme;
+    boolean resolvedSkipPendingBookings;
+    boolean resolvedSkipSummary;
 
     /**
      * Creates a new builder for a standard booking form.
@@ -312,38 +298,18 @@ public class StandardBookingFormBuilder {
      * @return A new StandardBookingForm instance
      */
     public StandardBookingForm build() {
-        boolean isPayBookingEntryPoint = entryPoint == BookingFormEntryPoint.PAY_BOOKING;
-        // Custom steps are optional - some forms (like STTP) may have no custom steps
-        // and rely entirely on the standard checkout flow
-
-        // Auto-resolve color scheme from Event if not explicitly set
-        BookingFormColorScheme resolvedColorScheme = this.colorScheme;
+        // Resolve color scheme from Event if using DEFAULT
+        resolvedColorScheme = colorScheme;
         if (resolvedColorScheme == BookingFormColorScheme.DEFAULT) {
             Event event = activity.getWorkingBookingProperties().getWorkingBooking().getEvent();
             resolvedColorScheme = BookingFormColorScheme.resolveFromEvent(event);
         }
 
-        // Skip flags for common steps
-        return new StandardBookingForm(
-            activity,
-            settings,
-            resolvedColorScheme,
-            showUserBadge,
-            customSteps,
-            yourInformationPageSupplier,
-            memberSelectionPageSupplier,
-            skipMemberSelection,
-            summaryPageSupplier,
-            showCommentsSection,
-            pendingBookingsPageSupplier,
-            isPayBookingEntryPoint && !StandardBookingForm.PAY_BOOKING_CAN_BE_MULTIPLE, // Skipping pending bookings when entry point is for paying a single booking
-            paymentPageSupplier,
-            confirmationPageSupplier,
-            callbacks,
-            cardPaymentOnly,
-            entryPoint,
-            navigationClickable,
-            stickyHeader
-        );
+        // Compute skip flags based on entry point
+        boolean isPayBookingEntryPoint = entryPoint == BookingFormEntryPoint.PAY_BOOKING;
+        resolvedSkipPendingBookings = isPayBookingEntryPoint && !StandardBookingForm.PAY_BOOKING_CAN_BE_MULTIPLE;
+        resolvedSkipSummary = isPayBookingEntryPoint;
+
+        return new StandardBookingForm(this);
     }
 }

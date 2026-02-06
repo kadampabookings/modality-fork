@@ -4,6 +4,8 @@ import one.modality.booking.frontoffice.bookingpage.BookingPageCssSelectors;
 import dev.webfx.extras.i18n.controls.I18nControls;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.ObjectProperty;
+import javafx.beans.property.SimpleStringProperty;
+import javafx.beans.property.StringProperty;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Cursor;
@@ -17,6 +19,7 @@ import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.shape.SVGPath;
+import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
 import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
 
 import java.time.LocalDate;
@@ -317,7 +320,7 @@ public final class BookingPageUIBuilder {
         ribbon.setAlignment(Pos.CENTER);
 
         // Text styling - font size defined in CSS class
-        Label ribbonText = new Label("SOLD OUT");
+        Label ribbonText = I18nControls.newLabel(BookingPageI18nKeys.SoldOut);
         ribbonText.getStyleClass().add(bookingpage_soldout_ribbon_text);
 
         // Padding for the ribbon - asymmetric to center text in visible area
@@ -393,7 +396,7 @@ public final class BookingPageUIBuilder {
      * @return A Label styled as a limited availability badge
      */
     public static Label createLimitedBadge() {
-        Label badge = new Label("LIMITED");
+        Label badge = I18nControls.newLabel(BookingPageI18nKeys.LimitedAvailability);
         badge.getStyleClass().add(bookingpage_badge_limited);
         badge.setPadding(new Insets(4, 8, 4, 8));
         return badge;
@@ -402,20 +405,6 @@ public final class BookingPageUIBuilder {
     // =============================================
     // SELECTION INDICATORS
     // =============================================
-
-    /**
-     * Creates a checkbox indicator (square, 24px, with checkmark when selected).
-     * This overload accepts an ObjectProperty for API compatibility but colors are CSS-based.
-     *
-     * @param selectedProperty      Property to bind selection state
-     * @param colorSchemeProperty   Property (ignored - kept for API compatibility, use CSS theme classes instead)
-     * @return A StackPane containing the checkbox indicator
-     * @deprecated Use {@link #createCheckboxIndicator(BooleanProperty)} instead. The colorSchemeProperty is ignored; CSS handles theming.
-     */
-    @Deprecated
-    public static StackPane createCheckboxIndicator(BooleanProperty selectedProperty, ObjectProperty<BookingFormColorScheme> colorSchemeProperty) {
-        return createCheckboxIndicator(selectedProperty);
-    }
 
     /**
      * Creates a checkbox indicator (square, 24px, with checkmark when selected).
@@ -561,7 +550,7 @@ public final class BookingPageUIBuilder {
         badge.setMinSize(size, size);
         badge.setMaxSize(size, size);
         badge.setAlignment(Pos.CENTER);
-        badge.getStyleClass().add("booking-form-checkmark-badge");
+        badge.getStyleClass().add(booking_form_checkmark_badge);
 
         return badge;
     }
@@ -679,6 +668,19 @@ public final class BookingPageUIBuilder {
     // =============================================
     // CHECKBOX AND RADIO CARDS
     // =============================================
+
+    /**
+     * Creates a card with an embedded checkbox indicator on the left.
+     * Uses CSS-based styling for consistent appearance across all sections.
+     * Convenience overload that omits the color scheme parameter (CSS handles theming).
+     *
+     * @param content          The content to display (typically labels/descriptions)
+     * @param selectedProperty Property to bind selection state (toggles on click)
+     * @return A styled HBox containing checkbox indicator + content
+     */
+    public static HBox createCheckboxCard(javafx.scene.Node content, BooleanProperty selectedProperty) {
+        return createCheckboxCard(content, selectedProperty, null);
+    }
 
     /**
      * Creates a card with an embedded checkbox indicator on the left.
@@ -845,7 +847,7 @@ public final class BookingPageUIBuilder {
 
         VBox card = new VBox(0);
         card.setMaxWidth(Double.MAX_VALUE);
-        card.getStyleClass().addAll(bookingpage_selectable_card, "bookingpage-accommodation-card");
+        card.getStyleClass().addAll(bookingpage_selectable_card, bookingpage_accommodation_card);
 
         if (config.isSoldOut) {
             card.getStyleClass().addAll(soldout, disabled);
@@ -897,7 +899,7 @@ public final class BookingPageUIBuilder {
         Label priceLabel = new Label(config.priceText != null ? config.priceText : "");
         priceLabel.getStyleClass().addAll(bookingpage_text_xl, bookingpage_font_bold);
         if (config.isSoldOut) {
-            priceLabel.getStyleClass().addAll(bookingpage_text_muted_light, "bookingpage-text-strikethrough");
+            priceLabel.getStyleClass().addAll(bookingpage_text_muted_light, bookingpage_text_strikethrough);
         } else {
             priceLabel.getStyleClass().add(bookingpage_text_primary);
         }
@@ -1091,19 +1093,6 @@ public final class BookingPageUIBuilder {
 
     /**
      * Creates a primary action button with dynamic color scheme support.
-     * This overload with colorSchemeProperty is kept for API compatibility.
-     *
-     * @param i18nKey            The i18n key for the button text
-     * @param colorSchemeProperty Property (ignored - kept for API compatibility, use CSS theme classes instead)
-     * @return A styled Button
-     * @deprecated Use {@link #createPrimaryButton(Object)} instead. The colorSchemeProperty is ignored; CSS handles theming.
-     */
-    @Deprecated
-    public static Button createPrimaryButton(Object i18nKey, ObjectProperty<BookingFormColorScheme> colorSchemeProperty) {
-        return createPrimaryButton(i18nKey);
-    }
-
-    /**
      * Creates a primary action button (Continue, Sign In, Submit, etc.).
      * Uses CSS for theming via CSS variables.
      *
@@ -1225,7 +1214,13 @@ public final class BookingPageUIBuilder {
     public static Label createStatusBadge(String text, BadgeType type) {
         Label badge = new Label(text);
         badge.getStyleClass().add(bookingpage_badge);
-        badge.getStyleClass().add("bookingpage-badge-" + type.name().toLowerCase());
+        String badgeTypeClass = switch (type) {
+            case SUCCESS -> bookingpage_badge_success;
+            case WARNING -> bookingpage_badge_warning;
+            case DANGER  -> bookingpage_badge_danger;
+            case INFO    -> bookingpage_badge_info;
+        };
+        badge.getStyleClass().add(badgeTypeClass);
         badge.setPadding(new Insets(4, 8, 4, 8));
         return badge;
     }
@@ -1276,6 +1271,21 @@ public final class BookingPageUIBuilder {
      * @return A styled HBox containing an icon and message
      */
     public static HBox createInfoBox(String message, InfoBoxType type) {
+        return createInfoBoxWithLabel(new Label(message), type);
+    }
+
+    /**
+     * Creates an info box with an i18n key for the message.
+     *
+     * @param i18nKey The i18n key for the message
+     * @param type    The type of info box
+     * @return A styled HBox containing an icon and message
+     */
+    public static HBox createInfoBox(Object i18nKey, InfoBoxType type) {
+        return createInfoBoxWithLabel(I18nControls.newLabel(i18nKey), type);
+    }
+
+    private static HBox createInfoBoxWithLabel(Label messageLabel, InfoBoxType type) {
         HBox box = new HBox(12);
         box.setAlignment(Pos.CENTER_LEFT);
         box.setPadding(new Insets(14, 16, 14, 16));
@@ -1286,27 +1296,27 @@ public final class BookingPageUIBuilder {
         String typeClass = switch (type) {
             case SUCCESS -> {
                 iconUnicode = "\u2713"; // ✓
-                yield "bookingpage-info-box-success";
+                yield bookingpage_info_box_success;
             }
             case WARNING -> {
                 iconUnicode = "\u26A0"; // ⚠
-                yield "bookingpage-info-box-warning";
+                yield bookingpage_info_box_warning;
             }
             case ERROR -> {
                 iconUnicode = "\u2716"; // ✖
-                yield "bookingpage-info-box-error";
+                yield bookingpage_info_box_error;
             }
             case OUTLINE_PRIMARY -> {
                 iconUnicode = "\u2139"; // ℹ
-                yield "bookingpage-info-box-outline-primary";
+                yield bookingpage_info_box_outline_primary;
             }
             case NEUTRAL -> {
                 iconUnicode = ""; // No icon for neutral boxes
-                yield "bookingpage-info-box-neutral";
+                yield bookingpage_info_box_neutral;
             }
             default -> { // INFO
                 iconUnicode = "\u2139"; // ℹ
-                yield "bookingpage-info-box-info";
+                yield bookingpage_info_box_info;
             }
         };
 
@@ -1319,67 +1329,6 @@ public final class BookingPageUIBuilder {
             box.getChildren().add(iconLabel);
         }
 
-        Label messageLabel = new Label(message);
-        messageLabel.getStyleClass().add(bookingpage_info_box_message);
-        messageLabel.setWrapText(true);
-
-        box.getChildren().add(messageLabel);
-        return box;
-    }
-
-    /**
-     * Creates an info box with an i18n key for the message.
-     *
-     * @param i18nKey The i18n key for the message
-     * @param type    The type of info box
-     * @return A styled HBox containing an icon and message
-     */
-    public static HBox createInfoBox(Object i18nKey, InfoBoxType type) {
-        HBox box = new HBox(12);
-        box.setAlignment(Pos.CENTER_LEFT);
-        box.setPadding(new Insets(14, 16, 14, 16));
-        box.getStyleClass().add(bookingpage_info_box);
-
-        // Icon based on type - CSS handles colors
-        String iconUnicode;
-        String typeClass;
-        switch (type) {
-            case SUCCESS -> {
-                iconUnicode = "\u2713"; // ✓
-                typeClass = "bookingpage-info-box-success";
-            }
-            case WARNING -> {
-                iconUnicode = "\u26A0"; // ⚠
-                typeClass = "bookingpage-info-box-warning";
-            }
-            case ERROR -> {
-                iconUnicode = "\u2716"; // ✖
-                typeClass = "bookingpage-info-box-error";
-            }
-            case OUTLINE_PRIMARY -> {
-                iconUnicode = "\u2139"; // ℹ
-                typeClass = "bookingpage-info-box-outline-primary";
-            }
-            case NEUTRAL -> {
-                iconUnicode = ""; // No icon for neutral boxes
-                typeClass = "bookingpage-info-box-neutral";
-            }
-            default -> { // INFO
-                iconUnicode = "\u2139"; // ℹ
-                typeClass = "bookingpage-info-box-info";
-            }
-        }
-
-        box.getStyleClass().add(typeClass);
-
-        // Only add icon if not empty (NEUTRAL type has no icon)
-        if (!iconUnicode.isEmpty()) {
-            Label iconLabel = new Label(iconUnicode);
-            iconLabel.getStyleClass().add(bookingpage_info_box_icon);
-            box.getChildren().add(iconLabel);
-        }
-
-        Label messageLabel = I18nControls.newLabel(i18nKey);
         messageLabel.getStyleClass().add(bookingpage_info_box_message);
         messageLabel.setWrapText(true);
 
@@ -1603,6 +1552,32 @@ public final class BookingPageUIBuilder {
     }
 
     /**
+     * Creates a StringProperty that auto-updates when the start/end date properties change,
+     * formatting the date range as a full-month string. Used by payment status sections
+     * to display event dates reactively.
+     *
+     * @param startDateProperty the event start date property
+     * @param endDateProperty   the event end date property
+     * @return a StringProperty bound to the formatted date range
+     */
+    public static StringProperty createDateRangeBinding(ObjectProperty<LocalDate> startDateProperty, ObjectProperty<LocalDate> endDateProperty) {
+        StringProperty dateString = new SimpleStringProperty();
+        Runnable updateDate = () -> {
+            LocalDate start = startDateProperty.get();
+            LocalDate end = endDateProperty.get();
+            if (start != null && end != null) {
+                dateString.set(formatDateRangeFull(start, end));
+            } else {
+                dateString.set("");
+            }
+        };
+        startDateProperty.addListener((obs, old, val) -> updateDate.run());
+        endDateProperty.addListener((obs, old, val) -> updateDate.run());
+        updateDate.run();
+        return dateString;
+    }
+
+    /**
      * Makes a region (typically a card) selectable by clicking.
      * Adds/removes the "selected" CSS class based on the selection state.
      * Also sets the cursor to HAND for better UX.
@@ -1619,7 +1594,7 @@ public final class BookingPageUIBuilder {
      * @param selectedProperty Property to bind selection state (will be toggled on click)
      */
     public static void makeSelectable(Region card, BooleanProperty selectedProperty) {
-        makeSelectable(card, selectedProperty, "selected");
+        makeSelectable(card, selectedProperty, selected);
     }
 
     /**
@@ -1656,11 +1631,6 @@ public final class BookingPageUIBuilder {
     // DATE CARD PAST STATE STYLING
     // =============================================
 
-    /**
-     * CSS class for past/disabled date cards.
-     */
-    public static final String CSS_DATE_CARD_PAST = "bookingpage-date-card-past";
-
     // =============================================
     // ACCOMMODATION INFO BOX
     // =============================================
@@ -1696,7 +1666,7 @@ public final class BookingPageUIBuilder {
         textContainer.setAlignment(Pos.CENTER_LEFT);
 
         // Bold "Price includes:" label on its own line
-        Label boldLabel = new Label("Price includes:");
+        Label boldLabel = I18nControls.newLabel(BookingPageI18nKeys.PriceIncludes);
         boldLabel.getStyleClass().add(bookingpage_price_includes_bold);
 
         // Primary text on next line, will wrap naturally
@@ -1774,7 +1744,7 @@ public final class BookingPageUIBuilder {
         textContainer.setAlignment(Pos.TOP_LEFT);
 
         // Bold "Price includes:" followed by primary text on same conceptual line
-        Label boldLabel = new Label("Price includes:");
+        Label boldLabel = I18nControls.newLabel(BookingPageI18nKeys.PriceIncludes);
         boldLabel.getStyleClass().add(bookingpage_price_includes_amber_bold);
 
         // Primary text on next line, will wrap naturally
@@ -1850,7 +1820,7 @@ public final class BookingPageUIBuilder {
         StackPane mapIcon = createMapPinWithXIcon();
 
         // "NO ACCOMMODATION" text (uppercase)
-        Label text = new Label("NO ACCOMMODATION");
+        Label text = I18nControls.newLabel(BookingPageI18nKeys.NoAccommodation);
         text.getStyleClass().add(bookingpage_no_accommodation_text);
 
         pill.getChildren().addAll(mapIcon, text);
@@ -1921,11 +1891,11 @@ public final class BookingPageUIBuilder {
      */
     public static void applyPastDateStyle(Region card, boolean isPastDate) {
         if (isPastDate) {
-            if (!card.getStyleClass().contains(CSS_DATE_CARD_PAST)) {
-                card.getStyleClass().add(CSS_DATE_CARD_PAST);
+            if (!card.getStyleClass().contains(bookingpage_date_card_past)) {
+                card.getStyleClass().add(bookingpage_date_card_past);
             }
         } else {
-            card.getStyleClass().remove(CSS_DATE_CARD_PAST);
+            card.getStyleClass().remove(bookingpage_date_card_past);
         }
     }
 

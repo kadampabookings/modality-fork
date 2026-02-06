@@ -2,11 +2,9 @@ package one.modality.booking.frontoffice.bookingpage.sections.payment;
 
 import dev.webfx.platform.async.AsyncFunction;
 import dev.webfx.platform.async.Future;
-import javafx.beans.property.ObjectProperty;
 import javafx.beans.value.ObservableBooleanValue;
 import one.modality.base.shared.entities.Document;
 import one.modality.booking.frontoffice.bookingpage.BookingFormSection;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
 
 import java.util.EnumSet;
 import java.util.List;
@@ -102,16 +100,6 @@ public interface HasPaymentSection extends BookingFormSection {
         public int getAmount() { return amount; }
         public Map<Object, Integer> getAllocations() { return allocations; }
     }
-
-    /**
-     * Returns the color scheme property for theming.
-     */
-    ObjectProperty<BookingFormColorScheme> colorSchemeProperty();
-
-    /**
-     * Sets the color scheme for this section.
-     */
-    void setColorScheme(BookingFormColorScheme scheme);
 
     /**
      * Sets the total amount to be paid.

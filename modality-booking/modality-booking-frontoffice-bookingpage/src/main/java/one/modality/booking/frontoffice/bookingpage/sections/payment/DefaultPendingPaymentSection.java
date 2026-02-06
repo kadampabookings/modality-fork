@@ -24,6 +24,7 @@ import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme
 
 import java.time.LocalDate;
 
+import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelectors.*;
 import static one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder.*;
 
 /**
@@ -50,7 +51,6 @@ public class DefaultPendingPaymentSection implements HasPendingPaymentSection {
     private static final String ICON_ARROW_RIGHT = "M5 12h14 M12 5l7 7-7 7";
 
     // === PROPERTIES ===
-    private final ObjectProperty<BookingFormColorScheme> colorScheme = new SimpleObjectProperty<>(BookingFormColorScheme.DEFAULT);
     private final SimpleBooleanProperty validProperty = new SimpleBooleanProperty(true);
 
     // === BOOKING DATA ===
@@ -64,7 +64,7 @@ public class DefaultPendingPaymentSection implements HasPendingPaymentSection {
     private final ObjectProperty<PendingPaymentType> pendingTypeProperty = new SimpleObjectProperty<>(PendingPaymentType.BANK_TRANSFER);
     private final StringProperty estimatedTimeProperty = new SimpleStringProperty("");
     private final BooleanProperty hasAccountProperty = new SimpleBooleanProperty(false);
-    private final StringProperty contactEmailProperty = new SimpleStringProperty("info@manjushri.org");
+    private final StringProperty contactEmailProperty = new SimpleStringProperty(""); // Set via setContactEmail() from event/organization config
 
     // === CALLBACKS ===
     private Runnable onViewOrders;
@@ -84,7 +84,7 @@ public class DefaultPendingPaymentSection implements HasPendingPaymentSection {
     private void buildUI() {
         container.setAlignment(Pos.TOP_CENTER);
         container.setSpacing(0);
-        container.getStyleClass().add("bookingpage-pending-payment-section");
+        container.getStyleClass().add(bookingpage_pending_payment_section);
 
         // Calm blue header
         VBox header = buildHeader();
@@ -128,13 +128,13 @@ public class DefaultPendingPaymentSection implements HasPendingPaymentSection {
         VBox header = new VBox(12);
         header.setAlignment(Pos.CENTER);
         header.setPadding(new Insets(40, 24, 32, 24));
-        header.getStyleClass().add("bookingpage-pending-payment-header");
+        header.getStyleClass().add(bookingpage_pending_payment_header);
 
         // Clock icon circle with pulse effect (via CSS)
         StackPane iconCircle = new StackPane();
         iconCircle.setMinSize(72, 72);
         iconCircle.setMaxSize(72, 72);
-        iconCircle.getStyleClass().add("bookingpage-pending-payment-icon-circle");
+        iconCircle.getStyleClass().add(bookingpage_pending_payment_icon_circle);
 
         SVGPath icon = new SVGPath();
         icon.setContent(ICON_CLOCK);
@@ -148,12 +148,12 @@ public class DefaultPendingPaymentSection implements HasPendingPaymentSection {
 
         // Title
         Label titleLabel = I18nControls.newLabel(BookingPageI18nKeys.PaymentBeingVerified);
-        titleLabel.getStyleClass().add("bookingpage-pending-payment-title");
+        titleLabel.getStyleClass().add(bookingpage_pending_payment_title);
         VBox.setMargin(titleLabel, new Insets(0, 0, 4, 0));
 
         // Subtitle
         Label subtitleLabel = I18nControls.newLabel(BookingPageI18nKeys.PaymentReceivedProcessing);
-        subtitleLabel.getStyleClass().add("bookingpage-pending-payment-subtitle");
+        subtitleLabel.getStyleClass().add(bookingpage_pending_payment_subtitle);
         subtitleLabel.setWrapText(true);
         subtitleLabel.setAlignment(Pos.CENTER);
         subtitleLabel.setMaxWidth(500);
@@ -166,22 +166,22 @@ public class DefaultPendingPaymentSection implements HasPendingPaymentSection {
         VBox box = new VBox(8);
         box.setAlignment(Pos.CENTER);
         box.setPadding(new Insets(20, 24, 20, 24));
-        box.getStyleClass().add("bookingpage-pending-payment-ref-box");
+        box.getStyleClass().add(bookingpage_pending_payment_ref_box);
         VBox.setMargin(box, new Insets(0, 24, 24, 24));
 
         // Label
         Label refLabel = I18nControls.newLabel(BookingPageI18nKeys.BookingReference);
-        refLabel.getStyleClass().add("bookingpage-pending-payment-ref-label");
+        refLabel.getStyleClass().add(bookingpage_pending_payment_ref_label);
 
         // Value
         Label refValue = new Label();
         refValue.textProperty().bind(bookingReferenceProperty);
-        refValue.getStyleClass().add("bookingpage-pending-payment-ref-value");
+        refValue.getStyleClass().add(bookingpage_pending_payment_ref_value);
 
         // Status badge
         HBox statusBadge = new HBox(6);
         statusBadge.setAlignment(Pos.CENTER);
-        statusBadge.getStyleClass().add("bookingpage-pending-payment-status-badge");
+        statusBadge.getStyleClass().add(bookingpage_pending_payment_status_badge);
         statusBadge.setPadding(new Insets(6, 14, 6, 14));
 
         SVGPath clockIcon = new SVGPath();
@@ -193,7 +193,7 @@ public class DefaultPendingPaymentSection implements HasPendingPaymentSection {
         clockIcon.setScaleY(0.5);
 
         Label badgeLabel = I18nControls.newLabel(BookingPageI18nKeys.AwaitingConfirmation);
-        badgeLabel.getStyleClass().add("bookingpage-pending-payment-badge-text");
+        badgeLabel.getStyleClass().add(bookingpage_pending_payment_badge_text);
 
         statusBadge.getChildren().addAll(clockIcon, badgeLabel);
         VBox.setMargin(statusBadge, new Insets(8, 0, 0, 0));
@@ -223,37 +223,24 @@ public class DefaultPendingPaymentSection implements HasPendingPaymentSection {
     }
 
     private StringProperty createDateBinding() {
-        StringProperty dateString = new SimpleStringProperty();
-        Runnable updateDate = () -> {
-            LocalDate start = eventStartDateProperty.get();
-            LocalDate end = eventEndDateProperty.get();
-            if (start != null && end != null) {
-                dateString.set(BookingPageUIBuilder.formatDateRangeFull(start, end));
-            } else {
-                dateString.set("");
-            }
-        };
-        eventStartDateProperty.addListener((obs, old, val) -> updateDate.run());
-        eventEndDateProperty.addListener((obs, old, val) -> updateDate.run());
-        updateDate.run();
-        return dateString;
+        return BookingPageUIBuilder.createDateRangeBinding(eventStartDateProperty, eventEndDateProperty);
     }
 
     private HBox createSummaryRow(Object labelKey, StringProperty valueProperty) {
         HBox row = new HBox();
         row.setAlignment(Pos.CENTER_LEFT);
         row.setPadding(new Insets(12, 0, 12, 0));
-        row.getStyleClass().add("bookingpage-pending-payment-summary-row");
+        row.getStyleClass().add(bookingpage_pending_payment_summary_row);
 
         // Label
         Label label = I18nControls.newLabel(labelKey);
-        label.getStyleClass().add("bookingpage-pending-payment-summary-label");
+        label.getStyleClass().add(bookingpage_pending_payment_summary_label);
         HBox.setHgrow(label, Priority.ALWAYS);
 
         // Value
         Label value = new Label();
         value.textProperty().bind(valueProperty);
-        value.getStyleClass().add("bookingpage-pending-payment-summary-value");
+        value.getStyleClass().add(bookingpage_pending_payment_summary_value);
 
         row.getChildren().addAll(label, value);
         return row;
@@ -263,16 +250,16 @@ public class DefaultPendingPaymentSection implements HasPendingPaymentSection {
         HBox row = new HBox();
         row.setAlignment(Pos.CENTER_LEFT);
         row.setPadding(new Insets(16, 0, 12, 0));
-        row.getStyleClass().add("bookingpage-pending-payment-summary-row-last");
+        row.getStyleClass().add(bookingpage_pending_payment_summary_row_last);
 
         // Label
         Label label = I18nControls.newLabel(BookingPageI18nKeys.TotalAmount);
-        label.getStyleClass().add("bookingpage-pending-payment-summary-label");
+        label.getStyleClass().add(bookingpage_pending_payment_summary_label);
         HBox.setHgrow(label, Priority.ALWAYS);
 
         // Value
         Label value = new Label();
-        value.getStyleClass().add("bookingpage-pending-payment-summary-total");
+        value.getStyleClass().add(bookingpage_pending_payment_summary_total);
 
         // Update value when amount changes
         Runnable updateAmount = () -> {
@@ -291,7 +278,7 @@ public class DefaultPendingPaymentSection implements HasPendingPaymentSection {
     private VBox buildPaymentInfoSection() {
         VBox section = new VBox(12);
         section.setPadding(new Insets(20));
-        section.getStyleClass().add("bookingpage-pending-payment-info-section");
+        section.getStyleClass().add(bookingpage_pending_payment_info_section);
         VBox.setMargin(section, new Insets(0, 24, 24, 24));
 
         // Header with icon
@@ -300,21 +287,21 @@ public class DefaultPendingPaymentSection implements HasPendingPaymentSection {
 
         // Payment method icon
         Label iconLabel = new Label(getPaymentMethodIcon());
-        iconLabel.getStyleClass().add("bookingpage-pending-payment-info-icon");
+        iconLabel.getStyleClass().add(bookingpage_pending_payment_info_icon);
 
         VBox titleBox = new VBox(2);
         Label titleLabel = I18nControls.newLabel(getPaymentMethodTitleKey());
-        titleLabel.getStyleClass().add("bookingpage-pending-payment-info-title");
+        titleLabel.getStyleClass().add(bookingpage_pending_payment_info_title);
 
         Label subtitleLabel = I18nControls.newLabel(BookingPageI18nKeys.PaymentReceived);
-        subtitleLabel.getStyleClass().add("bookingpage-pending-payment-info-subtitle");
+        subtitleLabel.getStyleClass().add(bookingpage_pending_payment_info_subtitle);
 
         titleBox.getChildren().addAll(titleLabel, subtitleLabel);
         headerRow.getChildren().addAll(iconLabel, titleBox);
 
         // Description
         Label descLabel = I18nControls.newLabel(getPaymentMethodDescKey());
-        descLabel.getStyleClass().add("bookingpage-pending-payment-info-description");
+        descLabel.getStyleClass().add(bookingpage_pending_payment_info_description);
         descLabel.setWrapText(true);
         VBox.setMargin(descLabel, new Insets(8, 0, 12, 0));
 
@@ -322,7 +309,7 @@ public class DefaultPendingPaymentSection implements HasPendingPaymentSection {
         HBox timeline = new HBox(8);
         timeline.setAlignment(Pos.CENTER_LEFT);
         timeline.setPadding(new Insets(12));
-        timeline.getStyleClass().add("bookingpage-pending-payment-timeline");
+        timeline.getStyleClass().add(bookingpage_pending_payment_timeline);
 
         SVGPath timeIcon = new SVGPath();
         timeIcon.setContent(ICON_CLOCK);
@@ -333,7 +320,7 @@ public class DefaultPendingPaymentSection implements HasPendingPaymentSection {
         timeIcon.setScaleY(0.6);
 
         Label timeLabel = I18nControls.newLabel(getPaymentMethodTimelineKey());
-        timeLabel.getStyleClass().add("bookingpage-pending-payment-timeline-text");
+        timeLabel.getStyleClass().add(bookingpage_pending_payment_timeline_text);
 
         timeline.getChildren().addAll(timeIcon, timeLabel);
 
@@ -391,14 +378,14 @@ public class DefaultPendingPaymentSection implements HasPendingPaymentSection {
 
         SVGPath checkIcon = new SVGPath();
         checkIcon.setContent(ICON_CHECK_SQUARE);
-        checkIcon.setStroke(colorScheme.get().getPrimary());
+        checkIcon.setStroke(BookingFormColorScheme.DEFAULT.getPrimary());
         checkIcon.setStrokeWidth(2);
         checkIcon.setFill(Color.TRANSPARENT);
         checkIcon.setScaleX(0.6);
         checkIcon.setScaleY(0.6);
 
         Label titleLabel = I18nControls.newLabel(BookingPageI18nKeys.WhatHappensNext);
-        titleLabel.getStyleClass().add("bookingpage-pending-payment-next-title");
+        titleLabel.getStyleClass().add(bookingpage_pending_payment_next_title);
 
         titleRow.getChildren().addAll(checkIcon, titleLabel);
 
@@ -422,16 +409,16 @@ public class DefaultPendingPaymentSection implements HasPendingPaymentSection {
         HBox item = new HBox(12);
         item.setAlignment(Pos.TOP_LEFT);
         item.setPadding(new Insets(12));
-        item.getStyleClass().add("bookingpage-pending-payment-step-item");
+        item.getStyleClass().add(bookingpage_pending_payment_step_item);
 
         // Number circle
         StackPane numberCircle = new StackPane();
         numberCircle.setMinSize(24, 24);
         numberCircle.setMaxSize(24, 24);
-        numberCircle.getStyleClass().add("bookingpage-pending-payment-step-number");
+        numberCircle.getStyleClass().add(bookingpage_pending_payment_step_number);
 
         Label numberLabel = new Label(number);
-        numberLabel.getStyleClass().add("bookingpage-pending-payment-step-number-text");
+        numberLabel.getStyleClass().add(bookingpage_pending_payment_step_number_text);
         numberCircle.getChildren().add(numberLabel);
 
         // Content
@@ -439,10 +426,10 @@ public class DefaultPendingPaymentSection implements HasPendingPaymentSection {
         HBox.setHgrow(content, Priority.ALWAYS);
 
         Label titleLabel = I18nControls.newLabel(titleKey);
-        titleLabel.getStyleClass().add("bookingpage-pending-payment-step-title");
+        titleLabel.getStyleClass().add(bookingpage_pending_payment_step_title);
 
         Label descLabel = I18nControls.newLabel(descKey);
-        descLabel.getStyleClass().add("bookingpage-pending-payment-step-desc");
+        descLabel.getStyleClass().add(bookingpage_pending_payment_step_desc);
         descLabel.setWrapText(true);
 
         content.getChildren().addAll(titleLabel, descLabel);
@@ -454,7 +441,7 @@ public class DefaultPendingPaymentSection implements HasPendingPaymentSection {
     private VBox buildAccountInfoBox() {
         VBox box = new VBox(8);
         box.setPadding(new Insets(16));
-        box.getStyleClass().add("bookingpage-pending-payment-account-box");
+        box.getStyleClass().add(bookingpage_pending_payment_account_box);
         VBox.setMargin(box, new Insets(0, 24, 24, 24));
 
         // Only show if user has account
@@ -467,20 +454,20 @@ public class DefaultPendingPaymentSection implements HasPendingPaymentSection {
 
         SVGPath userIcon = new SVGPath();
         userIcon.setContent(ICON_USER);
-        userIcon.setStroke(colorScheme.get().getPrimary());
+        userIcon.setStroke(BookingFormColorScheme.DEFAULT.getPrimary());
         userIcon.setStrokeWidth(2);
         userIcon.setFill(Color.TRANSPARENT);
         userIcon.setScaleX(0.6);
         userIcon.setScaleY(0.6);
 
         Label titleLabel = I18nControls.newLabel(BookingPageI18nKeys.TrackYourBooking);
-        titleLabel.getStyleClass().add("bookingpage-pending-payment-account-title");
+        titleLabel.getStyleClass().add(bookingpage_pending_payment_account_title);
 
         titleRow.getChildren().addAll(userIcon, titleLabel);
 
         // Message
         Label messageLabel = I18nControls.newLabel(BookingPageI18nKeys.TrackBookingMessage);
-        messageLabel.getStyleClass().add("bookingpage-pending-payment-account-text");
+        messageLabel.getStyleClass().add(bookingpage_pending_payment_account_text);
         messageLabel.setWrapText(true);
 
         // Go to My Orders link
@@ -494,11 +481,11 @@ public class DefaultPendingPaymentSection implements HasPendingPaymentSection {
         });
 
         Label linkLabel = I18nControls.newLabel(BookingPageI18nKeys.GoToMyOrders);
-        linkLabel.getStyleClass().add("bookingpage-pending-payment-account-link");
+        linkLabel.getStyleClass().add(bookingpage_pending_payment_account_link);
 
         SVGPath arrowIcon = new SVGPath();
         arrowIcon.setContent(ICON_ARROW_RIGHT);
-        arrowIcon.setStroke(colorScheme.get().getPrimary());
+        arrowIcon.setStroke(BookingFormColorScheme.DEFAULT.getPrimary());
         arrowIcon.setStrokeWidth(2);
         arrowIcon.setFill(Color.TRANSPARENT);
         arrowIcon.setScaleX(0.5);
@@ -537,7 +524,7 @@ public class DefaultPendingPaymentSection implements HasPendingPaymentSection {
 
         // Secondary button - Browse More Events
         Button secondaryButton = I18nControls.newButton(BookingPageI18nKeys.BrowseMoreEvents);
-        secondaryButton.getStyleClass().add("bookingpage-btn-secondary-outline");
+        secondaryButton.getStyleClass().add(bookingpage_btn_secondary_outline);
         secondaryButton.setPadding(new Insets(14, 24, 14, 24));
         secondaryButton.setMaxWidth(Double.MAX_VALUE);
         secondaryButton.setCursor(Cursor.HAND);
@@ -554,7 +541,7 @@ public class DefaultPendingPaymentSection implements HasPendingPaymentSection {
     private VBox buildContactSection() {
         VBox section = new VBox(12);
         section.setPadding(new Insets(16));
-        section.getStyleClass().add("bookingpage-pending-payment-contact-section");
+        section.getStyleClass().add(bookingpage_pending_payment_contact_section);
         VBox.setMargin(section, new Insets(0, 24, 24, 24));
 
         // Title
@@ -570,20 +557,20 @@ public class DefaultPendingPaymentSection implements HasPendingPaymentSection {
         questionIcon.setScaleY(0.6);
 
         Label titleLabel = I18nControls.newLabel(BookingPageI18nKeys.HaveQuestions);
-        titleLabel.getStyleClass().add("bookingpage-pending-payment-contact-title");
+        titleLabel.getStyleClass().add(bookingpage_pending_payment_contact_title);
 
         titleRow.getChildren().addAll(questionIcon, titleLabel);
 
         // Message
         Label messageLabel = I18nControls.newLabel(BookingPageI18nKeys.ContactTeamMessage);
-        messageLabel.getStyleClass().add("bookingpage-pending-payment-contact-text");
+        messageLabel.getStyleClass().add(bookingpage_pending_payment_contact_text);
         messageLabel.setWrapText(true);
 
         // Email row
         HBox emailRow = new HBox(8);
         emailRow.setAlignment(Pos.CENTER_LEFT);
         emailRow.setPadding(new Insets(12));
-        emailRow.getStyleClass().add("bookingpage-pending-payment-contact-email-box");
+        emailRow.getStyleClass().add(bookingpage_pending_payment_contact_email_box);
 
         SVGPath mailIcon = new SVGPath();
         mailIcon.setContent(ICON_MAIL);
@@ -595,7 +582,7 @@ public class DefaultPendingPaymentSection implements HasPendingPaymentSection {
 
         Label emailLabel = new Label();
         emailLabel.textProperty().bind(contactEmailProperty);
-        emailLabel.getStyleClass().add("bookingpage-pending-payment-contact-email");
+        emailLabel.getStyleClass().add(bookingpage_pending_payment_contact_email);
         HBox.setHgrow(emailLabel, Priority.ALWAYS);
 
         emailRow.getChildren().addAll(mailIcon, emailLabel);
@@ -610,11 +597,11 @@ public class DefaultPendingPaymentSection implements HasPendingPaymentSection {
         footer.setPadding(new Insets(0, 24, 32, 24));
 
         Label helpLabel = I18nControls.newLabel(BookingPageI18nKeys.NeedHelpContact);
-        helpLabel.getStyleClass().add("bookingpage-contact-footer");
+        helpLabel.getStyleClass().add(bookingpage_contact_footer);
 
         Hyperlink emailLink = new Hyperlink();
         emailLink.textProperty().bind(contactEmailProperty);
-        emailLink.getStyleClass().add("bookingpage-contact-link");
+        emailLink.getStyleClass().add(bookingpage_contact_link);
         emailLink.setOnAction(e -> {
             String email = contactEmailProperty.get();
             if (email != null && !email.isEmpty()) {
@@ -649,16 +636,6 @@ public class DefaultPendingPaymentSection implements HasPendingPaymentSection {
     }
 
     // === HasPendingPaymentSection INTERFACE ===
-
-    @Override
-    public ObjectProperty<BookingFormColorScheme> colorSchemeProperty() {
-        return colorScheme;
-    }
-
-    @Override
-    public void setColorScheme(BookingFormColorScheme scheme) {
-        this.colorScheme.set(scheme);
-    }
 
     @Override
     public void setBookingReference(String reference) {

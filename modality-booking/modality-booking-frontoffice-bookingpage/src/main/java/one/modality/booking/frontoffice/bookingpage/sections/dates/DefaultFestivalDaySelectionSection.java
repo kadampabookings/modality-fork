@@ -2,6 +2,7 @@ package one.modality.booking.frontoffice.bookingpage.sections.dates;
 import one.modality.booking.frontoffice.bookingpage.BookingPageCssSelectors;
 
 import dev.webfx.extras.i18n.I18n;
+import dev.webfx.extras.i18n.controls.I18nControls;
 import dev.webfx.platform.uischeduler.UiScheduler;
 import dev.webfx.stack.orm.entity.EntityList;
 import javafx.beans.property.ObjectProperty;
@@ -22,7 +23,8 @@ import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
 import one.modality.booking.frontoffice.bookingpage.components.StyledSectionHeader;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
+import one.modality.base.shared.entities.formatters.EventPriceFormatter;
+
 import one.modality.ecommerce.policy.service.PolicyAggregate;
 
 import java.time.LocalDate;
@@ -64,9 +66,6 @@ import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelecto
  * @see HasFestivalDaySelectionSection
  */
 public class DefaultFestivalDaySelectionSection implements HasFestivalDaySelectionSection {
-
-    // === COLOR SCHEME ===
-    protected final ObjectProperty<BookingFormColorScheme> colorScheme = new SimpleObjectProperty<>(BookingFormColorScheme.DEFAULT);
 
     // === VALIDITY ===
     protected final SimpleBooleanProperty validProperty = new SimpleBooleanProperty(false);
@@ -176,7 +175,7 @@ public class DefaultFestivalDaySelectionSection implements HasFestivalDaySelecti
     protected void buildUI() {
         container.setAlignment(Pos.TOP_LEFT);
         container.setSpacing(20);
-        container.getStyleClass().add("bookingpage-festival-day-section");
+        container.getStyleClass().add(bookingpage_festival_day_section);
 
         // Section header
         HBox sectionHeader = new StyledSectionHeader(BookingPageI18nKeys.YourStayAndFestivalDays, StyledSectionHeader.ICON_CALENDAR);
@@ -243,7 +242,7 @@ public class DefaultFestivalDaySelectionSection implements HasFestivalDaySelecti
         box.setPadding(new Insets(0, 0, 16, 0));
 
         // Change Arrival button - uses CSS class for theme colors
-        Button changeArrivalBtn = new Button("→ Change Arrival");
+        Button changeArrivalBtn = I18nControls.newButton(BookingPageI18nKeys.ChangeArrival);
         changeArrivalBtn.getStyleClass().add(bookingpage_change_arrival_btn);
         changeArrivalBtn.setPadding(new Insets(10, 16, 10, 16));
         changeArrivalBtn.setFocusTraversable(false); // Prevent focus-related scroll issues
@@ -255,7 +254,7 @@ public class DefaultFestivalDaySelectionSection implements HasFestivalDaySelecti
         });
 
         // Change Departure button - uses CSS class for theme colors
-        Button changeDepartureBtn = new Button("← Change Departure");
+        Button changeDepartureBtn = I18nControls.newButton(BookingPageI18nKeys.ChangeDeparture);
         changeDepartureBtn.getStyleClass().add(bookingpage_change_departure_btn);
         changeDepartureBtn.setPadding(new Insets(10, 16, 10, 16));
         changeDepartureBtn.setFocusTraversable(false); // Prevent focus-related scroll issues
@@ -299,15 +298,15 @@ public class DefaultFestivalDaySelectionSection implements HasFestivalDaySelecti
         card.setPadding(new Insets(12, 20, 12, 20));
         card.setMinWidth(160);
         card.setCursor(Cursor.HAND);
-        card.getStyleClass().add("bookingpage-date-selector-card");
+        card.getStyleClass().add(bookingpage_date_selector_card);
 
         // Label (Arrival/Departure)
-        Label typeLabel = new Label(I18n.getI18nText(isArrival ? BookingPageI18nKeys.Arrival : BookingPageI18nKeys.Departure));
-        typeLabel.getStyleClass().add("bookingpage-date-selector-label");
+        Label typeLabel = I18nControls.newLabel(isArrival ? BookingPageI18nKeys.Arrival : BookingPageI18nKeys.Departure);
+        typeLabel.getStyleClass().add(bookingpage_date_selector_label);
 
         // Date value (shows "Select date" initially)
-        Label dateLabel = new Label(I18n.getI18nText(BookingPageI18nKeys.SelectDate));
-        dateLabel.getStyleClass().add("bookingpage-date-selector-value");
+        Label dateLabel = I18nControls.newLabel(BookingPageI18nKeys.SelectDate);
+        dateLabel.getStyleClass().add(bookingpage_date_selector_value);
 
         // Store reference for dynamic updates
         if (isArrival) {
@@ -338,23 +337,23 @@ public class DefaultFestivalDaySelectionSection implements HasFestivalDaySelecti
 
         // Update arrival card styles
         if (arrivalSelectorCard != null) {
-            arrivalSelectorCard.getStyleClass().removeAll("active", "selected");
+            arrivalSelectorCard.getStyleClass().removeAll(active, selected);
             if ("arrival".equals(changingDateMode)) {
-                arrivalSelectorCard.getStyleClass().add("active");
+                arrivalSelectorCard.getStyleClass().add(active);
             }
             if (arrival != null) {
-                arrivalSelectorCard.getStyleClass().add("selected");
+                arrivalSelectorCard.getStyleClass().add(selected);
             }
         }
 
         // Update departure card styles
         if (departureSelectorCard != null) {
-            departureSelectorCard.getStyleClass().removeAll("active", "selected");
+            departureSelectorCard.getStyleClass().removeAll(active, selected);
             if ("departure".equals(changingDateMode)) {
-                departureSelectorCard.getStyleClass().add("active");
+                departureSelectorCard.getStyleClass().add(active);
             }
             if (departure != null) {
-                departureSelectorCard.getStyleClass().add("selected");
+                departureSelectorCard.getStyleClass().add(selected);
             }
         }
     }
@@ -367,18 +366,20 @@ public class DefaultFestivalDaySelectionSection implements HasFestivalDaySelecti
         LocalDate departure = departureDateProperty.get();
 
         if (arrivalDateLabel != null) {
+            arrivalDateLabel.textProperty().unbind();
             if (arrival != null) {
                 arrivalDateLabel.setText(formatDateForSelector(arrival));
             } else {
-                arrivalDateLabel.setText(I18n.getI18nText(BookingPageI18nKeys.SelectDate));
+                arrivalDateLabel.textProperty().bind(I18n.i18nTextProperty(BookingPageI18nKeys.SelectDate));
             }
         }
 
         if (departureDateLabel != null) {
+            departureDateLabel.textProperty().unbind();
             if (departure != null) {
                 departureDateLabel.setText(formatDateForSelector(departure));
             } else {
-                departureDateLabel.setText(I18n.getI18nText(BookingPageI18nKeys.SelectDate));
+                departureDateLabel.textProperty().bind(I18n.i18nTextProperty(BookingPageI18nKeys.SelectDate));
             }
         }
 
@@ -491,7 +492,7 @@ public class DefaultFestivalDaySelectionSection implements HasFestivalDaySelecti
 
         // Instruction label ("Select arrival/departure date:")
         datePickerInstruction = new Label();
-        datePickerInstruction.getStyleClass().add("bookingpage-date-picker-instruction");
+        datePickerInstruction.getStyleClass().add(bookingpage_date_picker_instruction);
 
         container.getChildren().addAll(datePickerInstruction, daysContainer);
         return container;
@@ -899,8 +900,6 @@ public class DefaultFestivalDaySelectionSection implements HasFestivalDaySelecti
         arrivalDateProperty.addListener((obs, old, newVal) -> rebuildTimeSections());
         departureDateProperty.addListener((obs, old, newVal) -> rebuildTimeSections());
 
-        // Rebuild time sections when color scheme changes to apply new colors
-        colorScheme.addListener((obs, old, newVal) -> rebuildTimeSections());
     }
 
     /**
@@ -1447,7 +1446,7 @@ public class DefaultFestivalDaySelectionSection implements HasFestivalDaySelecti
     }
 
     protected String formatPrice(int priceInCents) {
-        return "$" + (priceInCents / 100);
+        return EventPriceFormatter.formatWithCurrency(priceInCents, workingBookingProperties != null ? workingBookingProperties.getEvent() : null);
     }
 
     // ========================================
@@ -1477,16 +1476,6 @@ public class DefaultFestivalDaySelectionSection implements HasFestivalDaySelecti
     // ========================================
     // HasFestivalDaySelectionSection INTERFACE
     // ========================================
-
-    @Override
-    public ObjectProperty<BookingFormColorScheme> colorSchemeProperty() {
-        return colorScheme;
-    }
-
-    @Override
-    public void setColorScheme(BookingFormColorScheme scheme) {
-        this.colorScheme.set(scheme);
-    }
 
     @Override
     public void setFestivalDays(List<FestivalDay> days) {

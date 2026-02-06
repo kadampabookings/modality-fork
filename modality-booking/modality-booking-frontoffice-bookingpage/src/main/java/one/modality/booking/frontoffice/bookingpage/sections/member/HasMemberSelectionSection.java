@@ -1,12 +1,10 @@
 package one.modality.booking.frontoffice.bookingpage.sections.member;
 
-import javafx.beans.property.ObjectProperty;
 import javafx.beans.value.ObservableBooleanValue;
 import one.modality.base.shared.entities.Person;
 import one.modality.booking.frontoffice.bookingpage.BookingFormSection;
 import one.modality.booking.frontoffice.bookingpage.sections.childcarer.DefaultChildCarerSection;
 import one.modality.booking.frontoffice.bookingpage.standard.BookingSelectionState;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
 
 import java.util.Set;
 import java.util.function.Consumer;
@@ -66,16 +64,6 @@ public interface HasMemberSelectionSection extends BookingFormSection {
         }
 
     }
-
-    /**
-     * Returns the color scheme property for theming.
-     */
-    ObjectProperty<BookingFormColorScheme> colorSchemeProperty();
-
-    /**
-     * Sets the color scheme for this section.
-     */
-    void setColorScheme(BookingFormColorScheme scheme);
 
     /**
      * Sets the callback for when a member is selected.

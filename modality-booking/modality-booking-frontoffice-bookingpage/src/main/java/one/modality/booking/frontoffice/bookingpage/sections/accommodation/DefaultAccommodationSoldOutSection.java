@@ -27,7 +27,7 @@ import one.modality.booking.frontoffice.bookingpage.components.StyledSectionHead
 import one.modality.booking.frontoffice.bookingpage.sections.roommate.DefaultRoommateInfoSection;
 import one.modality.booking.frontoffice.bookingpage.standard.BookingSelectionState;
 import one.modality.booking.frontoffice.bookingpage.standard.StandardBookingFormCallbacks;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
+import one.modality.base.shared.entities.formatters.EventPriceFormatter;
 
 import java.time.LocalDate;
 import java.util.Comparator;
@@ -79,9 +79,6 @@ public class DefaultAccommodationSoldOutSection implements HasAccommodationSoldO
     // Circle with X icon for sold out indicator
     private static final String ICON_CIRCLE_X = "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2M15 9l-6 6M9 9l6 6";
     private static final String ICON_INFO = "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z";
-
-    // === COLOR SCHEME ===
-    private final ObjectProperty<BookingFormColorScheme> colorScheme = new SimpleObjectProperty<>(BookingFormColorScheme.DEFAULT);
 
     // === VALIDITY ===
     private final SimpleBooleanProperty validProperty = new SimpleBooleanProperty(false);
@@ -822,7 +819,7 @@ public class DefaultAccommodationSoldOutSection implements HasAccommodationSoldO
     }
 
     private String formatPrice(int priceInCents) {
-        return "$" + (priceInCents / 100);
+        return EventPriceFormatter.formatWithCurrency(priceInCents, workingBookingProperties != null ? workingBookingProperties.getEvent() : null);
     }
 
     // ========================================
@@ -921,16 +918,6 @@ public class DefaultAccommodationSoldOutSection implements HasAccommodationSoldO
     // ========================================
     // HasAccommodationSoldOutSection INTERFACE
     // ========================================
-
-    @Override
-    public ObjectProperty<BookingFormColorScheme> colorSchemeProperty() {
-        return colorScheme;
-    }
-
-    @Override
-    public void setColorScheme(BookingFormColorScheme scheme) {
-        this.colorScheme.set(scheme);
-    }
 
     @Override
     public void setOriginalSelection(String itemName, int price) {

@@ -60,6 +60,8 @@ import java.time.LocalTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelectors.*;
+
 /**
  * Abstract base class for international festival booking forms.
  *
@@ -334,7 +336,6 @@ public abstract class AbstractSinglePeriodInternationalFestival implements Stand
         signInEventHeader = new DefaultEventHeaderSection();
 
         yourInformationSection = new DefaultYourInformationSection();
-        yourInformationSection.setColorScheme(getColorScheme());
         yourInformationSection.setBackButtonVisible(false); // First step, no back button
 
         signInPage = new CompositeBookingFormPage(BookingPageI18nKeys.SignIn,
@@ -373,7 +374,6 @@ public abstract class AbstractSinglePeriodInternationalFestival implements Stand
         memberSelectionEventHeader = new DefaultEventHeaderSection();
 
         memberSelectionSection = new DefaultMemberSelectionSection();
-        memberSelectionSection.setColorScheme(getColorScheme());
         memberSelectionSection.setBackButtonVisible(true); // Back button to go to Sign In
         memberSelectionSection.setInlineChildCarerEnabled(true); // Show child carer inline
 
@@ -393,7 +393,6 @@ public abstract class AbstractSinglePeriodInternationalFestival implements Stand
         childCarerEventHeader = new DefaultEventHeaderSection();
 
         childCarerSection = new DefaultChildCarerSection();
-        childCarerSection.setColorScheme(getColorScheme());
         childCarerSection.setVisible(false); // Hidden until a child is selected
 
         childCarerPage = new CompositeBookingFormPage("ChildCarerSelection",
@@ -418,7 +417,6 @@ public abstract class AbstractSinglePeriodInternationalFestival implements Stand
         accommodationPageHeader = new AccommodationPageHeaderSection();
 
         accommodationSection = new DefaultAccommodationSelectionSection();
-        accommodationSection.setColorScheme(getColorScheme());
 
         accommodationPage = new CompositeBookingFormPage("Accommodation",
             accommodationPageHeader,
@@ -436,32 +434,24 @@ public abstract class AbstractSinglePeriodInternationalFestival implements Stand
         bookingDetailsPageHeader = new BookingDetailsPageHeaderSection();
 
         festivalDaySection = new DefaultFestivalDaySelectionSection();
-        festivalDaySection.setColorScheme(getColorScheme());
         festivalDaySection.setTimeSelectionEnabled(false); // International festivals don't need time selection
 
         ordinationSection = new DefaultOrdinationCeremonySection();
-        ordinationSection.setColorScheme(getColorScheme());
         ordinationSection.setVisible(false); // Hidden until person is known to be ordained
 
         mealsSection = new DefaultMealsSelectionSection();
-        mealsSection.setColorScheme(getColorScheme());
 
         translationSection = new DefaultTranslationSection();
-        translationSection.setColorScheme(getColorScheme());
 
         transportSection = new DefaultTransportSection();
-        transportSection.setColorScheme(getColorScheme());
         transportSection.setVisible(false);
 
         audioSection = new DefaultAudioRecordingPhaseCoverageSection();
-        audioSection.setColorScheme(getColorScheme());
         audioSection.setVisible(false);
 
         assistanceSection = new DefaultAssistanceNeedsSection();
-        assistanceSection.setColorScheme(getColorScheme());
 
         roommateSection = new DefaultRoommateInfoSection();
-        roommateSection.setColorScheme(getColorScheme());
         roommateSection.setVisible(false);
 
         bookingDetailsPage = new CompositeBookingFormPage(BookingPageI18nKeys.BookingDetails,
@@ -486,7 +476,6 @@ public abstract class AbstractSinglePeriodInternationalFestival implements Stand
         yourInfoEventHeader = new DefaultEventHeaderSection();
 
         yourInformationSection = new DefaultYourInformationSection();
-        yourInformationSection.setColorScheme(getColorScheme());
         yourInformationSection.setBackButtonVisible(true);
 
         return new CompositeBookingFormPage(BookingPageI18nKeys.YourInformation,
@@ -512,10 +501,10 @@ public abstract class AbstractSinglePeriodInternationalFestival implements Stand
         contentBox.setPadding(new Insets(40, 40, 40, 40));
 
         Label titleLabel = I18nControls.newLabel(BookingPageI18nKeys.ModifyBookingNotSupportedTitle);
-        titleLabel.getStyleClass().addAll("bookingpage-text-3xl", "bookingpage-font-bold", "bookingpage-text-primary");
+        titleLabel.getStyleClass().addAll(bookingpage_text_3xl, bookingpage_font_bold, bookingpage_text_primary);
 
         Label subtitleLabel = I18nControls.newLabel(BookingPageI18nKeys.ModifyBookingNotSupported);
-        subtitleLabel.getStyleClass().addAll("bookingpage-text-md", "bookingpage-text-muted");
+        subtitleLabel.getStyleClass().addAll(bookingpage_text_md, bookingpage_text_muted);
         subtitleLabel.setWrapText(true);
         subtitleLabel.setMaxWidth(500);
 

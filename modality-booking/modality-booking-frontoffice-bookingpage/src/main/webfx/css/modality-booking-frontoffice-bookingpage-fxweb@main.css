@@ -1261,6 +1261,10 @@
     -fx-background-color: -booking-form-card-disabled-bg;
 }
 
+/* Accommodation card - specific styling for accommodation option cards */
+.bookingpage-accommodation-card {
+}
+
 /* Checkbox Card - card with embedded checkbox on left */
 .bookingpage-checkbox-card {
     -fx-background-color: -booking-form-card-bg;
@@ -2148,6 +2152,9 @@
    GP Class Price Summary Styling
    ========================================== */
 
+/* Price summary container */
+.gpclass-price-summary { }
+
 /* Price summary title - "Your Selection" */
 .gpclass-price-summary-title {
     -fx-font-size: 16;
@@ -2566,6 +2573,11 @@
 /* Disabled muted text (for sold out items) */
 .bookingpage-text-muted-disabled {
     -fx-text-fill: #b0b0b0;
+}
+
+/* Error text (red) */
+.bookingpage-text-error {
+    -fx-text-fill: #dc3545;
 }
 
 /* ==========================================
@@ -4114,3 +4126,222 @@
 .bookingpage-text-muted-light {
     -fx-text-fill: #9CA3AF;
 }
+
+/* Child Age Badge (Member Selection Section) */
+.bookingpage-child-age-badge {
+    -fx-background-color: #FEF3C7;
+    -fx-background-radius: 20;
+}
+
+.bookingpage-child-age-badge-text {
+    -fx-text-fill: #92400E;
+    -fx-font-size: 12px;
+    -fx-font-weight: 500;
+}
+
+/* ==========================================
+   Section Container Classes
+   (structural markers for each booking section)
+   ========================================== */
+
+.bookingpage-accommodation-section { }
+.bookingpage-additional-options-section { }
+.bookingpage-assistance-section { }
+.bookingpage-audio-phase-section { }
+.bookingpage-childcarer-section { }
+.bookingpage-confirmation-section { }
+.bookingpage-existing-booking-section { }
+.bookingpage-festival-day-section { }
+.bookingpage-meals-section { }
+.bookingpage-member-selection-section { }
+.bookingpage-ordination-section { }
+.bookingpage-payment-section { }
+.bookingpage-payment-canceled-section { }
+.bookingpage-payment-refused-section { }
+.bookingpage-pending-bookings-section { }
+.bookingpage-roommate-section { }
+.bookingpage-summary-section { }
+.bookingpage-translation-section { }
+.bookingpage-transport-section { }
+.bookingpage-your-information-section { }
+
+/* ==========================================
+   Shared Component Classes
+   ========================================== */
+
+.bookingpage-info-card { }
+.bookingpage-info-text { }
+.bookingpage-form-field { }
+.bookingpage-checkbox-label { }
+.bookingpage-checkbox-description { }
+.bookingpage-inline-childcarer { }
+
+/* ==========================================
+   Ordination Section
+   ========================================== */
+
+.bookingpage-ordination-card { }
+.bookingpage-ordination-datetime { }
+
+/* ==========================================
+   Translation Section
+   ========================================== */
+
+.bookingpage-translation-subsection { }
+
+/* ==========================================
+   Pending Payment Section
+   ========================================== */
+
+.bookingpage-pending-payment-section { }
+
+.bookingpage-pending-payment-header { }
+.bookingpage-pending-payment-icon-circle { }
+.bookingpage-pending-payment-title { }
+.bookingpage-pending-payment-subtitle { }
+
+.bookingpage-pending-payment-ref-box { }
+.bookingpage-pending-payment-ref-label { }
+.bookingpage-pending-payment-ref-value { }
+.bookingpage-pending-payment-status-badge { }
+.bookingpage-pending-payment-badge-text { }
+
+.bookingpage-pending-payment-summary-row { }
+.bookingpage-pending-payment-summary-label { }
+.bookingpage-pending-payment-summary-value { }
+.bookingpage-pending-payment-summary-row-last { }
+.bookingpage-pending-payment-summary-total { }
+
+.bookingpage-pending-payment-info-section { }
+.bookingpage-pending-payment-info-icon { }
+.bookingpage-pending-payment-info-title { }
+.bookingpage-pending-payment-info-subtitle { }
+.bookingpage-pending-payment-info-description { }
+
+.bookingpage-pending-payment-timeline { }
+.bookingpage-pending-payment-timeline-text { }
+
+.bookingpage-pending-payment-next-title { }
+.bookingpage-pending-payment-step-item { }
+.bookingpage-pending-payment-step-number { }
+.bookingpage-pending-payment-step-number-text { }
+.bookingpage-pending-payment-step-title { }
+.bookingpage-pending-payment-step-desc { }
+
+.bookingpage-pending-payment-account-box { }
+.bookingpage-pending-payment-account-title { }
+.bookingpage-pending-payment-account-text { }
+.bookingpage-pending-payment-account-link { }
+
+.bookingpage-pending-payment-contact-section { }
+.bookingpage-pending-payment-contact-title { }
+.bookingpage-pending-payment-contact-text { }
+.bookingpage-pending-payment-contact-email-box { }
+.bookingpage-pending-payment-contact-email { }
+
+/* ==========================================
+   Failed Payment Section
+   ========================================== */
+
+.bookingpage-failed-payment-section { }
+
+.bookingpage-failed-payment-header { }
+.bookingpage-failed-payment-icon-circle { }
+.bookingpage-failed-payment-title { }
+.bookingpage-failed-payment-subtitle { }
+
+.bookingpage-failed-payment-ref-box { }
+.bookingpage-failed-payment-ref-label { }
+.bookingpage-failed-payment-ref-value { }
+
+.bookingpage-error-details-section { }
+.bookingpage-error-details-title { }
+.bookingpage-error-description { }
+.bookingpage-suggestion-item { }
+
+.bookingpage-bank-error-box { }
+.bookingpage-bank-error-label { }
+.bookingpage-bank-error-message { }
+.bookingpage-bank-error-meta { }
+
+.bookingpage-account-info-box { }
+.bookingpage-account-info-title { }
+.bookingpage-account-info-text { }
+.bookingpage-account-info-link { }
+
+/* ==========================================
+   Shared Payment/Contact Classes
+   ========================================== */
+
+.bookingpage-btn-secondary-outline { }
+.bookingpage-btn-danger-outline { }
+.bookingpage-contact-footer { }
+.bookingpage-contact-link { }
+
+/* ==========================================
+   Booking Form Navigation & Layout
+   ========================================== */
+
+.bookingpage-navigation-bar { }
+.bookingpage-navigation-back-button { }
+.bookingpage-navigation-title { }
+.bookingpage-navigation-next-button { }
+.bookingpage-navigation-buttons { }
+.bookingpage-step-number { }
+
+/* ==========================================
+   Booking Form Container & Loading
+   ========================================== */
+
+.booking-form-container { }
+.booking-form-loading-overlay { }
+
+/* ==========================================
+   Booking Form User Badge
+   ========================================== */
+
+.booking-form-user-badge { }
+.booking-form-user-badge-name { }
+
+/* ==========================================
+   Booking Form Step Progress (Responsive)
+   ========================================== */
+
+.booking-form-step-active-circle { }
+.booking-form-step-name-label { }
+.booking-form-step-count-label { }
+
+/* ==========================================
+   Booking Form Sections
+   ========================================== */
+
+.booking-form-existing-summary { }
+.booking-form-checkmark-badge { }
+.booking-form-rate-type-section { }
+.booking-form-rate-badge { }
+.default-rate-card { }
+.booking-form-terms-section { }
+.booking-form-terms-checkbox { }
+.error { }
+.booking-form-prerequisite-section { }
+
+/* ==========================================
+   Registration Queue
+   ========================================== */
+
+.registration-queue-container { }
+.registration-queue-dynamic-area { }
+
+/* ==========================================
+   GP Class Date Selection
+   ========================================== */
+
+.gpclass-date-cards-container { }
+.gpclass-date-selection-section { }
+
+/* ==========================================
+   Member Selection
+   ========================================== */
+
+.bookingpage-already-booked { }
+.bookingpage-default-rate-section { }

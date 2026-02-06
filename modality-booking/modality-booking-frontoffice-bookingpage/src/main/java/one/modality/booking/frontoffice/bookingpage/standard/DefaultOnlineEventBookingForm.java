@@ -48,7 +48,6 @@ public class DefaultOnlineEventBookingForm extends AbstractOnlineEventBookingFor
     @Override
     protected HasRateTypeSection createRateTypeSection() {
         DefaultRateTypeSection section = new DefaultRateTypeSection();
-        section.setColorScheme(getColorScheme());
         return section;
     }
 

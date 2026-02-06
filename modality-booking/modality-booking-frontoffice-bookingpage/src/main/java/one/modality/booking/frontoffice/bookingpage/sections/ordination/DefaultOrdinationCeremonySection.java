@@ -12,7 +12,8 @@ import javafx.scene.layout.VBox;
 import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
 import one.modality.booking.frontoffice.bookingpage.components.StyledSectionHeader;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
+
+import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelectors.*;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -43,9 +44,6 @@ public class DefaultOrdinationCeremonySection implements HasOrdinationCeremonySe
 
     // Date/time formatter for display
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("EEEE, MMMM d, yyyy 'at' h:mm a");
-
-    // === COLOR SCHEME ===
-    protected final ObjectProperty<BookingFormColorScheme> colorScheme = new SimpleObjectProperty<>(BookingFormColorScheme.DEFAULT);
 
     // === VISIBILITY ===
     protected final BooleanProperty visibleProperty = new SimpleBooleanProperty(false);
@@ -78,7 +76,7 @@ public class DefaultOrdinationCeremonySection implements HasOrdinationCeremonySe
     protected void buildUI() {
         container.setAlignment(Pos.TOP_LEFT);
         container.setSpacing(16);
-        container.getStyleClass().add("bookingpage-ordination-section");
+        container.getStyleClass().add(bookingpage_ordination_section);
 
         // Section header with ceremony icon
         sectionHeader = new StyledSectionHeader(OrdinationCeremony, StyledSectionHeader.ICON_USERS);
@@ -86,7 +84,7 @@ public class DefaultOrdinationCeremonySection implements HasOrdinationCeremonySe
 
         // Card container for the toggle
         cardContainer = new VBox(12);
-        cardContainer.getStyleClass().add("bookingpage-ordination-card");
+        cardContainer.getStyleClass().add(bookingpage_ordination_card);
 
         // Create the toggle card
         rebuildToggleCard();
@@ -94,13 +92,13 @@ public class DefaultOrdinationCeremonySection implements HasOrdinationCeremonySe
         // Date/time and location display
         VBox infoContainer = new VBox(4);
         infoContainer.setPadding(new Insets(0, 0, 0, 24)); // Indent under toggle
-        infoContainer.getStyleClass().add("bookingpage-ordination-datetime");
+        infoContainer.getStyleClass().add(bookingpage_ordination_datetime);
 
         dateTimeLabel = new Label();
-        dateTimeLabel.getStyleClass().add("bookingpage-info-text");
+        dateTimeLabel.getStyleClass().add(bookingpage_info_text);
 
         locationLabel = new Label();
-        locationLabel.getStyleClass().add("bookingpage-info-text");
+        locationLabel.getStyleClass().add(bookingpage_info_text);
 
         infoContainer.getChildren().addAll(dateTimeLabel, locationLabel);
 
@@ -120,16 +118,16 @@ public class DefaultOrdinationCeremonySection implements HasOrdinationCeremonySe
         // Create content with label and description
         VBox content = new VBox(4);
         Label titleLabel = I18nControls.newLabel(AttendOrdinationCeremony);
-        titleLabel.getStyleClass().add("bookingpage-checkbox-label");
+        titleLabel.getStyleClass().add(bookingpage_checkbox_label);
         Label descLabel = I18nControls.newLabel(OrdinationCeremonyInfo);
-        descLabel.getStyleClass().add("bookingpage-checkbox-description");
+        descLabel.getStyleClass().add(bookingpage_checkbox_description);
         descLabel.setWrapText(true);
         content.getChildren().addAll(titleLabel, descLabel);
 
         HBox toggleCard = BookingPageUIBuilder.createCheckboxCard(
             content,
             wantsOrdinationCeremonyProperty,
-            colorScheme
+            null
         );
 
         cardContainer.getChildren().add(toggleCard);
@@ -173,10 +171,6 @@ public class DefaultOrdinationCeremonySection implements HasOrdinationCeremonySe
             notifySelectionChanged();
         });
 
-        // Update toggle card when color scheme changes
-        colorScheme.addListener((obs, oldVal, newVal) -> {
-            rebuildToggleCard();
-        });
     }
 
     protected void notifySelectionChanged() {
@@ -212,16 +206,6 @@ public class DefaultOrdinationCeremonySection implements HasOrdinationCeremonySe
     // ========================================
     // HasOrdinationCeremonySection INTERFACE
     // ========================================
-
-    @Override
-    public ObjectProperty<BookingFormColorScheme> colorSchemeProperty() {
-        return colorScheme;
-    }
-
-    @Override
-    public void setColorScheme(BookingFormColorScheme scheme) {
-        this.colorScheme.set(scheme);
-    }
 
     @Override
     public BooleanProperty visibleProperty() {

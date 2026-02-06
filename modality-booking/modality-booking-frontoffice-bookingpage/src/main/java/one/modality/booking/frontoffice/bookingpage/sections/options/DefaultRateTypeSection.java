@@ -25,7 +25,7 @@ import one.modality.booking.frontoffice.bookingpage.BookingPageCssSelectors;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
 import one.modality.booking.frontoffice.bookingpage.components.StyledSectionHeader;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
+
 
 import java.time.LocalDate;
 import java.util.function.Consumer;
@@ -76,7 +76,6 @@ public class DefaultRateTypeSection implements HasRateTypeSection, BookingFormSe
     // === State ===
     protected final ObjectProperty<RateType> selectedRateType = new SimpleObjectProperty<>(RateType.STANDARD);
     protected final SimpleBooleanProperty validProperty = new SimpleBooleanProperty(true);
-    protected final ObjectProperty<BookingFormColorScheme> colorScheme = new SimpleObjectProperty<>(BookingFormColorScheme.DEFAULT);
     protected final ObjectProperty<BookablePeriod> selectedPeriod = new SimpleObjectProperty<>();
 
     // === Data ===
@@ -150,8 +149,6 @@ public class DefaultRateTypeSection implements HasRateTypeSection, BookingFormSe
                 BookingPageI18nKeys.YourPricingTier,
                 StyledSectionHeader.ICON_TAG
         );
-        header.colorSchemeProperty().bind(colorScheme);
-
         // Rate cards container (VBox for full-width stacked cards)
         cardsContainer = new VBox(12);
         cardsContainer.setAlignment(Pos.TOP_LEFT);
@@ -161,7 +158,7 @@ public class DefaultRateTypeSection implements HasRateTypeSection, BookingFormSe
         rebuildCards();
 
         container.getChildren().addAll(header, cardsContainer);
-        container.getStyleClass().add("booking-form-rate-type-section");
+        container.getStyleClass().add(booking_form_rate_type_section);
         container.setMinWidth(0);
         container.setMaxWidth(Double.MAX_VALUE);
 
@@ -236,7 +233,7 @@ public class DefaultRateTypeSection implements HasRateTypeSection, BookingFormSe
         // Rate badge
         Label rateBadge = I18nControls.newLabel(titleKey);
         rateBadge.setPadding(new Insets(4, 10, 4, 10));
-        rateBadge.getStyleClass().add("booking-form-rate-badge");
+        rateBadge.getStyleClass().add(booking_form_rate_badge);
 
         // Programme title - with text wrapping for responsiveness
         Label programmeTitleLabel = new Label();
@@ -384,24 +381,6 @@ public class DefaultRateTypeSection implements HasRateTypeSection, BookingFormSe
     // ========================================
     // HasRateTypeSection Implementation
     // ========================================
-
-    /**
-     * @deprecated Color scheme is now handled via CSS classes on parent container.
-     */
-    @Deprecated
-    @Override
-    public ObjectProperty<BookingFormColorScheme> colorSchemeProperty() {
-        return colorScheme;
-    }
-
-    /**
-     * @deprecated Use CSS theme classes instead.
-     */
-    @Deprecated
-    @Override
-    public void setColorScheme(BookingFormColorScheme scheme) {
-        this.colorScheme.set(scheme);
-    }
 
     @Override
     public RateType getSelectedRateType() {

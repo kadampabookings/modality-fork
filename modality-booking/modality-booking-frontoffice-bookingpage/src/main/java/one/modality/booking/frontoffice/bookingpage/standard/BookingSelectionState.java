@@ -306,6 +306,7 @@ public class BookingSelectionState {
 
     // === Audio Recording Selection ===
 
+    // Typed as Object to avoid dependency on HasAudioRecordingPhaseCoverageSection.AudioRecordingPhaseOption
     private final ObjectProperty<Object> selectedAudioPhase = new SimpleObjectProperty<>();
 
     public ObjectProperty<Object> selectedAudioPhaseProperty() {
@@ -498,16 +499,16 @@ public class BookingSelectionState {
     // === Child Carer Information ===
 
     private final StringProperty childCarer1Type = new SimpleStringProperty(); // "household" or "external"
-    private final ObjectProperty<Object> childCarer1PersonId = new SimpleObjectProperty<>();
+    private final ObjectProperty<Object> childCarer1PersonId = new SimpleObjectProperty<>(); // Entity primary key (Object in WebFX)
     private final StringProperty childCarer1Name = new SimpleStringProperty();
     private final StringProperty childCarer1BookingRef = new SimpleStringProperty();
     private final StringProperty childCarer2Type = new SimpleStringProperty();
-    private final ObjectProperty<Object> childCarer2PersonId = new SimpleObjectProperty<>();
+    private final ObjectProperty<Object> childCarer2PersonId = new SimpleObjectProperty<>(); // Entity primary key (Object in WebFX)
     private final StringProperty childCarer2Name = new SimpleStringProperty();
     private final StringProperty childCarer2BookingRef = new SimpleStringProperty();
     private final BooleanProperty childPolicyAccepted = new SimpleBooleanProperty(false);
-    private final ObjectProperty<Object> childCarer1DocumentId = new SimpleObjectProperty<>(); // Document ID if carer has existing booking
-    private final ObjectProperty<Object> childCarer2DocumentId = new SimpleObjectProperty<>(); // Document ID if carer has existing booking
+    private final ObjectProperty<Object> childCarer1DocumentId = new SimpleObjectProperty<>(); // Entity primary key (Object in WebFX)
+    private final ObjectProperty<Object> childCarer2DocumentId = new SimpleObjectProperty<>(); // Entity primary key (Object in WebFX)
 
     public StringProperty childCarer1TypeProperty() {
         return childCarer1Type;

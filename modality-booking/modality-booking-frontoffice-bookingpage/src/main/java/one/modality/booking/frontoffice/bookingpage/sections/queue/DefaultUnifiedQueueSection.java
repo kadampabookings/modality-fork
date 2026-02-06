@@ -30,7 +30,7 @@ import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
 import one.modality.booking.frontoffice.bookingpage.components.StyledSectionHeader;
 import one.modality.booking.frontoffice.bookingpage.components.price.UnifiedPriceDisplay;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
+
 import one.modality.ecommerce.shared.pricecalculator.PriceCalculator;
 
 import java.time.LocalDate;
@@ -97,7 +97,6 @@ public class DefaultUnifiedQueueSection implements BookingFormSection {
 
     // State
     private final ObjectProperty<QueueState> currentState = new SimpleObjectProperty<>(QueueState.PRE_COUNTDOWN);
-    private final ObjectProperty<BookingFormColorScheme> colorScheme = new SimpleObjectProperty<>(BookingFormColorScheme.DEFAULT);
     private final SimpleBooleanProperty validProperty = new SimpleBooleanProperty(true);
 
     // Callbacks
@@ -158,7 +157,7 @@ public class DefaultUnifiedQueueSection implements BookingFormSection {
         container.setSpacing(20);
         container.setMaxWidth(720);
         container.setPadding(new Insets(32, 24, 32, 24));
-        container.getStyleClass().add("registration-queue-container");
+        container.getStyleClass().add(registration_queue_container);
 
         // Build all components
         container.getChildren().addAll(
@@ -379,7 +378,7 @@ public class DefaultUnifiedQueueSection implements BookingFormSection {
      */
     private StackPane createDynamicContentArea() {
         dynamicContentArea = new StackPane();
-        dynamicContentArea.getStyleClass().add("registration-queue-dynamic-area");
+        dynamicContentArea.getStyleClass().add(registration_queue_dynamic_area);
 
         // Create both content variants
         countdownContent = createCountdownContent();
@@ -870,7 +869,7 @@ public class DefaultUnifiedQueueSection implements BookingFormSection {
     private void updateStatusMessage() {
         if (statusMessageLabel != null && !STATUS_MESSAGE_KEYS.isEmpty()) {
             Object key = STATUS_MESSAGE_KEYS.get(currentStatusIndex);
-            statusMessageLabel.setText(I18n.getI18nText(key));
+            I18nControls.bindI18nProperties(statusMessageLabel, key);
         }
     }
 
@@ -884,10 +883,6 @@ public class DefaultUnifiedQueueSection implements BookingFormSection {
 
     public void setOnLeaveQueueAndEdit(Runnable callback) {
         this.onLeaveQueueAndEdit = callback;
-    }
-
-    public void setColorScheme(BookingFormColorScheme scheme) {
-        this.colorScheme.set(scheme);
     }
 
     public void setWorkingBookingProperties(WorkingBookingProperties props) {

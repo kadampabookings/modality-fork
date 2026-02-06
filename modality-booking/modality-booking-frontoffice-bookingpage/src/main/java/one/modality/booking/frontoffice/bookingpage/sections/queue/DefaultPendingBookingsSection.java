@@ -21,7 +21,7 @@ import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
 import one.modality.booking.frontoffice.bookingpage.components.price.UnifiedPriceDisplay;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
+
 
 import java.util.function.Consumer;
 
@@ -39,7 +39,6 @@ import static one.modality.booking.frontoffice.bookingpage.components.BookingPag
 public class DefaultPendingBookingsSection implements HasPendingBookingsSection {
 
     // === PROPERTIES ===
-    protected final ObjectProperty<BookingFormColorScheme> colorScheme = new SimpleObjectProperty<>(BookingFormColorScheme.DEFAULT);
     protected final SimpleBooleanProperty validProperty = new SimpleBooleanProperty(false);
 
     // === BOOKINGS ===
@@ -72,7 +71,7 @@ public class DefaultPendingBookingsSection implements HasPendingBookingsSection 
     protected void buildUI() {
         container.setAlignment(Pos.TOP_CENTER);
         container.setSpacing(0);
-        container.getStyleClass().add("bookingpage-pending-bookings-section");
+        container.getStyleClass().add(bookingpage_pending_bookings_section);
 
         // Header with checkmark icon
         VBox headerSection = buildHeaderSection();
@@ -518,16 +517,6 @@ public class DefaultPendingBookingsSection implements HasPendingBookingsSection 
     }
 
     // === HasPendingBookingsSection INTERFACE ===
-
-    @Override
-    public ObjectProperty<BookingFormColorScheme> colorSchemeProperty() {
-        return colorScheme;
-    }
-
-    @Override
-    public void setColorScheme(BookingFormColorScheme scheme) {
-        this.colorScheme.set(scheme);
-    }
 
     @Override
     public void addBooking(BookingItem booking) {

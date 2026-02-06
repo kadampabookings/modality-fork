@@ -29,7 +29,7 @@ import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
 import one.modality.booking.frontoffice.bookingpage.components.StyledSectionHeader;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
+import one.modality.base.shared.entities.formatters.EventPriceFormatter;
 import one.modality.ecommerce.policy.service.PolicyAggregate;
 
 import java.util.Comparator;
@@ -71,9 +71,6 @@ import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelecto
  */
 public class DefaultAccommodationSelectionSection implements HasAccommodationSelectionSection {
 
-    // === COLOR SCHEME ===
-    protected final ObjectProperty<BookingFormColorScheme> colorScheme = new SimpleObjectProperty<>(BookingFormColorScheme.DEFAULT);
-
     // === VALIDITY ===
     protected final SimpleBooleanProperty validProperty = new SimpleBooleanProperty(false);
 
@@ -86,10 +83,7 @@ public class DefaultAccommodationSelectionSection implements HasAccommodationSel
     // === OPTIONS LIST ===
     protected final ObservableList<AccommodationOption> accommodationOptions = FXCollections.observableArrayList();
 
-    // === PRICING INFO ===
-    protected int fullEventTeachingPrice = 0;
-    protected int fullEventNights = 0;
-    protected int fullEventMealsPrice = 0;
+    // Pricing is always pre-calculated via WorkingBooking (see AccommodationOption.preCalculatedTotalPrice)
 
     // === UI COMPONENTS ===
     protected final VBox container = new VBox();
@@ -180,7 +174,7 @@ public class DefaultAccommodationSelectionSection implements HasAccommodationSel
     protected void buildUI() {
         container.setAlignment(Pos.TOP_CENTER);
         container.setSpacing(0);
-        container.getStyleClass().add("bookingpage-accommodation-section");
+        container.getStyleClass().add(bookingpage_accommodation_section);
 
         // Attendance type selection (Onsite vs Day Visitor cards)
         attendanceTypeContainer = createAttendanceTypeCards();
@@ -188,12 +182,11 @@ public class DefaultAccommodationSelectionSection implements HasAccommodationSel
 
         // Room options container (only shown when Onsite selected)
         roomOptionsWrapper = new VBox(20);
-        roomOptionsWrapper.getStyleClass().add("bookingpage-room-options-container");
+        roomOptionsWrapper.getStyleClass().add(bookingpage_room_options_container);
         roomOptionsWrapper.setPadding(new Insets(24));
 
-        // Use string literal until I18n keys are regenerated
-        Label selectAccomLabel = new Label("Select Your Accommodation");
-        selectAccomLabel.getStyleClass().addAll("bookingpage-text-lg", "bookingpage-font-semibold");
+        Label selectAccomLabel = I18nControls.newLabel(BookingPageI18nKeys.SelectYourAccommodation);
+        selectAccomLabel.getStyleClass().addAll(bookingpage_text_lg, bookingpage_font_semibold);
 
         optionsContainer = new VBox(12);  // 12px gap between cards per JSX
         optionsContainer.setAlignment(Pos.TOP_CENTER);
@@ -284,25 +277,24 @@ public class DefaultAccommodationSelectionSection implements HasAccommodationSel
         boolean isOnsite = newType == AttendanceType.ONSITE;
         boolean isDayVisitor = newType == AttendanceType.DAY_VISITOR;
 
-        // Get primary color from color scheme
-        String primaryColor = colorScheme.get() != null ? toHexString(colorScheme.get().getPrimary()) : "#4F46E5";
-
         // Update Onsite card
         if (onsiteCard != null) {
             if (isOnsite) {
-                onsiteCard.getStyleClass().add("selected");
+                onsiteCard.getStyleClass().add(selected);
             } else {
-                onsiteCard.getStyleClass().remove("selected");
+                onsiteCard.getStyleClass().remove(selected);
             }
         }
         if (onsiteCheckmark != null) {
             onsiteCheckmark.setVisible(isOnsite);
         }
-        // Update icon circle background directly
+        // Update icon circle background via CSS class toggle
         if (onsiteIconCircle != null) {
-            onsiteIconCircle.setStyle(isOnsite
-                ? "-fx-background-color: " + primaryColor + "; -fx-background-radius: 28;"
-                : "-fx-background-color: #F3F4F6; -fx-background-radius: 28;");
+            if (isOnsite) {
+                onsiteIconCircle.getStyleClass().add(selected);
+            } else {
+                onsiteIconCircle.getStyleClass().remove(selected);
+            }
         }
         // Update icon stroke color directly
         if (onsiteIcon != null) {
@@ -312,19 +304,21 @@ public class DefaultAccommodationSelectionSection implements HasAccommodationSel
         // Update Day Visitor card
         if (dayVisitorCard != null) {
             if (isDayVisitor) {
-                dayVisitorCard.getStyleClass().add("selected");
+                dayVisitorCard.getStyleClass().add(selected);
             } else {
-                dayVisitorCard.getStyleClass().remove("selected");
+                dayVisitorCard.getStyleClass().remove(selected);
             }
         }
         if (dayVisitorCheckmark != null) {
             dayVisitorCheckmark.setVisible(isDayVisitor);
         }
-        // Update icon circle background directly
+        // Update icon circle background via CSS class toggle
         if (dayVisitorIconCircle != null) {
-            dayVisitorIconCircle.setStyle(isDayVisitor
-                ? "-fx-background-color: " + primaryColor + "; -fx-background-radius: 28;"
-                : "-fx-background-color: #F3F4F6; -fx-background-radius: 28;");
+            if (isDayVisitor) {
+                dayVisitorIconCircle.getStyleClass().add(selected);
+            } else {
+                dayVisitorIconCircle.getStyleClass().remove(selected);
+            }
         }
         // Update icon stroke color directly
         if (dayVisitorIcon != null) {
@@ -365,16 +359,16 @@ public class DefaultAccommodationSelectionSection implements HasAccommodationSel
         // Create Onsite card
         onsiteCard = createAttendanceTypeCard(
             AttendanceType.ONSITE,
-            "Stay Onsite",
-            "Full festival experience with on-site accommodation",
+            BookingPageI18nKeys.Onsite,
+            BookingPageI18nKeys.OnsiteDescription,
             true  // isHouse icon
         );
 
         // Create Day Visitor card
         dayVisitorCard = createAttendanceTypeCard(
             AttendanceType.DAY_VISITOR,
-            "Day Visitor",
-            "Attend teachings, arrange your own accommodation",
+            BookingPageI18nKeys.DayVisitor,
+            BookingPageI18nKeys.DayVisitorDescription,
             false  // isSun icon
         );
 
@@ -401,20 +395,20 @@ public class DefaultAccommodationSelectionSection implements HasAccommodationSel
     /**
      * Creates a single attendance type card.
      */
-    protected VBox createAttendanceTypeCard(AttendanceType type, String titleText, String descText, boolean isHouseIcon) {
+    protected VBox createAttendanceTypeCard(AttendanceType type, Object titleI18nKey, Object descI18nKey, boolean isHouseIcon) {
         VBox card = new VBox(12);
         card.setAlignment(Pos.CENTER);
         card.setPadding(new Insets(24));
         card.setMinWidth(200);
         card.setMaxWidth(Double.MAX_VALUE);
-        card.getStyleClass().add("bookingpage-attendance-card");
+        card.getStyleClass().add(bookingpage_attendance_card);
 
-        // Icon circle (56px) - set initial background via inline style
+        // Icon circle (56px) - styled via CSS class
         StackPane iconCircle = new StackPane();
         iconCircle.setPrefSize(56, 56);
         iconCircle.setMinSize(56, 56);
         iconCircle.setMaxSize(56, 56);
-        iconCircle.setStyle("-fx-background-color: #F3F4F6; -fx-background-radius: 28;");
+        iconCircle.getStyleClass().add(bookingpage_attendance_icon_circle);
 
         // Icon SVG - MUST set stroke/fill properties for visibility
         SVGPath icon = new SVGPath();
@@ -444,13 +438,13 @@ public class DefaultAccommodationSelectionSection implements HasAccommodationSel
             dayVisitorIcon = icon;
         }
 
-        // Title (use plain Label with string literal until I18n keys regenerated)
-        Label titleLabel = new Label(titleText);
-        titleLabel.getStyleClass().addAll("bookingpage-text-lg", "bookingpage-font-semibold");
+        // Title
+        Label titleLabel = I18nControls.newLabel(titleI18nKey);
+        titleLabel.getStyleClass().addAll(bookingpage_text_lg, bookingpage_font_semibold);
 
-        // Description (use plain Label with string literal until I18n keys regenerated)
-        Label descLabel = new Label(descText);
-        descLabel.getStyleClass().addAll("bookingpage-text-sm", "bookingpage-text-muted");
+        // Description
+        Label descLabel = I18nControls.newLabel(descI18nKey);
+        descLabel.getStyleClass().addAll(bookingpage_text_sm, bookingpage_text_muted);
         descLabel.setWrapText(true);
         descLabel.setAlignment(Pos.CENTER);
 
@@ -718,7 +712,7 @@ public class DefaultAccommodationSelectionSection implements HasAccommodationSel
         row.getChildren().addAll(totalLabel, totalTextLabel);
 
         // Per night breakdown (if applicable)
-        if (pricePerNight > 0 && fullEventNights > 0) {
+        if (pricePerNight > 0) {
             String perNightText = " " + I18n.getI18nText(BookingPageI18nKeys.PerNightFormat, formatPrice(pricePerNight));
             Label breakdownLabel = new Label(perNightText);
             breakdownLabel.getStyleClass().addAll(bookingpage_text_xs, bookingpage_text_muted);
@@ -972,30 +966,12 @@ public class DefaultAccommodationSelectionSection implements HasAccommodationSel
     }
 
     protected int calculateTotalPrice(AccommodationOption option) {
-        // Use pre-calculated price from WorkingBooking if available
-        if (option.hasPreCalculatedPrice()) {
-            return option.getPreCalculatedTotalPrice();
-        }
-
-        // Fallback to legacy manual calculation
-        int totalPrice;
-        int accommodationPrice = 0;
-
-        // For "Day Visitor" option, no accommodation cost but include meals
-        if (option.isDayVisitor()) {
-            totalPrice = fullEventTeachingPrice + fullEventMealsPrice;
-        } else {
-            // Total = teaching price + meals + (accommodation per night * nights)
-            accommodationPrice = option.getPricePerNight() * fullEventNights;
-            totalPrice = fullEventTeachingPrice + fullEventMealsPrice + accommodationPrice;
-        }
-
-        return totalPrice;
+        // Price is always pre-calculated via WorkingBooking by the form class
+        return option.hasPreCalculatedPrice() ? option.getPreCalculatedTotalPrice() : 0;
     }
 
     protected String formatPrice(int priceInCents) {
-        // TODO: Use proper currency formatting from WorkingBookingProperties
-        return "$" + (priceInCents / 100);
+        return EventPriceFormatter.formatWithCurrency(priceInCents, workingBookingProperties != null ? workingBookingProperties.getEvent() : null);
     }
 
     // ========================================
@@ -1042,34 +1018,6 @@ public class DefaultAccommodationSelectionSection implements HasAccommodationSel
     // ========================================
     // HasAccommodationSelectionSection INTERFACE
     // ========================================
-
-    @Override
-    public ObjectProperty<BookingFormColorScheme> colorSchemeProperty() {
-        return colorScheme;
-    }
-
-    @Override
-    public void setColorScheme(BookingFormColorScheme scheme) {
-        this.colorScheme.set(scheme);
-    }
-
-    @Override
-    public void setFullEventTeachingPrice(int price) {
-        this.fullEventTeachingPrice = price;
-        rebuildOptionCards();
-    }
-
-    @Override
-    public void setFullEventNights(int nights) {
-        this.fullEventNights = nights;
-        rebuildOptionCards();
-    }
-
-    @Override
-    public void setFullEventMealsPrice(int price) {
-        this.fullEventMealsPrice = price;
-        rebuildOptionCards();
-    }
 
     @Override
     public void addAccommodationOption(AccommodationOption option) {
@@ -1135,16 +1083,6 @@ public class DefaultAccommodationSelectionSection implements HasAccommodationSel
     @Override
     public void setAttendanceType(AttendanceType type) {
         attendanceTypeProperty.set(type);
-    }
-
-    /**
-     * Converts a JavaFX Color to a CSS hex string (#RRGGBB).
-     */
-    private String toHexString(Color color) {
-        return String.format("#%02X%02X%02X",
-            (int) (color.getRed() * 255),
-            (int) (color.getGreen() * 255),
-            (int) (color.getBlue() * 255));
     }
 
     @Override

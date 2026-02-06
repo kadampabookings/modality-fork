@@ -15,6 +15,8 @@ import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.BookingFormSection;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
 
+import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelectors.*;
+
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 
@@ -56,7 +58,7 @@ public class AccommodationPageHeaderSection implements BookingFormSection {
 
         // Title: "How would you like to attend?"
         titleLabel = I18nControls.newLabel(BookingPageI18nKeys.HowWouldYouLikeToAttend);
-        titleLabel.getStyleClass().addAll("bookingpage-text-2xl", "bookingpage-font-bold");
+        titleLabel.getStyleClass().addAll(bookingpage_text_2xl, bookingpage_font_bold);
         VBox.setMargin(titleLabel, new Insets(0, 0, 10, 0));
 
         // Subtitle row: "Booking for: [person name]" + optional badge
@@ -64,14 +66,13 @@ public class AccommodationPageHeaderSection implements BookingFormSection {
         subtitleRow.setAlignment(Pos.CENTER);
 
         bookingForLabel = I18nControls.newLabel(BookingPageI18nKeys.BookingFor);
-        bookingForLabel.getStyleClass().addAll("bookingpage-text-md", "bookingpage-text-muted");
+        bookingForLabel.getStyleClass().addAll(bookingpage_text_md, bookingpage_text_muted);
 
         personNameLabel = new Label();
-        personNameLabel.getStyleClass().addAll("bookingpage-text-md", "bookingpage-font-semibold");
+        personNameLabel.getStyleClass().addAll(bookingpage_text_md, bookingpage_font_semibold);
 
-        // Use string literal for Ordained until I18n keys are regenerated
-        ordainedBadge = new Label("Ordained");
-        ordainedBadge.getStyleClass().add("bookingpage-ordained-badge");
+        ordainedBadge = I18nControls.newLabel(BookingPageI18nKeys.Ordained);
+        ordainedBadge.getStyleClass().add(bookingpage_ordained_badge);
         ordainedBadge.setPadding(new Insets(2, 8, 2, 8));
         ordainedBadge.setVisible(false);
         ordainedBadge.setManaged(false);
@@ -81,7 +82,7 @@ public class AccommodationPageHeaderSection implements BookingFormSection {
 
         // Event info line
         eventInfoLabel = new Label();
-        eventInfoLabel.getStyleClass().addAll("bookingpage-text-sm", "bookingpage-text-muted-light");
+        eventInfoLabel.getStyleClass().addAll(bookingpage_text_sm, bookingpage_text_muted_light);
         VBox.setMargin(eventInfoLabel, new Insets(0, 0, 40, 0));
 
         container.getChildren().addAll(titleLabel, subtitleRow, eventInfoLabel);

@@ -63,14 +63,14 @@ public class ButtonNavigation implements BookingFormNavigation {
         hboxContainer.setAlignment(Pos.CENTER_LEFT);
         hboxContainer.setPadding(new Insets(40, 0, 0, 0));
         hboxContainer.setSpacing(16);
-        hboxContainer.getStyleClass().add("buttons");
+        hboxContainer.getStyleClass().add(bookingpage_navigation_buttons);
 
         // Initialize FlowPane for mobile (wrapping behavior)
         flowContainer.setAlignment(Pos.CENTER_LEFT);
         flowContainer.setPadding(new Insets(40, 0, 0, 0));
         flowContainer.setHgap(16);
         flowContainer.setVgap(12);
-        flowContainer.getStyleClass().add("buttons");
+        flowContainer.getStyleClass().add(bookingpage_navigation_buttons);
 
         // Start with desktop layout
         wrapper.getChildren().add(hboxContainer);

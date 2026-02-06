@@ -57,6 +57,7 @@ public interface BookingPageI18nKeys {
     Object AudioRecording = "AudioRecording";
     Object AudioRecordingAttendanceNote = "AudioRecordingAttendanceNote";
     Object AudioRecordingInfoText = "AudioRecordingInfoText";
+    Object AudioRecordingOptions = "AudioRecordingOptions";
     Object AudioRecordingTopMessage = "AudioRecordingTopMessage";
     Object AudioRecordingUnavailable = "AudioRecordingUnavailable";
     Object AutoAllocateProportionally = "AutoAllocateProportionally";
@@ -179,6 +180,7 @@ public interface BookingPageI18nKeys {
     Object DayVisitorDescription = "DayVisitorDescription";
     Object DayVisitorInfo = "DayVisitorInfo";
     Object Days = "Days";
+    Object DaysCount = "DaysCount";
     Object DeclineReason = "DeclineReason";
     Object DepartsAt = "DepartsAt";
     Object Departure = "Departure";
@@ -327,6 +329,7 @@ public interface BookingPageI18nKeys {
     Object NextAttemptIn = "NextAttemptIn";
     Object Night = "Night";
     Object Nights = "Nights";
+    Object NoAccommodation = "NoAccommodation";
     Object NoBookingYet = "NoBookingYet";
     Object NoEarlyArrival = "NoEarlyArrival";
     Object NoLateDeparture = "NoLateDeparture";
@@ -339,6 +342,7 @@ public interface BookingPageI18nKeys {
     Object OnlineRegistration = "OnlineRegistration";
     Object Onsite = "Onsite";
     Object OnsiteDescription = "OnsiteDescription";
+    Object Options = "Options";
     Object Ordained = "Ordained";
     Object Orders = "Orders";
     Object OrdinationCeremony = "OrdinationCeremony";
@@ -419,6 +423,7 @@ public interface BookingPageI18nKeys {
     Object Prerequisite = "Prerequisite";
     Object Prerequisites = "Prerequisites";
     Object PriceBreakdown = "PriceBreakdown";
+    Object PriceIncludes = "PriceIncludes";
     Object PriceIncludesTeachingsAccommodationMeals = "PriceIncludesTeachingsAccommodationMeals";
     Object PricePerNight = "PricePerNight";
     Object PricesReflectRate = "PricesReflectRate";

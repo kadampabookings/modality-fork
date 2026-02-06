@@ -1,8 +1,6 @@
 package one.modality.booking.frontoffice.bookingpage.components;
 
 import dev.webfx.extras.i18n.controls.I18nControls;
-import javafx.beans.property.ObjectProperty;
-import javafx.beans.property.SimpleObjectProperty;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.Label;
@@ -10,7 +8,6 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.SVGPath;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
 
 import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelectors.booking_form_section_header;
 import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelectors.booking_form_section_header_title;
@@ -58,11 +55,19 @@ public class StyledSectionHeader extends HBox {
     private final Label titleLabel;
     private final SVGPath iconPath;
 
-    // Kept for API compatibility - theming is now CSS-based, so this is a no-op
-    private final ObjectProperty<BookingFormColorScheme> colorScheme = new SimpleObjectProperty<>(BookingFormColorScheme.DEFAULT);
-
     public StyledSectionHeader(Object titleI18nKey, String svgIconPath) {
-        // Icon
+        this(I18nControls.newLabel(titleI18nKey), svgIconPath);
+    }
+
+    /**
+     * Alternative constructor without I18n key - uses plain text.
+     */
+    public StyledSectionHeader(String title, String svgIconPath) {
+        this(new Label(title), svgIconPath);
+    }
+
+    private StyledSectionHeader(Label label, String svgIconPath) {
+        // Icon (SVGPath fill/stroke set programmatically - CSS cannot target SVGPath in WebFX/GWT)
         iconPath = new SVGPath();
         iconPath.setContent(svgIconPath);
         iconPath.setStroke(Color.web("#64748b"));
@@ -71,48 +76,13 @@ public class StyledSectionHeader extends HBox {
         iconPath.setScaleX(0.83); // Scale 24px icon to ~20px
         iconPath.setScaleY(0.83);
 
-        // We need to use a StackPane to properly center the SVG
-        StackPane iconWrapper = new StackPane(iconPath);
-        iconWrapper.setMinSize(20, 20);
-        iconWrapper.setMaxSize(20, 20);
-        iconWrapper.setAlignment(Pos.CENTER);
-
-        // Title - use I18nControls.newLabel for proper translation
-        titleLabel = I18nControls.newLabel(titleI18nKey);
-        titleLabel.getStyleClass().add(booking_form_section_header_title);
-
-        // Layout
-        setAlignment(Pos.CENTER_LEFT);
-        setSpacing(10);
-        getChildren().addAll(iconWrapper, titleLabel);
-        getStyleClass().add(booking_form_section_header);
-
-        // Sizing in Java (per project conventions - CSS handles colors only)
-        setPadding(new Insets(14, 18, 14, 16));
-        setMinHeight(48);
-        // Colors and theming are handled purely by CSS classes
-    }
-
-    /**
-     * Alternative constructor without I18n key - uses plain text.
-     */
-    public StyledSectionHeader(String title, String svgIconPath) {
-        // Icon
-        iconPath = new SVGPath();
-        iconPath.setContent(svgIconPath);
-        iconPath.setStroke(Color.web("#64748b"));
-        iconPath.setStrokeWidth(2);
-        iconPath.setFill(Color.TRANSPARENT);
-        iconPath.setScaleX(0.83);
-        iconPath.setScaleY(0.83);
-
         StackPane iconWrapper = new StackPane(iconPath);
         iconWrapper.setMinSize(20, 20);
         iconWrapper.setMaxSize(20, 20);
         iconWrapper.setAlignment(Pos.CENTER);
 
         // Title
-        titleLabel = new Label(title);
+        titleLabel = label;
         titleLabel.getStyleClass().add(booking_form_section_header_title);
 
         // Layout
@@ -124,37 +94,6 @@ public class StyledSectionHeader extends HBox {
         // Sizing in Java (per project conventions - CSS handles colors only)
         setPadding(new Insets(14, 18, 14, 16));
         setMinHeight(48);
-        // Colors and theming are handled purely by CSS classes
-    }
-
-    // === Property accessors ===
-
-    /**
-     * @deprecated Color scheme is now handled via CSS classes on parent container.
-     * Use theme classes like "theme-wisdom-blue" on a parent element instead.
-     * This property is kept for API compatibility but setting it has no effect.
-     */
-    @Deprecated
-    public ObjectProperty<BookingFormColorScheme> colorSchemeProperty() {
-        return colorScheme;
-    }
-
-    /**
-     * @deprecated Color scheme is now handled via CSS classes on parent container.
-     * Use theme classes like "theme-wisdom-blue" on a parent element instead.
-     */
-    @Deprecated
-    public BookingFormColorScheme getColorScheme() {
-        return colorScheme.get();
-    }
-
-    /**
-     * @deprecated Color scheme is now handled via CSS classes on parent container.
-     * Use theme classes like "theme-wisdom-blue" on a parent element instead.
-     */
-    @Deprecated
-    public void setColorScheme(BookingFormColorScheme scheme) {
-        colorScheme.set(scheme);
     }
 
     public void setTitle(String title) {

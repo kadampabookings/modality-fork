@@ -1,9 +1,7 @@
 package one.modality.booking.frontoffice.bookingpage.sections.options;
 
-import javafx.beans.property.ObjectProperty;
 import one.modality.base.shared.entities.BookablePeriod;
 import one.modality.booking.frontoffice.bookingpage.BookingFormSection;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
 
 import java.util.function.Consumer;
 
@@ -38,16 +36,6 @@ public interface HasRateTypeSection extends BookingFormSection {
 
         public String getId() { return id; }
     }
-
-    /**
-     * Returns the color scheme property for theming.
-     */
-    ObjectProperty<BookingFormColorScheme> colorSchemeProperty();
-
-    /**
-     * Sets the color scheme for this section.
-     */
-    void setColorScheme(BookingFormColorScheme scheme);
 
     /**
      * Returns the currently selected rate type.

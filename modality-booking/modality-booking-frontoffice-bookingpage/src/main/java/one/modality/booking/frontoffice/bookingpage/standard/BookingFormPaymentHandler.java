@@ -207,7 +207,6 @@ public class BookingFormPaymentHandler {
     private void handleEmbeddedPaymentFailed(int amount, PaymentFailureReason failureReason) {
         // Create PaymentRefusedSection matching JSX mockup
         PaymentRefusedSection section = new PaymentRefusedSection();
-        section.setColorScheme(callback.getColorScheme());
         section.setAmount(amount);
         section.setFailureReason(failureReason);
         section.setOnRetryPayment(() -> handlePaymentSubmit(lastPaymentAmount, lastPaymentAllocations));
@@ -236,7 +235,6 @@ public class BookingFormPaymentHandler {
     private void handleEmbeddedPaymentCanceled(int amount) {
         // Create PaymentCanceledSection matching JSX mockup
         PaymentCanceledSection section = new PaymentCanceledSection();
-        section.setColorScheme(callback.getColorScheme());
         section.setAmount(amount);
         section.setOnRetryPayment(() -> handlePaymentSubmit(lastPaymentAmount, lastPaymentAllocations));
 

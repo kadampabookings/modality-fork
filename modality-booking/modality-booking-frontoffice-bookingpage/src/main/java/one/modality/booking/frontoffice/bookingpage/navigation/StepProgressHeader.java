@@ -107,7 +107,7 @@ public class StepProgressHeader implements BookingFormHeader {
         bubble.setAlignment(Pos.CENTER);
 
         Label numberLabel = new Label(String.valueOf(stepNumber));
-        numberLabel.getStyleClass().add("step-number");
+        numberLabel.getStyleClass().add(bookingpage_step_number);
         StackPane.setAlignment(numberLabel, Pos.CENTER);
 
         bubble.getChildren().add(numberLabel);

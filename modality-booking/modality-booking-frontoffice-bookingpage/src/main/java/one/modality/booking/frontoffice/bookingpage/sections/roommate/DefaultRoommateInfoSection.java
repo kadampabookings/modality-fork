@@ -20,13 +20,12 @@ import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
 import one.modality.booking.frontoffice.bookingpage.components.StyledSectionHeader;
 import one.modality.booking.frontoffice.bookingpage.standard.BookingSelectionState;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
+
 
 import java.util.ArrayList;
 import java.util.List;
 
-import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelectors.bookingpage_form_label;
-import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelectors.bookingpage_text_input;
+import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelectors.*;
 import static one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys.*;
 
 /**
@@ -57,9 +56,6 @@ public class DefaultRoommateInfoSection implements HasRoommateInfoSection {
 
     // Minimum characters required for roommate name
     private static final int MIN_NAME_LENGTH = 2;
-
-    // === COLOR SCHEME ===
-    protected final ObjectProperty<BookingFormColorScheme> colorScheme = new SimpleObjectProperty<>(BookingFormColorScheme.DEFAULT);
 
     // === VISIBILITY ===
     protected final BooleanProperty visibleProperty = new SimpleBooleanProperty(false);
@@ -108,7 +104,7 @@ public class DefaultRoommateInfoSection implements HasRoommateInfoSection {
     protected void buildUI() {
         container.setAlignment(Pos.TOP_LEFT);
         container.setSpacing(16);
-        container.getStyleClass().add("bookingpage-roommate-section");
+        container.getStyleClass().add(bookingpage_roommate_section);
 
         // Section header with users icon
         sectionHeader = new StyledSectionHeader(RoommateInformation, StyledSectionHeader.ICON_USERS);
@@ -177,7 +173,7 @@ public class DefaultRoommateInfoSection implements HasRoommateInfoSection {
      */
     protected VBox createRoommateField(int roommateNumber, boolean isMandatory, boolean showNumber) {
         VBox fieldContainer = new VBox(6);
-        fieldContainer.getStyleClass().add("bookingpage-form-field");
+        fieldContainer.getStyleClass().add(bookingpage_form_field);
 
         // Create property for this field
         StringProperty nameProperty = new SimpleStringProperty("");
@@ -272,7 +268,7 @@ public class DefaultRoommateInfoSection implements HasRoommateInfoSection {
      */
     protected VBox createShareAccommodationNameField() {
         VBox fieldContainer = new VBox(6);
-        fieldContainer.getStyleClass().add("bookingpage-form-field");
+        fieldContainer.getStyleClass().add(bookingpage_form_field);
 
         // Label with required asterisk - combined label for name and reference
         HBox labelRow = createRequiredFieldLabel(RoommateNameAndReference);
@@ -410,16 +406,6 @@ public class DefaultRoommateInfoSection implements HasRoommateInfoSection {
     // ========================================
     // HasRoommateInfoSection INTERFACE
     // ========================================
-
-    @Override
-    public ObjectProperty<BookingFormColorScheme> colorSchemeProperty() {
-        return colorScheme;
-    }
-
-    @Override
-    public void setColorScheme(BookingFormColorScheme scheme) {
-        this.colorScheme.set(scheme);
-    }
 
     @Override
     public IntegerProperty roomCapacityProperty() {

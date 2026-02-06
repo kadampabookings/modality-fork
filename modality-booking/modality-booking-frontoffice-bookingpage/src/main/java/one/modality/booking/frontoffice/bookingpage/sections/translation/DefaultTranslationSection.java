@@ -17,7 +17,8 @@ import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
 import one.modality.booking.frontoffice.bookingpage.components.StyledSectionHeader;
 import one.modality.booking.frontoffice.bookingpage.standard.BookingSelectionState;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
+
+import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelectors.*;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -53,9 +54,6 @@ public class DefaultTranslationSection implements HasTranslationSection {
     private static final String SelectLanguageOrOption = "SelectLanguageOrOption";
     private static final String TranslationRequiredWarning = "TranslationRequiredWarning";
 
-    // === COLOR SCHEME ===
-    protected final ObjectProperty<BookingFormColorScheme> colorScheme = new SimpleObjectProperty<>(BookingFormColorScheme.DEFAULT);
-
     // === VISIBILITY ===
     protected final BooleanProperty visibleProperty = new SimpleBooleanProperty(true);
 
@@ -86,7 +84,7 @@ public class DefaultTranslationSection implements HasTranslationSection {
     protected void buildUI() {
         container.setAlignment(Pos.TOP_LEFT);
         container.setSpacing(16);
-        container.getStyleClass().add("bookingpage-translation-section");
+        container.getStyleClass().add(bookingpage_translation_section);
 
         // Section header with headphones icon
         sectionHeader = new StyledSectionHeader(TranslationOrHardOfHearing, StyledSectionHeader.ICON_HEADPHONES);
@@ -94,7 +92,7 @@ public class DefaultTranslationSection implements HasTranslationSection {
 
         // Single unified card (will be built when state is bound)
         translationCard = new VBox(0);
-        translationCard.getStyleClass().add("bookingpage-checkbox-card");
+        translationCard.getStyleClass().add(bookingpage_checkbox_card);
 
         container.getChildren().addAll(sectionHeader, translationCard);
     }
@@ -154,7 +152,7 @@ public class DefaultTranslationSection implements HasTranslationSection {
 
         // Label
         Label label = I18nControls.newLabel(INeedTranslationOrHearingAssistance);
-        label.getStyleClass().addAll("bookingpage-text-base", "bookingpage-font-medium", "bookingpage-text-dark");
+        label.getStyleClass().addAll(bookingpage_text_base, bookingpage_font_medium, bookingpage_text_dark);
 
         row.getChildren().addAll(checkbox, label);
 
@@ -169,12 +167,12 @@ public class DefaultTranslationSection implements HasTranslationSection {
      */
     protected VBox createLanguageSubsection() {
         VBox subsection = new VBox(10);
-        subsection.getStyleClass().add("bookingpage-translation-subsection");
+        subsection.getStyleClass().add(bookingpage_translation_subsection);
         subsection.setPadding(new Insets(0, 16, 16, 48));  // 48px left indent under checkbox
 
         // "Select language or option:" label
         Label selectLabel = I18nControls.newLabel(SelectLanguageOrOption);
-        selectLabel.getStyleClass().addAll("bookingpage-text-xs", "bookingpage-font-medium", "bookingpage-text-muted");
+        selectLabel.getStyleClass().addAll(bookingpage_text_xs, bookingpage_font_medium, bookingpage_text_muted);
 
         // FlowPane for pills
         FlowPane pillsContainer = new FlowPane();
@@ -214,13 +212,13 @@ public class DefaultTranslationSection implements HasTranslationSection {
     /**
      * Updates the card's "selected" CSS class based on state.
      */
-    protected void updateCardSelectedClass(boolean selected) {
-        if (selected) {
-            if (!translationCard.getStyleClass().contains("selected")) {
-                translationCard.getStyleClass().add("selected");
+    protected void updateCardSelectedClass(boolean isSelected) {
+        if (isSelected) {
+            if (!translationCard.getStyleClass().contains(selected)) {
+                translationCard.getStyleClass().add(selected);
             }
         } else {
-            translationCard.getStyleClass().remove("selected");
+            translationCard.getStyleClass().remove(selected);
         }
     }
 
@@ -259,11 +257,6 @@ public class DefaultTranslationSection implements HasTranslationSection {
             container.setVisible(newVal);
             container.setManaged(newVal);
             updateValidity();
-        });
-
-        // Rebuild card when color scheme changes
-        colorScheme.addListener((obs, oldVal, newVal) -> {
-            buildUnifiedTranslationCard();
         });
 
         // Initial visibility
@@ -322,16 +315,6 @@ public class DefaultTranslationSection implements HasTranslationSection {
     // ========================================
     // HasTranslationSection INTERFACE
     // ========================================
-
-    @Override
-    public ObjectProperty<BookingFormColorScheme> colorSchemeProperty() {
-        return colorScheme;
-    }
-
-    @Override
-    public void setColorScheme(BookingFormColorScheme scheme) {
-        this.colorScheme.set(scheme);
-    }
 
     @Override
     public BooleanProperty visibleProperty() {

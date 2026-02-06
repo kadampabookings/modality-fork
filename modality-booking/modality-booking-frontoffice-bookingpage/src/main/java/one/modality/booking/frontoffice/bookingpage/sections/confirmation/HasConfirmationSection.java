@@ -1,8 +1,6 @@
 package one.modality.booking.frontoffice.bookingpage.sections.confirmation;
 
-import javafx.beans.property.ObjectProperty;
 import one.modality.booking.frontoffice.bookingpage.BookingFormSection;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
 
 import java.time.LocalDate;
 
@@ -34,16 +32,6 @@ public interface HasConfirmationSection extends BookingFormSection {
         public String getEmail() { return email; }
         public String getReference() { return reference; }
     }
-
-    /**
-     * Returns the color scheme property for theming.
-     */
-    ObjectProperty<BookingFormColorScheme> colorSchemeProperty();
-
-    /**
-     * Sets the color scheme for this section.
-     */
-    void setColorScheme(BookingFormColorScheme scheme);
 
     /**
      * Sets the event name to display.

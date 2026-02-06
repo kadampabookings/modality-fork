@@ -363,7 +363,7 @@ public class RegistrationCountdownPage implements BookingFormPage {
         infoBox.setAlignment(Pos.TOP_LEFT);
         infoBox.setPadding(new Insets(28));
         infoBox.setMaxWidth(600);
-        infoBox.getStyleClass().addAll("bookingpage-info-card", registration_countdown_info_card);
+        infoBox.getStyleClass().addAll(bookingpage_info_card, registration_countdown_info_card);
 
         // Header with info icon
         HBox header = new HBox(12);

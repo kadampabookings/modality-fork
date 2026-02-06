@@ -1,8 +1,6 @@
 package one.modality.booking.frontoffice.bookingpage.sections.summary;
 
-import javafx.beans.property.ObjectProperty;
 import one.modality.booking.frontoffice.bookingpage.BookingFormSection;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
 
 import java.time.LocalDate;
 
@@ -41,35 +39,10 @@ public interface HasSummarySection extends BookingFormSection {
             this.amount = amount;
         }
 
-        /**
-         * Creates a price line with a combined name (backward compatibility).
-         *
-         * @param name combined display name (treated as itemName, familyName is null)
-         * @param description date range or description
-         * @param amount price in cents
-         * @deprecated Use {@link #PriceLine(String, String, String, int)} with separate family/item names
-         */
-        @Deprecated
-        public PriceLine(String name, String description, int amount) {
-            this(null, name, description, amount);
-        }
-
         public String getFamilyName() { return familyName; }
         public String getItemName() { return itemName; }
         public String getDates() { return dates; }
         public int getAmount() { return amount; }
-
-        /**
-         * @deprecated Use {@link #getItemName()} instead
-         */
-        @Deprecated
-        public String getName() { return itemName; }
-
-        /**
-         * @deprecated Use {@link #getDates()} instead
-         */
-        @Deprecated
-        public String getDescription() { return dates; }
     }
 
     /**
@@ -100,16 +73,6 @@ public interface HasSummarySection extends BookingFormSection {
         public String getName() { return name; }
         public String getDescription() { return description; }
     }
-
-    /**
-     * Returns the color scheme property for theming.
-     */
-    ObjectProperty<BookingFormColorScheme> colorSchemeProperty();
-
-    /**
-     * Sets the color scheme for this section.
-     */
-    void setColorScheme(BookingFormColorScheme scheme);
 
     /**
      * Sets the attendee name to display.
@@ -144,23 +107,7 @@ public interface HasSummarySection extends BookingFormSection {
      * @param dates date range string (can be null)
      * @param amount price in cents
      */
-    default void addPriceLine(String familyName, String itemName, String dates, int amount) {
-        // Default implementation falls back to the simple method for backward compatibility
-        // Implementations should override this to support family/item separation
-        String displayName = familyName != null ? familyName + " - " + itemName : itemName;
-        addPriceLine(displayName, dates, amount);
-    }
-
-    /**
-     * Adds a price line item to the breakdown.
-     *
-     * @param name combined display name
-     * @param description date range or description
-     * @param amount price in cents
-     * @deprecated Use {@link #addPriceLine(String, String, String, int)} with separate family/item names
-     */
-    @Deprecated
-    void addPriceLine(String name, String description, int amount);
+    void addPriceLine(String familyName, String itemName, String dates, int amount);
 
     /**
      * Clears all price lines.

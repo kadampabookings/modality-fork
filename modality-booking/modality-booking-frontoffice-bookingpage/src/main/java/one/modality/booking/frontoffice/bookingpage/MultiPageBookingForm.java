@@ -186,29 +186,11 @@ public abstract class MultiPageBookingForm extends BookingFormBase {
             borderPane.setTop(header.getView());
         }
         if (navigation != null) {
-            if (header != null) {
-                // If header is present, navigation might be at the bottom or handled
-                // differently.
-                // For now, let's put it at the bottom if it's not null.
-                // But wait, StandardBookingFormNavigation was at the top.
-                // If we have a header (StepProgress), we probably want navigation at the
-                // bottom?
-                // The HTML mockup shows navigation buttons at the bottom.
-                // The existing code put navigationBar at the top.
-                // Let's assume if header is set, we put header at top.
-                // Where to put navigation?
-                // If navigation is StandardBookingFormNavigation (which looks like a header),
-                // it might conflict.
-                // Let's put navigation at the bottom if header is present, or check types?
-                // Actually, the mockup shows "Continue" button at the bottom.
-                // The StandardBookingFormNavigation has Back/Next buttons.
-                // Let's put navigation at the bottom of the center pane or below it.
-                // Let's try putting it at the bottom of the BorderPane.
-                // But PriceBar is also at the bottom.
-                // We can use a VBox for the bottom.
-            } else {
+            if (header == null) {
+                // Without a header, navigation goes at the top (legacy layout)
                 borderPane.setTop(navigation.getView());
             }
+            // With a header, navigation is placed at the bottom (see bottomBox below)
         }
 
         VBox bottomBox = new VBox();
@@ -288,49 +270,18 @@ public abstract class MultiPageBookingForm extends BookingFormBase {
     }
 
     public void navigateToPage(int index) {
-        // Not during transitions because 1) Transition is buggy in this case 2) this
-        // prevents accidental multiple clicks
         if (transitionPane.isTransiting())
             return;
         boolean isForward = index > displayedPageIndex;
         if (isForward && isPageBusy())
             return;
-        BookingFormPage[] pages = getPages();
-        displayedPage = pages[index];
+        displayedPage = getPages()[index];
         displayedPageIndex = index;
-        pageShowingOwnSubmitButtonProperty.set(displayedPage.isShowingOwnSubmitButton());
-        pageIsPriceBarRelevantToShowProperty.set(displayedPage.isPriceBarRelevantToShow());
-        displayedPage.setWorkingBookingProperties(workingBookingProperties);
-        pageValidProperty.bind(displayedPage.validProperty());
-        pageBusyFutureProperty.bind(displayedPage.busyFutureProperty());
-        pageCanGoBackProperty.bind(displayedPage.canGoBackProperty());
-        pageCanGoForwardProperty.bind(displayedPage.canGoForwardProperty());
-        pageEndReachedProperty.bind(displayedPage.endReachedProperty());
-        if (bookingFormPageValidListener != null)
-            bookingFormPageValidListener.unregister();
-        // Only register callback listener if activityCallback is available (may be null in resume payment flow)
-        if (activityCallback != null) {
-            bookingFormPageValidListener = FXProperties.runNowAndOnPropertyChange(valid -> getActivityCallback().disableSubmitButton(!valid), displayedPage.validProperty());
-        }
-        MonoPane embeddedLoginContainer = displayedPage.getEmbeddedLoginContainer();
-        if (embeddedLoginContainer != null && embeddedLoginContainer != LAST_PAGE_EMBEDDED_LOGIN_CONTAINER && activityCallback != null) {
-            if (LAST_PAGE_EMBEDDED_LOGIN_CONTAINER != null)
-                LAST_PAGE_EMBEDDED_LOGIN_CONTAINER.setContent(null);
-            Region embeddedLoginNode = activityCallback.getEmbeddedLoginNode();
-            embeddedLoginContainer.setContent(embeddedLoginNode);
-            embeddedLoginContainer.visibleProperty().bind(embeddedLoginNode.visibleProperty());
-            embeddedLoginContainer.managedProperty().bind(embeddedLoginNode.managedProperty());
-            LAST_PAGE_EMBEDDED_LOGIN_CONTAINER = embeddedLoginContainer;
-        }
 
-        // Update Header Visibility
-        if (header != null) {
-            Layouts.setManagedAndVisibleProperties(header.getView(), displayedPage.isHeaderVisible());
-        }
+        bindPageProperties(displayedPage);
+        setupEmbeddedLogin(displayedPage);
 
-        // Update Navigation Buttons
         updateNavigationButtons();
-
         updateNavigationBar();
         updatePersonToBookRequired();
         updateShowDefaultSubmitButton();
@@ -341,21 +292,8 @@ public abstract class MultiPageBookingForm extends BookingFormBase {
     private void updateNavigationButtons() {
         if (navigation == null)
             return;
-
-        BookingFormButton[] buttons = displayedPage.getButtons();
-        if (buttons != null) {
-            navigation.setButtons(buttons);
-        } else {
-            // Fallback to default behavior if no custom buttons defined
-            // We might need to reset the navigation to default state if it was changed
-            // But StandardBookingFormNavigation doesn't support "resetting" easily if we
-            // overwrite it.
-            // For now, we assume if getButtons() returns null, the navigation component
-            // handles its default state
-            // or we need to explicitly tell it to use defaults.
-            // Let's pass null to setButtons to indicate "use defaults"
-            navigation.setButtons((BookingFormButton[]) null);
-        }
+        // Pass page's custom buttons, or null to reset to defaults
+        navigation.setButtons(displayedPage.getButtons());
     }
 
     private boolean isLastPage() {
@@ -396,27 +334,32 @@ public abstract class MultiPageBookingForm extends BookingFormBase {
 
     /**
      * Navigates to a special page that is NOT part of the standard pages array.
-     * This is used for dynamic pages like sold-out recovery that are created on-demand
-     * and don't belong in the static page flow.
-     *
-     * <p>The page is displayed with its own navigation buttons (via getButtons())
-     * and all standard page bindings are established.</p>
+     * Used for dynamic pages like sold-out recovery that are created on-demand.
      *
      * @param page The special page to navigate to
      */
     protected void navigateToSpecialPage(BookingFormPage page) {
-        // Not during transitions
         if (transitionPane.isTransiting())
             return;
 
-        // Mark as special page (not in pages array)
         displayedPage = page;
-        displayedPageIndex = -1;
+        displayedPageIndex = -1; // Not in pages array
 
-        // Setup the page
+        bindPageProperties(page);
+
+        updateNavigationButtons();
+        previousPageApplicableProperty.set(false); // No back navigation from special pages
+        updateShowDefaultSubmitButton();
+        transitionPane.setReverse(false);
+        transitionPane.transitToContent(page.getView(), page::onTransitionFinished);
+    }
+
+    /**
+     * Binds all page-level properties and listeners to the given page.
+     * Shared by both standard and special page navigation.
+     */
+    private void bindPageProperties(BookingFormPage page) {
         page.setWorkingBookingProperties(workingBookingProperties);
-
-        // Bind page properties
         pageShowingOwnSubmitButtonProperty.set(page.isShowingOwnSubmitButton());
         pageIsPriceBarRelevantToShowProperty.set(page.isPriceBarRelevantToShow());
         pageValidProperty.bind(page.validProperty());
@@ -424,33 +367,32 @@ public abstract class MultiPageBookingForm extends BookingFormBase {
         pageCanGoBackProperty.bind(page.canGoBackProperty());
         pageCanGoForwardProperty.bind(page.canGoForwardProperty());
         pageEndReachedProperty.bind(page.endReachedProperty());
-
-        // Unregister previous listener
         if (bookingFormPageValidListener != null)
             bookingFormPageValidListener.unregister();
-
-        // Register new callback listener if available
         if (activityCallback != null) {
             bookingFormPageValidListener = FXProperties.runNowAndOnPropertyChange(
                 valid -> getActivityCallback().disableSubmitButton(!valid),
                 page.validProperty());
         }
-
-        // Update Header Visibility
         if (header != null) {
             Layouts.setManagedAndVisibleProperties(header.getView(), page.isHeaderVisible());
         }
+    }
 
-        // Update Navigation Buttons (use page's custom buttons)
-        updateNavigationButtons();
-
-        // Update navigation bar and don't allow back navigation from special pages
-        previousPageApplicableProperty.set(false);
-        updateShowDefaultSubmitButton();
-
-        // Transition to the page
-        transitionPane.setReverse(false);
-        transitionPane.transitToContent(page.getView(), page::onTransitionFinished);
+    /**
+     * Sets up embedded login container for pages that require authentication.
+     */
+    private void setupEmbeddedLogin(BookingFormPage page) {
+        MonoPane embeddedLoginContainer = page.getEmbeddedLoginContainer();
+        if (embeddedLoginContainer != null && embeddedLoginContainer != LAST_PAGE_EMBEDDED_LOGIN_CONTAINER && activityCallback != null) {
+            if (LAST_PAGE_EMBEDDED_LOGIN_CONTAINER != null)
+                LAST_PAGE_EMBEDDED_LOGIN_CONTAINER.setContent(null);
+            Region embeddedLoginNode = activityCallback.getEmbeddedLoginNode();
+            embeddedLoginContainer.setContent(embeddedLoginNode);
+            embeddedLoginContainer.visibleProperty().bind(embeddedLoginNode.visibleProperty());
+            embeddedLoginContainer.managedProperty().bind(embeddedLoginNode.managedProperty());
+            LAST_PAGE_EMBEDDED_LOGIN_CONTAINER = embeddedLoginContainer;
+        }
     }
 
 }

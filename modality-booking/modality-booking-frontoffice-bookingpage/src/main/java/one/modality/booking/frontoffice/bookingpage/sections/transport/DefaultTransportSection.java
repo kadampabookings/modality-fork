@@ -27,7 +27,8 @@ import one.modality.booking.frontoffice.bookingpage.BookingPageCssSelectors;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
 import one.modality.booking.frontoffice.bookingpage.components.StyledSectionHeader;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
+
+import one.modality.base.shared.entities.formatters.EventPriceFormatter;
 import one.modality.ecommerce.policy.service.PolicyAggregate;
 
 import java.time.LocalDate;
@@ -65,9 +66,6 @@ import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelecto
  * @see HasTransportSection
  */
 public class DefaultTransportSection implements HasTransportSection {
-
-    // === COLOR SCHEME ===
-    protected final ObjectProperty<BookingFormColorScheme> colorScheme = new SimpleObjectProperty<>(BookingFormColorScheme.DEFAULT);
 
     // === DATE PROPERTIES (for shuttle availability) ===
     protected final ObjectProperty<LocalDate> arrivalDateProperty = new SimpleObjectProperty<>();
@@ -153,7 +151,7 @@ public class DefaultTransportSection implements HasTransportSection {
     protected void buildUI() {
         container.setAlignment(Pos.TOP_LEFT);
         container.setSpacing(16);
-        container.getStyleClass().add("bookingpage-transport-section");
+        container.getStyleClass().add(bookingpage_transport_section);
 
         // Section header
         HBox sectionHeader = new StyledSectionHeader(BookingPageI18nKeys.Transport, StyledSectionHeader.ICON_CAR);
@@ -270,7 +268,7 @@ public class DefaultTransportSection implements HasTransportSection {
         }
 
         // Checkbox indicator - bound to parkingEnabled
-        StackPane checkbox = BookingPageUIBuilder.createCheckboxIndicator(parkingEnabledProperty, colorScheme);
+        StackPane checkbox = BookingPageUIBuilder.createCheckboxIndicator(parkingEnabledProperty);
         if (allSoldOut) {
             checkbox.getStyleClass().add(disabled);
             checkbox.setOpacity(0.5);
@@ -490,7 +488,7 @@ public class DefaultTransportSection implements HasTransportSection {
         if (option.getPrice() == 0) {
             return "Free";
         }
-        String priceStr = "$" + (option.getPrice() / 100);
+        String priceStr = EventPriceFormatter.formatWithCurrency(option.getPrice(), workingBookingProperties != null ? workingBookingProperties.getEvent() : null);
         if (option.isPerDay()) {
             priceStr += "/day";
         }
@@ -629,7 +627,7 @@ public class DefaultTransportSection implements HasTransportSection {
         card.getStyleClass().add(bookingpage_shuttle_trip);
 
         // Checkbox indicator
-        StackPane checkbox = BookingPageUIBuilder.createCheckboxIndicator(option.selectedProperty(), colorScheme);
+        StackPane checkbox = BookingPageUIBuilder.createCheckboxIndicator(option.selectedProperty());
 
         // Text content (trip name + date/time)
         VBox textContent = new VBox(2);
@@ -793,7 +791,7 @@ public class DefaultTransportSection implements HasTransportSection {
         if (priceInCents == 0) {
             return "Free";
         }
-        return "$" + (priceInCents / 100);
+        return EventPriceFormatter.formatWithCurrency(priceInCents, workingBookingProperties != null ? workingBookingProperties.getEvent() : null);
     }
 
     /**
@@ -801,7 +799,7 @@ public class DefaultTransportSection implements HasTransportSection {
      */
     protected String getFormattedSingleTripPrice() {
         if (shuttleOptions.isEmpty()) {
-            return "$0";
+            return formatShuttlePrice(0);
         }
         int price = shuttleOptions.stream()
             .mapToInt(ShuttleOption::getPrice)
@@ -857,16 +855,6 @@ public class DefaultTransportSection implements HasTransportSection {
     // ========================================
     // HasTransportSection INTERFACE
     // ========================================
-
-    @Override
-    public ObjectProperty<BookingFormColorScheme> colorSchemeProperty() {
-        return colorScheme;
-    }
-
-    @Override
-    public void setColorScheme(BookingFormColorScheme scheme) {
-        this.colorScheme.set(scheme);
-    }
 
     @Override
     public ObjectProperty<LocalDate> arrivalDateProperty() {

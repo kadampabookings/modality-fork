@@ -7,7 +7,6 @@ import javafx.collections.ObservableList;
 import one.modality.booking.frontoffice.bookingpage.BookingFormSection;
 import one.modality.booking.frontoffice.bookingpage.ResettableSection;
 import one.modality.booking.frontoffice.bookingpage.standard.BookingSelectionState;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
 
 /**
  * Interface for the "Child Carer Selection" section of a booking form.
@@ -80,18 +79,6 @@ public interface HasChildCarerSection extends BookingFormSection, ResettableSect
             return name + (isSelf ? " (You)" : "");
         }
     }
-
-    // === Configuration ===
-
-    /**
-     * Returns the color scheme property for theming.
-     */
-    ObjectProperty<BookingFormColorScheme> colorSchemeProperty();
-
-    /**
-     * Sets the color scheme for this section.
-     */
-    void setColorScheme(BookingFormColorScheme scheme);
 
     // === Visibility ===
 

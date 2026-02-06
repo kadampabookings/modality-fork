@@ -5,7 +5,6 @@ import javafx.beans.value.ObservableBooleanValue;
 import one.modality.base.shared.entities.Item;
 import one.modality.booking.frontoffice.bookingpage.BookingFormSection;
 import one.modality.booking.frontoffice.bookingpage.ResettableSection;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
 import one.modality.ecommerce.policy.service.PolicyAggregate;
 
 import one.modality.booking.frontoffice.bookingpage.standard.BookingSelectionState;
@@ -170,36 +169,6 @@ public interface HasAccommodationSelectionSection extends BookingFormSection, Re
             return !earlyArrivalAllowed || !lateDepartureAllowed;
         }
     }
-
-    // === Configuration ===
-
-    /**
-     * Returns the color scheme property for theming.
-     */
-    ObjectProperty<BookingFormColorScheme> colorSchemeProperty();
-
-    /**
-     * Sets the color scheme for this section.
-     */
-    void setColorScheme(BookingFormColorScheme scheme);
-
-    /**
-     * Sets the total teaching price for the full event.
-     * Used to display total cost (teaching + accommodation) on each option.
-     */
-    void setFullEventTeachingPrice(int price);
-
-    /**
-     * Sets the number of nights for the full event.
-     * Used to calculate total accommodation cost.
-     */
-    void setFullEventNights(int nights);
-
-    /**
-     * Sets the total meals price for the full event.
-     * Used to display total cost (teaching + accommodation + meals) on each option.
-     */
-    void setFullEventMealsPrice(int price);
 
     // === Data Management ===
 

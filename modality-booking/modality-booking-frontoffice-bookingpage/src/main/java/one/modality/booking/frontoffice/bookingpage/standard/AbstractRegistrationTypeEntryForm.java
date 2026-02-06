@@ -126,7 +126,6 @@ public abstract class AbstractRegistrationTypeEntryForm extends AbstractEntryFor
     protected final void initializeContent() {
         // Create the registration type section
         registrationTypeSection = new DefaultRegistrationTypeSection();
-        registrationTypeSection.setColorScheme(getColorScheme());
         registrationTypeSection.setOnlineEnabled(isOnlineEnabled());
 
         // Allow subclass customization

@@ -27,7 +27,7 @@ import one.modality.booking.frontoffice.bookingpage.BookingFormSection;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
 import one.modality.booking.frontoffice.bookingpage.components.StyledSectionHeader;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
+
 import one.modality.ecommerce.policy.service.PolicyAggregate;
 
 import java.util.List;
@@ -54,8 +54,6 @@ public class GPClassRateTypeSection implements BookingFormSection, HasRateTypeSe
     // State
     private final ObjectProperty<RateType> selectedRateType = new SimpleObjectProperty<>(RateType.STANDARD);
     private final SimpleBooleanProperty validProperty = new SimpleBooleanProperty(true);
-    private final ObjectProperty<BookingFormColorScheme> colorSchemeProperty = new SimpleObjectProperty<>(BookingFormColorScheme.DEFAULT);
-
     // Working booking reference
     private WorkingBookingProperties workingBookingProperties;
 
@@ -98,7 +96,7 @@ public class GPClassRateTypeSection implements BookingFormSection, HasRateTypeSe
         cardsContainer.getChildren().addAll(standardRateCard, memberRateCard);
 
         container.getChildren().addAll(header, cardsContainer);
-        container.getStyleClass().add("default-rate-section");
+        container.getStyleClass().add(bookingpage_default_rate_section);
         container.setMinWidth(0);
     }
 
@@ -108,7 +106,7 @@ public class GPClassRateTypeSection implements BookingFormSection, HasRateTypeSe
         card.setMinWidth(160);
         card.setPrefWidth(180);
         card.setMaxWidth(220);
-        card.getStyleClass().addAll(bookingpage_card, "default-rate-card");
+        card.getStyleClass().addAll(bookingpage_card, default_rate_card);
         card.setCursor(Cursor.HAND);
 
         // Track selection state for this card
@@ -271,16 +269,6 @@ public class GPClassRateTypeSection implements BookingFormSection, HasRateTypeSe
     }
 
     // === HasRateTypeSection Implementation ===
-
-    @Override
-    public ObjectProperty<BookingFormColorScheme> colorSchemeProperty() {
-        return colorSchemeProperty;
-    }
-
-    @Override
-    public void setColorScheme(BookingFormColorScheme scheme) {
-        colorSchemeProperty.set(scheme);
-    }
 
     @Override
     public RateType getSelectedRateType() {

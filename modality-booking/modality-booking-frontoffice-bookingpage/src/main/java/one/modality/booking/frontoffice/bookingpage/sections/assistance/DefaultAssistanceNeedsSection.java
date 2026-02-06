@@ -13,7 +13,8 @@ import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
 import one.modality.booking.frontoffice.bookingpage.components.StyledSectionHeader;
 import one.modality.booking.frontoffice.bookingpage.standard.BookingSelectionState;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
+
+import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelectors.*;
 
 /**
  * Default implementation of the "Assistance Needs" section.
@@ -48,9 +49,6 @@ public class DefaultAssistanceNeedsSection implements HasAssistanceNeedsSection 
     private static final String VisualAssistance = "VisualAssistance";
     private static final String VisualAssistanceDesc = "VisualAssistanceDesc";
 
-    // === COLOR SCHEME ===
-    protected final ObjectProperty<BookingFormColorScheme> colorScheme = new SimpleObjectProperty<>(BookingFormColorScheme.DEFAULT);
-
     // === VISIBILITY ===
     protected final BooleanProperty visibleProperty = new SimpleBooleanProperty(true);
 
@@ -78,7 +76,7 @@ public class DefaultAssistanceNeedsSection implements HasAssistanceNeedsSection 
     protected void buildUI() {
         container.setAlignment(Pos.TOP_LEFT);
         container.setSpacing(16);
-        container.getStyleClass().add("bookingpage-assistance-section");
+        container.getStyleClass().add(bookingpage_assistance_section);
 
         // Section header with accessibility icon
         sectionHeader = new StyledSectionHeader(AssistanceNeeds, StyledSectionHeader.ICON_USERS);
@@ -109,7 +107,6 @@ public class DefaultAssistanceNeedsSection implements HasAssistanceNeedsSection 
         this.selectionState = state;
         buildCheckboxCards();
         setupStateBindings();
-        rebuildColorSchemeBindings();
     }
 
     /**
@@ -124,24 +121,21 @@ public class DefaultAssistanceNeedsSection implements HasAssistanceNeedsSection 
         VBox mobilityContent = createCheckboxContent(MobilityAssistance, MobilityAssistanceDesc);
         HBox mobilityCard = BookingPageUIBuilder.createCheckboxCard(
             mobilityContent,
-            selectionState.assistanceMobilityProperty(),
-            colorScheme
+            selectionState.assistanceMobilityProperty()
         );
 
         // Hearing Assistance checkbox card
         VBox hearingContent = createCheckboxContent(HearingAssistance, HearingAssistanceDesc);
         HBox hearingCard = BookingPageUIBuilder.createCheckboxCard(
             hearingContent,
-            selectionState.assistanceHearingProperty(),
-            colorScheme
+            selectionState.assistanceHearingProperty()
         );
 
         // Visual Assistance checkbox card
         VBox visualContent = createCheckboxContent(VisualAssistance, VisualAssistanceDesc);
         HBox visualCard = BookingPageUIBuilder.createCheckboxCard(
             visualContent,
-            selectionState.assistanceVisualProperty(),
-            colorScheme
+            selectionState.assistanceVisualProperty()
         );
 
         checkboxContainer.getChildren().addAll(mobilityCard, hearingCard, visualCard);
@@ -154,10 +148,10 @@ public class DefaultAssistanceNeedsSection implements HasAssistanceNeedsSection 
         VBox content = new VBox(4);
 
         Label titleLabel = I18nControls.newLabel(titleKey);
-        titleLabel.getStyleClass().addAll("bookingpage-text-base", "bookingpage-font-medium", "bookingpage-text-dark");
+        titleLabel.getStyleClass().addAll(bookingpage_text_base, bookingpage_font_medium, bookingpage_text_dark);
 
         Label descLabel = I18nControls.newLabel(descriptionKey);
-        descLabel.getStyleClass().addAll("bookingpage-text-sm", "bookingpage-text-muted");
+        descLabel.getStyleClass().addAll(bookingpage_text_sm, bookingpage_text_muted);
         descLabel.setWrapText(true);
 
         content.getChildren().addAll(titleLabel, descLabel);
@@ -188,13 +182,6 @@ public class DefaultAssistanceNeedsSection implements HasAssistanceNeedsSection 
         // Initial visibility
         container.setVisible(visibleProperty.get());
         container.setManaged(visibleProperty.get());
-    }
-
-    /**
-     * Sets up color scheme change listener to rebuild cards.
-     */
-    protected void rebuildColorSchemeBindings() {
-        colorScheme.addListener((obs, old, newVal) -> buildCheckboxCards());
     }
 
     protected void notifySelectionChanged() {
@@ -230,16 +217,6 @@ public class DefaultAssistanceNeedsSection implements HasAssistanceNeedsSection 
     // ========================================
     // HasAssistanceNeedsSection INTERFACE
     // ========================================
-
-    @Override
-    public ObjectProperty<BookingFormColorScheme> colorSchemeProperty() {
-        return colorScheme;
-    }
-
-    @Override
-    public void setColorScheme(BookingFormColorScheme scheme) {
-        this.colorScheme.set(scheme);
-    }
 
     @Override
     public BooleanProperty visibleProperty() {

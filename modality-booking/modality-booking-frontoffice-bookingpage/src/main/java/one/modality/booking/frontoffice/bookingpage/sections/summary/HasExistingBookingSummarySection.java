@@ -1,8 +1,6 @@
 package one.modality.booking.frontoffice.bookingpage.sections.summary;
 
-import javafx.beans.property.ObjectProperty;
 import one.modality.booking.frontoffice.bookingpage.BookingFormSection;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
 
 import java.time.LocalDate;
 
@@ -35,20 +33,6 @@ public interface HasExistingBookingSummarySection extends BookingFormSection {
         /** Event has ended */
         COMPLETED
     }
-
-    /**
-     * Returns the color scheme property for theming.
-     * @deprecated Color scheme is now handled via CSS classes on parent container.
-     */
-    @Deprecated
-    ObjectProperty<BookingFormColorScheme> colorSchemeProperty();
-
-    /**
-     * Sets the color scheme for this section.
-     * @deprecated Use CSS theme classes instead.
-     */
-    @Deprecated
-    void setColorScheme(BookingFormColorScheme scheme);
 
     /**
      * Sets the event name to display.

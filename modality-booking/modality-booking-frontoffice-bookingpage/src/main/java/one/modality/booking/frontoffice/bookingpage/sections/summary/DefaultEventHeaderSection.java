@@ -19,7 +19,7 @@ import one.modality.base.shared.entities.Event;
 import one.modality.base.shared.entities.Site;
 import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
+
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -61,8 +61,6 @@ public class DefaultEventHeaderSection implements HasEventHeaderSection {
     private static final double IMAGE_REQUEST_HEIGHT = 300;
 
     // === Properties ===
-    // Kept for API compatibility - theming is now CSS-based
-    protected final ObjectProperty<BookingFormColorScheme> colorScheme = new SimpleObjectProperty<>(BookingFormColorScheme.DEFAULT);
     protected final SimpleBooleanProperty validProperty = new SimpleBooleanProperty(true);
     protected boolean imageSuccessfullyLoaded;
 
@@ -331,31 +329,4 @@ public class DefaultEventHeaderSection implements HasEventHeaderSection {
 
     // === HasEventHeaderSection interface ===
 
-    /**
-     * @deprecated Color scheme is now handled via CSS classes on parent container.
-     * Use theme classes like "theme-wisdom-blue" on a parent element instead.
-     */
-    @Deprecated
-    @Override
-    public ObjectProperty<BookingFormColorScheme> colorSchemeProperty() {
-        return colorScheme;
-    }
-
-    /**
-     * @deprecated Use CSS theme classes instead.
-     */
-    @Deprecated
-    @Override
-    public BookingFormColorScheme getColorScheme() {
-        return colorScheme.get();
-    }
-
-    /**
-     * @deprecated Use CSS theme classes instead.
-     */
-    @Deprecated
-    @Override
-    public void setColorScheme(BookingFormColorScheme scheme) {
-        this.colorScheme.set(scheme);
-    }
 }

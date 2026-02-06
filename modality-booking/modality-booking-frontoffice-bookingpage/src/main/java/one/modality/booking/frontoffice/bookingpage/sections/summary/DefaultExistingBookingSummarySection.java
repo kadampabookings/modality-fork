@@ -1,6 +1,5 @@
 package one.modality.booking.frontoffice.bookingpage.sections.summary;
 
-import dev.webfx.extras.i18n.I18n;
 import dev.webfx.extras.i18n.controls.I18nControls;
 import javafx.beans.property.*;
 import javafx.beans.value.ObservableBooleanValue;
@@ -55,7 +54,7 @@ import static one.modality.booking.frontoffice.bookingpage.components.StyledSect
 public class DefaultExistingBookingSummarySection implements HasExistingBookingSummarySection {
 
     // === PROPERTIES ===
-    protected final ObjectProperty<BookingFormColorScheme> colorScheme = new SimpleObjectProperty<>(BookingFormColorScheme.DEFAULT);
+
     protected final SimpleBooleanProperty validProperty = new SimpleBooleanProperty(true);
     protected final StringProperty bookingReferenceProperty = new SimpleStringProperty("");
 
@@ -93,8 +92,6 @@ public class DefaultExistingBookingSummarySection implements HasExistingBookingS
                 BookingPageI18nKeys.ExistingBooking,
                 StyledSectionHeader.ICON_CLIPBOARD
         );
-        header.colorSchemeProperty().bind(colorScheme);
-
         // Page title and subtitle
         Label title = createPageTitle();
         Label subtitle = createPageSubtitle();
@@ -103,7 +100,7 @@ public class DefaultExistingBookingSummarySection implements HasExistingBookingS
         VBox bookingCard = createBookingCard();
 
         container.getChildren().addAll(header, title, subtitle, bookingCard);
-        container.getStyleClass().add("booking-form-existing-summary");
+        container.getStyleClass().add(booking_form_existing_summary);
         VBox.setMargin(title, new Insets(16, 0, 4, 0));
         VBox.setMargin(subtitle, new Insets(0, 0, 20, 0));
     }
@@ -144,8 +141,6 @@ public class DefaultExistingBookingSummarySection implements HasExistingBookingS
             }
         });
 
-        // Update styles when color scheme changes
-        colorScheme.addListener((obs, old, newScheme) -> updateIconColors());
     }
 
     protected Label createPageTitle() {
@@ -207,7 +202,7 @@ public class DefaultExistingBookingSummarySection implements HasExistingBookingS
         row.setAlignment(Pos.CENTER_LEFT);
 
         // Calendar icon
-        SVGPath icon = createIcon(ICON_CALENDAR, colorScheme.get().getPrimary());
+        SVGPath icon = createIcon(ICON_CALENDAR, BookingFormColorScheme.DEFAULT.getPrimary());
 
         // Dates label
         datesLabel = new Label(formatDates());
@@ -283,22 +278,22 @@ public class DefaultExistingBookingSummarySection implements HasExistingBookingS
 
         // Remove previous status classes
         statusBadge.getStyleClass().removeAll(
-                "booking-form-status-upcoming",
-                "booking-form-status-in-progress",
-                "booking-form-status-completed"
+                booking_form_status_upcoming,
+                booking_form_status_in_progress,
+                booking_form_status_completed
         );
 
         switch (status) {
             case UPCOMING:
-                statusBadge.setText(I18n.getI18nText(BookingPageI18nKeys.StatusUpcoming));
+                I18nControls.bindI18nProperties(statusBadge, BookingPageI18nKeys.StatusUpcoming);
                 statusBadge.getStyleClass().add(booking_form_status_upcoming);
                 break;
             case IN_PROGRESS:
-                statusBadge.setText(I18n.getI18nText(BookingPageI18nKeys.StatusInProgress));
+                I18nControls.bindI18nProperties(statusBadge, BookingPageI18nKeys.StatusInProgress);
                 statusBadge.getStyleClass().add(booking_form_status_in_progress);
                 break;
             case COMPLETED:
-                statusBadge.setText(I18n.getI18nText(BookingPageI18nKeys.StatusCompleted));
+                I18nControls.bindI18nProperties(statusBadge, BookingPageI18nKeys.StatusCompleted);
                 statusBadge.getStyleClass().add(booking_form_status_completed);
                 break;
         }
@@ -339,7 +334,7 @@ public class DefaultExistingBookingSummarySection implements HasExistingBookingS
         String dharmaWheelPath = "M12 3a9 9 0 100 18 9 9 0 000-18z " +
                 "M12 9a3 3 0 100 6 3 3 0 000-6z " +
                 "M12 3v6 M12 15v6 M3 12h6 M15 12h6";
-        return createIcon(dharmaWheelPath, colorScheme.get().getPrimary());
+        return createIcon(dharmaWheelPath, BookingFormColorScheme.DEFAULT.getPrimary());
     }
 
     // ========================================
@@ -451,24 +446,6 @@ public class DefaultExistingBookingSummarySection implements HasExistingBookingS
     // ========================================
     // HasExistingBookingSummarySection INTERFACE
     // ========================================
-
-    /**
-     * @deprecated Color scheme is now handled via CSS classes on parent container.
-     */
-    @Deprecated
-    @Override
-    public ObjectProperty<BookingFormColorScheme> colorSchemeProperty() {
-        return colorScheme;
-    }
-
-    /**
-     * @deprecated Use CSS theme classes instead.
-     */
-    @Deprecated
-    @Override
-    public void setColorScheme(BookingFormColorScheme scheme) {
-        this.colorScheme.set(scheme);
-    }
 
     @Override
     public void setEventName(String name) {

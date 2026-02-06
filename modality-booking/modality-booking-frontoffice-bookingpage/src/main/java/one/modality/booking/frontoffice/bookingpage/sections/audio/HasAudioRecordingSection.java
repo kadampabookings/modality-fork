@@ -1,12 +1,10 @@
 package one.modality.booking.frontoffice.bookingpage.sections.audio;
 
-import javafx.beans.property.ObjectProperty;
 import one.modality.base.shared.entities.BookablePeriod;
 import one.modality.base.shared.entities.Item;
 import one.modality.base.shared.entities.ScheduledItem;
 import one.modality.booking.frontoffice.bookingpage.BookingFormSection;
 import one.modality.booking.frontoffice.bookingpage.ResettableSection;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
 
 import java.util.List;
 import java.util.Set;
@@ -43,16 +41,6 @@ public interface HasAudioRecordingSection extends BookingFormSection, Resettable
         }
 
     }
-
-    /**
-     * Returns the color scheme property for theming.
-     */
-    ObjectProperty<BookingFormColorScheme> colorSchemeProperty();
-
-    /**
-     * Sets the color scheme for this section.
-     */
-    void setColorScheme(BookingFormColorScheme scheme);
 
     /**
      * Sets the selected programme period for price calculation.

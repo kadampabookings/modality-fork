@@ -1,12 +1,10 @@
 package one.modality.booking.frontoffice.bookingpage.sections.assistance;
 
 import javafx.beans.property.BooleanProperty;
-import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.StringProperty;
 import one.modality.booking.frontoffice.bookingpage.BookingFormSection;
 import one.modality.booking.frontoffice.bookingpage.ResettableSection;
 import one.modality.booking.frontoffice.bookingpage.standard.BookingSelectionState;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
 
 /**
  * Interface for the "Assistance Needs" section of a booking form.
@@ -36,18 +34,6 @@ import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme
  * @see BookingFormSection
  */
 public interface HasAssistanceNeedsSection extends BookingFormSection, ResettableSection {
-
-    // === Configuration ===
-
-    /**
-     * Returns the color scheme property for theming.
-     */
-    ObjectProperty<BookingFormColorScheme> colorSchemeProperty();
-
-    /**
-     * Sets the color scheme for this section.
-     */
-    void setColorScheme(BookingFormColorScheme scheme);
 
     // === Visibility ===
 

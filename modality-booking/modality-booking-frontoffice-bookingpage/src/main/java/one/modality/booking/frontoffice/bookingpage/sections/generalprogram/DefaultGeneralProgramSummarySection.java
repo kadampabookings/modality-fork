@@ -13,7 +13,7 @@ import javafx.scene.layout.VBox;
 import one.modality.base.shared.entities.ScheduledItem;
 import one.modality.booking.client.workingbooking.WorkingBooking;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
-import one.modality.booking.frontoffice.bookingpage.PriceFormatter;
+import one.modality.base.shared.entities.formatters.EventPriceFormatter;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
 import one.modality.booking.frontoffice.bookingpage.components.StyledSectionHeader;
 import one.modality.booking.frontoffice.bookingpage.sections.dates.HasClassDateSelectionSection;
@@ -283,7 +283,7 @@ public class DefaultGeneralProgramSummarySection extends DefaultSummarySection {
     }
 
     private String formatPrice(int priceInCents) {
-        return PriceFormatter.formatPriceWithCurrencyNoDecimals(priceInCents);
+        return EventPriceFormatter.formatWithCurrency(priceInCents, workingBookingProperties != null ? workingBookingProperties.getEvent() : null);
     }
 
     @Override

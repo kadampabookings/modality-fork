@@ -1,5 +1,7 @@
 package one.modality.booking.frontoffice.bookingpage.components;
 
+import dev.webfx.extras.i18n.I18n;
+import dev.webfx.extras.i18n.controls.I18nControls;
 import dev.webfx.platform.uischeduler.UiScheduler;
 import javafx.beans.property.*;
 import javafx.geometry.Insets;
@@ -8,6 +10,9 @@ import javafx.scene.control.Label;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.SVGPath;
+import one.modality.base.shared.entities.Event;
+import one.modality.base.shared.entities.formatters.EventPriceFormatter;
+import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
 import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
 
 import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelectors.*;
@@ -29,6 +34,7 @@ public class StickyPriceHeader extends HBox {
     private final IntegerProperty selectedDays = new SimpleIntegerProperty(0);
     private final IntegerProperty totalPrice = new SimpleIntegerProperty(0);
     private final BooleanProperty showHeader = new SimpleBooleanProperty(false);
+    private Event event;
 
     // === UI COMPONENTS ===
     private final Label roomNameLabel;
@@ -69,7 +75,7 @@ public class StickyPriceHeader extends HBox {
         HBox textRow = new HBox(6);
         textRow.setAlignment(Pos.CENTER_LEFT);
 
-        roomNameLabel = new Label("Room");  // Default text to ensure proper rendering
+        roomNameLabel = new Label();
         roomNameLabel.getStyleClass().addAll(bookingpage_text_sm, bookingpage_font_medium);
         roomNameLabel.setTextFill(Color.web("#495057"));  // Secondary text color
         roomNameLabel.setMinWidth(50);  // Ensure minimum width for proper layout
@@ -78,7 +84,7 @@ public class StickyPriceHeader extends HBox {
         separator.getStyleClass().add(sticky_price_header_separator);
         separator.setTextFill(Color.web("#9CA3AF"));  // Muted separator
 
-        daysLabel = new Label("0 days");  // Default text
+        daysLabel = new Label();
         daysLabel.getStyleClass().addAll(bookingpage_text_sm);
         daysLabel.setTextFill(Color.web("#6c757d"));  // Muted text color
         daysLabel.setMinWidth(50);  // Ensure minimum width for proper layout
@@ -92,11 +98,11 @@ public class StickyPriceHeader extends HBox {
         HBox rightSide = new HBox(8);
         rightSide.setAlignment(Pos.CENTER_RIGHT);
 
-        Label totalLabel = new Label("TOTAL");  // TODO: i18n
+        Label totalLabel = I18nControls.newLabel(BookingPageI18nKeys.Total);
         totalLabel.getStyleClass().addAll(bookingpage_text_xs, bookingpage_font_medium);
         totalLabel.setTextFill(Color.web("#6c757d"));  // Muted text color
 
-        priceLabel = new Label("$0");  // Default text to ensure proper rendering
+        priceLabel = new Label();
         priceLabel.getStyleClass().addAll(bookingpage_text_2xl, bookingpage_font_bold);
         priceLabel.setMinWidth(60);  // Ensure minimum width for price display
 
@@ -156,7 +162,7 @@ public class StickyPriceHeader extends HBox {
         // Update days label
         selectedDays.addListener((obs, old, newDays) -> {
             int days = newDays != null ? newDays.intValue() : 0;
-            daysLabel.setText(days + " day" + (days != 1 ? "s" : ""));
+            daysLabel.setText(I18n.getI18nText(BookingPageI18nKeys.DaysCount, days));
         });
 
         // Update price label with color
@@ -174,7 +180,7 @@ public class StickyPriceHeader extends HBox {
 
     private void updatePriceLabel() {
         int price = totalPrice.get();
-        priceLabel.setText("$" + (price / 100));
+        priceLabel.setText(EventPriceFormatter.formatWithCurrency(price, event));
         // Set price color from color scheme (CSS classes not reliable in web)
         BookingFormColorScheme scheme = colorScheme.get();
         if (scheme != null) {
@@ -189,6 +195,10 @@ public class StickyPriceHeader extends HBox {
     }
 
     // === PUBLIC API ===
+
+    public void setEvent(Event event) {
+        this.event = event;
+    }
 
     public void setColorScheme(BookingFormColorScheme scheme) {
         this.colorScheme.set(scheme);

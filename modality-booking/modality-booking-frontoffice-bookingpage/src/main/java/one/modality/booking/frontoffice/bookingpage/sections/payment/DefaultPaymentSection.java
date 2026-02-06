@@ -23,9 +23,9 @@ import one.modality.base.shared.entities.formatters.EventPriceFormatter;
 import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.BookingPageCssSelectors;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
-import one.modality.booking.frontoffice.bookingpage.PriceFormatter;
+import one.modality.base.shared.domainmodel.formatters.PriceFormatter;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
+
 
 import java.util.*;
 
@@ -42,7 +42,6 @@ import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelecto
 public class DefaultPaymentSection implements HasPaymentSection {
 
     // === PROPERTIES ===
-    protected final ObjectProperty<BookingFormColorScheme> colorScheme = new SimpleObjectProperty<>(BookingFormColorScheme.DEFAULT);
     protected final SimpleBooleanProperty validProperty = new SimpleBooleanProperty(false);
 
     // === PAYMENT STATE ===
@@ -122,7 +121,7 @@ public class DefaultPaymentSection implements HasPaymentSection {
     protected void buildUI() {
         container.setAlignment(Pos.TOP_CENTER);
         container.setSpacing(0);
-        container.getStyleClass().add("bookingpage-payment-section");
+        container.getStyleClass().add(bookingpage_payment_section);
 
         // Page title
         Label title = createPageTitle();
@@ -367,7 +366,7 @@ public class DefaultPaymentSection implements HasPaymentSection {
         currencyLabel.getStyleClass().addAll(bookingpage_text_2xl, bookingpage_font_semibold, bookingpage_text_dark);
 
         customAmountTextField = new TextField();
-        customAmountTextField.setText(PriceFormatter.formatPriceNoCurrencyNoDecimals(customAmountProperty.get()));
+        customAmountTextField.setText(PriceFormatter.formatWithoutCurrency(customAmountProperty.get(), false));
         customAmountTextField.getStyleClass().addAll(bookingpage_input, bookingpage_text_2xl, bookingpage_font_semibold);
         customAmountTextField.setPadding(new Insets(12, 16, 12, 16));
         customAmountTextField.setMaxWidth(Double.MAX_VALUE);
@@ -376,7 +375,7 @@ public class DefaultPaymentSection implements HasPaymentSection {
         // Update property when text changes
         customAmountTextField.textProperty().addListener((obs, old, newVal) -> {
             try {
-                int value = PriceFormatter.parsePrice(newVal);
+                int value = (int) (Double.parseDouble(newVal) * 100);
                 handleCustomAmountChange(value);
             } catch (NumberFormatException ignored) {
                 // Ignore invalid input
@@ -387,7 +386,7 @@ public class DefaultPaymentSection implements HasPaymentSection {
         customAmountTextField.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
             if (!isFocused) {
                 // Update to show the rounded/bounded value
-                customAmountTextField.setText(PriceFormatter.formatPriceNoCurrencyNoDecimals(customAmountProperty.get()));
+                customAmountTextField.setText(PriceFormatter.formatWithoutCurrency(customAmountProperty.get(), false));
             }
         });
 
@@ -411,7 +410,7 @@ public class DefaultPaymentSection implements HasPaymentSection {
             int value = newVal.intValue();
             handleCustomAmountChange(value);
             // Use the actual stored value (rounded and bounded) for display
-            customAmountTextField.setText(PriceFormatter.formatPriceNoCurrencyNoDecimals(customAmountProperty.get()));
+            customAmountTextField.setText(PriceFormatter.formatWithoutCurrency(customAmountProperty.get(), false));
         });
 
         // Update slider when property changes (e.g., from text field input)
@@ -504,7 +503,7 @@ public class DefaultPaymentSection implements HasPaymentSection {
 
         TextField allocationField = new TextField();
         IntegerProperty allocationProp = allocationProperties.computeIfAbsent(item.getDocumentPrimaryKey(), k -> new SimpleIntegerProperty(0));
-        allocationField.setText(PriceFormatter.formatPriceNoCurrencyNoDecimals(allocationProp.get()));
+        allocationField.setText(PriceFormatter.formatWithoutCurrency(allocationProp.get(), false));
         allocationField.setPrefWidth(100);
         allocationField.getStyleClass().addAll(bookingpage_input, bookingpage_font_semibold);
         allocationField.setPadding(new Insets(8, 12, 8, 12));
@@ -513,7 +512,7 @@ public class DefaultPaymentSection implements HasPaymentSection {
         // Update property when text changes - store actual typed value for validation
         allocationField.textProperty().addListener((obs, old, newVal) -> {
             try {
-                int parsedValue = PriceFormatter.parsePrice(newVal);
+                int parsedValue = (int) (Double.parseDouble(newVal) * 100);
                 // Clamp to max (can't allocate more than booking total) but allow values below minimum for validation
                 int value = Math.min(item.getAmount(), parsedValue);
                 allocationProp.set(value);
@@ -525,7 +524,7 @@ public class DefaultPaymentSection implements HasPaymentSection {
 
         // Update text when property changes (for programmatic changes like auto-allocate)
         allocationProp.addListener((obs, old, newVal) -> {
-            String newText = PriceFormatter.formatPriceNoCurrencyNoDecimals(newVal.intValue());
+            String newText = PriceFormatter.formatWithoutCurrency(newVal.intValue(), false);
             if (!allocationField.getText().equals(newText)) {
                 allocationField.setText(newText);
             }
@@ -634,7 +633,7 @@ public class DefaultPaymentSection implements HasPaymentSection {
      * Allocates payment proportionally based on booking amounts, ensuring min deposit requirements are met.
      */
     protected void autoAllocateProportionally(int paymentAmountCents) {
-        double paymentAmount = PriceFormatter.centsPriceToDoublePrice(paymentAmountCents);
+        double paymentAmount = paymentAmountCents / 100.0;
 
         // Step 1: Calculate initial allocations using floor to avoid exceeding payment amount
         double[] exactAllocations = new double[bookingItems.size()];
@@ -643,7 +642,7 @@ public class DefaultPaymentSection implements HasPaymentSection {
 
         for (int i = 0; i < bookingItems.size(); i++) {
             PaymentBookingItem item = bookingItems.get(i);
-            double proportion = PriceFormatter.centsPriceToDoublePrice(item.getAmount()) / PriceFormatter.centsPriceToDoublePrice(totalAmount);
+            double proportion = (double) item.getAmount() / totalAmount;
             exactAllocations[i] = paymentAmount * proportion;
             flooredAllocations[i] = Math.floor(exactAllocations[i]);
             sumFloored += flooredAllocations[i];
@@ -674,7 +673,7 @@ public class DefaultPaymentSection implements HasPaymentSection {
         for (int i = 0; i < bookingItems.size(); i++) {
             PaymentBookingItem item = bookingItems.get(i);
             IntegerProperty prop = allocationProperties.computeIfAbsent(item.getDocumentPrimaryKey(), k -> new SimpleIntegerProperty(0));
-            int allocatedAmount = PriceFormatter.doublePriceToCentsPrice(flooredAllocations[i]);
+            int allocatedAmount = (int) (flooredAllocations[i] * 100);
             // Ensure allocation meets minimum deposit requirement
             int minRequired = item.getBalanceToMinDeposit();
             if (allocatedAmount < minRequired && minRequired > 0) {
@@ -961,26 +960,6 @@ public class DefaultPaymentSection implements HasPaymentSection {
     }
 
     // === HasPaymentSection INTERFACE ===
-
-    /**
-     * @deprecated Color scheme is now handled via CSS classes on parent container.
-     * Use theme classes like "theme-wisdom-blue" on a parent element instead.
-     * This property is kept for dynamic element coloring which requires Java.
-     */
-    @Deprecated
-    @Override
-    public ObjectProperty<BookingFormColorScheme> colorSchemeProperty() {
-        return colorScheme;
-    }
-
-    /**
-     * @deprecated Use CSS theme classes instead.
-     */
-    @Deprecated
-    @Override
-    public void setColorScheme(BookingFormColorScheme scheme) {
-        this.colorScheme.set(scheme);
-    }
 
     @Override
     public void setTotalAmount(int amount) {

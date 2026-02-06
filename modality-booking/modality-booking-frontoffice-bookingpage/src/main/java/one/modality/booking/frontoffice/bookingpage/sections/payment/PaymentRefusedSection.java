@@ -14,10 +14,7 @@ import javafx.scene.Cursor;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
-import javafx.scene.layout.HBox;
-import javafx.scene.layout.Priority;
-import javafx.scene.layout.StackPane;
-import javafx.scene.layout.VBox;
+import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.SVGPath;
 import one.modality.booking.client.workingbooking.WorkingBookingProperties;
@@ -53,7 +50,6 @@ public class PaymentRefusedSection implements BookingFormSection {
     private static final String ICON_CLOCK = "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z";
 
     // === PROPERTIES ===
-    private final ObjectProperty<BookingFormColorScheme> colorScheme = new SimpleObjectProperty<>(BookingFormColorScheme.DEFAULT);
     private final SimpleBooleanProperty validProperty = new SimpleBooleanProperty(true);
     private final IntegerProperty amountProperty = new SimpleIntegerProperty(0);
     private final ObjectProperty<PaymentFailureReason> failureReasonProperty = new SimpleObjectProperty<>(PaymentFailureReason.UNKNOWN_REASON);
@@ -77,7 +73,7 @@ public class PaymentRefusedSection implements BookingFormSection {
         container.setAlignment(Pos.TOP_CENTER);
         container.setSpacing(0);
         container.setPadding(new Insets(0, 24, 32, 24));
-        container.getStyleClass().add("bookingpage-payment-refused-section");
+        container.getStyleClass().add(bookingpage_payment_refused_section);
 
         // 1. Amber warning header
         VBox header = buildHeader();
@@ -256,16 +252,9 @@ public class PaymentRefusedSection implements BookingFormSection {
         iconCircle.setMinSize(36, 36);
         iconCircle.setMaxSize(36, 36);
 
-        // Bind background color to color scheme
-        colorScheme.addListener((obs, old, scheme) -> {
-            if (scheme != null) {
-                iconCircle.setStyle("-fx-background-color: " + toHexString(scheme.getSelectedBg()) + "; -fx-background-radius: 18;");
-            }
-        });
-        BookingFormColorScheme scheme = colorScheme.get();
-        if (scheme != null) {
-            iconCircle.setStyle("-fx-background-color: " + toHexString(scheme.getSelectedBg()) + "; -fx-background-radius: 18;");
-        }
+        // Set background color using default color scheme
+        iconCircle.setBackground(new Background(new BackgroundFill(
+            BookingFormColorScheme.DEFAULT.getSelectedBg(), new CornerRadii(18), null)));
 
         SVGPath clockIcon = new SVGPath();
         clockIcon.setContent(ICON_CLOCK);
@@ -273,16 +262,7 @@ public class PaymentRefusedSection implements BookingFormSection {
         clockIcon.setFill(Color.TRANSPARENT);
         clockIcon.setScaleX(0.7);
         clockIcon.setScaleY(0.7);
-
-        // Bind stroke color to color scheme
-        colorScheme.addListener((obs, old, newScheme) -> {
-            if (newScheme != null) {
-                clockIcon.setStroke(newScheme.getPrimary());
-            }
-        });
-        if (scheme != null) {
-            clockIcon.setStroke(scheme.getPrimary());
-        }
+        clockIcon.setStroke(BookingFormColorScheme.DEFAULT.getPrimary());
 
         iconCircle.getChildren().add(clockIcon);
 
@@ -313,21 +293,6 @@ public class PaymentRefusedSection implements BookingFormSection {
         return box;
     }
 
-    /**
-     * Converts a Color to a hex string (e.g., "#FF5500").
-     * GWT-compatible alternative to String.format("#%02X%02X%02X", ...).
-     */
-    private String toHexString(Color color) {
-        return "#" + toHex((int) (color.getRed() * 255))
-                   + toHex((int) (color.getGreen() * 255))
-                   + toHex((int) (color.getBlue() * 255));
-    }
-
-    private static String toHex(int value) {
-        String hex = Integer.toHexString(value).toUpperCase();
-        return hex.length() == 1 ? "0" + hex : hex;
-    }
-
     // === BookingFormSection INTERFACE ===
 
     @Override
@@ -351,10 +316,6 @@ public class PaymentRefusedSection implements BookingFormSection {
     }
 
     // === PUBLIC SETTERS ===
-
-    public void setColorScheme(BookingFormColorScheme scheme) {
-        this.colorScheme.set(scheme);
-    }
 
     public void setAmount(int amount) {
         this.amountProperty.set(amount);
