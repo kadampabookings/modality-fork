@@ -30,6 +30,7 @@ import javafx.scene.layout.VBox;
 import javafx.scene.text.TextAlignment;
 import one.modality.base.client.bootstrap.ModalityStyle;
 import one.modality.base.client.mainframe.fx.FXMainFrameDialogArea;
+import one.modality.base.shared.entities.AttendanceMode;
 import one.modality.base.shared.entities.Person;
 import one.modality.base.shared.entities.ScheduledItem;
 import one.modality.base.shared.entities.formatters.EventPriceFormatter;
@@ -245,7 +246,15 @@ public final class BookingElements {
                 workingBooking.unbookScheduledItems(bookableScheduledItems);
         }, selectedProperty);
         PolicyAggregate policyAggregate = workingBooking.getPolicyAggregate();
-        WorkingBooking periodWorkingBooking = new WorkingBooking(policyAggregate, workingBooking.getInitialDocumentAggregate());
+        // Create a temporary WorkingBooking for price calculation
+        // For existing bookings, use initialDocumentAggregate; for new bookings, use attendanceMode from current document
+        WorkingBooking periodWorkingBooking;
+        if (workingBooking.getInitialDocumentAggregate() != null) {
+            periodWorkingBooking = new WorkingBooking(policyAggregate, workingBooking.getInitialDocumentAggregate());
+        } else {
+            AttendanceMode attendanceMode = workingBooking.getDocument().getAttendanceMode();
+            periodWorkingBooking = new WorkingBooking(policyAggregate, attendanceMode);
+        }
         periodWorkingBooking.unbookScheduledItems(bookableScheduledItems);
         int unbookedTotalPrice = new PriceCalculator(periodWorkingBooking.getLastestDocumentAggregate()).calculateTotalPrice();
         periodWorkingBooking.bookScheduledItems(bookableScheduledItems, true);
