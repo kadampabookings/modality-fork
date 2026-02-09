@@ -247,7 +247,7 @@ public class DefaultEventHeaderSection implements HasEventHeaderSection {
         }
 
         // Bind the event title using the label field (i18n translated), with fallback to name
-        I18nEntities.bindExpressionToTextProperty(titleLabel, event, "coalesce(i18n(label),name)");
+        I18nEntities.bindTranslatedEntityToTextProperty(titleLabel, event);
 
         // Set dates
         startDate = event.getStartDate();

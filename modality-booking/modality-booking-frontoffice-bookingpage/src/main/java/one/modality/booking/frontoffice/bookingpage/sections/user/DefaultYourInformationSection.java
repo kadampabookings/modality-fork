@@ -540,8 +540,19 @@ public class DefaultYourInformationSection implements HasYourInformationSection 
         Label emailLabel = createFieldLabel(BookingPageI18nKeys.EmailAddress);
         emailFieldContainer.getChildren().addAll(emailLabel, emailField, emailErrorLabel);
 
-        // Hint text
+        // Hint text - dynamic based on whether guest checkout is allowed
         Label hintLabel = createHintLabel(BookingPageI18nKeys.WeWillCheckIfYouHaveAnExistingAccount);
+
+        // Update hint text based on forceAccountCreation setting
+        Runnable updateHintText = () -> {
+            boolean guestAllowed = !forceAccountCreationProperty.get();
+            I18n.bindI18nTextProperty(hintLabel.textProperty(),
+                guestAllowed
+                    ? BookingPageI18nKeys.WeWillCheckIfYouHaveAnExistingAccountOrGuest
+                    : BookingPageI18nKeys.WeWillCheckIfYouHaveAnExistingAccount);
+        };
+        forceAccountCreationProperty.addListener((obs, old, newVal) -> updateHintText.run());
+        updateHintText.run();
 
         emailCard.getChildren().addAll(emailFieldContainer, hintLabel);
 

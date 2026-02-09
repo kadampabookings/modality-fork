@@ -17,8 +17,6 @@ import one.modality.ecommerce.policy.service.spi.PolicyServiceProvider;
  */
 public final class ServerPolicyServiceProvider implements PolicyServiceProvider {
 
-    private static final int GENERAL_GUESTS_EVENT_POOL_ID = 4; // temporarily hardcoded
-
     private final static String EVENT_QUERY_BASE =
         "select venue.(name,label), state, shortDescriptionLabel, longDescriptionLabel, termsUrlEn, organization.privacyUrlLabel, openingDate, bookingProcessStart, timezone, noAccountBooking, inPersonAllowed, onlineAllowed, vodEnabled" +
         ", date_part('epoch', openingDate - now()) as " + Event.secondsToOpeningDateAtLoadingTime +
@@ -30,16 +28,16 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
         ",(select [" +
             // male availability
             "sum(!sr.configuration.allowsMale ? 0 :" +
-            " coalesce((select quantity from PoolAllocation where resource=sr.configuration.resource and pool= " + GENERAL_GUESTS_EVENT_POOL_ID + " and event=$1 limit 1), 0)" +
-            " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledResource=sr and present and documentLine.(!frontend_released and (pool = null or pool= " + GENERAL_GUESTS_EVENT_POOL_ID + "))), 0)" +
+            " coalesce((select quantity from PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and event=$1 limit 1), 0)" +
+            " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledResource=sr and present and documentLine.(!frontend_released and (pool = null or pool.allowsPublic))), 0)" +
             ")," +
             // female availability
             "sum(!sr.configuration.allowsFemale ? 0 :" +
-            " coalesce((select quantity from PoolAllocation where resource=sr.configuration.resource and pool= " + GENERAL_GUESTS_EVENT_POOL_ID + " and event=$1 limit 1), 0)" +
-            " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledResource=sr and present and documentLine.(!frontend_released and (pool = null or pool= " + GENERAL_GUESTS_EVENT_POOL_ID + "))), 0)" +
+            " coalesce((select quantity from PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and event=$1 limit 1), 0)" +
+            " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledResource=sr and present and documentLine.(!frontend_released and (pool = null or pool.allowsPublic))), 0)" +
             ")] from ScheduledResource sr" +
         // We consider only the resources allocated to the general guest pool for this event
-        " where scheduledItem=si and exists(select PoolAllocation where resource=sr.configuration.resource and pool= " + GENERAL_GUESTS_EVENT_POOL_ID + " and event=$1)" +
+        " where scheduledItem=si and exists(select PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and event=$1)" +
         " group by scheduledItem)" +
         " as " + ScheduledItem.maleFemaleAvailabilities +
         " from ScheduledItem si";
@@ -99,7 +97,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                         // or not bound to an event but happening in the event venue with over the period of the event
                         "      or si.event=null and si.site = e.venue and (si.date >= e.startDate and si.date <= e.endDate or exists(select EventPart ep where ep.event=e and si.date>=coalesce(ep.startBoundary.date, ep.startBoundary.scheduledItem.date) and si.date<=coalesce(ep.endBoundary.date, ep.endBoundary.scheduledItem.date))) from Event e where id=$1)" +
                         // excluding accommodation items with no resource allocated to the general guest pool for this event
-                        " and (si.item.family.code!='acco' or exists(select ScheduledResource sr where scheduledItem=si and exists(select PoolAllocation where resource=sr.configuration.resource and pool= " + GENERAL_GUESTS_EVENT_POOL_ID + " and event=$1)))" +
+                        " and (si.item.family.code!='acco' or exists(select ScheduledResource sr where scheduledItem=si and exists(select PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and event=$1)))" +
                         " order by site?.ord,item?.ord,date", eventPk)
                     // 2 - Loading scheduled boundaries (of this event or of the repeated event if set)
                     , DqlQueries.newQueryArgumentForDefaultDataSource(

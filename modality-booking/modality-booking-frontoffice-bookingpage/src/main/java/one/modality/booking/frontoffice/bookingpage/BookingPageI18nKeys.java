@@ -585,6 +585,7 @@ public interface BookingPageI18nKeys {
     Object WeVerifyPayment = "WeVerifyPayment";
     Object WeVerifyPaymentDesc = "WeVerifyPaymentDesc";
     Object WeWillCheckIfYouHaveAnExistingAccount = "WeWillCheckIfYouHaveAnExistingAccount";
+    Object WeWillCheckIfYouHaveAnExistingAccountOrGuest = "WeWillCheckIfYouHaveAnExistingAccountOrGuest";
     Object WeWillSendEmailToSetPassword = "WeWillSendEmailToSetPassword";
     Object WelcomeBack = "WelcomeBack";
     Object WhatHappened = "WhatHappened";

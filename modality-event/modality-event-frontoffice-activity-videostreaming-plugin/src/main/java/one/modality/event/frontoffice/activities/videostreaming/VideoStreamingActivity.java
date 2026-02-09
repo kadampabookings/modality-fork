@@ -115,7 +115,7 @@ final class VideoStreamingActivity extends ViewDomainActivityBase {
                             // we check if :
                             " and (" +
                             // 1/ there is a ScheduledItem of `video` family type whose `bookableScheduledItem` has been booked (KBS3 setup)
-                            " exists(select Attendance a where documentLine=dl and exists(select ScheduledItem where bookableScheduledItem=a.scheduledItem and item.family.code=$2))" +
+                            " exists(select Attendance a where videoAccessEnabled and documentLine=dl and exists(select ScheduledItem where bookableScheduledItem=a.scheduledItem and item.family.code=$2))" +
                             // 2/ Or KBS3 / KBS2 setup (this allows displaying the videos that have been booked in the past with KBS2 events, event if we can't display them)
                             " or item.family.code=$2)" +
                             // we display only the events that have not expired or expired since less than 21 days.
@@ -175,6 +175,7 @@ final class VideoStreamingActivity extends ViewDomainActivityBase {
                                 and item.code=$4
                                 and exists(select Attendance a
                                  where scheduledItem=si.bookableScheduledItem
+                                    and videoAccessEnabled
                                     and documentLine.(!cancelled and document.(event=$5 and accountCanAccessPersonMedias($1, person))))
                              order by date, programScheduledItem.timeline?.startTime""",
                         /*$1*/ userAccountId, /*$2*/ eventContainingVideos, /*$3*/ KnownItemFamily.TEACHING.getCode(), /*$4*/ KnownItem.VIDEO.getCode(), /*$5*/ event)

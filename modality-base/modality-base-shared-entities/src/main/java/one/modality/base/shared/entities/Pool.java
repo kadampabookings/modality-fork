@@ -18,6 +18,7 @@ public interface Pool extends
     String graphic = "graphic";
     String eventPool = "eventPool";
     String bookable = "bookable";
+    String allowsPublic = "allowsPublic";
 
     default void setDescription(String value) {
         setFieldValue(description, value);
@@ -69,6 +70,14 @@ public interface Pool extends
 
     default Boolean isBookable() {
         return getBooleanFieldValue(bookable);
+    }
+
+    default void setAllowsPublic(Boolean value) {
+        setFieldValue(allowsPublic, value);
+    }
+
+    default Boolean allowsPublic() {
+        return getBooleanFieldValue(allowsPublic);
     }
 
 }
