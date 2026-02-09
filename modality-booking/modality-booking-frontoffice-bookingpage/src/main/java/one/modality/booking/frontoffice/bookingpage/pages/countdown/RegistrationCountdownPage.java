@@ -334,7 +334,7 @@ public class RegistrationCountdownPage implements BookingFormPage {
     private HBox buildTimeUnit(String value, Object labelI18nKey) {
         // Value label - uses CSS class for themed text color
         Label valueLabel = new Label(value);
-        valueLabel.getStyleClass().add(registration_countdown_timer_value);
+        valueLabel.getStyleClass().addAll(bookingpage_text_4xl, bookingpage_font_bold, bookingpage_text_primary);
         valueLabel.setMinWidth(60);
         valueLabel.setAlignment(Pos.CENTER);
 
@@ -347,7 +347,7 @@ public class RegistrationCountdownPage implements BookingFormPage {
 
         // Label below
         Label label = I18nControls.newLabel(labelI18nKey);
-        label.getStyleClass().add(registration_countdown_timer_label);
+        label.getStyleClass().addAll(bookingpage_text_sm, bookingpage_font_medium, bookingpage_text_muted);
 
         VBox unitContainer = new VBox(8);
         unitContainer.setAlignment(Pos.CENTER);
@@ -399,7 +399,7 @@ public class RegistrationCountdownPage implements BookingFormPage {
 
         SVGPath checkIcon = BookingPageUIBuilder.createThemedIcon("M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z", 0.75);
         Label reassuranceLabel = I18nControls.newLabel(BookingPageI18nKeys.TakeYourTime);
-        reassuranceLabel.getStyleClass().addAll(bookingpage_text_sm, registration_countdown_reassurance_text);
+        reassuranceLabel.getStyleClass().addAll(bookingpage_text_sm, bookingpage_text_dark);
         reassuranceLabel.setWrapText(true);
 
         reassurance.getChildren().addAll(checkIcon, reassuranceLabel);
@@ -418,7 +418,7 @@ public class RegistrationCountdownPage implements BookingFormPage {
         numberCircle.setMaxSize(28, 28);
         numberCircle.getStyleClass().add(registration_countdown_step_number);
         Label numberLabel = new Label(String.valueOf(number));
-        numberLabel.getStyleClass().add(registration_countdown_step_number_text);
+        numberLabel.getStyleClass().addAll(bookingpage_text_sm, bookingpage_font_semibold, bookingpage_text_white);
         numberCircle.getChildren().add(numberLabel);
 
         // Text content with {0} placeholder replaced by windowMinutes

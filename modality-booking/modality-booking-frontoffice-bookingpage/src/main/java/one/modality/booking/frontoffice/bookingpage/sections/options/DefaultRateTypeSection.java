@@ -201,7 +201,7 @@ public class DefaultRateTypeSection implements HasRateTypeSection, BookingFormSe
         card.setPadding(new Insets(20, 24, 20, 24));
         card.setAlignment(Pos.CENTER_LEFT);
         card.setMaxWidth(Double.MAX_VALUE);  // Full width
-        card.getStyleClass().add(bookingpage_card);
+        card.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded);
         card.setCursor(Cursor.HAND);
 
         // Track selection state for this card
@@ -261,7 +261,7 @@ public class DefaultRateTypeSection implements HasRateTypeSection, BookingFormSe
 
         // Price label
         Label priceLabel = new Label();
-        priceLabel.getStyleClass().addAll(bookingpage_price_large, bookingpage_text_dark);
+        priceLabel.getStyleClass().addAll(bookingpage_text_2xl, bookingpage_font_bold, bookingpage_text_dark);
 
         rightContent.getChildren().addAll(checkmarkBadge, priceLabel);
 

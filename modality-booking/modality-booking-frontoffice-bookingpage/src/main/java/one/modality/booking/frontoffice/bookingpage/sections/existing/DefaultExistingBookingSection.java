@@ -297,7 +297,7 @@ public class DefaultExistingBookingSection implements BookingFormSection, HasExi
 
         // Continue button with dynamic text
         continueButton = new Button();
-        continueButton.getStyleClass().addAll(booking_form_primary_btn, btn_primary);
+        continueButton.getStyleClass().addAll(booking_form_primary_btn, booking_form_btn_primary);
         continueButton.setPadding(new Insets(12, 24, 12, 24));
         continueButton.setDisable(true);
 
@@ -412,7 +412,7 @@ public class DefaultExistingBookingSection implements BookingFormSection, HasExi
         card.setMaxWidth(Double.MAX_VALUE);
         card.setPadding(new Insets(20));
         card.setCursor(Cursor.HAND);
-        card.getStyleClass().add(bookingpage_selectable_card);
+        card.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded_lg, bookingpage_selectable_card);
 
         // === Member info row ===
         HBox memberRow = new HBox(12);
@@ -530,7 +530,7 @@ public class DefaultExistingBookingSection implements BookingFormSection, HasExi
         card.setMaxWidth(350);
         card.setPadding(new Insets(20));
         card.setCursor(isBookable ? Cursor.HAND : Cursor.DEFAULT);  // Conditional cursor
-        card.getStyleClass().add(bookingpage_selectable_card);
+        card.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded_lg, bookingpage_selectable_card);
 
         // Apply disabled state for non-bookable members
         if (!isBookable) {

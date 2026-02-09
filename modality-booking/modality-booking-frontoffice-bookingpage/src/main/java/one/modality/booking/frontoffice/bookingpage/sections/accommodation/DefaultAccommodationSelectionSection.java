@@ -401,7 +401,7 @@ public class DefaultAccommodationSelectionSection implements HasAccommodationSel
         card.setPadding(new Insets(24));
         card.setMinWidth(200);
         card.setMaxWidth(Double.MAX_VALUE);
-        card.getStyleClass().add(bookingpage_attendance_card);
+        card.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded_lg);
 
         // Icon circle (56px) - styled via CSS class
         StackPane iconCircle = new StackPane();
@@ -533,7 +533,7 @@ public class DefaultAccommodationSelectionSection implements HasAccommodationSel
         if (!isSoldOut) {
             card.setPadding(new Insets(20));
         }
-        card.getStyleClass().add(bookingpage_selectable_card);
+        card.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded_lg, bookingpage_selectable_card);
 
         // Apply CSS classes for different states (styling handled in CSS)
         if (isSoldOut) {

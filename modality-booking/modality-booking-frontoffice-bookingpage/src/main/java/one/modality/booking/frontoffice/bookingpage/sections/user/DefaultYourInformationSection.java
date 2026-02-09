@@ -312,7 +312,7 @@ public class DefaultYourInformationSection implements HasYourInformationSection 
         I18n.bindI18nTextProperty(femaleButton.textProperty(), BookingPageI18nKeys.Female);
         femaleButton.setPadding(new Insets(14, 20, 14, 20));
         femaleButton.setMinWidth(80);
-        femaleButton.getStyleClass().add(bookingpage_gender_button);
+        femaleButton.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded, bookingpage_gender_button);
         femaleButton.setOnAction(e -> {
             genderProperty.set(false);
             femaleButton.getStyleClass().add(selected);
@@ -323,7 +323,7 @@ public class DefaultYourInformationSection implements HasYourInformationSection 
         I18n.bindI18nTextProperty(maleButton.textProperty(), BookingPageI18nKeys.Male);
         maleButton.setPadding(new Insets(14, 20, 14, 20));
         maleButton.setMinWidth(80);
-        maleButton.getStyleClass().add(bookingpage_gender_button);
+        maleButton.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded, bookingpage_gender_button);
         maleButton.setOnAction(e -> {
             genderProperty.set(true);
             maleButton.getStyleClass().add(selected);
@@ -382,7 +382,7 @@ public class DefaultYourInformationSection implements HasYourInformationSection 
         // Checkbox labels with bullet list
         VBox toggleLabels = new VBox(6);
         Label confirmLabel = I18nControls.newLabel(BookingPageI18nKeys.IConfirmThat);
-        confirmLabel.getStyleClass().add(bookingpage_toggle_label);
+        confirmLabel.getStyleClass().addAll(bookingpage_text_base, bookingpage_font_medium, bookingpage_text_dark);
 
         // Bullet list (simulating HTML <ul>)
         VBox bulletList = new VBox(4);
@@ -392,10 +392,10 @@ public class DefaultYourInformationSection implements HasYourInformationSection 
         HBox age18Line = new HBox(6);
         age18Line.setAlignment(Pos.TOP_LEFT);
         Label age18Bullet = new Label("•");
-        age18Bullet.getStyleClass().add(bookingpage_toggle_item);
+        age18Bullet.getStyleClass().addAll(bookingpage_text_sm, bookingpage_text_muted);
         age18Bullet.setMinWidth(10);
         Label age18Label = I18nControls.newLabel(BookingPageI18nKeys.IAm18YearsOrOlder);
-        age18Label.getStyleClass().add(bookingpage_toggle_item);
+        age18Label.getStyleClass().addAll(bookingpage_text_sm, bookingpage_text_muted);
         age18Label.setWrapText(true);
         age18Line.getChildren().addAll(age18Bullet, age18Label);
         HBox.setHgrow(age18Label, Priority.ALWAYS);
@@ -404,16 +404,16 @@ public class DefaultYourInformationSection implements HasYourInformationSection 
         termsLine = new HBox(6);
         termsLine.setAlignment(Pos.TOP_LEFT);
         Label termsBullet = new Label("•");
-        termsBullet.getStyleClass().add(bookingpage_toggle_item);
+        termsBullet.getStyleClass().addAll(bookingpage_text_sm, bookingpage_text_muted);
         termsBullet.setMinWidth(10);
 
         HBox termsContent = new HBox(4);
         termsContent.setAlignment(Pos.CENTER_LEFT);
         Label iAgreeLabel = I18nControls.newLabel(BookingPageI18nKeys.IAgreeToThe);
-        iAgreeLabel.getStyleClass().add(bookingpage_toggle_item);
+        iAgreeLabel.getStyleClass().addAll(bookingpage_text_sm, bookingpage_text_muted);
         Hyperlink termsLink = I18nControls.newHyperlink(BookingPageI18nKeys.TermsAndConditions);
         termsLink.setOnAction(e -> openTermsAndConditions());
-        termsLink.getStyleClass().add(bookingpage_terms_link);
+        termsLink.getStyleClass().addAll(bookingpage_text_primary, bookingpage_font_medium);
         termsContent.getChildren().addAll(iAgreeLabel, termsLink);
 
         termsLine.getChildren().addAll(termsBullet, termsContent);
@@ -440,7 +440,7 @@ public class DefaultYourInformationSection implements HasYourInformationSection 
 
         VBox successLabels = new VBox(4);
         Label verifiedLabel = I18nControls.newLabel(BookingPageI18nKeys.EmailVerified);
-        verifiedLabel.getStyleClass().add(bookingpage_success_title);
+        verifiedLabel.getStyleClass().addAll(bookingpage_text_base, bookingpage_font_semibold, bookingpage_text_emerald);
         successLabels.getChildren().add(verifiedLabel);
 
         verificationSuccessBox.getChildren().addAll(checkIconContainer, successLabels);
@@ -811,7 +811,7 @@ public class DefaultYourInformationSection implements HasYourInformationSection 
         HBox box = new HBox(10);
         box.setAlignment(Pos.CENTER_LEFT);
         box.setPadding(new Insets(14, 18, 14, 18));
-        box.getStyleClass().add(bookingpage_card_light);
+        box.getStyleClass().addAll(bookingpage_bg_light, bookingpage_border_subtle, bookingpage_rounded);
 
         // Email icon
         SVGPath emailIcon = new SVGPath();
@@ -923,7 +923,7 @@ public class DefaultYourInformationSection implements HasYourInformationSection 
         // Age/Terms container (white card with toggle)
         VBox ageTermsCard = new VBox(0);
         ageTermsCard.setPadding(new Insets(16));
-        ageTermsCard.getStyleClass().addAll(bookingpage_card, bookingpage_rounded);
+        ageTermsCard.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded);
         ageTermsCard.setOnMouseClicked(e -> e.consume()); // Prevent toggling main checkbox
         ageTermsCard.getChildren().add(ageTermsToggleContainer);
         accountRequirements.getChildren().add(ageTermsCard);
@@ -1152,8 +1152,8 @@ public class DefaultYourInformationSection implements HasYourInformationSection 
     protected void updateCreateAccountBoxStyle(VBox box) {
         boolean checked = createAccountProperty.get();
         // Use CSS class with theme variables - toggle 'selected' class for checked state
-        box.getStyleClass().removeAll(bookingpage_selectable_card, selected);
-        box.getStyleClass().add(bookingpage_selectable_card);
+        box.getStyleClass().removeAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded_lg, bookingpage_selectable_card, selected);
+        box.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded_lg, bookingpage_selectable_card);
         if (checked) {
             box.getStyleClass().add(selected);
         }
@@ -1438,7 +1438,7 @@ public class DefaultYourInformationSection implements HasYourInformationSection 
     protected VBox createCard() {
         VBox card = new VBox(24);
         card.setPadding(new Insets(32));
-        card.getStyleClass().addAll(bookingpage_card_static, bookingpage_rounded_lg);
+        card.getStyleClass().addAll(bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded_lg);
         return card;
     }
 

@@ -9,8 +9,7 @@ import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.SVGPath;
 
-import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelectors.booking_form_section_header;
-import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelectors.booking_form_section_header_title;
+import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelectors.*;
 
 /**
  * A styled section header with icon, title, and themed background.
@@ -83,7 +82,7 @@ public class StyledSectionHeader extends HBox {
 
         // Title
         titleLabel = label;
-        titleLabel.getStyleClass().add(booking_form_section_header_title);
+        titleLabel.getStyleClass().addAll(bookingpage_text_xlg, bookingpage_font_semibold, bookingpage_text_secondary);
 
         // Layout
         setAlignment(Pos.CENTER_LEFT);

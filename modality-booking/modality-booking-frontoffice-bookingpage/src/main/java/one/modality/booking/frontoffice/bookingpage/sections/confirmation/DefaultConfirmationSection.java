@@ -169,7 +169,7 @@ public class DefaultConfirmationSection implements HasConfirmationSection {
         // Content
         bookingReferencesContent = new VBox(0);
         bookingReferencesContent.setPadding(new Insets(16));
-        bookingReferencesContent.getStyleClass().add(bookingpage_card_static);
+        bookingReferencesContent.getStyleClass().addAll(bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded);
 
         section.getChildren().addAll(header, bookingReferencesContent);
         VBox.setMargin(header, new Insets(0, 0, 16, 0));
@@ -228,7 +228,7 @@ public class DefaultConfirmationSection implements HasConfirmationSection {
         // Content
         VBox content = new VBox(12);
         content.setPadding(new Insets(20));
-        content.getStyleClass().add(bookingpage_card_static);
+        content.getStyleClass().addAll(bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded);
 
         // Event
         VBox eventBox = new VBox(4);
@@ -304,7 +304,7 @@ public class DefaultConfirmationSection implements HasConfirmationSection {
         // Content
         VBox content = new VBox(12);
         content.setPadding(new Insets(20));
-        content.getStyleClass().add(bookingpage_card_static);
+        content.getStyleClass().addAll(bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded);
 
         // Total Amount row
         String formattedTotal = unifiedPriceDisplay != null
@@ -405,7 +405,7 @@ public class DefaultConfirmationSection implements HasConfirmationSection {
         // Content
         VBox content = new VBox(16);
         content.setPadding(new Insets(20));
-        content.getStyleClass().add(bookingpage_card_static);
+        content.getStyleClass().addAll(bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded);
 
         // Check Your Email
         String email = confirmedBookings.isEmpty() ? "" : confirmedBookings.get(0).getEmail();

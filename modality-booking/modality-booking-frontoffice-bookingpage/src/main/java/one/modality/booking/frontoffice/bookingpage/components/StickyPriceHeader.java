@@ -81,7 +81,7 @@ public class StickyPriceHeader extends HBox {
         roomNameLabel.setMinWidth(50);  // Ensure minimum width for proper layout
 
         Label separator = new Label("·");
-        separator.getStyleClass().add(sticky_price_header_separator);
+        separator.getStyleClass().addAll(bookingpage_text_sm, bookingpage_text_muted_light);
         separator.setTextFill(Color.web("#9CA3AF"));  // Muted separator
 
         daysLabel = new Label();

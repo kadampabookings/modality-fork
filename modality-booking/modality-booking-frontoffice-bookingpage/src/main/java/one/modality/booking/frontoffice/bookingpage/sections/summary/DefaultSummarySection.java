@@ -308,7 +308,7 @@ public class DefaultSummarySection implements HasSummarySection {
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
         totalAmountLabel = new Label(unifiedPriceDisplay != null ? unifiedPriceDisplay.formatPrice(0) : "£0");
-        totalAmountLabel.getStyleClass().addAll(bookingpage_price_medium, bookingpage_font_bold, bookingpage_text_primary);
+        totalAmountLabel.getStyleClass().addAll(bookingpage_text_xl, bookingpage_font_bold, bookingpage_text_primary);
 
         totalRow.getChildren().addAll(totalTextLabel, spacer, totalAmountLabel);
 
@@ -370,7 +370,7 @@ public class DefaultSummarySection implements HasSummarySection {
 
         // Content box
         VBox contentBox = new VBox(0);
-        contentBox.getStyleClass().addAll(bookingpage_card, bookingpage_rounded_lg);
+        contentBox.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded_lg);
         contentBox.setPadding(new Insets(16, 20, 16, 20));
 
         // Options list container

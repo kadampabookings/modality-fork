@@ -228,7 +228,7 @@ public class DefaultRoommateInfoSection implements HasRoommateInfoSection {
             ? I18n.getI18nText(RoommateNumbered, roommateNumber)
             : I18n.getI18nText(Roommate);
         Label label = new Label(labelText);
-        label.getStyleClass().add(bookingpage_form_label);
+        label.getStyleClass().addAll(bookingpage_text_base, bookingpage_font_medium, bookingpage_text_gray_dark);
 
         Text asterisk = new Text(" *");
         asterisk.setFill(Color.web("#dc3545")); // Danger red
@@ -251,7 +251,7 @@ public class DefaultRoommateInfoSection implements HasRoommateInfoSection {
             : I18n.getI18nText(Roommate);
         String optionalSuffix = " " + I18n.getI18nText(RoommateOptionalSuffix);
         Label label = new Label(labelText);
-        label.getStyleClass().add(bookingpage_form_label);
+        label.getStyleClass().addAll(bookingpage_text_base, bookingpage_font_medium, bookingpage_text_gray_dark);
 
         Text optional = new Text(optionalSuffix);
         optional.setFill(Color.web("#6c757d")); // Muted gray
@@ -298,7 +298,7 @@ public class DefaultRoommateInfoSection implements HasRoommateInfoSection {
      */
     protected HBox createRequiredFieldLabel(Object i18nKey) {
         Label label = I18nControls.newLabel(i18nKey);
-        label.getStyleClass().add(bookingpage_form_label);
+        label.getStyleClass().addAll(bookingpage_text_base, bookingpage_font_medium, bookingpage_text_gray_dark);
 
         Text asterisk = new Text(" *");
         asterisk.setFill(Color.web("#dc3545")); // Danger red

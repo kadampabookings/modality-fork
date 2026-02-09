@@ -383,7 +383,7 @@ public class UnifiedPriceDisplay {
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
         Label value = new Label(formatPrice(amount));
-        value.getStyleClass().addAll(bookingpage_price_medium, bookingpage_font_bold, bookingpage_text_primary);
+        value.getStyleClass().addAll(bookingpage_text_xl, bookingpage_font_bold, bookingpage_text_primary);
 
         row.getChildren().addAll(label, spacer, value);
         return row;
@@ -408,7 +408,7 @@ public class UnifiedPriceDisplay {
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
         Label value = new Label(formatPrice(amount));
-        value.getStyleClass().addAll(bookingpage_price_large, bookingpage_text_primary);
+        value.getStyleClass().addAll(bookingpage_text_2xl, bookingpage_font_bold, bookingpage_text_primary);
 
         row.getChildren().addAll(label, spacer, value);
         return row;

@@ -170,7 +170,7 @@ public class DefaultPrerequisiteSection implements HasPrerequisiteSection {
     protected VBox createConfirmationBox() {
         VBox box = new VBox(16);
         box.setPadding(new Insets(20));
-        box.getStyleClass().add(bookingpage_card);
+        box.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded);
         box.setMinWidth(0);
 
         // Checkbox row

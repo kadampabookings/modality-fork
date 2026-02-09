@@ -438,7 +438,7 @@ public class DefaultAudioRecordingSection implements HasAudioRecordingSection {
             setSpacing(12);
             setPadding(new Insets(16, 20, 16, 16));
             getChildren().addAll(checkboxIndicator, titleContainer, priceLabel);
-            getStyleClass().add(bookingpage_checkbox_card);
+            getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded, bookingpage_checkbox_card);
 
             // Locked items are not clickable - use default cursor
             setCursor(locked ? Cursor.DEFAULT : Cursor.HAND);

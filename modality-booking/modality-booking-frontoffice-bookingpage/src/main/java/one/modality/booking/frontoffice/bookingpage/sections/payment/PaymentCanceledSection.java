@@ -97,7 +97,7 @@ public class PaymentCanceledSection implements BookingFormSection {
 
         // Title: "Payment Canceled"
         Label titleLabel = I18nControls.newLabel(BookingPageI18nKeys.PaymentCanceledTitle);
-        titleLabel.getStyleClass().add(bookingpage_warning_title);
+        titleLabel.getStyleClass().addAll(bookingpage_text_2xl, bookingpage_font_bold, bookingpage_text_amber_dark);
         VBox.setMargin(titleLabel, new Insets(0, 0, 8, 0));
 
         // Subtitle with Orders link: "Your booking is saved. Complete your payment anytime from the {0} menu."
@@ -122,7 +122,7 @@ public class PaymentCanceledSection implements BookingFormSection {
         VBox.setMargin(section, new Insets(0, 0, 24, 0));
 
         Button tryAgainButton = I18nControls.newButton(BookingPageI18nKeys.TryAgain);
-        tryAgainButton.getStyleClass().addAll(booking_form_primary_btn, booking_form_primary_btn_text);
+        tryAgainButton.getStyleClass().addAll(booking_form_primary_btn, bookingpage_text_white, bookingpage_font_bold, bookingpage_text_lg);
         tryAgainButton.setPadding(new Insets(16, 24, 16, 24));
         tryAgainButton.setCursor(Cursor.HAND);
         tryAgainButton.setMaxWidth(Double.MAX_VALUE);

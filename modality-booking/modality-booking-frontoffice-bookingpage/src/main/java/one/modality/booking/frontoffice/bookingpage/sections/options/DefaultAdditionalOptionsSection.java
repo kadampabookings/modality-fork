@@ -149,7 +149,7 @@ public class DefaultAdditionalOptionsSection implements HasAdditionalOptionsSect
      */
     protected VBox createOptionCard(AdditionalOption option) {
         VBox card = new VBox(0);
-        card.getStyleClass().add(bookingpage_checkbox_card);
+        card.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded, bookingpage_checkbox_card);
 
         HBox mainRow = new HBox(12);
         mainRow.setAlignment(Pos.CENTER_LEFT);
@@ -257,7 +257,7 @@ public class DefaultAdditionalOptionsSection implements HasAdditionalOptionsSect
      */
     protected VBox createCeremonyOptionCard(CeremonyOption ceremony) {
         VBox card = new VBox(0);
-        card.getStyleClass().add(bookingpage_checkbox_card);
+        card.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded, bookingpage_checkbox_card);
 
         HBox mainRow = new HBox(12);
         mainRow.setAlignment(Pos.CENTER_LEFT);

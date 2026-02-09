@@ -114,12 +114,12 @@ public class PaymentRefusedSection implements BookingFormSection {
 
         // Title: "Payment Declined"
         Label titleLabel = I18nControls.newLabel(BookingPageI18nKeys.PaymentDeclinedTitle);
-        titleLabel.getStyleClass().add(bookingpage_warning_title);
+        titleLabel.getStyleClass().addAll(bookingpage_text_2xl, bookingpage_font_bold, bookingpage_text_amber_dark);
         VBox.setMargin(titleLabel, new Insets(0, 0, 8, 0));
 
         // Subtitle
         Label subtitleLabel = I18nControls.newLabel(BookingPageI18nKeys.PaymentDeclinedSubtitle);
-        subtitleLabel.getStyleClass().add(bookingpage_warning_subtitle);
+        subtitleLabel.getStyleClass().addAll(bookingpage_text_md, bookingpage_text_muted);
         subtitleLabel.setWrapText(true);
         subtitleLabel.setAlignment(Pos.CENTER);
         subtitleLabel.setMaxWidth(500);
@@ -159,11 +159,11 @@ public class PaymentRefusedSection implements BookingFormSection {
 
         // "DECLINE REASON" header
         Label headerLabel = I18nControls.newLabel(BookingPageI18nKeys.DeclineReason);
-        headerLabel.getStyleClass().add(bookingpage_decline_reason_header);
+        headerLabel.getStyleClass().addAll(bookingpage_text_xxs, bookingpage_font_bold, bookingpage_text_amber_dark);
 
         // Failure reason message (dynamically updated)
         failureReasonLabel = new Label();
-        failureReasonLabel.getStyleClass().add(bookingpage_decline_reason_message);
+        failureReasonLabel.getStyleClass().addAll(bookingpage_text_base, bookingpage_text_amber_dark);
         failureReasonLabel.setWrapText(true);
         updateFailureReasonLabel();
 
@@ -207,7 +207,7 @@ public class PaymentRefusedSection implements BookingFormSection {
         VBox.setMargin(section, new Insets(0, 0, 24, 0));
 
         Button tryAgainButton = I18nControls.newButton(BookingPageI18nKeys.TryAgain);
-        tryAgainButton.getStyleClass().addAll(booking_form_primary_btn, booking_form_primary_btn_text);
+        tryAgainButton.getStyleClass().addAll(booking_form_primary_btn, bookingpage_text_white, bookingpage_font_bold, bookingpage_text_lg);
         tryAgainButton.setPadding(new Insets(16, 24, 16, 24));
         tryAgainButton.setCursor(Cursor.HAND);
         tryAgainButton.setMaxWidth(Double.MAX_VALUE);
@@ -271,7 +271,7 @@ public class PaymentRefusedSection implements BookingFormSection {
 
         // Title: "Pay Later"
         Label titleLabel = I18nControls.newLabel(BookingPageI18nKeys.PayLater);
-        titleLabel.getStyleClass().add(bookingpage_paylater_title);
+        titleLabel.getStyleClass().addAll(bookingpage_text_md, bookingpage_font_semibold, bookingpage_text_dark);
 
         // Description with Orders link using HtmlText for WebFX compatibility
         HtmlText descHtml = new HtmlText();

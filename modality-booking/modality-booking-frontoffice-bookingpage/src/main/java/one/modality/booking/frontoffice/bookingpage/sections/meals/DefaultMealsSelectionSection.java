@@ -914,7 +914,7 @@ public class DefaultMealsSelectionSection implements HasMealsSelectionSection {
         card.setAlignment(Pos.CENTER_LEFT);
         card.setPadding(new Insets(16));
         card.setCursor(Cursor.HAND);
-        card.getStyleClass().add(bookingpage_checkbox_card);
+        card.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded, bookingpage_checkbox_card);
 
         // Initial selection state - CSS handles styling via .selected class
         if (selectedProperty.get()) {
@@ -1059,7 +1059,7 @@ public class DefaultMealsSelectionSection implements HasMealsSelectionSection {
         HBox card = new HBox(12);
         card.setAlignment(Pos.CENTER_LEFT);
         card.setPadding(new Insets(16));
-        card.getStyleClass().add(bookingpage_checkbox_card);
+        card.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded, bookingpage_checkbox_card);
 
         // Always selected style when accommodation is selected (breakfast is auto-included)
         // CSS handles styling via .selected class
@@ -1153,7 +1153,7 @@ public class DefaultMealsSelectionSection implements HasMealsSelectionSection {
         option.setAlignment(Pos.CENTER_LEFT);
         option.setPadding(new Insets(8, 16, 8, 16));
         option.setCursor(Cursor.HAND);
-        option.getStyleClass().add(bookingpage_pill_option);
+        option.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_subtle, bookingpage_rounded_pill);
 
         // Use the item name for the label
         String itemName = dietItem.getName() != null ? dietItem.getName() : "Unknown";
@@ -1194,7 +1194,7 @@ public class DefaultMealsSelectionSection implements HasMealsSelectionSection {
         option.setAlignment(Pos.CENTER_LEFT);
         option.setPadding(new Insets(8, 16, 8, 16));
         option.setCursor(Cursor.HAND);
-        option.getStyleClass().add(bookingpage_pill_option);
+        option.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_subtle, bookingpage_rounded_pill);
 
         Label label = I18nControls.newLabel(labelKey);
         label.getStyleClass().addAll(bookingpage_text_base, bookingpage_font_medium, bookingpage_text_dark);

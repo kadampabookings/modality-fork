@@ -342,7 +342,7 @@ public class RegistrationOfflinePage implements BookingFormPage {
         } else {
             textLabel = I18nControls.newLabel(textI18nKey);
         }
-        textLabel.getStyleClass().addAll(bookingpage_text_sm, registration_offline_text_gray);
+        textLabel.getStyleClass().addAll(bookingpage_text_sm, bookingpage_text_secondary);
         textLabel.setWrapText(true);
 
         row.getChildren().addAll(iconCircle, textLabel);
@@ -374,10 +374,10 @@ public class RegistrationOfflinePage implements BookingFormPage {
         textContainer.setAlignment(Pos.CENTER_LEFT);
 
         Label questionLabel = I18nControls.newLabel(BookingPageI18nKeys.QuestionsContactUs);
-        questionLabel.getStyleClass().addAll(bookingpage_text_sm, registration_offline_text_gray);
+        questionLabel.getStyleClass().addAll(bookingpage_text_sm, bookingpage_text_secondary);
 
         Hyperlink emailLink = new Hyperlink(contactEmail);
-        emailLink.getStyleClass().add(registration_offline_email_link);
+        emailLink.getStyleClass().addAll(bookingpage_text_primary, bookingpage_font_medium);
         emailLink.setOnAction(e -> {
             if (contactEmail != null && !contactEmail.isEmpty()) {
                 dev.webfx.platform.windowlocation.WindowLocation.assignHref("mailto:" + contactEmail);
@@ -404,7 +404,7 @@ public class RegistrationOfflinePage implements BookingFormPage {
         infoIcon.setScaleY(0.67);
 
         Label apologyLabel = I18nControls.newLabel(BookingPageI18nKeys.ApologizeForInconvenience);
-        apologyLabel.getStyleClass().addAll(bookingpage_text_xs, registration_offline_text_light_gray);
+        apologyLabel.getStyleClass().addAll(bookingpage_text_xs, bookingpage_text_muted_light);
         apologyLabel.setWrapText(true);
         apologyLabel.setMaxWidth(400);
 

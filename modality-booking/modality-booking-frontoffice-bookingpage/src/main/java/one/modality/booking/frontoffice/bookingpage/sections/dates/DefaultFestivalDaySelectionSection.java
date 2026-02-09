@@ -298,11 +298,11 @@ public class DefaultFestivalDaySelectionSection implements HasFestivalDaySelecti
         card.setPadding(new Insets(12, 20, 12, 20));
         card.setMinWidth(160);
         card.setCursor(Cursor.HAND);
-        card.getStyleClass().add(bookingpage_date_selector_card);
+        card.getStyleClass().addAll(bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded_10, bookingpage_date_selector_card);
 
         // Label (Arrival/Departure)
         Label typeLabel = I18nControls.newLabel(isArrival ? BookingPageI18nKeys.Arrival : BookingPageI18nKeys.Departure);
-        typeLabel.getStyleClass().add(bookingpage_date_selector_label);
+        typeLabel.getStyleClass().addAll(bookingpage_text_xs, bookingpage_text_muted);
 
         // Date value (shows "Select date" initially)
         Label dateLabel = I18nControls.newLabel(BookingPageI18nKeys.SelectDate);
@@ -474,7 +474,7 @@ public class DefaultFestivalDaySelectionSection implements HasFestivalDaySelecti
 
             Label messageLabel = new Label(message.toString());
             messageLabel.setWrapText(true);
-            messageLabel.getStyleClass().add(bookingpage_info_box_message);
+            messageLabel.getStyleClass().addAll(bookingpage_text_base, bookingpage_text_dark);
             constraintInfoBox.getChildren().add(messageLabel);
         }
 
@@ -492,7 +492,7 @@ public class DefaultFestivalDaySelectionSection implements HasFestivalDaySelecti
 
         // Instruction label ("Select arrival/departure date:")
         datePickerInstruction = new Label();
-        datePickerInstruction.getStyleClass().add(bookingpage_date_picker_instruction);
+        datePickerInstruction.getStyleClass().addAll(bookingpage_text_base, bookingpage_font_medium, bookingpage_text_secondary);
 
         container.getChildren().addAll(datePickerInstruction, daysContainer);
         return container;
@@ -575,7 +575,7 @@ public class DefaultFestivalDaySelectionSection implements HasFestivalDaySelecti
         card.setPadding(new Insets(14, 16, 14, 16));
         card.setMinWidth(140);
         card.setCursor(Cursor.HAND);
-        card.getStyleClass().addAll(bookingpage_time_option, contextClass);
+        card.getStyleClass().addAll(bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded_10, bookingpage_time_option, contextClass);
 
         boolean isSelected = timeProperty.get() == time;
 
@@ -590,14 +590,14 @@ public class DefaultFestivalDaySelectionSection implements HasFestivalDaySelecti
 
         // Time range - uses CSS class for styling
         Label rangeLabel = new Label(getTimeRange(time, isArrival));
-        rangeLabel.getStyleClass().add(bookingpage_time_option_range);
+        rangeLabel.getStyleClass().addAll(bookingpage_text_xs, bookingpage_text_muted);
 
         // Meal note - uses CSS class based on meal availability
         String mealText = getMealNote(time, isArrival);
         boolean hasNoMeals = mealText.contains("\u2717");
         Label mealLabel = new Label(mealText);
-        mealLabel.getStyleClass().addAll(bookingpage_time_option_meal,
-            hasNoMeals ? "bookingpage-time-option-meal-negative" : "bookingpage-time-option-meal-positive");
+        mealLabel.getStyleClass().addAll(bookingpage_text_xxs,
+            hasNoMeals ? bookingpage_text_muted_light : bookingpage_text_primary);
 
         card.getChildren().addAll(timeLabel, rangeLabel, mealLabel);
 
@@ -1165,7 +1165,7 @@ public class DefaultFestivalDaySelectionSection implements HasFestivalDaySelecti
         card.setCursor(isDisabled ? Cursor.DEFAULT : (isClickable ? Cursor.HAND : Cursor.DEFAULT));
 
         // Apply CSS classes based on state - CSS handles styling
-        card.getStyleClass().add(bookingpage_festival_day_card);
+        card.getStyleClass().addAll(bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded_10, bookingpage_festival_day_card);
         if (isDisabled) {
             card.getStyleClass().add(disabled);
         } else if (isChangingMode) {

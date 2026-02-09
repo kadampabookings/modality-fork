@@ -135,7 +135,7 @@ public class DefaultChildCarerSection implements HasChildCarerSection {
 
         // Requirement label (shows how many carers needed)
         requirementLabel = new Label();
-        requirementLabel.getStyleClass().addAll(bookingpage_form_label, bookingpage_text_primary);
+        requirementLabel.getStyleClass().addAll(bookingpage_text_base, bookingpage_font_medium, bookingpage_text_primary);
         requirementLabel.setWrapText(true);
         VBox.setMargin(requirementLabel, new Insets(0, 0, 16, 0));
 
@@ -269,7 +269,7 @@ public class DefaultChildCarerSection implements HasChildCarerSection {
         card.setPadding(new Insets(12, 16, 12, 16));
         card.setMaxWidth(Double.MAX_VALUE);
         card.setCursor(Cursor.HAND);
-        card.getStyleClass().add(bookingpage_childcarer_card);
+        card.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded, bookingpage_childcarer_card);
 
         // Avatar/Icon
         StackPane avatar = createAvatar(displayName, isExternal);
@@ -538,7 +538,7 @@ public class DefaultChildCarerSection implements HasChildCarerSection {
         card.setAlignment(Pos.TOP_LEFT);
         card.setPadding(new Insets(16));
         card.setCursor(Cursor.HAND);
-        card.getStyleClass().add(bookingpage_childcarer_policy);
+        card.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded);
 
         // Checkbox indicator
         Region checkbox = new Region();

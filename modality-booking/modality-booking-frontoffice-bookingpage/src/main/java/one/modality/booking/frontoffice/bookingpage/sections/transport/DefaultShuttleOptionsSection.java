@@ -154,7 +154,7 @@ public class DefaultShuttleOptionsSection implements HasShuttleOptionsSection {
 
         // Price label (only visible when any shuttle selected)
         totalPriceLabel = new Label();
-        totalPriceLabel.getStyleClass().addAll(bookingpage_price_medium, bookingpage_text_primary);
+        totalPriceLabel.getStyleClass().addAll(bookingpage_text_xl, bookingpage_font_bold, bookingpage_text_primary);
         updateTotalPriceLabel();
 
         headerPriceBox = new HBox(totalPriceLabel);
@@ -223,7 +223,7 @@ public class DefaultShuttleOptionsSection implements HasShuttleOptionsSection {
         card.setAlignment(Pos.CENTER_LEFT);
         card.setPadding(new Insets(12, 14, 12, 14));
         card.setCursor(Cursor.HAND);
-        card.getStyleClass().add(bookingpage_shuttle_trip);
+        card.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_subtle, bookingpage_rounded, bookingpage_shuttle_trip);
 
         // Checkbox indicator
         StackPane checkbox = BookingPageUIBuilder.createCheckboxIndicator(option.selectedProperty());

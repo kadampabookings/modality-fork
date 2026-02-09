@@ -206,7 +206,7 @@ public class DefaultTransportSection implements HasTransportSection {
         StackPane cardWrapper = new StackPane();
 
         VBox card = new VBox(0);
-        card.getStyleClass().add(bookingpage_checkbox_card);
+        card.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded, bookingpage_checkbox_card);
 
         if (allSoldOut) {
             card.getStyleClass().add(soldout);
@@ -304,7 +304,7 @@ public class DefaultTransportSection implements HasTransportSection {
         Label priceLabel = new Label(formatUnifiedParkingPrice());
         priceLabel.getStyleClass().addAll(bookingpage_text_base, bookingpage_font_semibold);
         if (allSoldOut) {
-            priceLabel.getStyleClass().addAll(bookingpage_text_muted, bookingpage_strikethrough);
+            priceLabel.getStyleClass().addAll(bookingpage_text_muted, bookingpage_text_strikethrough);
         } else {
             priceLabel.getStyleClass().add(bookingpage_text_dark);
         }
@@ -358,7 +358,7 @@ public class DefaultTransportSection implements HasTransportSection {
         HBox pill = new HBox(6);
         pill.setAlignment(Pos.CENTER_LEFT);
         pill.setPadding(new Insets(8, 16, 8, 16));
-        pill.getStyleClass().add(bookingpage_radio_pill);
+        pill.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_subtle, bookingpage_rounded_pill, bookingpage_radio_pill);
 
         if (soldOut) {
             pill.getStyleClass().add(disabled);
@@ -375,7 +375,7 @@ public class DefaultTransportSection implements HasTransportSection {
         Label text = new Label(option.getName());
         text.getStyleClass().addAll(bookingpage_text_sm, bookingpage_font_medium);
         if (soldOut) {
-            text.getStyleClass().addAll(bookingpage_text_muted, bookingpage_strikethrough);
+            text.getStyleClass().addAll(bookingpage_text_muted, bookingpage_text_strikethrough);
         } else {
             text.getStyleClass().add(bookingpage_text_dark);
         }
@@ -551,7 +551,7 @@ public class DefaultTransportSection implements HasTransportSection {
 
         // Price label (only visible when any shuttle selected)
         shuttleTotalPriceLabel = new Label();
-        shuttleTotalPriceLabel.getStyleClass().addAll(bookingpage_price_medium, bookingpage_text_primary);
+        shuttleTotalPriceLabel.getStyleClass().addAll(bookingpage_text_xl, bookingpage_font_bold, bookingpage_text_primary);
         updateShuttleTotalPriceLabel();
 
         shuttleHeaderPriceBox = new HBox(shuttleTotalPriceLabel);

@@ -450,7 +450,7 @@ public abstract class AbstractOnlineEventModificationForm {
         payBtn.textProperty().bind(paymentSection.payButtonTextProperty());
         payBtn.disableProperty().bind(paymentSection.payButtonDisabledProperty());
         payBtn.setCursor(javafx.scene.Cursor.HAND);
-        payBtn.getStyleClass().addAll(booking_form_primary_btn, booking_form_primary_btn_text);
+        payBtn.getStyleClass().addAll(booking_form_primary_btn, bookingpage_text_white, bookingpage_font_bold, bookingpage_text_lg);
         payBtn.setOnAction(e -> paymentSection.submitPaymentAsync());
         payBtn.setGraphicTextGap(16);
 
@@ -522,7 +522,7 @@ public abstract class AbstractOnlineEventModificationForm {
         // Action button
         Button viewBookingsBtn = I18nControls.newButton(BookingPageI18nKeys.ViewMyBookings);
         viewBookingsBtn.setCursor(javafx.scene.Cursor.HAND);
-        viewBookingsBtn.getStyleClass().addAll(booking_form_primary_btn, booking_form_primary_btn_text);
+        viewBookingsBtn.getStyleClass().addAll(booking_form_primary_btn, bookingpage_text_white, bookingpage_font_bold, bookingpage_text_lg);
         viewBookingsBtn.setOnAction(e -> {
             if (onComplete != null) {
                 onComplete.run();

@@ -152,7 +152,7 @@ public class DefaultRegistrationTypeSection implements BookingFormSection {
         card.setPadding(new Insets(28, 24, 28, 24));
         card.setAlignment(Pos.TOP_CENTER);
         card.setCursor(enabled ? Cursor.HAND : Cursor.DEFAULT);
-        card.getStyleClass().add(bookingpage_registration_type_card);
+        card.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded_lg, bookingpage_registration_type_card);
 
         if (!enabled) {
             card.getStyleClass().add(disabled);
@@ -230,7 +230,7 @@ public class DefaultRegistrationTypeSection implements BookingFormSection {
             comingSoonContainer.setPadding(new Insets(12, 24, 12, 24));
 
             Label comingSoonText = I18nControls.newLabel(BookingPageI18nKeys.ComingSoon);
-            comingSoonText.getStyleClass().add(bookingpage_btn_coming_soon_text);
+            comingSoonText.getStyleClass().addAll(bookingpage_text_theme_secondary, bookingpage_font_semibold, bookingpage_text_base);
 
             comingSoonContainer.getChildren().add(comingSoonText);
             VBox.setMargin(comingSoonContainer, new Insets(8, 0, 0, 0));

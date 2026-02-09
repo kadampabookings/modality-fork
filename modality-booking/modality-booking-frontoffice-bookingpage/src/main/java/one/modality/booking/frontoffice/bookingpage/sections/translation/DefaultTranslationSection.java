@@ -92,7 +92,7 @@ public class DefaultTranslationSection implements HasTranslationSection {
 
         // Single unified card (will be built when state is bound)
         translationCard = new VBox(0);
-        translationCard.getStyleClass().add(bookingpage_checkbox_card);
+        translationCard.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded, bookingpage_checkbox_card);
 
         container.getChildren().addAll(sectionHeader, translationCard);
     }

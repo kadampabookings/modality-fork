@@ -645,7 +645,7 @@ public class ResponsiveStepProgressHeader implements BookingFormHeader {
             circle.getStyleClass().add(booking_form_step_bubble_tablet);
 
             Label numberLabel = new Label(String.valueOf(step.stepNumber));
-            numberLabel.getStyleClass().add(booking_form_step_number);
+            numberLabel.getStyleClass().addAll(bookingpage_font_bold, bookingpage_text_base);
             numberLabel.setFont(Font.font(null, FontWeight.SEMI_BOLD, 12)); // Per JSX mockup
             circle.getChildren().addAll(circleShape, numberLabel); // Circle first, label on top
 
@@ -712,7 +712,7 @@ public class ResponsiveStepProgressHeader implements BookingFormHeader {
             bubble.getStyleClass().add(booking_form_step_bubble);
 
             Label numberLabel = new Label(String.valueOf(step.stepNumber));
-            numberLabel.getStyleClass().add(booking_form_step_number);
+            numberLabel.getStyleClass().addAll(bookingpage_font_bold, bookingpage_text_base);
             numberLabel.setFont(Font.font(null, FontWeight.SEMI_BOLD, 13));
             bubble.getChildren().addAll(circleShape, numberLabel);
 

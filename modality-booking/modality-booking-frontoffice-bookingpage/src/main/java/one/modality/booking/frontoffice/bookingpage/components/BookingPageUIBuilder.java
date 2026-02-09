@@ -604,7 +604,7 @@ public final class BookingPageUIBuilder {
         card.setPadding(new Insets(16));
         card.setCursor(Cursor.HAND);
         card.setMaxWidth(Double.MAX_VALUE);
-        card.getStyleClass().add(bookingpage_card);
+        card.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded);
 
         // Title - CSS handles font and color
         Label titleLabel = new Label(title);
@@ -612,11 +612,11 @@ public final class BookingPageUIBuilder {
 
         // Amount - CSS handles font size and primary color
         Label amountLabel = new Label(amount);
-        amountLabel.getStyleClass().addAll(bookingpage_price_medium, bookingpage_text_primary);
+        amountLabel.getStyleClass().addAll(bookingpage_text_xl, bookingpage_font_bold, bookingpage_text_primary);
 
         // Description - CSS handles styling
         Label descLabel = new Label(description);
-        descLabel.getStyleClass().addAll(bookingpage_label_small, bookingpage_text_center);
+        descLabel.getStyleClass().addAll(bookingpage_text_xs, bookingpage_text_muted, bookingpage_text_center);
         descLabel.setWrapText(true);
 
         // Content container
@@ -660,7 +660,7 @@ public final class BookingPageUIBuilder {
      */
     public static VBox createPassiveCard() {
         VBox card = new VBox(0);
-        card.getStyleClass().add(bookingpage_passive_card);
+        card.getStyleClass().addAll(bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded);
         card.setPadding(new Insets(20));
         return card;
     }
@@ -697,7 +697,7 @@ public final class BookingPageUIBuilder {
         card.setAlignment(Pos.CENTER_LEFT);
         card.setPadding(new Insets(16));
         card.setCursor(Cursor.HAND);
-        card.getStyleClass().add(bookingpage_checkbox_card);
+        card.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded, bookingpage_checkbox_card);
 
         // Use CSS-based checkbox indicator for consistent styling
         StackPane checkbox = createCheckboxIndicator(selectedProperty);
@@ -731,7 +731,7 @@ public final class BookingPageUIBuilder {
         card.setAlignment(Pos.CENTER_LEFT);
         card.setPadding(new Insets(16));
         card.setCursor(Cursor.HAND);
-        card.getStyleClass().add(bookingpage_radio_card);
+        card.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded);
 
         // Radio indicator on left
         StackPane radio = createRadioIndicator(selectedProperty);
@@ -847,7 +847,7 @@ public final class BookingPageUIBuilder {
 
         VBox card = new VBox(0);
         card.setMaxWidth(Double.MAX_VALUE);
-        card.getStyleClass().addAll(bookingpage_selectable_card, bookingpage_accommodation_card);
+        card.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded_lg, bookingpage_selectable_card, bookingpage_accommodation_card);
 
         if (config.isSoldOut) {
             card.getStyleClass().addAll(soldout, disabled);
@@ -1001,7 +1001,7 @@ public final class BookingPageUIBuilder {
         HBox pill = new HBox(6);
         pill.setAlignment(Pos.CENTER_LEFT);
         pill.setPadding(new Insets(8, 16, 8, 16));
-        pill.getStyleClass().add(bookingpage_radio_pill);
+        pill.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_subtle, bookingpage_rounded_pill, bookingpage_radio_pill);
         pill.setCursor(Cursor.HAND);
 
         // Radio indicator (small circular - 14px)
@@ -1110,7 +1110,7 @@ public final class BookingPageUIBuilder {
         Button btn = I18nControls.newButton(i18nKey);
         btn.setCursor(Cursor.HAND);
         btn.setPadding(new Insets(14, 32, 14, 32)); // Set in Java for WebFX/GWT compatibility
-        btn.getStyleClass().addAll(booking_form_primary_btn, booking_form_primary_btn_text);
+        btn.getStyleClass().addAll(booking_form_primary_btn, bookingpage_text_white, bookingpage_font_bold, bookingpage_text_lg);
 
         // Disabled state - update CSS class and cursor
         btn.disabledProperty().addListener((obs, old, disabled) -> {
@@ -1329,7 +1329,7 @@ public final class BookingPageUIBuilder {
             box.getChildren().add(iconLabel);
         }
 
-        messageLabel.getStyleClass().add(bookingpage_info_box_message);
+        messageLabel.getStyleClass().addAll(bookingpage_text_base, bookingpage_text_dark);
         messageLabel.setWrapText(true);
 
         box.getChildren().add(messageLabel);
@@ -1667,11 +1667,11 @@ public final class BookingPageUIBuilder {
 
         // Bold "Price includes:" label on its own line
         Label boldLabel = I18nControls.newLabel(BookingPageI18nKeys.PriceIncludes);
-        boldLabel.getStyleClass().add(bookingpage_price_includes_bold);
+        boldLabel.getStyleClass().addAll(bookingpage_text_sm, bookingpage_font_bold, bookingpage_text_secondary);
 
         // Primary text on next line, will wrap naturally
         Label primaryLabel = new Label(primaryText);
-        primaryLabel.getStyleClass().add(bookingpage_price_includes_primary);
+        primaryLabel.getStyleClass().addAll(bookingpage_text_sm, bookingpage_text_secondary);
         primaryLabel.setWrapText(true);
         primaryLabel.setMaxWidth(Double.MAX_VALUE);
 
@@ -1680,7 +1680,7 @@ public final class BookingPageUIBuilder {
         // Secondary text (if provided)
         if (secondaryText != null && !secondaryText.isEmpty()) {
             Label secondaryLabel = new Label("(" + secondaryText + ")");
-            secondaryLabel.getStyleClass().add(bookingpage_price_includes_secondary);
+            secondaryLabel.getStyleClass().addAll(bookingpage_text_xs, bookingpage_text_muted);
             secondaryLabel.setWrapText(true);
             secondaryLabel.setMaxWidth(Double.MAX_VALUE);
             textContainer.getChildren().add(secondaryLabel);
@@ -1745,11 +1745,11 @@ public final class BookingPageUIBuilder {
 
         // Bold "Price includes:" followed by primary text on same conceptual line
         Label boldLabel = I18nControls.newLabel(BookingPageI18nKeys.PriceIncludes);
-        boldLabel.getStyleClass().add(bookingpage_price_includes_amber_bold);
+        boldLabel.getStyleClass().addAll(bookingpage_text_sm, bookingpage_font_bold, bookingpage_text_amber_dark);
 
         // Primary text on next line, will wrap naturally
         Label primaryLabel = new Label(primaryText);
-        primaryLabel.getStyleClass().add(bookingpage_price_includes_amber_primary);
+        primaryLabel.getStyleClass().addAll(bookingpage_text_sm, bookingpage_text_amber_dark);
         primaryLabel.setWrapText(true);
         primaryLabel.setMaxWidth(Double.MAX_VALUE);
 
@@ -1758,7 +1758,7 @@ public final class BookingPageUIBuilder {
         // Secondary text (if provided)
         if (secondaryText != null && !secondaryText.isEmpty()) {
             Label secondaryLabel = new Label(secondaryText);
-            secondaryLabel.getStyleClass().add(bookingpage_price_includes_amber_secondary);
+            secondaryLabel.getStyleClass().addAll(bookingpage_text_xs, bookingpage_text_amber_dark);
             secondaryLabel.setWrapText(true);
             secondaryLabel.setMaxWidth(Double.MAX_VALUE);
             VBox.setMargin(secondaryLabel, new Insets(4, 0, 0, 0));
@@ -1821,7 +1821,7 @@ public final class BookingPageUIBuilder {
 
         // "NO ACCOMMODATION" text (uppercase)
         Label text = I18nControls.newLabel(BookingPageI18nKeys.NoAccommodation);
-        text.getStyleClass().add(bookingpage_no_accommodation_text);
+        text.getStyleClass().addAll(bookingpage_text_sm, bookingpage_font_bold, bookingpage_text_gray_dark);
 
         pill.getChildren().addAll(mapIcon, text);
 

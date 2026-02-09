@@ -333,7 +333,7 @@ public class DefaultMemberSelectionSection implements HasMemberSelectionSection 
         card.setMaxWidth(350);
         card.setPadding(new Insets(20));
         card.setCursor(isBookable ? Cursor.HAND : Cursor.DEFAULT);
-        card.getStyleClass().add(bookingpage_selectable_card); // Use selectable card class for proper theming
+        card.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded_lg, bookingpage_selectable_card);
 
         // Apply state classes
         if (!isBookable) {
@@ -450,7 +450,7 @@ public class DefaultMemberSelectionSection implements HasMemberSelectionSection 
         badge.getStyleClass().add(bookingpage_child_age_badge);
 
         Label label = I18nControls.newLabel(BookingPageI18nKeys.ChildAge, age);
-        label.getStyleClass().add(bookingpage_child_age_badge_text);
+        label.getStyleClass().addAll(bookingpage_text_amber_dark, bookingpage_text_xs, bookingpage_font_medium);
 
         badge.getChildren().add(label);
         return badge;

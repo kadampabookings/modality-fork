@@ -499,7 +499,7 @@ public class DefaultAccommodationSoldOutSection implements HasAccommodationSoldO
         if (!isDisabled) {
             card.setPadding(new Insets(20));
         }
-        card.getStyleClass().add(bookingpage_selectable_card);
+        card.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded_lg, bookingpage_selectable_card);
 
         if (isDisabled) {
             card.getStyleClass().addAll(soldout, disabled);

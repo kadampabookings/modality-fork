@@ -203,7 +203,7 @@ public class DefaultEventHeaderSection implements HasEventHeaderSection {
         // Title - styled via CSS
         titleLabel.setWrapText(true);
         titleLabel.setMinWidth(0); // Allow shrinking for text wrap
-        titleLabel.getStyleClass().add(booking_form_event_header_title);
+        titleLabel.getStyleClass().addAll(bookingpage_text_3xl, bookingpage_font_semibold, bookingpage_text_dark);
 
         // Dates (no wrapping container, directly managed by hPane)
         datesLabel.setWrapText(true);

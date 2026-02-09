@@ -94,7 +94,7 @@ public class DefaultTermsSection implements HasTermsSection {
     protected HBox createTermsCheckboxRow() {
         HBox row = new HBox(12);
         row.setAlignment(Pos.TOP_LEFT);
-        row.getStyleClass().addAll(booking_form_terms_checkbox, bookingpage_checkbox_card);
+        row.getStyleClass().addAll(booking_form_terms_checkbox, bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded, bookingpage_checkbox_card);
         row.setPadding(new Insets(16, 20, 16, 16));
 
         // Toggle 'selected' class based on terms accepted state

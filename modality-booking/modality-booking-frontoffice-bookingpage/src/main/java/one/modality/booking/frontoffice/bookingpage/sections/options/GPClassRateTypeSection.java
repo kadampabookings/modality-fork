@@ -106,7 +106,7 @@ public class GPClassRateTypeSection implements BookingFormSection, HasRateTypeSe
         card.setMinWidth(160);
         card.setPrefWidth(180);
         card.setMaxWidth(220);
-        card.getStyleClass().addAll(bookingpage_card, default_rate_card);
+        card.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded, default_rate_card);
         card.setCursor(Cursor.HAND);
 
         // Track selection state for this card
