@@ -285,6 +285,9 @@ public class DefaultFestivalDaySelectionSection implements HasFestivalDaySelecti
         // Departure selector card
         departureSelectorCard = createDateSelectorCard(false);
 
+        HBox.setHgrow(arrivalSelectorCard, Priority.ALWAYS);
+        HBox.setHgrow(departureSelectorCard, Priority.ALWAYS);
+
         container.getChildren().addAll(arrivalSelectorCard, departureSelectorCard);
         return container;
     }
@@ -297,6 +300,7 @@ public class DefaultFestivalDaySelectionSection implements HasFestivalDaySelecti
         card.setAlignment(Pos.CENTER_LEFT);
         card.setPadding(new Insets(12, 20, 12, 20));
         card.setMinWidth(160);
+        card.setMaxWidth(Double.MAX_VALUE);
         card.setCursor(Cursor.HAND);
         card.getStyleClass().addAll(bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded_10, bookingpage_date_selector_card);
 
