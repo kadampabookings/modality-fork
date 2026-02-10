@@ -62,7 +62,7 @@ public final class MultiBookingEditor extends BookingEditorBase {
     private Node createPersonToBookButton() {
         DataSourceModel dataSourceModel = DataSourceModelService.getDefaultDataSourceModel();
         EntityButtonSelector<Person> personSelector = new EntityButtonSelector<Person>( // language=JSON5
-            "{class: 'Person', alias: 'p', columns: [{expression: '[firstName,lastName,`(` + email + `)`]'}], where: 'owner and !removed and frontendAccount.(!backoffice and !disabled)', orderBy: 'firstName,lastName'}",
+            "{class: 'Person', alias: 'p', columns: [{expression: '[firstName,lastName,`(` + email + `)`]'}], where: 'owner and !removed and !frontendAccount.disabled', orderBy: 'firstName,lastName'}",
             new ButtonFactoryMixin() {
             }, FXMainFrameDialogArea::getDialogArea, dataSourceModel
         ) {
@@ -74,7 +74,7 @@ public final class MultiBookingEditor extends BookingEditorBase {
         }
             // Inline function doesn't work TODO: fix it
             //.setSearchCondition("searchMatchesPerson(p)")
-            .setSearchCondition("abcNames(p?.fullName) like ?abcSearchLike or lower(p?.email) like ?searchEmailLike")
+            .setSearchCondition("abcNames(p.fullName) like :abcSearchLike or lower(p.email) like :searchEmailLike")
             ;
         FXPersonToBook.personToBookProperty().bind(personSelector.selectedItemProperty());
         return personSelector.getButton();
