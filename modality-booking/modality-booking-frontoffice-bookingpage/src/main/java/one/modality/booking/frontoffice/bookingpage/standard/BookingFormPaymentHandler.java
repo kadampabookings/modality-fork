@@ -20,7 +20,6 @@ import one.modality.ecommerce.payment.PaymentFailureReason;
 import one.modality.ecommerce.payment.PaymentFormType;
 import one.modality.ecommerce.payment.PaymentStatus;
 import one.modality.ecommerce.payment.client.ClientPaymentUtil;
-import one.modality.event.frontoffice.activities.book.event.slides.ProvidedGatewayPaymentForm;
 
 /**
  * Handles payment processing for booking forms.
