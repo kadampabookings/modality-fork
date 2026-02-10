@@ -60,6 +60,18 @@ public interface BookingFormProvider {
     }
 
     /**
+     * Returns whether the existing booking for a logged-in user should be auto-loaded.
+     * When true, the ExistingBookingSection is shown allowing users to select which
+     * family member's booking to modify or create a new one.
+     *
+     * @param event the event to check
+     * @return true to auto-load existing bookings, false otherwise
+     */
+    default boolean autoLoadExistingBooking(Event event) {
+        return false;
+    }
+
+    /**
      * Legacy method for backward compatibility - defaults to NEW_BOOKING entry point.
      *
      * @param event the event to create the form for

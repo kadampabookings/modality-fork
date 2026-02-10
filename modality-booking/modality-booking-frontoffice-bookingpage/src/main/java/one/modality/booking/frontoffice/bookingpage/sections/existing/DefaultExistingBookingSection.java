@@ -5,7 +5,6 @@ import dev.webfx.extras.i18n.controls.I18nControls;
 import dev.webfx.extras.panes.MonoPane;
 import dev.webfx.extras.util.control.Controls;
 import dev.webfx.platform.async.Future;
-import dev.webfx.platform.async.Promise;
 import dev.webfx.platform.console.Console;
 import dev.webfx.stack.orm.datasourcemodel.service.DataSourceModelService;
 import dev.webfx.stack.orm.entity.EntityStore;
@@ -25,6 +24,7 @@ import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
 import javafx.scene.shape.SVGPath;
+import one.modality.base.shared.entities.Document;
 import one.modality.base.shared.entities.Event;
 import one.modality.base.shared.entities.Invitation;
 import one.modality.base.shared.entities.Person;
@@ -42,8 +42,7 @@ import one.modality.crm.shared.services.authn.fx.FXModalityUserPrincipal;
 import one.modality.crm.shared.services.authn.fx.FXUserPerson;
 import one.modality.ecommerce.document.service.DocumentAggregate;
 import one.modality.ecommerce.document.service.DocumentService;
-import one.modality.ecommerce.document.service.PolicyAndDocumentAggregates;
-import one.modality.ecommerce.shared.pricecalculator.PriceCalculator;
+import one.modality.ecommerce.document.service.LoadDocumentArgument;
 
 import java.util.*;
 import java.util.function.Consumer;
@@ -70,6 +69,7 @@ public class DefaultExistingBookingSection implements BookingFormSection, HasExi
 
     /**
      * Data class to hold booking information for display.
+     * Uses lightweight Document fields only — full DocumentAggregate is loaded on demand.
      */
     public static class BookingInfo {
         private final Object personId;
@@ -78,26 +78,26 @@ public class DefaultExistingBookingSection implements BookingFormSection, HasExi
         private final Person personEntity;
         private final boolean isPrimary;  // account owner
         private final Integer documentRef;
-        private final int classesBooked;
-        private final int amountPaid;
-        private final int amountTotal;
+        private final String dates;       // dates string from Document for display
+        private final int amountPaid;     // price_deposit from Document
+        private final int amountTotal;    // price_net from Document
         private final boolean isConfirmed;
-        private final DocumentAggregate documentAggregate;  // Full booking data for WorkingBooking recreation
+        private final Document document;  // Lightweight entity for on-demand loading
 
         public BookingInfo(Object personId, String personName, String personEmail, Person personEntity,
-                           boolean isPrimary, Integer documentRef, int classesBooked,
-                           int amountPaid, int amountTotal, DocumentAggregate documentAggregate) {
+                           boolean isPrimary, Integer documentRef, String dates,
+                           int amountPaid, int amountTotal, Document document) {
             this.personId = personId;
             this.personName = personName;
             this.personEmail = personEmail;
             this.personEntity = personEntity;
             this.isPrimary = isPrimary;
             this.documentRef = documentRef;
-            this.classesBooked = classesBooked;
+            this.dates = dates;
             this.amountPaid = amountPaid;
             this.amountTotal = amountTotal;
             this.isConfirmed = amountPaid >= amountTotal && amountTotal > 0;
-            this.documentAggregate = documentAggregate;
+            this.document = document;
         }
 
         public Object getPersonId() { return personId; }
@@ -106,11 +106,11 @@ public class DefaultExistingBookingSection implements BookingFormSection, HasExi
         public Person getPersonEntity() { return personEntity; }
         public boolean isPrimary() { return isPrimary; }
         public Integer getDocumentRef() { return documentRef; }
-        public int getClassesBooked() { return classesBooked; }
+        public String getDates() { return dates; }
         public int getAmountPaid() { return amountPaid; }
         public int getAmountTotal() { return amountTotal; }
         public boolean isConfirmed() { return isConfirmed; }
-        public DocumentAggregate getDocumentAggregate() { return documentAggregate; }
+        public Document getDocument() { return document; }
     }
 
     // SVG Icons
@@ -154,7 +154,7 @@ public class DefaultExistingBookingSection implements BookingFormSection, HasExi
 
     // Selected person entity (set when card is clicked, used when Continue is pressed)
     private Person selectedPersonEntity;
-    // Selected BookingInfo (for existing booking modification - contains DocumentAggregate)
+    // Selected BookingInfo (for existing booking modification - Document loaded on demand)
     private BookingInfo selectedBookingInfo;
     // Selected MemberInfo (for new booking creation)
     private MemberInfo selectedMemberInfo;
@@ -305,26 +305,41 @@ public class DefaultExistingBookingSection implements BookingFormSection, HasExi
         I18n.bindI18nTextProperty(continueButton.textProperty(), BookingPageI18nKeys.ModifyBookingButton);
 
         continueButton.setOnAction(e -> {
-            // Handle selection based on type
-            if (selectedBookingInfo != null && selectedBookingInfo.getDocumentAggregate() != null) {
-                // EXISTING BOOKING MODIFICATION: Pass DocumentAggregate to recreate WorkingBooking
-                // This avoids triggering FXPersonToBook which would cause a form reload
-                Console.log("Continue pressed - modifying existing booking for: " + selectedBookingInfo.getPersonName());
-                if (onDocumentAggregateSelected != null) {
-                    onDocumentAggregateSelected.accept(selectedBookingInfo.getDocumentAggregate());
-                }
+            if (selectedBookingInfo != null && selectedBookingInfo.getDocument() != null) {
+                // EXISTING BOOKING MODIFICATION: Load full DocumentAggregate on demand
+                Console.log("Continue pressed - loading full booking data for: " + selectedBookingInfo.getPersonName());
+                continueButton.setDisable(true);
+                continueButton.setGraphic(Controls.createSpinner(16));
+
+                DocumentService.loadDocument(LoadDocumentArgument.ofDocument(selectedBookingInfo.getDocument()))
+                    .inUiThread()
+                    .onSuccess(docAggregate -> {
+                        // Set PolicyAggregate from form's working booking properties
+                        if (workingBookingProperties != null && workingBookingProperties.getPolicyAggregate() != null) {
+                            docAggregate.setPolicyAggregate(workingBookingProperties.getPolicyAggregate());
+                        }
+                        continueButton.setGraphic(null);
+                        if (onDocumentAggregateSelected != null) {
+                            onDocumentAggregateSelected.accept(docAggregate);
+                        }
+                        if (onContinuePressed != null) {
+                            onContinuePressed.run();
+                        }
+                    })
+                    .onFailure(error -> {
+                        Console.log("Error loading document aggregate: " + error);
+                        continueButton.setGraphic(null);
+                        continueButton.setDisable(false);
+                    });
             } else if (selectedMemberInfo != null) {
-                // NEW BOOKING: Create fresh WorkingBooking with person details
-                // Pass MemberInfo (which has name/email captured when data was available)
+                // NEW BOOKING: No async needed — create fresh WorkingBooking synchronously
                 Console.log("Continue pressed - creating new booking for: " + selectedMemberInfo.getName());
                 if (onMemberSelected != null) {
                     onMemberSelected.accept(selectedMemberInfo);
                 }
-            }
-
-            // Navigate to next page
-            if (onContinuePressed != null) {
-                onContinuePressed.run();
+                if (onContinuePressed != null) {
+                    onContinuePressed.run();
+                }
             }
         });
 
@@ -463,9 +478,10 @@ public class DefaultExistingBookingSection implements BookingFormSection, HasExi
         VBox refBox = createSummaryItem(BookingPageI18nKeys.Reference,
                 info.getDocumentRef() != null ? "#" + info.getDocumentRef() : "-");
 
-        // Classes
+        // Classes booked count (derived from dates string)
+        int classesBooked = countDates(info.getDates());
         VBox classesBox = createSummaryItem(BookingPageI18nKeys.Dates,
-                I18n.getI18nText(BookingPageI18nKeys.ClassesBookedCount, info.getClassesBooked()));
+                I18n.getI18nText(BookingPageI18nKeys.ClassesBookedCount, classesBooked));
 
         // Payment
         String paymentText = formatCurrency(info.getAmountPaid()) + " / " + formatCurrency(info.getAmountTotal());
@@ -506,7 +522,7 @@ public class DefaultExistingBookingSection implements BookingFormSection, HasExi
 
         card.getChildren().add(wrapper);
 
-        // Click handler - store the selected BookingInfo (contains DocumentAggregate for WorkingBooking recreation)
+        // Click handler - store the selected BookingInfo (full data loaded on Continue click)
         card.setOnMouseClicked(e -> {
             selectedAction.set("modify-" + info.getPersonId());
             // Store selection data for Continue button
@@ -698,6 +714,18 @@ public class DefaultExistingBookingSection implements BookingFormSection, HasExi
         return EventPriceFormatter.formatWithCurrency(amountInCents, workingBookingProperties != null ? workingBookingProperties.getEvent() : null);
     }
 
+    /**
+     * Counts the number of dates in a comma-separated dates string from Document.dates.
+     */
+    private static int countDates(String dates) {
+        if (dates == null || dates.isEmpty()) return 0;
+        int count = 1;
+        for (int i = 0; i < dates.length(); i++) {
+            if (dates.charAt(i) == ',') count++;
+        }
+        return count;
+    }
+
     // === DATA LOADING ===
 
     private void loadData() {
@@ -744,17 +772,29 @@ public class DefaultExistingBookingSection implements BookingFormSection, HasExi
         EntityStore entityStore = EntityStore.create(DataSourceModelService.getDefaultDataSourceModel());
         Object personId = userPerson.getPrimaryKey();
 
-        // Step 1: Load pending invitations where I'm the inviter
-        loadPendingInvitations(entityStore, personId)
-            .compose(pendingInviteeIds ->
-                // Step 2: Load all account members (with accountPerson for validation check)
-                loadAccountMembers(entityStore, accountId, pendingInviteeIds))
-            .compose(context ->
-                // Step 3: Load bookings for all members
-                loadBookingsForMembers(entityStore, event, context, userPerson, ownerEmail))
+        // Run two groups in parallel:
+        // Group A: invitations → account members (sequential internally)
+        // Group B: lightweight document query for display only
+        Future.all(
+            // Group A: Load member info
+            loadPendingInvitations(entityStore, personId)
+                .compose(pendingInviteeIds -> loadAccountMembers(entityStore, accountId, pendingInviteeIds)),
+            // Group B: Lightweight DQL query — only display fields, no DocumentLines/Attendances/MoneyTransfers
+            entityStore.<Document>executeQuery(
+                "select ref,person.(id,firstName,lastName,email)," +
+                "price_net,price_deposit,cancelled,confirmed,dates " +
+                "from Document where event=$1 and person.frontendAccount=$2",
+                event, accountId)
+        )
+            .inUiThread()
+            .onSuccess(compositeFuture -> {
+                MemberLoadContext context = compositeFuture.resultAt(0);
+                List<Document> allDocuments = compositeFuture.resultAt(1);
+
+                buildMemberAndBookingLists(context, allDocuments, userPerson, ownerEmail);
+            })
             .onFailure(error -> {
                 Console.log("Error loading household members: " + error);
-                // Hide loading spinner on error
                 loadingProperty.set(false);
             });
     }
@@ -829,12 +869,12 @@ public class DefaultExistingBookingSection implements BookingFormSection, HasExi
     }
 
     /**
-     * Step 3: Load bookings for all members and build final lists.
+     * Matches lightweight documents to members and builds the final display lists.
+     * Called on the UI thread after all parallel loading completes.
      */
-    private Future<Void> loadBookingsForMembers(
-            EntityStore entityStore,
-            Event event,
+    private void buildMemberAndBookingLists(
             MemberLoadContext context,
+            List<Document> allDocuments,
             Person userPerson,
             String ownerEmail) {
 
@@ -842,93 +882,77 @@ public class DefaultExistingBookingSection implements BookingFormSection, HasExi
         Set<Object> pendingInviteeIds = context.pendingInviteeIds;
         Set<String> emailsWithAccounts = context.emailsWithAccounts;
 
-        List<Future<PersonBookingResult>> futures = new ArrayList<>();
-
-        for (Person member : allMembers) {
-            Promise<PersonBookingResult> promise = Promise.promise();
-            futures.add(promise.future());
-
-            DocumentService.loadPolicyAndDocument(event, member.getPrimaryKey())
-                .onSuccess(result -> {
-                    promise.complete(new PersonBookingResult(member, result));
-                })
-                .onFailure(error -> {
-                    Console.log("Error loading booking for " + member.getPrimaryKey() + ": " + error);
-                    promise.complete(new PersonBookingResult(member, null));
-                });
-        }
-
-        Promise<Void> resultPromise = Promise.promise();
-
-        // Wait for all futures to complete
-        Future.all(futures)
-            .inUiThread()
-            .onComplete(ar -> {
-                List<BookingInfo> withBookings = new ArrayList<>();
-                List<MemberInfo> withoutBookings = new ArrayList<>();
-
-                for (Future<PersonBookingResult> future : futures) {
-                    PersonBookingResult result = future.result();
-                    Person person = result.person;
-                    PolicyAndDocumentAggregates policyAndDoc = result.policyAndDoc;
-                    boolean isPrimary = person.getPrimaryKey().equals(userPerson.getPrimaryKey());
-
-                    if (policyAndDoc != null && policyAndDoc.documentAggregate() != null) {
-                        // Has existing booking
-                        DocumentAggregate docAgg = policyAndDoc.documentAggregate();
-
-                        int classesBooked = docAgg.getAttendances() != null ? docAgg.getAttendances().size() : 0;
-                        PriceCalculator priceCalculator = new PriceCalculator(docAgg);
-                        int amountTotal = priceCalculator.calculateTotalPrice();
-                        int amountPaid = priceCalculator.calculateDeposit();
-
-                        BookingInfo bookingInfo = new BookingInfo(
-                                person.getPrimaryKey(),
-                                getPersonFullName(person),
-                                person.getEmail(),
-                                person,
-                                isPrimary,
-                                docAgg.getDocumentRef(),
-                                classesBooked,
-                                amountPaid,
-                                amountTotal,
-                                docAgg
-                        );
-                        withBookings.add(bookingInfo);
-                    } else {
-                        // No booking yet - determine the correct status
-                        MemberStatus status = determineMemberStatus(
-                            person, isPrimary, pendingInviteeIds, emailsWithAccounts, ownerEmail);
-
-                        MemberInfo memberInfo = new MemberInfo(
-                                person.getPrimaryKey(),
-                                getPersonFullName(person),
-                                person.getEmail(),
-                                person,
-                                status
-                        );
-                        withoutBookings.add(memberInfo);
+        // Index documents by person primary key (latest document wins if multiple exist)
+        Map<Object, Document> docByPerson = new HashMap<>();
+        if (allDocuments != null) {
+            for (Document doc : allDocuments) {
+                if (doc != null && doc.getPersonId() != null) {
+                    Object personPk = doc.getPersonId().getPrimaryKey();
+                    // Keep the first document encountered per person (query returns latest first)
+                    if (!docByPerson.containsKey(personPk)) {
+                        docByPerson.put(personPk, doc);
                     }
                 }
+            }
+        }
 
-                // Sort: primary/owner first
-                withBookings.sort((a, b) -> Boolean.compare(b.isPrimary(), a.isPrimary()));
-                withoutBookings.sort((a, b) -> {
-                    boolean aOwner = a.getStatus() == MemberStatus.OWNER;
-                    boolean bOwner = b.getStatus() == MemberStatus.OWNER;
-                    return Boolean.compare(bOwner, aOwner);
-                });
+        List<BookingInfo> withBookings = new ArrayList<>();
+        List<MemberInfo> withoutBookings = new ArrayList<>();
 
-                membersWithBookings.setAll(withBookings);
-                membersWithoutBookings.setAll(withoutBookings);
+        for (Person person : allMembers) {
+            boolean isPrimary = person.getPrimaryKey().equals(userPerson.getPrimaryKey());
+            Document doc = docByPerson.get(person.getPrimaryKey());
 
-                rebuildCards();
-                // Hide loading spinner
-                loadingProperty.set(false);
-                resultPromise.complete();
-            });
+            if (doc != null) {
+                // Has existing booking — use lightweight Document fields directly
+                Integer priceNet = doc.getPriceNet();
+                Integer priceDeposit = doc.getPriceDeposit();
+                int amountTotal = priceNet != null ? priceNet : 0;
+                int amountPaid = priceDeposit != null ? priceDeposit : 0;
 
-        return resultPromise.future();
+                BookingInfo bookingInfo = new BookingInfo(
+                        person.getPrimaryKey(),
+                        getPersonFullName(person),
+                        person.getEmail(),
+                        person,
+                        isPrimary,
+                        doc.getRef(),
+                        doc.getDates(),
+                        amountPaid,
+                        amountTotal,
+                        doc
+                );
+                withBookings.add(bookingInfo);
+            } else {
+                // No booking yet - determine the correct status
+                MemberStatus status = determineMemberStatus(
+                    person, isPrimary, pendingInviteeIds, emailsWithAccounts, ownerEmail);
+
+                MemberInfo memberInfo = new MemberInfo(
+                        person.getPrimaryKey(),
+                        getPersonFullName(person),
+                        person.getEmail(),
+                        person,
+                        status
+                );
+                withoutBookings.add(memberInfo);
+            }
+        }
+
+        // Sort: primary/owner first
+        withBookings.sort((a, b) -> Boolean.compare(b.isPrimary(), a.isPrimary()));
+        withoutBookings.sort((a, b) -> {
+            boolean aOwner = a.getStatus() == MemberStatus.OWNER;
+            boolean bOwner = b.getStatus() == MemberStatus.OWNER;
+            return Boolean.compare(bOwner, aOwner);
+        });
+
+        membersWithBookings.setAll(withBookings);
+        membersWithoutBookings.setAll(withoutBookings);
+
+        rebuildCards();
+        // Hide loading spinner
+        loadingProperty.set(false);
     }
 
     /**
@@ -989,16 +1013,6 @@ public class DefaultExistingBookingSection implements BookingFormSection, HasExi
             this.allMembers = allMembers;
             this.pendingInviteeIds = pendingInviteeIds;
             this.emailsWithAccounts = emailsWithAccounts;
-        }
-    }
-
-    private static class PersonBookingResult {
-        final Person person;
-        final PolicyAndDocumentAggregates policyAndDoc;
-
-        PersonBookingResult(Person person, PolicyAndDocumentAggregates policyAndDoc) {
-            this.person = person;
-            this.policyAndDoc = policyAndDoc;
         }
     }
 
@@ -1068,14 +1082,13 @@ public class DefaultExistingBookingSection implements BookingFormSection, HasExi
     }
 
     /**
-     * This section is only applicable when there's an existing booking to modify.
-     * When there's no existing booking, the page will be skipped automatically.
+     * This section is applicable when modifying an existing booking or when in modify booking mode
+     * (deferred DocumentAggregate loading — isNewBooking() is true but we still need to show the section).
      */
     @Override
     public boolean isApplicableToBooking(WorkingBooking workingBooking) {
-        // Only show this section when modifying an existing booking (not new booking, not payment request)
         return workingBooking != null
-            && !workingBooking.isNewBooking()
+            && (!workingBooking.isNewBooking() || workingBooking.isModifyBookingMode())
             && !workingBooking.isPaymentRequestedByUser();
     }
 
@@ -1153,10 +1166,8 @@ public class DefaultExistingBookingSection implements BookingFormSection, HasExi
     }
 
     /**
-     * Sets the callback for when a DocumentAggregate is selected (for existing booking modification).
-     * This is called when the user clicks Continue after selecting an existing booking.
-     * The callback receives the DocumentAggregate which can be used to recreate the WorkingBooking
-     * without triggering a full form reload.
+     * Sets the callback for when the user clicks Continue after selecting an existing booking.
+     * The full DocumentAggregate is loaded on demand at that point and passed to the callback.
      */
     @Override
     public void setOnDocumentAggregateSelected(Consumer<DocumentAggregate> callback) {
