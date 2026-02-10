@@ -67,6 +67,10 @@ public final class WorkingBooking {
     // Flag to mark that member was explicitly selected (e.g., via ExistingBookingSection)
     // When true, member selection page should be skipped
     private boolean memberExplicitlySelected;
+    // Flag to mark that this is a MODIFY_BOOKING entry point with deferred DocumentAggregate loading.
+    // When true, isNewBooking() returns true (no initial DocumentAggregate) but the ExistingBookingSection
+    // should still be shown so the user can select which booking to modify.
+    private boolean modifyBookingMode;
     // Then a booking form can actually distinguish 3 cases from the working booking state:
     // 1) workingBooking.isNewBooking() == true => non-existing, new, initial booking (after pressing a Book Now button)
     // 2) isPaymentRequestedByUser() == true => existing, saved booking the user requested to pay from Orders page
@@ -196,6 +200,14 @@ public final class WorkingBooking {
 
     public void setMemberExplicitlySelected(boolean memberExplicitlySelected) {
         this.memberExplicitlySelected = memberExplicitlySelected;
+    }
+
+    public boolean isModifyBookingMode() {
+        return modifyBookingMode;
+    }
+
+    public void setModifyBookingMode(boolean modifyBookingMode) {
+        this.modifyBookingMode = modifyBookingMode;
     }
 
     public void copyChanges(WorkingBooking workingBooking, boolean clearPreviousChanges) {
