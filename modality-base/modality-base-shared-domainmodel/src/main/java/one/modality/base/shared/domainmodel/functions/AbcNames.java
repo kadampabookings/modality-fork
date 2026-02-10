@@ -30,7 +30,7 @@ public final class AbcNames extends Function {
             return null;
         String[] tokens = Strings.split(Strings.replaceAll(s.toLowerCase(), "-", " "), " "); // PB TeaVM s.toLowerCase().split("[\\s,-]");
         Arrays.sort(tokens);
-        String start = like ? "% " : " ";
+        String start = like ? "%" : "";
         StringBuilder sb = new StringBuilder(start);
         for (String token : tokens) {
             if (sb.length() > start.length())
