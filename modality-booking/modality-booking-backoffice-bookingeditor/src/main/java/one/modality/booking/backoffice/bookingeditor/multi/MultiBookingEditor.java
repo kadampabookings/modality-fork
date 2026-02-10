@@ -38,6 +38,8 @@ public final class MultiBookingEditor extends BookingEditorBase {
 
     @Override
     public void syncWorkingBookingFromUi() {
+        if (workingBooking.isNewBooking())
+            workingBooking.applyPersonalDetails(FXPersonToBook.getPersonToBook());
         bookingEditors.forEach(bookingEditor -> {
             if (bookingEditor instanceof BookingEditorBase beb) {
                 beb.syncWorkingBookingFromUi();
