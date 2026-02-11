@@ -1,10 +1,10 @@
 package one.modality.booking.frontoffice.bookingpage.sections.member;
 
-import javafx.beans.property.ObjectProperty;
 import javafx.beans.value.ObservableBooleanValue;
 import one.modality.base.shared.entities.Person;
 import one.modality.booking.frontoffice.bookingpage.BookingFormSection;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
+import one.modality.booking.frontoffice.bookingpage.sections.childcarer.DefaultChildCarerSection;
+import one.modality.booking.frontoffice.bookingpage.standard.BookingSelectionState;
 
 import java.util.Set;
 import java.util.function.Consumer;
@@ -66,16 +66,6 @@ public interface HasMemberSelectionSection extends BookingFormSection {
     }
 
     /**
-     * Returns the color scheme property for theming.
-     */
-    ObjectProperty<BookingFormColorScheme> colorSchemeProperty();
-
-    /**
-     * Sets the color scheme for this section.
-     */
-    void setColorScheme(BookingFormColorScheme scheme);
-
-    /**
      * Sets the callback for when a member is selected.
      */
     void setOnMemberSelected(Consumer<MemberInfo> callback);
@@ -120,5 +110,45 @@ public interface HasMemberSelectionSection extends BookingFormSection {
      * Returns true if householdMembers contains at least one member not in alreadyBookedPersonIds.
      */
     ObservableBooleanValue hasAvailableMembersProperty();
+
+    // === Inline Child Carer Support ===
+
+    /**
+     * Enables inline child carer selection for this member selection section.
+     * When enabled, selecting a child (under 18) will show the child carer
+     * selection form directly below the member cards.
+     *
+     * <p>This is optional - forms that don't need child carer selection
+     * simply don't call this method (defaults to disabled).</p>
+     *
+     * @param enabled true to enable inline child carer, false to disable
+     */
+    default void setInlineChildCarerEnabled(boolean enabled) {
+        // Default: no-op - implementations that support this feature override
+    }
+
+    /**
+     * Returns whether inline child carer selection is enabled.
+     */
+    default boolean isInlineChildCarerEnabled() {
+        return false;
+    }
+
+    /**
+     * Binds this section to the centralized BookingSelectionState.
+     * Also binds the inline child carer section if enabled.
+     *
+     * @param selectionState the centralized state to bind to
+     */
+    default void bindToSelectionState(BookingSelectionState selectionState) {
+        // Default: no-op - implementations that support this feature override
+    }
+
+    /**
+     * Returns the inline child carer section if enabled, null otherwise.
+     */
+    default DefaultChildCarerSection getChildCarerSection() {
+        return null;
+    }
 
 }

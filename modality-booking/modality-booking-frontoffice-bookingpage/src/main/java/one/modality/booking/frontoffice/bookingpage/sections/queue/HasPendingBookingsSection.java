@@ -1,10 +1,8 @@
 package one.modality.booking.frontoffice.bookingpage.sections.queue;
 
-import javafx.beans.property.ObjectProperty;
 import javafx.collections.ObservableList;
 import one.modality.base.shared.entities.Document;
 import one.modality.booking.frontoffice.bookingpage.BookingFormSection;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -50,48 +48,12 @@ public interface HasPendingBookingsSection extends BookingFormSection {
             this.dates = dates;
         }
 
-        /**
-         * Constructor with combined name (backward compatibility).
-         *
-         * @deprecated Use {@link #BookingLineItem(String, String, int, boolean, String, String)} with separate family/item names
-         */
-        @Deprecated
-        public BookingLineItem(String name, int amount, boolean included) {
-            this(null, name, amount, included, null, null);
-        }
-
-        /**
-         * Constructor with combined name and family code (backward compatibility).
-         *
-         * @deprecated Use {@link #BookingLineItem(String, String, int, boolean, String, String)} with separate family/item names
-         */
-        @Deprecated
-        public BookingLineItem(String name, int amount, boolean included, String familyCode) {
-            this(null, name, amount, included, familyCode, null);
-        }
-
-        /**
-         * Constructor with combined name, family code, and dates (backward compatibility).
-         *
-         * @deprecated Use {@link #BookingLineItem(String, String, int, boolean, String, String)} with separate family/item names
-         */
-        @Deprecated
-        public BookingLineItem(String name, int amount, boolean included, String familyCode, String dates) {
-            this(null, name, amount, included, familyCode, dates);
-        }
-
         public String getFamilyName() { return familyName; }
         public String getItemName() { return itemName; }
         public int getAmount() { return amount; }
         public boolean isIncluded() { return included; }
         public String getFamilyCode() { return familyCode; }
         public String getDates() { return dates; }
-
-        /**
-         * @deprecated Use {@link #getItemName()} for item name or {@link #getFamilyName()} for family name
-         */
-        @Deprecated
-        public String getName() { return itemName; }
     }
 
     /**
@@ -147,24 +109,6 @@ public interface HasPendingBookingsSection extends BookingFormSection {
             calculateTotal();
         }
 
-        /**
-         * @deprecated Use {@link #addLineItem(String, String, String, int, String)} with separate family/item names
-         */
-        @Deprecated
-        public void addLineItem(String name, String familyCode, int amount) {
-            lineItems.add(new BookingLineItem(null, name, amount, false, familyCode, null));
-            calculateTotal();
-        }
-
-        /**
-         * @deprecated Use {@link #addLineItem(String, String, String, int, String)} with separate family/item names
-         */
-        @Deprecated
-        public void addLineItem(String name, String familyCode, int amount, String dates) {
-            lineItems.add(new BookingLineItem(null, name, amount, false, familyCode, dates));
-            calculateTotal();
-        }
-
         public void addLineItem(BookingLineItem item) {
             lineItems.add(item);
             calculateTotal();
@@ -192,16 +136,6 @@ public interface HasPendingBookingsSection extends BookingFormSection {
         public String getBookingReference() { return bookingReference; }
         public void setBookingReference(String bookingReference) { this.bookingReference = bookingReference; }
     }
-
-    /**
-     * Returns the color scheme property for theming.
-     */
-    ObjectProperty<BookingFormColorScheme> colorSchemeProperty();
-
-    /**
-     * Sets the color scheme for this section.
-     */
-    void setColorScheme(BookingFormColorScheme scheme);
 
     /**
      * Adds a booking to the cart.

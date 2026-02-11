@@ -98,19 +98,19 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
         dateCardsContainer.setVgap(12);
         dateCardsContainer.setPadding(new Insets(0));
         dateCardsContainer.setAlignment(Pos.TOP_LEFT);
-        dateCardsContainer.getStyleClass().add("gpclass-date-cards-container");
+        dateCardsContainer.getStyleClass().add(gpclass_date_cards_container);
 
         // Select all bar
         buildSelectAllBar();
 
         // Price summary
         priceSummaryBox.setPadding(new Insets(24));
-        priceSummaryBox.getStyleClass().addAll(bookingpage_card_static, "gpclass-price-summary");
+        priceSummaryBox.getStyleClass().addAll(bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded, gpclass_price_summary);
         priceSummaryBox.setVisible(false);
         priceSummaryBox.setManaged(false);
 
         container.getChildren().addAll(header, dateCardsContainer, selectAllBar, priceSummaryBox);
-        container.getStyleClass().add("gpclass-date-selection-section");
+        container.getStyleClass().add(gpclass_date_selection_section);
         container.setMinWidth(0);
     }
 
@@ -302,7 +302,7 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
         card.setMinWidth(180);
         card.setPrefWidth(180);
         card.setMaxWidth(200);
-        card.getStyleClass().addAll(bookingpage_card, gpclass_date_card);
+        card.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded, gpclass_date_card);
 
         // Apply past date styling using CSS helper (grayed out, not clickable)
         BookingPageUIBuilder.applyPastDateStyle(card, isPastDate);
@@ -473,7 +473,7 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
 
         // Title
         Label titleLabel = I18nControls.newLabel(BookingPageI18nKeys.ClassSelectionYourSelection);
-        titleLabel.getStyleClass().add(gpclass_price_summary_title);
+        titleLabel.getStyleClass().addAll(bookingpage_text_lg, bookingpage_font_bold, bookingpage_text_dark);
         VBox.setMargin(titleLabel, new Insets(0, 0, 4, 0)); // 4px extra to achieve 16px total (12px VBox spacing + 4px)
 
         boolean allSelected = selectedItems.size() == availableItems.size();
@@ -523,13 +523,13 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
             discountRow.getStyleClass().add(bookingpage_discount_row);
 
             Label discountLabel = I18nControls.newLabel(BookingPageI18nKeys.ClassSelectionFullTermDiscount);
-            discountLabel.getStyleClass().add(bookingpage_discount_label);
+            discountLabel.getStyleClass().addAll(bookingpage_text_primary, bookingpage_font_medium);
 
             Region discountSpacer = new Region();
             HBox.setHgrow(discountSpacer, Priority.ALWAYS);
 
             Label discountValue = new Label("-" + formatPrice(discount));
-            discountValue.getStyleClass().add(bookingpage_discount_value);
+            discountValue.getStyleClass().addAll(bookingpage_text_primary, bookingpage_font_semibold);
 
             discountRow.getChildren().addAll(discountLabel, discountSpacer, discountValue);
             priceSummaryBox.getChildren().add(discountRow);
@@ -547,14 +547,14 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
         totalRow.setAlignment(Pos.CENTER_LEFT);
         totalRow.setPadding(new Insets(0, 12, 0, 12)); // Match subtotal row padding for value alignment
 
-        Label totalLabel = new Label(I18n.getI18nText(BookingPageI18nKeys.Total));
-        totalLabel.getStyleClass().add(gpclass_price_summary_total_label);
+        Label totalLabel = I18nControls.newLabel(BookingPageI18nKeys.Total);
+        totalLabel.getStyleClass().addAll(bookingpage_text_xl, bookingpage_font_bold, bookingpage_text_dark);
 
         Region totalSpacer = new Region();
         HBox.setHgrow(totalSpacer, Priority.ALWAYS);
 
         Label totalValue = new Label(formatPrice(total));
-        totalValue.getStyleClass().addAll(gpclass_price_summary_total_value, bookingpage_text_primary);
+        totalValue.getStyleClass().addAll(bookingpage_text_2xl, bookingpage_font_bold, bookingpage_text_primary);
 
         totalRow.getChildren().addAll(totalLabel, totalSpacer, totalValue);
 

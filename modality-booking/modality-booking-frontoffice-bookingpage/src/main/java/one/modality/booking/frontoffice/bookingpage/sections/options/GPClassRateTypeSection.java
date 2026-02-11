@@ -27,7 +27,7 @@ import one.modality.booking.frontoffice.bookingpage.BookingFormSection;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
 import one.modality.booking.frontoffice.bookingpage.components.StyledSectionHeader;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
+
 import one.modality.ecommerce.policy.service.PolicyAggregate;
 
 import java.util.List;
@@ -36,15 +36,15 @@ import java.util.function.Consumer;
 import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelectors.*;
 
 /**
- * Default rate selection section for booking forms.
- * Allows users to choose between Standard Rate and Member Rate.
+ * Rate selection section for General Program (GP) class booking forms.
+ * Allows users to choose between Standard Rate and Member Rate with per-class pricing.
  *
- * <p>This is the default implementation of {@link HasRateTypeSection} that can be used
- * as-is or extended for organization-specific customizations.</p>
+ * <p>This section is specifically designed for GP Class bookings where pricing is per class.
+ * For online event forms, use {@link DefaultRateTypeSection} instead.</p>
  *
  * @author Claude
  */
-public class DefaultRateSection implements BookingFormSection, HasRateTypeSection {
+public class GPClassRateTypeSection implements BookingFormSection, HasRateTypeSection {
 
     // UI Components
     private final VBox container = new VBox(16);
@@ -54,8 +54,6 @@ public class DefaultRateSection implements BookingFormSection, HasRateTypeSectio
     // State
     private final ObjectProperty<RateType> selectedRateType = new SimpleObjectProperty<>(RateType.STANDARD);
     private final SimpleBooleanProperty validProperty = new SimpleBooleanProperty(true);
-    private final ObjectProperty<BookingFormColorScheme> colorSchemeProperty = new SimpleObjectProperty<>(BookingFormColorScheme.DEFAULT);
-
     // Working booking reference
     private WorkingBookingProperties workingBookingProperties;
 
@@ -66,7 +64,7 @@ public class DefaultRateSection implements BookingFormSection, HasRateTypeSectio
     // Callbacks
     private Consumer<RateType> onRateTypeChanged;
 
-    public DefaultRateSection() {
+    public GPClassRateTypeSection() {
         buildUI();
     }
 
@@ -98,7 +96,7 @@ public class DefaultRateSection implements BookingFormSection, HasRateTypeSectio
         cardsContainer.getChildren().addAll(standardRateCard, memberRateCard);
 
         container.getChildren().addAll(header, cardsContainer);
-        container.getStyleClass().add("default-rate-section");
+        container.getStyleClass().add(bookingpage_default_rate_section);
         container.setMinWidth(0);
     }
 
@@ -108,7 +106,7 @@ public class DefaultRateSection implements BookingFormSection, HasRateTypeSectio
         card.setMinWidth(160);
         card.setPrefWidth(180);
         card.setMaxWidth(220);
-        card.getStyleClass().addAll(bookingpage_card, "default-rate-card");
+        card.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded, default_rate_card);
         card.setCursor(Cursor.HAND);
 
         // Track selection state for this card
@@ -271,16 +269,6 @@ public class DefaultRateSection implements BookingFormSection, HasRateTypeSectio
     }
 
     // === HasRateTypeSection Implementation ===
-
-    @Override
-    public ObjectProperty<BookingFormColorScheme> colorSchemeProperty() {
-        return colorSchemeProperty;
-    }
-
-    @Override
-    public void setColorScheme(BookingFormColorScheme scheme) {
-        colorSchemeProperty.set(scheme);
-    }
 
     @Override
     public RateType getSelectedRateType() {

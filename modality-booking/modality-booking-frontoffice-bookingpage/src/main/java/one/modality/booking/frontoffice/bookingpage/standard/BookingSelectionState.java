@@ -1,9 +1,12 @@
 package one.modality.booking.frontoffice.bookingpage.standard;
 
+import dev.webfx.stack.orm.entity.EntityStore;
 import javafx.beans.property.*;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
+import one.modality.base.shared.entities.Document;
 import one.modality.base.shared.entities.Item;
+import one.modality.booking.client.workingbooking.WorkingBooking;
 import one.modality.booking.frontoffice.bookingpage.sections.accommodation.HasAccommodationSelectionSection.AccommodationOption;
 import one.modality.booking.frontoffice.bookingpage.sections.dates.HasFestivalDaySelectionSection.ArrivalDepartureTime;
 import one.modality.booking.frontoffice.bookingpage.sections.options.HasAdditionalOptionsSection.AdditionalOption;
@@ -303,6 +306,7 @@ public class BookingSelectionState {
 
     // === Audio Recording Selection ===
 
+    // Typed as Object to avoid dependency on HasAudioRecordingPhaseCoverageSection.AudioRecordingPhaseOption
     private final ObjectProperty<Object> selectedAudioPhase = new SimpleObjectProperty<>();
 
     public ObjectProperty<Object> selectedAudioPhaseProperty() {
@@ -383,6 +387,370 @@ public class BookingSelectionState {
         return text != null && !text.trim().isEmpty();
     }
 
+    // === Translation or Hard of Hearing Selection ===
+
+    private final BooleanProperty needsTranslation = new SimpleBooleanProperty(false);
+    private final StringProperty translationLanguage = new SimpleStringProperty();
+
+    public BooleanProperty needsTranslationProperty() {
+        return needsTranslation;
+    }
+
+    public boolean needsTranslation() {
+        return needsTranslation.get();
+    }
+
+    public void setNeedsTranslation(boolean needs) {
+        needsTranslation.set(needs);
+    }
+
+    public StringProperty translationLanguageProperty() {
+        return translationLanguage;
+    }
+
+    public String getTranslationLanguage() {
+        return translationLanguage.get();
+    }
+
+    public void setTranslationLanguage(String language) {
+        translationLanguage.set(language);
+    }
+
+    public boolean hasTranslationSelection() {
+        return needsTranslation() && translationLanguage.get() != null && !translationLanguage.get().isEmpty();
+    }
+
+    // === Ordination Ceremony ===
+
+    private final BooleanProperty wantsOrdinationCeremony = new SimpleBooleanProperty(false);
+
+    public BooleanProperty wantsOrdinationCeremonyProperty() {
+        return wantsOrdinationCeremony;
+    }
+
+    public boolean wantsOrdinationCeremony() {
+        return wantsOrdinationCeremony.get();
+    }
+
+    public void setWantsOrdinationCeremony(boolean wants) {
+        wantsOrdinationCeremony.set(wants);
+    }
+
+    // === Assistance Needs ===
+
+    private final BooleanProperty assistanceMobility = new SimpleBooleanProperty(false);
+    private final BooleanProperty assistanceHearing = new SimpleBooleanProperty(false);
+    private final BooleanProperty assistanceVisual = new SimpleBooleanProperty(false);
+    private final StringProperty assistanceDietary = new SimpleStringProperty();
+
+    public BooleanProperty assistanceMobilityProperty() {
+        return assistanceMobility;
+    }
+
+    public boolean needsMobilityAssistance() {
+        return assistanceMobility.get();
+    }
+
+    public void setAssistanceMobility(boolean needs) {
+        assistanceMobility.set(needs);
+    }
+
+    public BooleanProperty assistanceHearingProperty() {
+        return assistanceHearing;
+    }
+
+    public boolean needsHearingAssistance() {
+        return assistanceHearing.get();
+    }
+
+    public void setAssistanceHearing(boolean needs) {
+        assistanceHearing.set(needs);
+    }
+
+    public BooleanProperty assistanceVisualProperty() {
+        return assistanceVisual;
+    }
+
+    public boolean needsVisualAssistance() {
+        return assistanceVisual.get();
+    }
+
+    public void setAssistanceVisual(boolean needs) {
+        assistanceVisual.set(needs);
+    }
+
+    public StringProperty assistanceDietaryProperty() {
+        return assistanceDietary;
+    }
+
+    public String getAssistanceDietary() {
+        return assistanceDietary.get();
+    }
+
+    public void setAssistanceDietary(String dietary) {
+        assistanceDietary.set(dietary);
+    }
+
+    public boolean hasAnyAssistanceNeeds() {
+        return needsMobilityAssistance() || needsHearingAssistance() || needsVisualAssistance()
+            || (assistanceDietary.get() != null && !assistanceDietary.get().isEmpty());
+    }
+
+    // === Child Carer Information ===
+
+    private final StringProperty childCarer1Type = new SimpleStringProperty(); // "household" or "external"
+    private final ObjectProperty<Object> childCarer1PersonId = new SimpleObjectProperty<>(); // Entity primary key (Object in WebFX)
+    private final StringProperty childCarer1Name = new SimpleStringProperty();
+    private final StringProperty childCarer1BookingRef = new SimpleStringProperty();
+    private final StringProperty childCarer2Type = new SimpleStringProperty();
+    private final ObjectProperty<Object> childCarer2PersonId = new SimpleObjectProperty<>(); // Entity primary key (Object in WebFX)
+    private final StringProperty childCarer2Name = new SimpleStringProperty();
+    private final StringProperty childCarer2BookingRef = new SimpleStringProperty();
+    private final BooleanProperty childPolicyAccepted = new SimpleBooleanProperty(false);
+    private final ObjectProperty<Object> childCarer1DocumentId = new SimpleObjectProperty<>(); // Entity primary key (Object in WebFX)
+    private final ObjectProperty<Object> childCarer2DocumentId = new SimpleObjectProperty<>(); // Entity primary key (Object in WebFX)
+
+    public StringProperty childCarer1TypeProperty() {
+        return childCarer1Type;
+    }
+
+    public String getChildCarer1Type() {
+        return childCarer1Type.get();
+    }
+
+    public void setChildCarer1Type(String type) {
+        childCarer1Type.set(type);
+    }
+
+    public ObjectProperty<Object> childCarer1PersonIdProperty() {
+        return childCarer1PersonId;
+    }
+
+    public Object getChildCarer1PersonId() {
+        return childCarer1PersonId.get();
+    }
+
+    public void setChildCarer1PersonId(Object personId) {
+        childCarer1PersonId.set(personId);
+    }
+
+    public StringProperty childCarer1NameProperty() {
+        return childCarer1Name;
+    }
+
+    public String getChildCarer1Name() {
+        return childCarer1Name.get();
+    }
+
+    public void setChildCarer1Name(String name) {
+        childCarer1Name.set(name);
+    }
+
+    public StringProperty childCarer1BookingRefProperty() {
+        return childCarer1BookingRef;
+    }
+
+    public String getChildCarer1BookingRef() {
+        return childCarer1BookingRef.get();
+    }
+
+    public void setChildCarer1BookingRef(String ref) {
+        childCarer1BookingRef.set(ref);
+    }
+
+    public StringProperty childCarer2TypeProperty() {
+        return childCarer2Type;
+    }
+
+    public String getChildCarer2Type() {
+        return childCarer2Type.get();
+    }
+
+    public void setChildCarer2Type(String type) {
+        childCarer2Type.set(type);
+    }
+
+    public ObjectProperty<Object> childCarer2PersonIdProperty() {
+        return childCarer2PersonId;
+    }
+
+    public Object getChildCarer2PersonId() {
+        return childCarer2PersonId.get();
+    }
+
+    public void setChildCarer2PersonId(Object personId) {
+        childCarer2PersonId.set(personId);
+    }
+
+    public StringProperty childCarer2NameProperty() {
+        return childCarer2Name;
+    }
+
+    public String getChildCarer2Name() {
+        return childCarer2Name.get();
+    }
+
+    public void setChildCarer2Name(String name) {
+        childCarer2Name.set(name);
+    }
+
+    public StringProperty childCarer2BookingRefProperty() {
+        return childCarer2BookingRef;
+    }
+
+    public String getChildCarer2BookingRef() {
+        return childCarer2BookingRef.get();
+    }
+
+    public void setChildCarer2BookingRef(String ref) {
+        childCarer2BookingRef.set(ref);
+    }
+
+    public BooleanProperty childPolicyAcceptedProperty() {
+        return childPolicyAccepted;
+    }
+
+    public boolean isChildPolicyAccepted() {
+        return childPolicyAccepted.get();
+    }
+
+    public void setChildPolicyAccepted(boolean accepted) {
+        childPolicyAccepted.set(accepted);
+    }
+
+    public ObjectProperty<Object> childCarer1DocumentIdProperty() {
+        return childCarer1DocumentId;
+    }
+
+    public Object getChildCarer1DocumentId() {
+        return childCarer1DocumentId.get();
+    }
+
+    public void setChildCarer1DocumentId(Object docId) {
+        childCarer1DocumentId.set(docId);
+    }
+
+    public ObjectProperty<Object> childCarer2DocumentIdProperty() {
+        return childCarer2DocumentId;
+    }
+
+    public Object getChildCarer2DocumentId() {
+        return childCarer2DocumentId.get();
+    }
+
+    public void setChildCarer2DocumentId(Object docId) {
+        childCarer2DocumentId.set(docId);
+    }
+
+    /**
+     * Returns true if at least the first carer is defined (either from household or external).
+     */
+    public boolean hasChildCarer1() {
+        return (childCarer1PersonId.get() != null) ||
+            (childCarer1Name.get() != null && !childCarer1Name.get().isEmpty());
+    }
+
+    /**
+     * Returns true if the second carer is defined (either from household or external).
+     */
+    public boolean hasChildCarer2() {
+        return (childCarer2PersonId.get() != null) ||
+            (childCarer2Name.get() != null && !childCarer2Name.get().isEmpty());
+    }
+
+    /**
+     * Resets child carer information.
+     */
+    public void resetChildCarerInfo() {
+        childCarer1Type.set(null);
+        childCarer1PersonId.set(null);
+        childCarer1Name.set(null);
+        childCarer1BookingRef.set(null);
+        childCarer1DocumentId.set(null);
+        childCarer2Type.set(null);
+        childCarer2PersonId.set(null);
+        childCarer2Name.set(null);
+        childCarer2BookingRef.set(null);
+        childCarer2DocumentId.set(null);
+        childPolicyAccepted.set(false);
+    }
+
+    /**
+     * Commits child carer information to the working booking.
+     * For household carers: uses Document reference if they have existing booking, otherwise name.
+     * For external carers: uses the entered name.
+     *
+     * @param workingBooking The working booking to update
+     * @param store The entity store for retrieving Document entities
+     */
+    public void commitCarersInfoToBooking(WorkingBooking workingBooking, EntityStore store) {
+        String carer1Name = null;
+        Document carer1Doc = null;
+        String carer2Name = null;
+        Document carer2Doc = null;
+
+        // Carer 1
+        String type1 = getChildCarer1Type();
+        if ("external".equals(type1)) {
+            carer1Name = getChildCarer1Name();
+        } else if ("household".equals(type1)) {
+            Object docId = getChildCarer1DocumentId();
+            if (docId != null && store != null) {
+                carer1Doc = store.getEntity(Document.class, docId);
+            }
+            // Use name as fallback (for carers without existing bookings)
+            if (carer1Doc == null) {
+                carer1Name = getChildCarer1Name();
+            }
+        }
+
+        // Carer 2
+        String type2 = getChildCarer2Type();
+        if ("external".equals(type2)) {
+            carer2Name = getChildCarer2Name();
+        } else if ("household".equals(type2)) {
+            Object docId = getChildCarer2DocumentId();
+            if (docId != null && store != null) {
+                carer2Doc = store.getEntity(Document.class, docId);
+            }
+            // Use name as fallback (for carers without existing bookings)
+            if (carer2Doc == null) {
+                carer2Name = getChildCarer2Name();
+            }
+        }
+
+        workingBooking.setCarersInfo(carer1Name, carer1Doc, carer2Name, carer2Doc);
+    }
+
+    // === Shuttle Time Slots ===
+
+    private final StringProperty shuttleOutboundTimeSlot = new SimpleStringProperty();
+    private final StringProperty shuttleReturnTimeSlot = new SimpleStringProperty();
+
+    public StringProperty shuttleOutboundTimeSlotProperty() {
+        return shuttleOutboundTimeSlot;
+    }
+
+    public String getShuttleOutboundTimeSlot() {
+        return shuttleOutboundTimeSlot.get();
+    }
+
+    public void setShuttleOutboundTimeSlot(String timeSlot) {
+        shuttleOutboundTimeSlot.set(timeSlot);
+    }
+
+    public StringProperty shuttleReturnTimeSlotProperty() {
+        return shuttleReturnTimeSlot;
+    }
+
+    public String getShuttleReturnTimeSlot() {
+        return shuttleReturnTimeSlot.get();
+    }
+
+    public void setShuttleReturnTimeSlot(String timeSlot) {
+        shuttleReturnTimeSlot.set(timeSlot);
+    }
+
     // === Reset ===
 
     /**
@@ -423,6 +791,26 @@ public class BookingSelectionState {
 
         // Comments
         commentText.set(null);
+
+        // Translation
+        needsTranslation.set(false);
+        translationLanguage.set(null);
+
+        // Ordination Ceremony
+        wantsOrdinationCeremony.set(false);
+
+        // Assistance Needs
+        assistanceMobility.set(false);
+        assistanceHearing.set(false);
+        assistanceVisual.set(false);
+        assistanceDietary.set(null);
+
+        // Child Carer
+        resetChildCarerInfo();
+
+        // Shuttle Time Slots
+        shuttleOutboundTimeSlot.set(null);
+        shuttleReturnTimeSlot.set(null);
     }
 
     /**

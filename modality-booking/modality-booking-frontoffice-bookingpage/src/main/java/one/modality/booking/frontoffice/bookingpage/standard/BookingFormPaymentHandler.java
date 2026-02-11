@@ -20,7 +20,6 @@ import one.modality.ecommerce.payment.PaymentFailureReason;
 import one.modality.ecommerce.payment.PaymentFormType;
 import one.modality.ecommerce.payment.PaymentStatus;
 import one.modality.ecommerce.payment.client.ClientPaymentUtil;
-import one.modality.event.frontoffice.activities.book.event.slides.ProvidedGatewayPaymentForm;
 
 /**
  * Handles payment processing for booking forms.
@@ -167,14 +166,8 @@ public class BookingFormPaymentHandler {
             paymentFormSection
         );
 
-        // Configure page:
-        // - setStep(false): Stay on the same header navigation step
-        // - setShowingOwnSubmitButton(true): ProvidedGatewayPaymentForm has its own Pay/Cancel buttons
-        // - setCanGoBack(false): Prevent back navigation during payment (like PaymentPage)
-        embeddedPaymentPage
-            .setStep(false)
-            .setShowingOwnSubmitButton(true)
-            .setCanGoBack(false);
+        // Configure as special page: no step navigation, own submit buttons, no back navigation
+        embeddedPaymentPage.asSpecialPage();
 
         // Handle cancel: show payment canceled page with retry option
         gatewayPaymentForm.setCancelPaymentResultHandler(ar -> {
@@ -213,7 +206,6 @@ public class BookingFormPaymentHandler {
     private void handleEmbeddedPaymentFailed(int amount, PaymentFailureReason failureReason) {
         // Create PaymentRefusedSection matching JSX mockup
         PaymentRefusedSection section = new PaymentRefusedSection();
-        section.setColorScheme(callback.getColorScheme());
         section.setAmount(amount);
         section.setFailureReason(failureReason);
         section.setOnRetryPayment(() -> handlePaymentSubmit(lastPaymentAmount, lastPaymentAllocations));
@@ -230,11 +222,7 @@ public class BookingFormPaymentHandler {
         CompositeBookingFormPage failedPaymentPage = new CompositeBookingFormPage(
             BookingPageI18nKeys.Payment,
             section
-        );
-        failedPaymentPage
-            .setStep(false)
-            .setShowingOwnSubmitButton(true)
-            .setCanGoBack(false);
+        ).asSpecialPage();
 
         callback.navigateToSpecialPage(failedPaymentPage);
     }
@@ -246,7 +234,6 @@ public class BookingFormPaymentHandler {
     private void handleEmbeddedPaymentCanceled(int amount) {
         // Create PaymentCanceledSection matching JSX mockup
         PaymentCanceledSection section = new PaymentCanceledSection();
-        section.setColorScheme(callback.getColorScheme());
         section.setAmount(amount);
         section.setOnRetryPayment(() -> handlePaymentSubmit(lastPaymentAmount, lastPaymentAllocations));
 
@@ -254,11 +241,7 @@ public class BookingFormPaymentHandler {
         CompositeBookingFormPage canceledPaymentPage = new CompositeBookingFormPage(
             BookingPageI18nKeys.Payment,
             section
-        );
-        canceledPaymentPage
-            .setStep(false)
-            .setShowingOwnSubmitButton(true)
-            .setCanGoBack(false);
+        ).asSpecialPage();
 
         callback.navigateToSpecialPage(canceledPaymentPage);
     }

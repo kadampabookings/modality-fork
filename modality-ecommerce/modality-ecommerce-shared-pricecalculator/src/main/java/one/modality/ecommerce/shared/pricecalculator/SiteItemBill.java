@@ -260,21 +260,26 @@ public final class SiteItemBill {
                 price = rate.getAge3Price() != null ? rate.getAge3Price() : price * (100 - rate.getAge3Discount()) / 100;
                 childRateApplied = true; // To improve as it's not yet certain at this point this rate will be finally applied
             }
-        } /*else if (workingVisit && (rate.workingVisit_price || rate.workingVisit_discount))
-            price = (rate.workingVisit_price || rate.workingVisit_price === 0) ? rate.workingVisit_price : price * (100 - rate.workingVisit_discount) / 100;
-        else if (guest && (rate.guest_price || rate.guest_discount))
-            price = (rate.guest_price || rate.guest_price === 0) ? rate.guest_price : price * (100 - rate.guest_discount) / 100;
-        else if (resident && (rate.resident_price || rate.resident_discount))
-            price = (rate.resident_price || rate.resident_price === 0) ? rate.resident_price : price * (100 - rate.resident_discount) / 100;
-        else if (resident2 && (rate.resident2_price || rate.resident2_discount))
-            price = (rate.resident2_price || rate.resident2_price === 0) ? rate.resident2_price : price * (100 - rate.resident2_discount) / 100;
-        else if (discoveryReduced && (rate.discoveryReduced_price || rate.discoveryReduced_discount))
-            price = (rate.discoveryReduced_price || rate.discoveryReduced_price === 0) ? rate.discoveryReduced_price : price * (100 - rate.discoveryReduced_discount) / 100;
-        else if (discovery && (rate.discovery_price || rate.discovery_discount))
-            price = (rate.discovery_price || rate.discovery_price === 0) ? rate.discovery_price : price * (100 - rate.discovery_discount) / 100;*/ else if (unemployed && (rate.getUnemployedPrice() != null || rate.getUnemployedDiscount() != null))
-            price = rate.getUnemployedPrice() != null ? rate.getUnemployedPrice() : price * (100 - rate.getUnemployedDiscount()) / 100;
-        else if (facilityFee && (rate.getFacilityFeePrice() != null || rate.getFacilityFeeDiscount() != null))
-            price = rate.getFacilityFeePrice() != null ? rate.getFacilityFeePrice() : price * (100 - rate.getFacilityFeeDiscount()) / 100;
+        }
+        if (!childRateApplied) {
+            /*if (workingVisit && (rate.workingVisit_price || rate.workingVisit_discount))
+                price = (rate.workingVisit_price || rate.workingVisit_price === 0) ? rate.workingVisit_price : price * (100 - rate.workingVisit_discount) / 100;
+            else if (guest && (rate.guest_price || rate.guest_discount))
+                price = (rate.guest_price || rate.guest_price === 0) ? rate.guest_price : price * (100 - rate.guest_discount) / 100;
+            else if (resident && (rate.resident_price || rate.resident_discount))
+                price = (rate.resident_price || rate.resident_price === 0) ? rate.resident_price : price * (100 - rate.resident_discount) / 100;
+            else if (resident2 && (rate.resident2_price || rate.resident2_discount))
+                price = (rate.resident2_price || rate.resident2_price === 0) ? rate.resident2_price : price * (100 - rate.resident2_discount) / 100;
+            else if (discoveryReduced && (rate.discoveryReduced_price || rate.discoveryReduced_discount))
+                price = (rate.discoveryReduced_price || rate.discoveryReduced_price === 0) ? rate.discoveryReduced_price : price * (100 - rate.discoveryReduced_discount) / 100;
+            else if (discovery && (rate.discovery_price || rate.discovery_discount))
+                price = (rate.discovery_price || rate.discovery_price === 0) ? rate.discovery_price : price * (100 - rate.discovery_discount) / 100;
+            else*/
+            if (unemployed && (rate.getUnemployedPrice() != null || rate.getUnemployedDiscount() != null))
+                price = rate.getUnemployedPrice() != null ? rate.getUnemployedPrice() : price * (100 - rate.getUnemployedDiscount()) / 100;
+            else if (facilityFee && (rate.getFacilityFeePrice() != null || rate.getFacilityFeeDiscount() != null))
+                price = rate.getFacilityFeePrice() != null ? rate.getFacilityFeePrice() : price * (100 - rate.getFacilityFeeDiscount()) / 100;
+        }
         return price;
     }
 

@@ -5,7 +5,6 @@ import javafx.beans.value.ObservableBooleanValue;
 import one.modality.booking.frontoffice.bookingpage.BookingFormSection;
 import one.modality.booking.frontoffice.bookingpage.standard.BookingSelectionState;
 import one.modality.booking.frontoffice.bookingpage.standard.StandardBookingFormCallbacks;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -31,18 +30,6 @@ import java.util.function.Consumer;
  * @see HasAccommodationSelectionSection
  */
 public interface HasAccommodationSoldOutSection extends BookingFormSection {
-
-    // === Configuration ===
-
-    /**
-     * Returns the color scheme property for theming.
-     */
-    ObjectProperty<BookingFormColorScheme> colorSchemeProperty();
-
-    /**
-     * Sets the color scheme for this section.
-     */
-    void setColorScheme(BookingFormColorScheme scheme);
 
     // === Original Selection Info ===
 

@@ -52,7 +52,6 @@ public class DefaultFailedPaymentSection implements HasFailedPaymentSection {
     private static final String ICON_MAIL = "M2 4h20a2 2 0 012 2v12a2 2 0 01-2 2H2a2 2 0 01-2-2V6a2 2 0 012-2z M22 6l-10 7L2 6";
 
     // === PROPERTIES ===
-    private final ObjectProperty<BookingFormColorScheme> colorScheme = new SimpleObjectProperty<>(BookingFormColorScheme.DEFAULT);
     private final SimpleBooleanProperty validProperty = new SimpleBooleanProperty(true);
 
     // === BOOKING DATA ===
@@ -66,7 +65,7 @@ public class DefaultFailedPaymentSection implements HasFailedPaymentSection {
     private final StringProperty bankErrorMessageProperty = new SimpleStringProperty("");
     private final StringProperty errorCodeProperty = new SimpleStringProperty("");
     private final BooleanProperty hasAccountProperty = new SimpleBooleanProperty(false);
-    private final StringProperty contactEmailProperty = new SimpleStringProperty("info@manjushri.org");
+    private final StringProperty contactEmailProperty = new SimpleStringProperty(""); // Set via setContactEmail() from event/organization config
 
     // === CALLBACKS ===
     private Runnable onRetryPayment;
@@ -86,7 +85,7 @@ public class DefaultFailedPaymentSection implements HasFailedPaymentSection {
     private void buildUI() {
         container.setAlignment(Pos.TOP_CENTER);
         container.setSpacing(0);
-        container.getStyleClass().add("bookingpage-failed-payment-section");
+        container.getStyleClass().add(bookingpage_failed_payment_section);
 
         // Amber header
         VBox header = buildHeader();
@@ -124,13 +123,13 @@ public class DefaultFailedPaymentSection implements HasFailedPaymentSection {
         VBox header = new VBox(12);
         header.setAlignment(Pos.CENTER);
         header.setPadding(new Insets(40, 24, 32, 24));
-        header.getStyleClass().add("bookingpage-failed-payment-header");
+        header.getStyleClass().add(bookingpage_failed_payment_header);
 
         // Amber icon circle with info icon
         StackPane iconCircle = new StackPane();
         iconCircle.setMinSize(64, 64);
         iconCircle.setMaxSize(64, 64);
-        iconCircle.getStyleClass().add("bookingpage-failed-payment-icon-circle");
+        iconCircle.getStyleClass().add(bookingpage_failed_payment_icon_circle);
 
         SVGPath icon = new SVGPath();
         icon.setContent(ICON_INFO_CIRCLE);
@@ -144,12 +143,12 @@ public class DefaultFailedPaymentSection implements HasFailedPaymentSection {
 
         // Title - dynamic based on error type
         Label titleLabel = I18nControls.newLabel(getTitleI18nKeyForError());
-        titleLabel.getStyleClass().add("bookingpage-failed-payment-title");
+        titleLabel.getStyleClass().add(bookingpage_failed_payment_title);
         VBox.setMargin(titleLabel, new Insets(0, 0, 4, 0));
 
         // Subtitle
         Label subtitleLabel = I18nControls.newLabel(BookingPageI18nKeys.PaymentNotCompleted);
-        subtitleLabel.getStyleClass().add("bookingpage-failed-payment-subtitle");
+        subtitleLabel.getStyleClass().add(bookingpage_failed_payment_subtitle);
         subtitleLabel.setWrapText(true);
         subtitleLabel.setAlignment(Pos.CENTER);
         subtitleLabel.setMaxWidth(500);
@@ -173,17 +172,17 @@ public class DefaultFailedPaymentSection implements HasFailedPaymentSection {
         VBox box = new VBox(4);
         box.setAlignment(Pos.CENTER);
         box.setPadding(new Insets(16, 24, 16, 24));
-        box.getStyleClass().add("bookingpage-failed-payment-ref-box");
+        box.getStyleClass().add(bookingpage_failed_payment_ref_box);
         VBox.setMargin(box, new Insets(0, 24, 24, 24));
 
         // Label
         Label refLabel = I18nControls.newLabel(BookingPageI18nKeys.BookingReference);
-        refLabel.getStyleClass().add("bookingpage-failed-payment-ref-label");
+        refLabel.getStyleClass().add(bookingpage_failed_payment_ref_label);
 
         // Value
         Label refValue = new Label();
         refValue.textProperty().bind(bookingReferenceProperty);
-        refValue.getStyleClass().add("bookingpage-failed-payment-ref-value");
+        refValue.getStyleClass().add(bookingpage_failed_payment_ref_value);
 
         box.getChildren().addAll(refLabel, refValue);
         return box;
@@ -210,20 +209,7 @@ public class DefaultFailedPaymentSection implements HasFailedPaymentSection {
     }
 
     private StringProperty createDateBinding() {
-        StringProperty dateString = new SimpleStringProperty();
-        Runnable updateDate = () -> {
-            LocalDate start = eventStartDateProperty.get();
-            LocalDate end = eventEndDateProperty.get();
-            if (start != null && end != null) {
-                dateString.set(BookingPageUIBuilder.formatDateRangeFull(start, end));
-            } else {
-                dateString.set("");
-            }
-        };
-        eventStartDateProperty.addListener((obs, old, val) -> updateDate.run());
-        eventEndDateProperty.addListener((obs, old, val) -> updateDate.run());
-        updateDate.run();
-        return dateString;
+        return BookingPageUIBuilder.createDateRangeBinding(eventStartDateProperty, eventEndDateProperty);
     }
 
     private HBox createInfoRow(String iconPath, Object labelKey, StringProperty valueProperty) {
@@ -280,7 +266,7 @@ public class DefaultFailedPaymentSection implements HasFailedPaymentSection {
     private VBox buildErrorDetailsSection() {
         VBox section = new VBox(16);
         section.setPadding(new Insets(20));
-        section.getStyleClass().add("bookingpage-error-details-section");
+        section.getStyleClass().add(bookingpage_error_details_section);
         VBox.setMargin(section, new Insets(0, 24, 24, 24));
 
         // Header with question icon
@@ -296,13 +282,13 @@ public class DefaultFailedPaymentSection implements HasFailedPaymentSection {
         questionIcon.setScaleY(0.7);
 
         Label headerLabel = I18nControls.newLabel(BookingPageI18nKeys.WhatHappened);
-        headerLabel.getStyleClass().add("bookingpage-error-details-title");
+        headerLabel.getStyleClass().add(bookingpage_error_details_title);
 
         headerRow.getChildren().addAll(questionIcon, headerLabel);
 
         // Description
         Label descLabel = I18nControls.newLabel(getDescriptionI18nKeyForError());
-        descLabel.getStyleClass().add("bookingpage-error-description");
+        descLabel.getStyleClass().add(bookingpage_error_description);
         descLabel.setWrapText(true);
         VBox.setMargin(descLabel, new Insets(8, 0, 12, 0));
 
@@ -387,10 +373,10 @@ public class DefaultFailedPaymentSection implements HasFailedPaymentSection {
         item.setAlignment(Pos.TOP_LEFT);
 
         Label bullet = new Label("•");
-        bullet.getStyleClass().addAll("bookingpage-suggestion-item", bookingpage_text_muted);
+        bullet.getStyleClass().addAll(bookingpage_suggestion_item, bookingpage_text_muted);
 
         Label text = I18nControls.newLabel(i18nKey);
-        text.getStyleClass().add("bookingpage-suggestion-item");
+        text.getStyleClass().add(bookingpage_suggestion_item);
         text.setWrapText(true);
 
         item.getChildren().addAll(bullet, text);
@@ -400,17 +386,17 @@ public class DefaultFailedPaymentSection implements HasFailedPaymentSection {
     private VBox buildBankErrorBox() {
         VBox box = new VBox(8);
         box.setPadding(new Insets(16, 0, 0, 0));
-        box.getStyleClass().add("bookingpage-bank-error-box");
+        box.getStyleClass().add(bookingpage_bank_error_box);
         VBox.setMargin(box, new Insets(12, 0, 0, 0));
 
         // Label
         Label label = I18nControls.newLabel(BookingPageI18nKeys.BankResponse);
-        label.getStyleClass().add("bookingpage-bank-error-label");
+        label.getStyleClass().add(bookingpage_bank_error_label);
 
         // Message box
         HBox messageBox = new HBox();
         messageBox.setPadding(new Insets(8, 12, 8, 12));
-        messageBox.getStyleClass().add("bookingpage-bank-error-message");
+        messageBox.getStyleClass().add(bookingpage_bank_error_message);
 
         Label messageLabel = new Label();
         messageLabel.textProperty().bind(bankErrorMessageProperty);
@@ -423,7 +409,7 @@ public class DefaultFailedPaymentSection implements HasFailedPaymentSection {
             Label codeLabel = new Label();
             I18nControls.bindI18nProperties(codeLabel, BookingPageI18nKeys.ErrorCode);
             codeLabel.setText(codeLabel.getText() + ": " + errorCodeProperty.get());
-            codeLabel.getStyleClass().add("bookingpage-bank-error-meta");
+            codeLabel.getStyleClass().add(bookingpage_bank_error_meta);
             box.getChildren().add(codeLabel);
         }
 
@@ -448,7 +434,7 @@ public class DefaultFailedPaymentSection implements HasFailedPaymentSection {
 
         // Cancel Booking button (danger outline)
         Button cancelButton = I18nControls.newButton(BookingPageI18nKeys.CancelBooking);
-        cancelButton.getStyleClass().add("bookingpage-btn-danger-outline");
+        cancelButton.getStyleClass().add(bookingpage_btn_danger_outline);
         cancelButton.setPadding(new Insets(14, 32, 14, 32));
         cancelButton.setCursor(Cursor.HAND);
         cancelButton.setOnAction(e -> {
@@ -466,7 +452,7 @@ public class DefaultFailedPaymentSection implements HasFailedPaymentSection {
     private VBox buildAccountInfoBox() {
         VBox box = new VBox(8);
         box.setPadding(new Insets(16));
-        box.getStyleClass().add("bookingpage-account-info-box");
+        box.getStyleClass().add(bookingpage_account_info_box);
         VBox.setMargin(box, new Insets(0, 24, 24, 24));
 
         // Only show if user has account
@@ -475,11 +461,11 @@ public class DefaultFailedPaymentSection implements HasFailedPaymentSection {
 
         // Title
         Label titleLabel = I18nControls.newLabel(BookingPageI18nKeys.YouHaveAnAccount);
-        titleLabel.getStyleClass().add("bookingpage-account-info-title");
+        titleLabel.getStyleClass().add(bookingpage_account_info_title);
 
         // Message
         Label messageLabel = I18nControls.newLabel(BookingPageI18nKeys.AccountInfoMessage);
-        messageLabel.getStyleClass().add("bookingpage-account-info-text");
+        messageLabel.getStyleClass().add(bookingpage_account_info_text);
         messageLabel.setWrapText(true);
 
         // Go to My Orders link
@@ -493,11 +479,11 @@ public class DefaultFailedPaymentSection implements HasFailedPaymentSection {
         });
 
         Label linkLabel = I18nControls.newLabel(BookingPageI18nKeys.GoToMyOrders);
-        linkLabel.getStyleClass().add("bookingpage-account-info-link");
+        linkLabel.getStyleClass().add(bookingpage_account_info_link);
 
         SVGPath arrowIcon = new SVGPath();
         arrowIcon.setContent(ICON_ARROW_RIGHT);
-        arrowIcon.setStroke(colorScheme.get().getPrimary());
+        arrowIcon.setStroke(BookingFormColorScheme.DEFAULT.getPrimary());
         arrowIcon.setStrokeWidth(2);
         arrowIcon.setFill(Color.TRANSPARENT);
         arrowIcon.setScaleX(0.5);
@@ -517,12 +503,12 @@ public class DefaultFailedPaymentSection implements HasFailedPaymentSection {
 
         // Help text
         Label helpLabel = I18nControls.newLabel(BookingPageI18nKeys.NeedHelpContact);
-        helpLabel.getStyleClass().add("bookingpage-contact-footer");
+        helpLabel.getStyleClass().add(bookingpage_contact_footer);
 
         // Email link
         Hyperlink emailLink = new Hyperlink();
         emailLink.textProperty().bind(contactEmailProperty);
-        emailLink.getStyleClass().add("bookingpage-contact-link");
+        emailLink.getStyleClass().add(bookingpage_contact_link);
         emailLink.setOnAction(e -> {
             String email = contactEmailProperty.get();
             if (email != null && !email.isEmpty()) {
@@ -557,16 +543,6 @@ public class DefaultFailedPaymentSection implements HasFailedPaymentSection {
     }
 
     // === HasFailedPaymentSection INTERFACE ===
-
-    @Override
-    public ObjectProperty<BookingFormColorScheme> colorSchemeProperty() {
-        return colorScheme;
-    }
-
-    @Override
-    public void setColorScheme(BookingFormColorScheme scheme) {
-        this.colorScheme.set(scheme);
-    }
 
     @Override
     public void setBookingReference(String reference) {

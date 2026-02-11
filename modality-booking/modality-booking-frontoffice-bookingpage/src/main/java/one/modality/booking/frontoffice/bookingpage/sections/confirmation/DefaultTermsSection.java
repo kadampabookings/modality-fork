@@ -18,7 +18,7 @@ import javafx.scene.layout.VBox;
 import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
+
 
 import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelectors.*;
 
@@ -43,7 +43,6 @@ import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelecto
 public class DefaultTermsSection implements HasTermsSection {
 
     // === PROPERTIES ===
-    protected final ObjectProperty<BookingFormColorScheme> colorScheme = new SimpleObjectProperty<>(BookingFormColorScheme.DEFAULT);
     protected final SimpleBooleanProperty termsAcceptedProperty = new SimpleBooleanProperty(false);
     protected final StringProperty termsUrlProperty = new SimpleStringProperty("");
     protected final StringProperty customTermsTextProperty = new SimpleStringProperty(null);
@@ -76,7 +75,7 @@ public class DefaultTermsSection implements HasTermsSection {
         errorLabel.setManaged(false);
 
         container.getChildren().addAll(checkboxRow, errorLabel);
-        container.getStyleClass().add("booking-form-terms-section");
+        container.getStyleClass().add(booking_form_terms_section);
         container.setPadding(new Insets(0));
     }
 
@@ -95,7 +94,7 @@ public class DefaultTermsSection implements HasTermsSection {
     protected HBox createTermsCheckboxRow() {
         HBox row = new HBox(12);
         row.setAlignment(Pos.TOP_LEFT);
-        row.getStyleClass().addAll("booking-form-terms-checkbox", bookingpage_checkbox_card);
+        row.getStyleClass().addAll(booking_form_terms_checkbox, bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded, bookingpage_checkbox_card);
         row.setPadding(new Insets(16, 20, 16, 16));
 
         // Toggle 'selected' class based on terms accepted state
@@ -163,7 +162,7 @@ public class DefaultTermsSection implements HasTermsSection {
         showError = false;
         errorLabel.setVisible(false);
         errorLabel.setManaged(false);
-        checkboxRow.getStyleClass().remove("error");
+        checkboxRow.getStyleClass().remove(error);
     }
 
     // ========================================
@@ -193,24 +192,6 @@ public class DefaultTermsSection implements HasTermsSection {
     // ========================================
     // HasTermsSection INTERFACE
     // ========================================
-
-    /**
-     * @deprecated Color scheme is now handled via CSS classes on parent container.
-     */
-    @Deprecated
-    @Override
-    public ObjectProperty<BookingFormColorScheme> colorSchemeProperty() {
-        return colorScheme;
-    }
-
-    /**
-     * @deprecated Use CSS theme classes instead.
-     */
-    @Deprecated
-    @Override
-    public void setColorScheme(BookingFormColorScheme scheme) {
-        this.colorScheme.set(scheme);
-    }
 
     @Override
     public boolean isTermsAccepted() {

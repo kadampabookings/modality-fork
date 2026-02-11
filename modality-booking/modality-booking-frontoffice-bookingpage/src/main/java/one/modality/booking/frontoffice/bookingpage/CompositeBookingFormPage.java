@@ -75,12 +75,8 @@ public class CompositeBookingFormPage implements BookingFormPage {
 
     @Override
     public boolean isApplicableToBooking(WorkingBooking workingBooking) {
-        // If any section is applicable, the page is applicable?
-        // Or should it be if ALL are applicable?
-        // Or maybe we filter out non-applicable sections but still show the page if at
-        // least one remains?
-        // For now, let's say the page is applicable if at least one section is
-        // applicable.
+        // Page is shown if at least one section is applicable; non-applicable sections
+        // are filtered out in setWorkingBookingProperties().
         for (BookingFormSection section : sections) {
             if (section.isApplicableToBooking(workingBooking)) {
                 return true;
@@ -157,6 +153,26 @@ public class CompositeBookingFormPage implements BookingFormPage {
     public CompositeBookingFormPage setButtons(BookingFormButton... buttons) {
         this.buttons = buttons;
         return this;
+    }
+
+    /**
+     * Configures this page as a "special page" (non-step, own submit button, no back navigation).
+     * Used for payment forms, queue pages, error recovery pages, and other pages that shouldn't
+     * appear in the step navigation or allow going back.
+     *
+     * <p>This is a convenience method equivalent to calling:</p>
+     * <pre>
+     * setStep(false)
+     *     .setShowingOwnSubmitButton(true)
+     *     .setCanGoBack(false)
+     * </pre>
+     *
+     * @return this page for chaining
+     */
+    public CompositeBookingFormPage asSpecialPage() {
+        return this.setStep(false)
+                   .setShowingOwnSubmitButton(true)
+                   .setCanGoBack(false);
     }
 
     /**

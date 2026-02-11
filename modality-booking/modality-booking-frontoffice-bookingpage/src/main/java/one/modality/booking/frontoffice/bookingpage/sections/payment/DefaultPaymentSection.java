@@ -23,9 +23,9 @@ import one.modality.base.shared.entities.formatters.EventPriceFormatter;
 import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.BookingPageCssSelectors;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
-import one.modality.booking.frontoffice.bookingpage.PriceFormatter;
+import one.modality.base.shared.domainmodel.formatters.PriceFormatter;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
+
 
 import java.util.*;
 
@@ -42,7 +42,6 @@ import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelecto
 public class DefaultPaymentSection implements HasPaymentSection {
 
     // === PROPERTIES ===
-    protected final ObjectProperty<BookingFormColorScheme> colorScheme = new SimpleObjectProperty<>(BookingFormColorScheme.DEFAULT);
     protected final SimpleBooleanProperty validProperty = new SimpleBooleanProperty(false);
 
     // === PAYMENT STATE ===
@@ -122,7 +121,7 @@ public class DefaultPaymentSection implements HasPaymentSection {
     protected void buildUI() {
         container.setAlignment(Pos.TOP_CENTER);
         container.setSpacing(0);
-        container.getStyleClass().add("bookingpage-payment-section");
+        container.getStyleClass().add(bookingpage_payment_section);
 
         // Page title
         Label title = createPageTitle();
@@ -182,7 +181,7 @@ public class DefaultPaymentSection implements HasPaymentSection {
     protected VBox buildBookingSummarySection() {
         VBox section = new VBox(0);
         section.setPadding(new Insets(24));
-        section.getStyleClass().add(bookingpage_card_lighter);
+        section.getStyleClass().addAll(bookingpage_bg_lighter, bookingpage_border_subtle, bookingpage_rounded_lg);
 
         // Title
         Label titleLabel = I18nControls.newLabel(BookingPageI18nKeys.YourBookingSummary);
@@ -210,7 +209,7 @@ public class DefaultPaymentSection implements HasPaymentSection {
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
         totalAmountLabel = new Label(EventPriceFormatter.formatWithCurrency(totalAmount, workingBookingProperties.getEvent()));
-        totalAmountLabel.getStyleClass().addAll(bookingpage_price_large, bookingpage_text_primary);
+        totalAmountLabel.getStyleClass().addAll(bookingpage_text_2xl, bookingpage_font_bold, bookingpage_text_primary);
 
         totalRow.getChildren().addAll(totalTextLabel, spacer, totalAmountLabel);
 
@@ -235,7 +234,7 @@ public class DefaultPaymentSection implements HasPaymentSection {
         // Show payment as a deduction (e.g., "- $30")
         paymentsMadeAmountLabel = new Label();
         updatePaymentsMadeAmountLabel();
-        paymentsMadeAmountLabel.getStyleClass().addAll(bookingpage_price_medium, bookingpage_text_primary);
+        paymentsMadeAmountLabel.getStyleClass().addAll(bookingpage_text_xl, bookingpage_font_bold, bookingpage_text_primary);
 
         row.getChildren().addAll(textLabel, spacer, paymentsMadeAmountLabel);
         return row;
@@ -301,14 +300,14 @@ public class DefaultPaymentSection implements HasPaymentSection {
         nameLabel.setWrapText(true);  // Allow long names with registration numbers to wrap
 
         Label detailsLabel = new Label(item.getDetails());
-        detailsLabel.getStyleClass().add(bookingpage_label_small);
+        detailsLabel.getStyleClass().addAll(bookingpage_text_xs, bookingpage_text_muted);
         detailsLabel.setWrapText(true);
 
         infoBox.getChildren().addAll(nameLabel, detailsLabel);
         HBox.setHgrow(infoBox, Priority.ALWAYS);
 
         Label priceLabel = new Label(EventPriceFormatter.formatWithCurrency(item.getAmount(), workingBookingProperties != null && workingBookingProperties.getWorkingBooking() != null ? workingBookingProperties.getWorkingBooking().getEvent() : null));
-        priceLabel.getStyleClass().addAll(bookingpage_price_medium, bookingpage_text_primary);
+        priceLabel.getStyleClass().addAll(bookingpage_text_xl, bookingpage_font_bold, bookingpage_text_primary);
         priceLabel.setMinWidth(60);  // Ensure price visible for up to 4 digits + currency
 
         row.getChildren().addAll(infoBox, priceLabel);
@@ -318,7 +317,7 @@ public class DefaultPaymentSection implements HasPaymentSection {
     protected VBox buildPaymentAmountSection() {
         VBox section = new VBox(0);
         section.setPadding(new Insets(24));
-        section.getStyleClass().addAll(bookingpage_card_static, bookingpage_rounded_lg, bookingpage_card_bordered);
+        section.getStyleClass().addAll(bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded_lg);
 
         // Title
         Label titleLabel = I18nControls.newLabel(BookingPageI18nKeys.HowMuchToPay);
@@ -367,7 +366,7 @@ public class DefaultPaymentSection implements HasPaymentSection {
         currencyLabel.getStyleClass().addAll(bookingpage_text_2xl, bookingpage_font_semibold, bookingpage_text_dark);
 
         customAmountTextField = new TextField();
-        customAmountTextField.setText(PriceFormatter.formatPriceNoCurrencyNoDecimals(customAmountProperty.get()));
+        customAmountTextField.setText(PriceFormatter.formatWithoutCurrency(customAmountProperty.get(), false));
         customAmountTextField.getStyleClass().addAll(bookingpage_input, bookingpage_text_2xl, bookingpage_font_semibold);
         customAmountTextField.setPadding(new Insets(12, 16, 12, 16));
         customAmountTextField.setMaxWidth(Double.MAX_VALUE);
@@ -376,7 +375,7 @@ public class DefaultPaymentSection implements HasPaymentSection {
         // Update property when text changes
         customAmountTextField.textProperty().addListener((obs, old, newVal) -> {
             try {
-                int value = PriceFormatter.parsePrice(newVal);
+                int value = (int) (Double.parseDouble(newVal) * 100);
                 handleCustomAmountChange(value);
             } catch (NumberFormatException ignored) {
                 // Ignore invalid input
@@ -387,7 +386,7 @@ public class DefaultPaymentSection implements HasPaymentSection {
         customAmountTextField.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
             if (!isFocused) {
                 // Update to show the rounded/bounded value
-                customAmountTextField.setText(PriceFormatter.formatPriceNoCurrencyNoDecimals(customAmountProperty.get()));
+                customAmountTextField.setText(PriceFormatter.formatWithoutCurrency(customAmountProperty.get(), false));
             }
         });
 
@@ -399,7 +398,7 @@ public class DefaultPaymentSection implements HasPaymentSection {
         I18nControls.bindI18nProperties(customAmountRangeLabel, BookingPageI18nKeys.CustomAmountRange,
             EventPriceFormatter.formatWithCurrency(minCustomAmount, workingBookingProperties != null && workingBookingProperties.getWorkingBooking() != null ? workingBookingProperties.getWorkingBooking().getEvent() : null),
             EventPriceFormatter.formatWithCurrency(totalAmount, workingBookingProperties != null && workingBookingProperties.getWorkingBooking() != null ? workingBookingProperties.getWorkingBooking().getEvent() : null));
-        customAmountRangeLabel.getStyleClass().add(bookingpage_label_small);
+        customAmountRangeLabel.getStyleClass().addAll(bookingpage_text_xs, bookingpage_text_muted);
 
         // Slider - min is max((minDeposit - alreadyPaid), $1)
         customAmountSlider = new Slider(minCustomAmount, totalAmount, customAmountProperty.get());
@@ -411,7 +410,7 @@ public class DefaultPaymentSection implements HasPaymentSection {
             int value = newVal.intValue();
             handleCustomAmountChange(value);
             // Use the actual stored value (rounded and bounded) for display
-            customAmountTextField.setText(PriceFormatter.formatPriceNoCurrencyNoDecimals(customAmountProperty.get()));
+            customAmountTextField.setText(PriceFormatter.formatWithoutCurrency(customAmountProperty.get(), false));
         });
 
         // Update slider when property changes (e.g., from text field input)
@@ -437,7 +436,7 @@ public class DefaultPaymentSection implements HasPaymentSection {
 
         // Subtitle
         Label subtitleLabel = I18nControls.newLabel(BookingPageI18nKeys.AllocatePaymentSubtitle);
-        subtitleLabel.getStyleClass().add(bookingpage_label_small);
+        subtitleLabel.getStyleClass().addAll(bookingpage_text_xs, bookingpage_text_muted);
         subtitleLabel.setWrapText(true);
 
         // Allocation items container
@@ -455,7 +454,7 @@ public class DefaultPaymentSection implements HasPaymentSection {
         HBox.setHgrow(footerSpacer, Priority.ALWAYS);
 
         allocationTotalLabel = new Label(EventPriceFormatter.formatWithCurrency(0, workingBookingProperties != null && workingBookingProperties.getWorkingBooking() != null ? workingBookingProperties.getWorkingBooking().getEvent() : null));
-        allocationTotalLabel.getStyleClass().addAll(bookingpage_price_medium, bookingpage_text_primary);
+        allocationTotalLabel.getStyleClass().addAll(bookingpage_text_xl, bookingpage_font_bold, bookingpage_text_primary);
 
         footerRow.getChildren().addAll(allocatedTextLabel, footerSpacer, allocationTotalLabel);
 
@@ -504,7 +503,7 @@ public class DefaultPaymentSection implements HasPaymentSection {
 
         TextField allocationField = new TextField();
         IntegerProperty allocationProp = allocationProperties.computeIfAbsent(item.getDocumentPrimaryKey(), k -> new SimpleIntegerProperty(0));
-        allocationField.setText(PriceFormatter.formatPriceNoCurrencyNoDecimals(allocationProp.get()));
+        allocationField.setText(PriceFormatter.formatWithoutCurrency(allocationProp.get(), false));
         allocationField.setPrefWidth(100);
         allocationField.getStyleClass().addAll(bookingpage_input, bookingpage_font_semibold);
         allocationField.setPadding(new Insets(8, 12, 8, 12));
@@ -513,7 +512,7 @@ public class DefaultPaymentSection implements HasPaymentSection {
         // Update property when text changes - store actual typed value for validation
         allocationField.textProperty().addListener((obs, old, newVal) -> {
             try {
-                int parsedValue = PriceFormatter.parsePrice(newVal);
+                int parsedValue = (int) (Double.parseDouble(newVal) * 100);
                 // Clamp to max (can't allocate more than booking total) but allow values below minimum for validation
                 int value = Math.min(item.getAmount(), parsedValue);
                 allocationProp.set(value);
@@ -525,7 +524,7 @@ public class DefaultPaymentSection implements HasPaymentSection {
 
         // Update text when property changes (for programmatic changes like auto-allocate)
         allocationProp.addListener((obs, old, newVal) -> {
-            String newText = PriceFormatter.formatPriceNoCurrencyNoDecimals(newVal.intValue());
+            String newText = PriceFormatter.formatWithoutCurrency(newVal.intValue(), false);
             if (!allocationField.getText().equals(newText)) {
                 allocationField.setText(newText);
             }
@@ -634,7 +633,7 @@ public class DefaultPaymentSection implements HasPaymentSection {
      * Allocates payment proportionally based on booking amounts, ensuring min deposit requirements are met.
      */
     protected void autoAllocateProportionally(int paymentAmountCents) {
-        double paymentAmount = PriceFormatter.centsPriceToDoublePrice(paymentAmountCents);
+        double paymentAmount = paymentAmountCents / 100.0;
 
         // Step 1: Calculate initial allocations using floor to avoid exceeding payment amount
         double[] exactAllocations = new double[bookingItems.size()];
@@ -643,7 +642,7 @@ public class DefaultPaymentSection implements HasPaymentSection {
 
         for (int i = 0; i < bookingItems.size(); i++) {
             PaymentBookingItem item = bookingItems.get(i);
-            double proportion = PriceFormatter.centsPriceToDoublePrice(item.getAmount()) / PriceFormatter.centsPriceToDoublePrice(totalAmount);
+            double proportion = (double) item.getAmount() / totalAmount;
             exactAllocations[i] = paymentAmount * proportion;
             flooredAllocations[i] = Math.floor(exactAllocations[i]);
             sumFloored += flooredAllocations[i];
@@ -674,7 +673,7 @@ public class DefaultPaymentSection implements HasPaymentSection {
         for (int i = 0; i < bookingItems.size(); i++) {
             PaymentBookingItem item = bookingItems.get(i);
             IntegerProperty prop = allocationProperties.computeIfAbsent(item.getDocumentPrimaryKey(), k -> new SimpleIntegerProperty(0));
-            int allocatedAmount = PriceFormatter.doublePriceToCentsPrice(flooredAllocations[i]);
+            int allocatedAmount = (int) (flooredAllocations[i] * 100);
             // Ensure allocation meets minimum deposit requirement
             int minRequired = item.getBalanceToMinDeposit();
             if (allocatedAmount < minRequired && minRequired > 0) {
@@ -900,8 +899,8 @@ public class DefaultPaymentSection implements HasPaymentSection {
 
     protected void updatePaymentMethodCardStyle(VBox card, boolean selected) {
         // Use CSS classes for styling - hover effects handled by CSS
-        card.getStyleClass().removeAll(bookingpage_selectable_card, BookingPageCssSelectors.selected);
-        card.getStyleClass().add(bookingpage_selectable_card);
+        card.getStyleClass().removeAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded_lg, bookingpage_selectable_card, BookingPageCssSelectors.selected);
+        card.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded_lg, bookingpage_selectable_card);
         if (selected) {
             card.getStyleClass().add(BookingPageCssSelectors.selected);
         }
@@ -930,7 +929,7 @@ public class DefaultPaymentSection implements HasPaymentSection {
 
     protected Label createPageSubtitle() {
         Label label = I18nControls.newLabel(BookingPageI18nKeys.ReviewRegistrationsSubtitle);
-        label.getStyleClass().add(bookingpage_label_caption);
+        label.getStyleClass().addAll(bookingpage_text_sm, bookingpage_text_muted);
         label.setWrapText(true);
         label.setAlignment(Pos.CENTER);
         label.setMaxWidth(Double.MAX_VALUE);
@@ -961,26 +960,6 @@ public class DefaultPaymentSection implements HasPaymentSection {
     }
 
     // === HasPaymentSection INTERFACE ===
-
-    /**
-     * @deprecated Color scheme is now handled via CSS classes on parent container.
-     * Use theme classes like "theme-wisdom-blue" on a parent element instead.
-     * This property is kept for dynamic element coloring which requires Java.
-     */
-    @Deprecated
-    @Override
-    public ObjectProperty<BookingFormColorScheme> colorSchemeProperty() {
-        return colorScheme;
-    }
-
-    /**
-     * @deprecated Use CSS theme classes instead.
-     */
-    @Deprecated
-    @Override
-    public void setColorScheme(BookingFormColorScheme scheme) {
-        this.colorScheme.set(scheme);
-    }
 
     @Override
     public void setTotalAmount(int amount) {

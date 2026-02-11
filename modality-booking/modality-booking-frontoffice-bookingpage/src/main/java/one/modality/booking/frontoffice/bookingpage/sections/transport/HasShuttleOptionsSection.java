@@ -7,7 +7,6 @@ import one.modality.base.shared.entities.Item;
 import one.modality.base.shared.entities.ScheduledItem;
 import one.modality.booking.frontoffice.bookingpage.BookingFormSection;
 import one.modality.booking.frontoffice.bookingpage.ResettableSection;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
 import one.modality.ecommerce.policy.service.PolicyAggregate;
 
 import java.time.LocalDate;
@@ -115,18 +114,6 @@ public interface HasShuttleOptionsSection extends BookingFormSection, Resettable
             return direction == ShuttleDirection.RETURN;
         }
     }
-
-    // === Configuration ===
-
-    /**
-     * Returns the color scheme property for theming.
-     */
-    ObjectProperty<BookingFormColorScheme> colorSchemeProperty();
-
-    /**
-     * Sets the color scheme for this section.
-     */
-    void setColorScheme(BookingFormColorScheme scheme);
 
     // === Date Binding ===
 

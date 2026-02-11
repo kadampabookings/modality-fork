@@ -13,7 +13,7 @@ import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
 import one.modality.booking.frontoffice.bookingpage.components.StyledSectionHeader;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
+
 
 import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelectors.bookingpage_input_bordered;
 import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelectors.bookingpage_text_base;
@@ -38,7 +38,6 @@ import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelecto
 public class DefaultCommentsSection implements HasCommentsSection {
 
     // === PROPERTIES ===
-    protected final ObjectProperty<BookingFormColorScheme> colorScheme = new SimpleObjectProperty<>(BookingFormColorScheme.DEFAULT);
     protected final StringProperty commentTextProperty = new SimpleStringProperty("");
 
     // === I18N KEYS ===
@@ -112,24 +111,6 @@ public class DefaultCommentsSection implements HasCommentsSection {
     // ========================================
     // HasCommentsSection INTERFACE
     // ========================================
-
-    /**
-     * @deprecated Color scheme is now handled via CSS classes on parent container.
-     */
-    @Deprecated
-    @Override
-    public ObjectProperty<BookingFormColorScheme> colorSchemeProperty() {
-        return colorScheme;
-    }
-
-    /**
-     * @deprecated Use CSS theme classes instead.
-     */
-    @Deprecated
-    @Override
-    public void setColorScheme(BookingFormColorScheme scheme) {
-        this.colorScheme.set(scheme);
-    }
 
     @Override
     public String getCommentText() {

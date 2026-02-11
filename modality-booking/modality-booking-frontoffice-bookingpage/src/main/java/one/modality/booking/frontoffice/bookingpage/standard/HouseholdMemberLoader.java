@@ -16,8 +16,10 @@ import one.modality.booking.frontoffice.bookingpage.sections.member.HasMemberSel
 import one.modality.crm.shared.services.authn.ModalityUserPrincipal;
 import one.modality.crm.shared.services.authn.fx.FXModalityUserPrincipal;
 
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -196,6 +198,7 @@ public final class HouseholdMemberLoader {
 
     /**
      * Step 3: Check for existing bookings and mark members as already booked.
+     * Also builds a mapping of personId to documentId for child carer selection.
      */
     private static Future<Void> loadExistingBookings(
             EntityStore entityStore,
@@ -214,24 +217,31 @@ public final class HouseholdMemberLoader {
         Console.log("Checking existing bookings for event=" + eventId + ", account=" + accountId);
 
         return entityStore.<Document>executeQuery(
-                "select person.id from Document where event=$1 and person.frontendAccount=$2 and !cancelled",
+                "select id, person.id from Document where event=$1 and person.frontendAccount=$2 and !cancelled",
                 eventId, accountId)
             .map(existingBookings -> {
                 Console.log("Query returned " + existingBookings.size() + " existing bookings");
 
                 Set<Object> alreadyBookedPersonIds = new HashSet<>();
+                Map<Object, Object> personToDocumentMap = new HashMap<>();
+
                 for (Document doc : existingBookings) {
                     Person docPerson = doc.getPerson();
                     if (docPerson != null) {
                         Object pid = docPerson.getPrimaryKey();
-                        Console.log("Booking found for person ID: " + pid);
+                        Object docId = doc.getPrimaryKey();
+                        Console.log("Booking found for person ID: " + pid + ", document ID: " + docId);
                         alreadyBookedPersonIds.add(pid);
+                        personToDocumentMap.put(pid, docId);
                     }
                 }
 
                 Console.log("Total already booked person IDs: " + alreadyBookedPersonIds.size());
                 // Update UI on UI thread to avoid "Not on FX application thread" errors
-                UiScheduler.runInUiThread(() -> memberSection.setAlreadyBookedPersonIds(alreadyBookedPersonIds));
+                UiScheduler.runInUiThread(() -> {
+                    memberSection.setAlreadyBookedPersonIds(alreadyBookedPersonIds);
+                    memberSection.setPersonDocumentMap(personToDocumentMap);
+                });
                 return null;
             });
     }

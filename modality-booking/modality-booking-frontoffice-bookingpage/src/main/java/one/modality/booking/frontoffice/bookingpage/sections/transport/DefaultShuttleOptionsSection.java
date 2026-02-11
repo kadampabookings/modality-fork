@@ -25,7 +25,8 @@ import one.modality.base.shared.knownitems.KnownItemFamily;
 import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
+
+import one.modality.base.shared.entities.formatters.EventPriceFormatter;
 import one.modality.ecommerce.policy.service.PolicyAggregate;
 
 import java.time.LocalDate;
@@ -65,9 +66,6 @@ import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelecto
  * @see HasShuttleOptionsSection
  */
 public class DefaultShuttleOptionsSection implements HasShuttleOptionsSection {
-
-    // === COLOR SCHEME ===
-    protected final ObjectProperty<BookingFormColorScheme> colorScheme = new SimpleObjectProperty<>(BookingFormColorScheme.DEFAULT);
 
     // === DATE PROPERTIES ===
     protected final ObjectProperty<LocalDate> arrivalDateProperty = new SimpleObjectProperty<>();
@@ -156,7 +154,7 @@ public class DefaultShuttleOptionsSection implements HasShuttleOptionsSection {
 
         // Price label (only visible when any shuttle selected)
         totalPriceLabel = new Label();
-        totalPriceLabel.getStyleClass().addAll(bookingpage_price_medium, bookingpage_text_primary);
+        totalPriceLabel.getStyleClass().addAll(bookingpage_text_xl, bookingpage_font_bold, bookingpage_text_primary);
         updateTotalPriceLabel();
 
         headerPriceBox = new HBox(totalPriceLabel);
@@ -225,10 +223,10 @@ public class DefaultShuttleOptionsSection implements HasShuttleOptionsSection {
         card.setAlignment(Pos.CENTER_LEFT);
         card.setPadding(new Insets(12, 14, 12, 14));
         card.setCursor(Cursor.HAND);
-        card.getStyleClass().add(bookingpage_shuttle_trip);
+        card.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_subtle, bookingpage_rounded, bookingpage_shuttle_trip);
 
         // Checkbox indicator
-        StackPane checkbox = BookingPageUIBuilder.createCheckboxIndicator(option.selectedProperty(), colorScheme);
+        StackPane checkbox = BookingPageUIBuilder.createCheckboxIndicator(option.selectedProperty());
 
         // Text content (trip name + date/time)
         VBox textContent = new VBox(2);
@@ -409,7 +407,7 @@ public class DefaultShuttleOptionsSection implements HasShuttleOptionsSection {
         if (priceInCents == 0) {
             return "Free";
         }
-        return "$" + (priceInCents / 100);
+        return EventPriceFormatter.formatWithCurrency(priceInCents, workingBookingProperties != null ? workingBookingProperties.getEvent() : null);
     }
 
     /**
@@ -417,7 +415,7 @@ public class DefaultShuttleOptionsSection implements HasShuttleOptionsSection {
      */
     protected String getFormattedSingleTripPrice() {
         if (options.isEmpty()) {
-            return "$0";
+            return formatPrice(0);
         }
         // Get price from first option
         int price = options.stream()
@@ -455,16 +453,6 @@ public class DefaultShuttleOptionsSection implements HasShuttleOptionsSection {
     // ========================================
     // HasShuttleOptionsSection INTERFACE
     // ========================================
-
-    @Override
-    public ObjectProperty<BookingFormColorScheme> colorSchemeProperty() {
-        return colorScheme;
-    }
-
-    @Override
-    public void setColorScheme(BookingFormColorScheme scheme) {
-        this.colorScheme.set(scheme);
-    }
 
     @Override
     public ObjectProperty<LocalDate> arrivalDateProperty() {

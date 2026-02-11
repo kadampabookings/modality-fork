@@ -136,7 +136,7 @@ public class ResponsiveStepProgressHeader implements BookingFormHeader {
         // User badge container (the clickable badge)
         userBadgeContent.setAlignment(Pos.CENTER);
         userBadgeContent.setCursor(Cursor.HAND);
-        userBadgeContent.getStyleClass().add("booking-form-user-badge");
+        userBadgeContent.getStyleClass().add(booking_form_user_badge);
         userBadgeContent.setPadding(new Insets(6, 12, 6, 12)); // Reduced padding for compact height
 
         // Max height to align with step circles (40px on desktop)
@@ -218,7 +218,7 @@ public class ResponsiveStepProgressHeader implements BookingFormHeader {
         Label nameLabel = new Label(truncatedName);
         nameLabel.setTextFill(darkTextColor);
         nameLabel.setFont(Font.font(null, FontWeight.MEDIUM, 14));
-        nameLabel.getStyleClass().add("booking-form-user-badge-name");
+        nameLabel.getStyleClass().add(booking_form_user_badge_name);
 
         // Chevron icon - uses darkText from color scheme
         SVGPath chevron = new SVGPath();
@@ -376,25 +376,6 @@ public class ResponsiveStepProgressHeader implements BookingFormHeader {
             node = node.getParent();
         }
         return false;
-    }
-
-    /**
-     * Converts Color to hex string for inline CSS.
-     * Note: Using manual conversion since String.format() is not GWT-compatible.
-     */
-    private String toHexString(Color color) {
-        int r = (int) (color.getRed() * 255);
-        int g = (int) (color.getGreen() * 255);
-        int b = (int) (color.getBlue() * 255);
-        return "#" + toHex(r) + toHex(g) + toHex(b);
-    }
-
-    /**
-     * Converts an integer (0-255) to a two-character hex string.
-     */
-    private String toHex(int value) {
-        String hex = Integer.toHexString(value).toUpperCase();
-        return hex.length() == 1 ? "0" + hex : hex;
     }
 
     private void setupResponsiveDesign() {
@@ -560,7 +541,7 @@ public class ResponsiveStepProgressHeader implements BookingFormHeader {
 
         // Active step circle (44x44px per mockup)
         Circle activeStepCircle = new Circle(22);
-        activeStepCircle.getStyleClass().add("booking-form-step-active-circle");
+        activeStepCircle.getStyleClass().add(booking_form_step_active_circle);
         Label activeStepNumber = new Label();
         activeStepNumber.setTextFill(Color.WHITE);
         activeStepNumber.setFont(Font.font(null, FontWeight.BOLD, 16));
@@ -572,12 +553,12 @@ public class ResponsiveStepProgressHeader implements BookingFormHeader {
         // Step info (label + "Step X of Y")
         VBox stepInfo = new VBox(2);
         Label stepNameLabel = new Label();
-        stepNameLabel.getStyleClass().add("booking-form-step-name-label");
+        stepNameLabel.getStyleClass().add(booking_form_step_name_label);
         stepNameLabel.setFont(Font.font(null, FontWeight.SEMI_BOLD, 16));
         stepNameLabel.setTextFill(Color.web("#212529"));
 
         Label stepCountLabel = new Label();
-        stepCountLabel.getStyleClass().add("booking-form-step-count-label");
+        stepCountLabel.getStyleClass().add(booking_form_step_count_label);
         stepCountLabel.setFont(Font.font(null, FontWeight.NORMAL, 13));
         stepCountLabel.setTextFill(Color.web("#6c757d"));
 
@@ -664,7 +645,7 @@ public class ResponsiveStepProgressHeader implements BookingFormHeader {
             circle.getStyleClass().add(booking_form_step_bubble_tablet);
 
             Label numberLabel = new Label(String.valueOf(step.stepNumber));
-            numberLabel.getStyleClass().add(booking_form_step_number);
+            numberLabel.getStyleClass().addAll(bookingpage_font_bold, bookingpage_text_base);
             numberLabel.setFont(Font.font(null, FontWeight.SEMI_BOLD, 12)); // Per JSX mockup
             circle.getChildren().addAll(circleShape, numberLabel); // Circle first, label on top
 
@@ -731,7 +712,7 @@ public class ResponsiveStepProgressHeader implements BookingFormHeader {
             bubble.getStyleClass().add(booking_form_step_bubble);
 
             Label numberLabel = new Label(String.valueOf(step.stepNumber));
-            numberLabel.getStyleClass().add(booking_form_step_number);
+            numberLabel.getStyleClass().addAll(bookingpage_font_bold, bookingpage_text_base);
             numberLabel.setFont(Font.font(null, FontWeight.SEMI_BOLD, 13));
             bubble.getChildren().addAll(circleShape, numberLabel);
 

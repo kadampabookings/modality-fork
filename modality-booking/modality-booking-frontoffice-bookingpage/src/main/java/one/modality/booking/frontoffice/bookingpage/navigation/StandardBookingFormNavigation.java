@@ -26,6 +26,8 @@ import javafx.scene.shape.StrokeLineCap;
 import javafx.scene.text.TextAlignment;
 import one.modality.base.client.i18n.BaseI18nKeys;
 
+import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelectors.*;
+
 /**
  * @author Bruno Salmon
  */
@@ -67,10 +69,10 @@ public class StandardBookingFormNavigation implements BookingFormNavigation {
         gridPane.add(titleLabel, 1, 0);
         gridPane.add(nextButton, 2, 0);
         gridPane.setAlignment(Pos.CENTER);
-        gridPane.getStyleClass().add("navigation-bar");
-        titleLabel.getStyleClass().add("title");
-        backButton.getStyleClass().add("back-button");
-        nextButton.getStyleClass().add("next-button");
+        gridPane.getStyleClass().add(bookingpage_navigation_bar);
+        titleLabel.getStyleClass().add(bookingpage_navigation_title);
+        backButton.getStyleClass().add(bookingpage_navigation_back_button);
+        nextButton.getStyleClass().add(bookingpage_navigation_next_button);
         backButton.visibleProperty().bind(backButton.disabledProperty().not());
         nextButton.visibleProperty().bind(nextButton.disabledProperty().not());
     }

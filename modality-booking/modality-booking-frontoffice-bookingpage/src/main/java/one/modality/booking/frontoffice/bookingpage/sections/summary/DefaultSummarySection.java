@@ -22,7 +22,7 @@ import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
 import one.modality.booking.frontoffice.bookingpage.components.StyledSectionHeader;
 import one.modality.booking.frontoffice.bookingpage.components.price.UnifiedPriceDisplay;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
+
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -42,7 +42,6 @@ import static one.modality.booking.frontoffice.bookingpage.components.BookingPag
 public class DefaultSummarySection implements HasSummarySection {
 
     // === PROPERTIES ===
-    protected final ObjectProperty<BookingFormColorScheme> colorScheme = new SimpleObjectProperty<>(BookingFormColorScheme.DEFAULT);
     protected final SimpleBooleanProperty validProperty = new SimpleBooleanProperty(true);
 
     // === ATTENDEE INFO ===
@@ -91,7 +90,7 @@ public class DefaultSummarySection implements HasSummarySection {
     protected void buildUI() {
         container.setAlignment(Pos.TOP_CENTER);
         container.setSpacing(0);
-        container.getStyleClass().add("bookingpage-summary-section");
+        container.getStyleClass().add(bookingpage_summary_section);
 
         // Page title: "Review Your Booking"
         Label title = createPageTitle();
@@ -309,7 +308,7 @@ public class DefaultSummarySection implements HasSummarySection {
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
         totalAmountLabel = new Label(unifiedPriceDisplay != null ? unifiedPriceDisplay.formatPrice(0) : "£0");
-        totalAmountLabel.getStyleClass().addAll(bookingpage_price_medium, bookingpage_font_bold, bookingpage_text_primary);
+        totalAmountLabel.getStyleClass().addAll(bookingpage_text_xl, bookingpage_font_bold, bookingpage_text_primary);
 
         totalRow.getChildren().addAll(totalTextLabel, spacer, totalAmountLabel);
 
@@ -371,7 +370,7 @@ public class DefaultSummarySection implements HasSummarySection {
 
         // Content box
         VBox contentBox = new VBox(0);
-        contentBox.getStyleClass().addAll(bookingpage_card, bookingpage_rounded_lg);
+        contentBox.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded_lg);
         contentBox.setPadding(new Insets(16, 20, 16, 20));
 
         // Options list container
@@ -483,10 +482,12 @@ public class DefaultSummarySection implements HasSummarySection {
         VBox labelBox = new VBox(2);
         HBox.setHgrow(labelBox, Priority.ALWAYS);
 
-        // Format display name: "Family - Item" if family exists, otherwise just "Item"
+        // Format display name: "Family - Item" if family exists and differs from item, otherwise just "Item"
         String familyName = line.getFamilyName();
         String itemName = line.getItemName() != null ? line.getItemName() : "Item";
-        String displayName = familyName != null ? familyName + " - " + itemName : itemName;
+        // Avoid redundant display like "Teaching - Teaching" when names are the same
+        boolean sameNames = familyName != null && familyName.equalsIgnoreCase(itemName);
+        String displayName = (familyName != null && !sameNames) ? familyName + " - " + itemName : itemName;
 
         Label nameLabel = new Label(displayName);
         nameLabel.getStyleClass().addAll(bookingpage_text_base, bookingpage_font_medium, bookingpage_text_dark);
@@ -627,26 +628,6 @@ public class DefaultSummarySection implements HasSummarySection {
     // HasSummarySection INTERFACE
     // ========================================
 
-    /**
-     * @deprecated Color scheme is now handled via CSS classes on parent container.
-     * Use theme classes like "theme-wisdom-blue" on a parent element instead.
-     * This property is kept for icon and dynamic element coloring which requires Java.
-     */
-    @Deprecated
-    @Override
-    public ObjectProperty<BookingFormColorScheme> colorSchemeProperty() {
-        return colorScheme;
-    }
-
-    /**
-     * @deprecated Use CSS theme classes instead.
-     */
-    @Deprecated
-    @Override
-    public void setColorScheme(BookingFormColorScheme scheme) {
-        this.colorScheme.set(scheme);
-    }
-
     @Override
     public void setAttendeeName(String name) {
         attendeeNameProperty.set(name);
@@ -676,13 +657,6 @@ public class DefaultSummarySection implements HasSummarySection {
     @Override
     public void addPriceLine(String familyName, String itemName, String dates, int amount) {
         priceLines.add(new PriceLine(familyName, itemName, dates, amount));
-        refreshPriceBreakdown();
-    }
-
-    @Override
-    public void addPriceLine(String name, String description, int amount) {
-        // Backward compatibility: treat name as itemName, familyName as null
-        priceLines.add(new PriceLine(null, name, description, amount));
         refreshPriceBreakdown();
     }
 

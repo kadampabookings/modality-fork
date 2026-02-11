@@ -1,9 +1,6 @@
 package one.modality.booking.frontoffice.bookingpage.standard;
 
 import dev.webfx.extras.i18n.I18n;
-import dev.webfx.extras.util.dialog.DialogCallback;
-import dev.webfx.extras.util.dialog.DialogUtil;
-import dev.webfx.extras.util.dialog.builder.DialogContent;
 import dev.webfx.kit.util.properties.FXProperties;
 import dev.webfx.platform.async.Future;
 import dev.webfx.platform.async.Promise;
@@ -28,9 +25,7 @@ import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
-import one.modality.base.client.error.ErrorReporter;
 import one.modality.base.client.i18n.I18nEntities;
-import one.modality.base.client.mainframe.fx.FXMainFrameDialogArea;
 import one.modality.base.shared.entities.*;
 import one.modality.booking.client.workingbooking.*;
 import one.modality.booking.frontoffice.bookingform.BookingFormEntryPoint;
@@ -54,6 +49,8 @@ import one.modality.booking.frontoffice.bookingpage.sections.user.DefaultYourInf
 import one.modality.booking.frontoffice.bookingpage.sections.user.HasYourInformationSection;
 import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
 import one.modality.booking.frontoffice.bookingpage.util.BookingDateFormatter;
+import one.modality.booking.frontoffice.bookingpage.util.BookingFormDialogUtil;
+import one.modality.booking.frontoffice.bookingpage.util.PersonNameUtil;
 import one.modality.booking.frontoffice.bookingpage.util.SoldOutErrorParser;
 import one.modality.crm.shared.services.authn.ModalityUserPrincipal;
 import one.modality.crm.shared.services.authn.fx.FXModalityUserPrincipal;
@@ -162,120 +159,67 @@ public class StandardBookingForm extends MultiPageBookingForm
 
     /**
      * Package-private constructor - use {@link StandardBookingFormBuilder} to create instances.
+     * Takes the builder as a config object to avoid a long positional parameter list.
      */
-    StandardBookingForm(
-        HasWorkingBookingProperties activity,
-        EventBookingFormSettings settings,
-        BookingFormColorScheme colorScheme,
-        boolean showUserBadge,
-        List<BookingFormPage> customSteps,
-        Supplier<BookingFormPage> yourInformationPageSupplier,
-        Supplier<BookingFormPage> memberSelectionPageSupplier,
-        boolean skipMemberSelection,
-        Supplier<BookingFormPage> summaryPageSupplier,
-        boolean showCommentsSection,
-        Supplier<BookingFormPage> pendingBookingsPageSupplier,
-        boolean skipPendingBookings,
-        Supplier<BookingFormPage> paymentPageSupplier,
-        Supplier<BookingFormPage> confirmationPageSupplier,
-        StandardBookingFormCallbacks callbacks,
-        boolean cardPaymentOnly,
-        BookingFormEntryPoint entryPoint,
-        boolean navigationClickable,
-        Node stickyHeader) {
-
-        super(activity, settings);
-        this.navigationClickable = navigationClickable;
-        this.stickyHeader = stickyHeader;
-        this.colorScheme = colorScheme;
-        this.showUserBadge = showUserBadge;
-        this.showCommentsSection = showCommentsSection;
-        this.callbacks = callbacks;
-        this.cardPaymentOnly = cardPaymentOnly;
-        this.entryPoint = entryPoint;
-        this.customStepPages = new ArrayList<>(customSteps);
+    StandardBookingForm(StandardBookingFormBuilder config) {
+        super(config.activity, config.settings);
+        this.colorScheme = config.resolvedColorScheme;
+        this.showUserBadge = config.showUserBadge;
+        this.showCommentsSection = config.showCommentsSection;
+        this.callbacks = config.callbacks;
+        this.cardPaymentOnly = config.cardPaymentOnly;
+        this.entryPoint = config.entryPoint;
+        this.navigationClickable = config.navigationClickable;
+        this.stickyHeader = config.stickyHeader;
+        this.customStepPages = new ArrayList<>(config.customSteps);
 
         // Initialize state management
-        this.state = new BookingFormState(activity.getWorkingBookingProperties());
+        this.state = new BookingFormState(config.activity.getWorkingBookingProperties());
 
-        // Initialize payment handler (this class implements PaymentFormCallback)
+        // Initialize handlers
         this.paymentHandler = new BookingFormPaymentHandler(this);
-
-        // Initialize queue handler (this class implements QueueFormCallback)
         this.queueHandler = new BookingFormQueueHandler(this);
-
-        // Initialize sold-out handler (this class implements SoldOutFormCallback)
         this.soldOutHandler = new BookingFormSoldOutHandler(this);
 
         // Build the pages array
-        this.pages = buildPages(
-            customSteps,
-            yourInformationPageSupplier,
-            memberSelectionPageSupplier,
-            skipMemberSelection,
-            summaryPageSupplier,
-            entryPoint == BookingFormEntryPoint.PAY_BOOKING, // Skipping summary section when entry point is for paying a booking
-            pendingBookingsPageSupplier,
-            skipPendingBookings,
-            paymentPageSupplier,
-            confirmationPageSupplier
-        );
+        this.pages = buildPages(config);
 
-        // Set up theme
+        // Set up theme, callbacks, and navigation
         setupTheme();
-
-        // Wire up internal callbacks
         wireUpInternalCallbacks();
-
-        // Set up navigation buttons for each page
         setupPageButtons();
     }
 
-    private BookingFormPage[] buildPages(
-        List<BookingFormPage> customSteps,
-        Supplier<BookingFormPage> yourInformationPageSupplier,
-        Supplier<BookingFormPage> memberSelectionPageSupplier,
-        boolean skipMemberSelection,
-        Supplier<BookingFormPage> summaryPageSupplier,
-        boolean skipSummary,
-        Supplier<BookingFormPage> pendingBookingsPageSupplier,
-        boolean skipPendingBookings,
-        Supplier<BookingFormPage> paymentPageSupplier,
-        Supplier<BookingFormPage> confirmationPageSupplier) {
-
+    private BookingFormPage[] buildPages(StandardBookingFormBuilder config) {
         // 1. Add all custom steps
-        List<BookingFormPage> allPages = new ArrayList<>(customSteps);
+        List<BookingFormPage> allPages = new ArrayList<>(config.customSteps);
 
         // 2. Your Information page (always present)
-        // Index tracking for common pages (set during page array construction)
-        yourInformationPage = yourInformationPageSupplier != null
-            ? yourInformationPageSupplier.get()
+        yourInformationPage = config.yourInformationPageSupplier != null
+            ? config.yourInformationPageSupplier.get()
             : createDefaultYourInformationPage();
         allPages.add(yourInformationPage);
 
         // 3. Member Selection page (optional)
-        if (!skipMemberSelection) {
-            // -1 if skipped
-            memberSelectionPage = memberSelectionPageSupplier != null
-                ? memberSelectionPageSupplier.get()
+        if (!config.skipMemberSelection) {
+            memberSelectionPage = config.memberSelectionPageSupplier != null
+                ? config.memberSelectionPageSupplier.get()
                 : createDefaultMemberSelectionPage();
             allPages.add(memberSelectionPage);
         }
 
         // 4. Summary page (optional)
-        if (!skipSummary) {
-            summaryPage = summaryPageSupplier != null
-                ? summaryPageSupplier.get()
+        if (!config.resolvedSkipSummary) {
+            summaryPage = config.summaryPageSupplier != null
+                ? config.summaryPageSupplier.get()
                 : createDefaultSummaryPage();
             allPages.add(summaryPage);
 
             // Extract DefaultSummarySection from custom summary page if present
-            // This allows updateSummaryWithAttendee() to work with custom summary pages
-            if (summaryPageSupplier != null && defaultSummarySection == null && summaryPage instanceof CompositeBookingFormPage compositeSummary) {
+            if (config.summaryPageSupplier != null && defaultSummarySection == null && summaryPage instanceof CompositeBookingFormPage compositeSummary) {
                 for (BookingFormSection section : compositeSummary.getSections()) {
                     if (section instanceof DefaultSummarySection dss) {
                         defaultSummarySection = dss;
-                        defaultSummarySection.setColorScheme(colorScheme);
                         break;
                     }
                 }
@@ -283,23 +227,22 @@ public class StandardBookingForm extends MultiPageBookingForm
         }
 
         // 5. Pending Bookings page (optional)
-        if (!skipPendingBookings) {
-            // -1 if skipped
-            pendingBookingsPage = pendingBookingsPageSupplier != null
-                ? pendingBookingsPageSupplier.get()
+        if (!config.resolvedSkipPendingBookings) {
+            pendingBookingsPage = config.pendingBookingsPageSupplier != null
+                ? config.pendingBookingsPageSupplier.get()
                 : createDefaultPendingBookingsPage();
             allPages.add(pendingBookingsPage);
         }
 
         // 6. Payment page (always present)
-        paymentPage = paymentPageSupplier != null
-            ? paymentPageSupplier.get()
+        paymentPage = config.paymentPageSupplier != null
+            ? config.paymentPageSupplier.get()
             : createDefaultPaymentPage();
         allPages.add(paymentPage);
 
         // 7. Confirmation page (always present)
-        confirmationPage = confirmationPageSupplier != null
-            ? confirmationPageSupplier.get()
+        confirmationPage = config.confirmationPageSupplier != null
+            ? config.confirmationPageSupplier.get()
             : createDefaultConfirmationPage();
         allPages.add(confirmationPage);
 
@@ -363,7 +306,6 @@ public class StandardBookingForm extends MultiPageBookingForm
 
     protected BookingFormPage createDefaultYourInformationPage() {
         defaultYourInformationSection = new DefaultYourInformationSection();
-        defaultYourInformationSection.setColorScheme(colorScheme);
         return new CompositeBookingFormPage(BookingPageI18nKeys.YourInformation,
             defaultYourInformationSection)
             .setStep(false)
@@ -372,7 +314,6 @@ public class StandardBookingForm extends MultiPageBookingForm
 
     protected BookingFormPage createDefaultMemberSelectionPage() {
         defaultMemberSelectionSection = new DefaultMemberSelectionSection();
-        defaultMemberSelectionSection.setColorScheme(colorScheme);
         return new CompositeBookingFormPage(BookingPageI18nKeys.MemberSelection,
             defaultMemberSelectionSection)
             .setStep(true)
@@ -381,15 +322,12 @@ public class StandardBookingForm extends MultiPageBookingForm
 
     protected BookingFormPage createDefaultSummaryPage() {
         defaultSummarySection = new DefaultSummarySection();
-        defaultSummarySection.setColorScheme(colorScheme);
         // Terms section is shown on Summary page, before submitting registration
         defaultTermsSection = new DefaultTermsSection();
-        defaultTermsSection.setColorScheme(colorScheme);
 
         // Comments section (optional - enabled via builder)
         if (showCommentsSection) {
             defaultCommentsSection = new DefaultCommentsSection();
-            defaultCommentsSection.setColorScheme(colorScheme);
             return new CompositeBookingFormPage(BookingPageI18nKeys.Summary,
                 defaultSummarySection,
                 defaultCommentsSection,
@@ -405,7 +343,6 @@ public class StandardBookingForm extends MultiPageBookingForm
 
     protected BookingFormPage createDefaultPendingBookingsPage() {
         defaultPendingBookingsSection = new DefaultPendingBookingsSection();
-        defaultPendingBookingsSection.setColorScheme(colorScheme);
         return new CompositeBookingFormPage(BookingPageI18nKeys.PendingBookings,
             defaultPendingBookingsSection)
             .setStep(true);
@@ -413,7 +350,6 @@ public class StandardBookingForm extends MultiPageBookingForm
 
     protected BookingFormPage createDefaultPaymentPage() {
         defaultPaymentSection = new DefaultPaymentSection();
-        defaultPaymentSection.setColorScheme(colorScheme);
         defaultPaymentSection.setCardPaymentOnly(cardPaymentOnly);
         return new CompositeBookingFormPage(BookingPageI18nKeys.Payment,
             defaultPaymentSection)
@@ -424,7 +360,6 @@ public class StandardBookingForm extends MultiPageBookingForm
 
     protected BookingFormPage createDefaultConfirmationPage() {
         defaultConfirmationSection = new DefaultConfirmationSection();
-        defaultConfirmationSection.setColorScheme(colorScheme);
         return new CompositeBookingFormPage(BookingPageI18nKeys.Confirmation,
             defaultConfirmationSection)
             .setStep(true)
@@ -590,7 +525,6 @@ public class StandardBookingForm extends MultiPageBookingForm
      */
     private void showFailedPaymentContent(MoneyTransfer moneyTransfer) {
         DefaultFailedPaymentSection failedSection = new DefaultFailedPaymentSection();
-        failedSection.setColorScheme(colorScheme);
 
         // Populate with data from MoneyTransfer
         Document document = moneyTransfer.getDocument();
@@ -629,7 +563,6 @@ public class StandardBookingForm extends MultiPageBookingForm
      */
     private void showPendingPaymentContent(MoneyTransfer moneyTransfer) {
         DefaultPendingPaymentSection pendingSection = new DefaultPendingPaymentSection();
-        pendingSection.setColorScheme(colorScheme);
 
         // Populate with data from MoneyTransfer
         Document document = moneyTransfer.getDocument();
@@ -969,47 +902,7 @@ public class StandardBookingForm extends MultiPageBookingForm
      * @param error The error/exception from the server
      */
     private void showSubmissionErrorDialog(Throwable error) {
-        // Build detailed error message for logging
-        String errorMessage = error != null && error.getMessage() != null
-            ? error.getMessage()
-            : "Unknown error";
-
-        // Get event context for error reporting
-        String eventName = null;
-        Event event = getEvent();
-        if (event != null) {
-            eventName = event.getName();
-        }
-
-        // Build comprehensive error report message
-        StringBuilder reportMessage = new StringBuilder();
-        reportMessage.append("[StandardBookingForm] Booking submission failed: ").append(errorMessage);
-        if (eventName != null) {
-            reportMessage.append(" | Event: ").append(eventName);
-        }
-
-        // Report error to database
-        ErrorReporter.reportError(reportMessage.toString());
-
-        // Show error dialog to user
-        UiScheduler.runInUiThread(() -> {
-            DialogContent errorDialog = DialogContent.createErrorDialogWithTechnicalDetails(
-                I18n.getI18nText(BookingPageI18nKeys.ServerErrorTitle),
-                I18n.getI18nText(BookingPageI18nKeys.ServerErrorHeader),
-                I18n.getI18nText(BookingPageI18nKeys.ServerErrorMessage),
-                errorMessage,  // Technical details - the actual server error
-                null,          // No error code
-                null           // No timestamp
-            );
-
-            // Use DialogUtil to show the dialog
-            DialogCallback callback = DialogUtil.showModalNodeInGoldLayout(
-                errorDialog.build(),
-                FXMainFrameDialogArea.getDialogArea()
-            );
-            errorDialog.setDialogCallback(callback);
-            errorDialog.getPrimaryButton().setOnAction(e -> callback.closeDialog());
-        });
+        BookingFormDialogUtil.showSubmissionErrorDialog(getEvent(), error);
     }
 
     /**
@@ -1017,35 +910,7 @@ public class StandardBookingForm extends MultiPageBookingForm
      * Reports the error to the database and displays a user-friendly message.
      */
     private void showAlreadyBookedErrorDialogInternal() {
-        // Get event context for error reporting
-        String eventName = null;
-        Event event = getEvent();
-        if (event != null) {
-            eventName = event.getName();
-        }
-
-        // Report to database
-        ErrorReporter.reportError("[StandardBookingForm] User already has booking for event: " + eventName);
-
-        // Show error dialog to user
-        UiScheduler.runInUiThread(() -> {
-            DialogContent errorDialog = DialogContent.createErrorDialogWithTechnicalDetails(
-                I18n.getI18nText(BookingPageI18nKeys.AlreadyBookedTitle),
-                I18n.getI18nText(BookingPageI18nKeys.AlreadyBookedHeader),
-                I18n.getI18nText(BookingPageI18nKeys.AlreadyBookedMessage),
-                null,  // No technical details needed
-                null,
-                null
-            );
-
-            // Use DialogUtil to show the dialog
-            DialogCallback callback = DialogUtil.showModalNodeInGoldLayout(
-                errorDialog.build(),
-                FXMainFrameDialogArea.getDialogArea()
-            );
-            errorDialog.setDialogCallback(callback);
-            errorDialog.getPrimaryButton().setOnAction(e -> callback.closeDialog());
-        });
+        BookingFormDialogUtil.showAlreadyBookedErrorDialog(getEvent());
     }
 
     /**
@@ -1315,8 +1180,8 @@ public class StandardBookingForm extends MultiPageBookingForm
         for (DocumentAggregate documentAggregate : documentAggregates) {
             Document doc = documentAggregate.getDocument();
             // Get person info from Document entity (safer than getAttendeeFullName() which relies on AddDocumentEvent)
-            String personName = getDocumentPersonName(doc);
-            String personEmail = getDocumentPersonEmail(doc);
+            String personName = PersonNameUtil.getDocumentPersonName(doc);
+            String personEmail = PersonNameUtil.getDocumentPersonEmail(doc);
 
             // Use stored values from Document for database-loaded bookings
             // These values were calculated and stored when the booking was submitted
@@ -1368,8 +1233,10 @@ public class StandardBookingForm extends MultiPageBookingForm
                         }
                         String familyCode = family != null ? family.getCode() : "";
                         // Pass family and item names separately - sections use UnifiedPriceDisplay for consistent formatting
-                        String familyName = (family != null && family.getName() != null) ? family.getName() : null;
-                        String itemName = item.getName() != null ? item.getName() : "Item";
+                        // Use I18nEntities.translateEntity() to get localized Label, fallback to getName()
+                        String familyName = translateEntityName(family);
+                        String itemName = translateEntityName(item);
+                        if (itemName == null) itemName = "Item";
                         Integer linePriceObj = line.getPriceNet();
                         int linePrice = linePriceObj != null ? linePriceObj : 0;
 
@@ -1412,7 +1279,7 @@ public class StandardBookingForm extends MultiPageBookingForm
         Document doc = documentAggregate.getDocument();
         // Get person name from Document directly (it has personal details copied via EntityHasPersonalDetailsCopy)
         // Fall back to Person entity if Document doesn't have the name
-        String personName = getDocumentPersonName(doc);
+        String personName = PersonNameUtil.getDocumentPersonName(doc);
         String eventName = getEvent() != null ? getEvent().getName() : "";
 
         // Use WorkingBooking's balance calculation (calculates from MoneyTransfers which are loaded)
@@ -1438,61 +1305,6 @@ public class StandardBookingForm extends MultiPageBookingForm
         defaultPaymentSection.setPaymentsMade(paidDeposit);     // Previous payments (for display)
         int remainingMinDeposit = Math.max(0, minDeposit - paidDeposit);
         defaultPaymentSection.setDepositAmount(remainingMinDeposit);  // Remaining min deposit needed
-    }
-
-    /**
-     * Get full name from Person entity.
-     */
-    private String getPersonFullName(Person person) {
-        if (person == null) return "";
-        String firstName = person.getFirstName() != null ? person.getFirstName() : "";
-    String lastName = person.getLastName() != null ? person.getLastName() : "";
-        return (firstName + " " + lastName).trim();
-    }
-
-    /**
-     * Get person name from Document entity.
-     * Document has personal details copied directly via EntityHasPersonalDetailsCopy interface.
-     * Falls back to Person entity if Document doesn't have the name.
-     */
-    private String getDocumentPersonName(Document doc) {
-        if (doc == null) return "";
-
-        // Try to get name from Document directly (personal details are copied to Document)
-        String firstName = doc.getFirstName();
-        String lastName = doc.getLastName();
-
-        if (firstName != null || lastName != null) {
-            StringBuilder name = new StringBuilder();
-            if (firstName != null) name.append(firstName);
-            if (lastName != null) {
-                if (name.length() > 0) name.append(" ");
-                name.append(lastName);
-            }
-            return name.toString().trim();
-        }
-
-        // Fall back to Person entity
-        return getPersonFullName(doc.getPerson());
-    }
-
-    /**
-     * Get person email from Document entity.
-     * Document has personal details copied directly via EntityHasPersonalDetailsCopy interface.
-     * Falls back to Person entity if Document doesn't have the email.
-     */
-    private String getDocumentPersonEmail(Document doc) {
-        if (doc == null) return "";
-
-        // Try to get email from Document directly (personal details are copied to Document)
-        String email = doc.getEmail();
-        if (email != null) {
-            return email;
-        }
-
-        // Fall back to Person entity
-        Person person = doc.getPerson();
-        return person != null ? person.getEmail() : "";
     }
 
     // === Payment Page Handlers ===
@@ -1907,8 +1719,10 @@ public class StandardBookingForm extends MultiPageBookingForm
                 }
 
                 // Pass family and item names separately - sections use UnifiedPriceDisplay for consistent formatting
-                String familyName = (family != null && family.getName() != null) ? family.getName() : null;
-                String itemName = item.getName() != null ? item.getName() : "Item";
+                // Use I18nEntities.translateEntity() to get localized Label, fallback to getName()
+                String familyName = translateEntityName(family);
+                String itemName = translateEntityName(item);
+                if (itemName == null) itemName = "Item";
 
                 // Get price: use stored price if available, otherwise calculate dynamically
                 Integer linePriceObj = line.getPriceNet();
@@ -1922,82 +1736,6 @@ public class StandardBookingForm extends MultiPageBookingForm
 
                 // Compute dates from attendances (uses centralized formatting)
                 String lineDates = BookingDateFormatter.computeDatesFromAttendances(workingBooking, line);
-
-                // DEBUG: Detailed logging for transport items
-                if (familyName != null && familyName.toLowerCase().contains("transport")) {
-                    Console.log("=== DEBUG Transport: " + itemName + " ===");
-                    Console.log("  line.getId() = " + line.getId());
-                    Console.log("  line.getSite() = " + (line.getSite() != null ? line.getSite().getPrimaryKey() : "null"));
-                    Console.log("  line.getItem() = " + (line.getItem() != null ? line.getItem().getPrimaryKey() : "null"));
-                    Console.log("  line.getPriceNet() = " + linePriceObj);
-                    Console.log("  priceCalculator.calculateDocumentLinePrice() = " + linePrice);
-
-                    // Check standard getLineAttendances
-                    List<Attendance> stdAttendances = documentAggregate.getLineAttendances(line);
-                    Console.log("  Standard getLineAttendances count = " + (stdAttendances != null ? stdAttendances.size() : "null"));
-
-                    // Check robust matching
-                    List<Attendance> robustAttendances = BookingDateFormatter.getLineAttendancesRobust(documentAggregate, line);
-                    Console.log("  Robust getLineAttendances count = " + robustAttendances.size());
-
-                    // Show all attendances and their documentLine info
-                    List<Attendance> allAtts = documentAggregate.getAttendances();
-                    Console.log("  Total attendances in DocumentAggregate = " + (allAtts != null ? allAtts.size() : "null"));
-                    if (allAtts != null) {
-                        for (Attendance att : allAtts) {
-                            DocumentLine attLine = att.getDocumentLine();
-                            if (attLine != null) {
-                                Item attItem = attLine.getItem();
-                                String attItemName = attItem != null ? attItem.getName() : "null";
-                                // Only show transport attendances
-                                if (attItemName != null && (attItemName.contains("Newark") || attItemName.contains("KMCNY"))) {
-                                    Site attSite = attLine.getSite();
-                                    Console.log("    Attendance: item='" + attItemName + "', attLine.site=" +
-                                        (attSite != null ? attSite.getPrimaryKey() : "null") +
-                                        ", attLine.item=" + (attItem != null ? attItem.getPrimaryKey() : "null") +
-                                        ", att.date=" + att.getDate() +
-                                        ", att.scheduledItem=" + (att.getScheduledItem() != null ? att.getScheduledItem().getPrimaryKey() : "null"));
-
-                                    // Check if this attendance matches the current line
-                                    boolean stdMatch = java.util.Objects.equals(attLine, line);
-                                    boolean siteMatch = attSite != null && line.getSite() != null &&
-                                        Entities.samePrimaryKey(attSite, line.getSite());
-                                    boolean itemMatch = attItem != null && line.getItem() != null &&
-                                        Entities.samePrimaryKey(attItem, line.getItem());
-                                    Console.log("      -> stdMatch=" + stdMatch + ", siteMatch=" + siteMatch + ", itemMatch=" + itemMatch);
-                                }
-                            }
-                        }
-                    }
-
-                    // Check rates for this Site+Item
-                    PolicyAggregate pa = workingBooking.getPolicyAggregate();
-                    if (pa != null) {
-                        List<Rate> rates = pa.getRates();
-                        Console.log("  Checking rates (total " + (rates != null ? rates.size() : 0) + "):");
-                        if (rates != null) {
-                            Site lineSite = line.getSite();
-                            Item lineItem = line.getItem();
-                            Item rateItem = lineItem != null && lineItem.getRateAliasItem() != null ?
-                                lineItem.getRateAliasItem() : lineItem;
-                            for (Rate rate : rates) {
-                                Site rateSite = rate.getSite();
-                                Item rateItemFromRate = rate.getItem();
-                                if (rateSite != null && rateItemFromRate != null) {
-                                    boolean siteMatch = Entities.samePrimaryKey(rateSite, lineSite);
-                                    boolean itemMatch = Entities.samePrimaryKey(rateItemFromRate, rateItem);
-                                    if (siteMatch || itemMatch) {
-                                        Console.log("    Rate: site=" + rateSite.getPrimaryKey() +
-                                            ", item=" + rateItemFromRate.getPrimaryKey() +
-                                            ", price=" + rate.getPrice() +
-                                            " -> siteMatch=" + siteMatch + ", itemMatch=" + itemMatch);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    Console.log("=== END DEBUG ===");
-                }
 
                 // Add the price line using new API with separate family/item for consistent formatting via UnifiedPriceDisplay
                 if (linePrice != 0 || (family != null && !Boolean.TRUE.equals(family.isSummaryHidden()))) {
@@ -2015,42 +1753,6 @@ public class StandardBookingForm extends MultiPageBookingForm
                 defaultSummarySection.addPriceLine(null, eventName, null, totalPrice);
             }
         }
-    }
-
-    /**
-     * Calculates price from PolicyAggregate's rates for a given Site+Item.
-     * Used as a fallback when PriceCalculator returns 0 due to EntityStore mismatch issues.
-     */
-    private int calculatePriceFromRates(PolicyAggregate policyAggregate, Site site, Item item, int attendanceCount) {
-        if (policyAggregate == null || site == null || item == null) return 0;
-
-        // Look for a Rate matching this Site+Item
-        List<Rate> rates = policyAggregate.getRates();
-        if (rates == null || rates.isEmpty()) return 0;
-
-        // If item has a rate alias, use that for the lookup
-        Item rateItem = item.getRateAliasItem() != null ? item.getRateAliasItem() : item;
-
-        for (Rate rate : rates) {
-            if (rate.getSite() != null && rate.getItem() != null &&
-                Entities.samePrimaryKey(rate.getSite(), site) &&
-                Entities.samePrimaryKey(rate.getItem(), rateItem)) {
-                // Found matching rate
-                Integer ratePrice = rate.getPrice();
-                if (ratePrice != null) {
-                    // For daily rates, multiply by attendance count
-                    // For fixed rates (perDay = false or not set), return the rate price directly
-                    Boolean perDay = rate.isPerDay();
-                    if (Boolean.TRUE.equals(perDay)) {
-                        return ratePrice * attendanceCount;
-                    } else {
-                        return ratePrice;
-                    }
-                }
-            }
-        }
-
-        return 0; // No matching rate found
     }
 
     private void updatePaymentFromPendingBookings() {
@@ -2137,8 +1839,10 @@ public class StandardBookingForm extends MultiPageBookingForm
                         }
                         String familyCode = family != null ? family.getCode() : "";
                         // Pass family and item names separately - sections use UnifiedPriceDisplay for consistent formatting
-                        String familyName = (family != null && family.getName() != null) ? family.getName() : null;
-                        String itemName = item.getName() != null ? item.getName() : "Item";
+                        // Use I18nEntities.translateEntity() to get localized Label, fallback to getName()
+                        String familyName = translateEntityName(family);
+                        String itemName = translateEntityName(item);
+                        if (itemName == null) itemName = "Item";
                         Integer linePriceObj = line.getPriceNet();
                         int linePrice = linePriceObj != null ? linePriceObj : 0;
 
@@ -2183,33 +1887,12 @@ public class StandardBookingForm extends MultiPageBookingForm
             String bookingRef = Strings.toString(workingBookingProperties.getBookingReference());
             DocumentAggregate docAggregate = workingBookingProperties.getDocumentAggregate();
             if (docAggregate != null) {
-                String personName = "";
-                String personEmail = "";
                 Document doc = docAggregate.getDocument();
-                if (doc != null) {
-                    // Get from Document's personal details fields (copied from Person via EntityHasPersonalDetailsCopy)
-                    String firstName = doc.getFirstName();
-                    String lastName = doc.getLastName();
-                    if (firstName != null || lastName != null) {
-                        personName = ((firstName != null ? firstName : "") + " " + (lastName != null ? lastName : "")).trim();
-                    }
-                    personEmail = doc.getEmail();
-                    // Fall back to Person entity if Document fields are empty
-                    if (personName.isEmpty() || personEmail == null) {
-                        Person person = doc.getPerson();
-                        if (person != null) {
-                            if (personName.isEmpty()) {
-                                personName = person.getFullName();
-                            }
-                            if (personEmail == null) {
-                                personEmail = person.getEmail();
-                            }
-                        }
-                    }
-                }
+                String personName = PersonNameUtil.getDocumentPersonName(doc);
+                String personEmail = PersonNameUtil.getDocumentPersonEmail(doc);
                 defaultConfirmationSection.addConfirmedBooking(new HasConfirmationSection.ConfirmedBooking(
-                    personName != null ? personName : "",
-                    personEmail != null ? personEmail : "",
+                    personName,
+                    personEmail,
                     bookingRef));
             }
         } else {
@@ -2252,6 +1935,28 @@ public class StandardBookingForm extends MultiPageBookingForm
     @Override
     public Event getEvent() {
         return workingBookingProperties.getEvent();
+    }
+
+    /**
+     * Translates an entity to its localized display name.
+     * Uses the entity's Label if available, otherwise falls back to getName().
+     *
+     * @param entity the entity to translate (Item, ItemFamily, etc.)
+     * @return the translated name, or null if entity is null
+     */
+    private String translateEntityName(dev.webfx.stack.orm.entity.Entity entity) {
+        if (entity == null) return null;
+        // I18nEntities.translateEntity uses i18n(this) which resolves Label -> name fallback
+        String translated = I18nEntities.translateEntity(entity);
+        // Fallback to getName() if translation returns null or empty
+        if (translated == null || translated.isEmpty()) {
+            if (entity instanceof Item) {
+                return ((Item) entity).getName();
+            } else if (entity instanceof ItemFamily) {
+                return ((ItemFamily) entity).getName();
+            }
+        }
+        return translated;
     }
 
     // === Navigation Methods ===

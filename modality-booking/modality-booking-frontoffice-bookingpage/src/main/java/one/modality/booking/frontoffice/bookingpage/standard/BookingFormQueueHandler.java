@@ -1,9 +1,6 @@
 package one.modality.booking.frontoffice.bookingpage.standard;
 
 import dev.webfx.extras.i18n.I18n;
-import dev.webfx.extras.util.dialog.DialogCallback;
-import dev.webfx.extras.util.dialog.DialogUtil;
-import dev.webfx.extras.util.dialog.builder.DialogContent;
 import dev.webfx.kit.util.properties.FXProperties;
 import dev.webfx.platform.async.Future;
 import dev.webfx.platform.console.Console;
@@ -14,8 +11,6 @@ import dev.webfx.platform.visibility.VisibilityState;
 import dev.webfx.platform.windowlocation.WindowLocation;
 import dev.webfx.stack.authn.AuthenticationService;
 import dev.webfx.stack.authn.InitiateAccountCreationCredentials;
-import one.modality.base.client.error.ErrorReporter;
-import one.modality.base.client.mainframe.fx.FXMainFrameDialogArea;
 import one.modality.base.shared.entities.Event;
 import one.modality.booking.client.workingbooking.EventQueueFinalResultNotification;
 import one.modality.booking.client.workingbooking.EventQueueProgressNotification;
@@ -25,6 +20,7 @@ import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
 import one.modality.booking.frontoffice.bookingpage.CompositeBookingFormPage;
 import one.modality.booking.frontoffice.bookingpage.sections.queue.DefaultUnifiedQueueSection;
 import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
+import one.modality.booking.frontoffice.bookingpage.util.BookingFormDialogUtil;
 import one.modality.booking.frontoffice.bookingpage.util.SoldOutErrorParser;
 import one.modality.ecommerce.document.service.DocumentChangesRejectedReason;
 import one.modality.ecommerce.document.service.DocumentService;
@@ -283,43 +279,7 @@ public class BookingFormQueueHandler {
      * @param errorMessage The error message from the server
      */
     private void showQueueErrorDialog(String errorMessage) {
-        String message = errorMessage != null ? errorMessage : "Unknown error";
-
-        // Get event context for error reporting
-        String eventName = null;
-        Event event = callback.getEvent();
-        if (event != null) {
-            eventName = event.getName();
-        }
-
-        // Build error report message
-        StringBuilder reportMessage = new StringBuilder();
-        reportMessage.append("[BookingFormQueueHandler] Queue processing failed: ").append(message);
-        if (eventName != null) {
-            reportMessage.append(" | Event: ").append(eventName);
-        }
-
-        // Report error to database
-        ErrorReporter.reportError(reportMessage.toString());
-
-        // Show error dialog to user
-        UiScheduler.runInUiThread(() -> {
-            DialogContent errorDialog = DialogContent.createErrorDialogWithTechnicalDetails(
-                I18n.getI18nText(BookingPageI18nKeys.ServerErrorTitle),
-                I18n.getI18nText(BookingPageI18nKeys.ServerErrorHeader),
-                I18n.getI18nText(BookingPageI18nKeys.QueueErrorMessage),
-                message,  // Technical details - the actual server error
-                null,     // No error code
-                null      // No timestamp
-            );
-
-            DialogCallback dialogCallback = DialogUtil.showModalNodeInGoldLayout(
-                errorDialog.build(),
-                FXMainFrameDialogArea.getDialogArea()
-            );
-            errorDialog.setDialogCallback(dialogCallback);
-            errorDialog.getPrimaryButton().setOnAction(e -> dialogCallback.closeDialog());
-        });
+        BookingFormDialogUtil.showQueueErrorDialog(callback.getEvent(), errorMessage);
     }
 
     /**
@@ -329,17 +289,15 @@ public class BookingFormQueueHandler {
     private CompositeBookingFormPage getOrCreateUnifiedQueuePage() {
         if (unifiedQueuePage == null) {
             unifiedQueueSection = new DefaultUnifiedQueueSection();
-            unifiedQueueSection.setColorScheme(callback.getColorScheme());
             unifiedQueueSection.setWorkingBookingProperties(callback.getWorkingBookingProperties());
 
             unifiedQueuePage = new CompositeBookingFormPage(
                 "RegistrationQueue", // i18n key
                 unifiedQueueSection
             );
-            unifiedQueuePage.setStep(false)
-                .setHeaderVisible(true) // Show step navigation header
-                .setShowingOwnSubmitButton(true)
-                .setCanGoBack(false); // Can't go back during queue - use "Leave Queue" button
+            // Configure as special page with visible header for queue navigation
+            unifiedQueuePage.asSpecialPage()
+                .setHeaderVisible(true); // Show step navigation header
 
             // Create "Leave Queue and Edit Booking" button
             BookingFormButton leaveQueueButton = new BookingFormButton(

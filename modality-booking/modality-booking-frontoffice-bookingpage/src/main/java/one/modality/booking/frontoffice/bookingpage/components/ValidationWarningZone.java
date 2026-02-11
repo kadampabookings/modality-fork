@@ -185,4 +185,13 @@ public class ValidationWarningZone extends VBox {
         }
         return false;
     }
+
+    /**
+     * Forces a refresh of the warning display.
+     * Call this when external state changes that may affect validation messages,
+     * even if validProperty hasn't changed.
+     */
+    public void refresh() {
+        updateWarnings();
+    }
 }

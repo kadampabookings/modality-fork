@@ -1,9 +1,7 @@
 package one.modality.booking.frontoffice.bookingpage.sections.user;
 
-import javafx.beans.property.ObjectProperty;
 import one.modality.base.shared.entities.Person;
 import one.modality.booking.frontoffice.bookingpage.BookingFormSection;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
 
 import java.util.function.Consumer;
 
@@ -44,16 +42,6 @@ public interface HasYourInformationSection extends BookingFormSection {
             this.emailVerified = emailVerified;
         }
     }
-
-    /**
-     * Returns the color scheme property for theming.
-     */
-    ObjectProperty<BookingFormColorScheme> colorSchemeProperty();
-
-    /**
-     * Sets the color scheme for this section.
-     */
-    void setColorScheme(BookingFormColorScheme scheme);
 
     /**
      * Sets the callback for when an existing user successfully logs in.

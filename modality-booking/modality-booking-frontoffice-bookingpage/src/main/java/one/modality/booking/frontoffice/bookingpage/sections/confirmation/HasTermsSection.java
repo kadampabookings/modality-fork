@@ -1,10 +1,8 @@
 package one.modality.booking.frontoffice.bookingpage.sections.confirmation;
 
 import javafx.beans.property.BooleanProperty;
-import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.StringProperty;
 import one.modality.booking.frontoffice.bookingpage.BookingFormSection;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
 
 /**
  * Interface for the "Terms and Conditions" section of a booking form.
@@ -16,20 +14,6 @@ import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme
  * @see BookingFormSection
  */
 public interface HasTermsSection extends BookingFormSection {
-
-    /**
-     * Returns the color scheme property for theming.
-     * @deprecated Color scheme is now handled via CSS classes on parent container.
-     */
-    @Deprecated
-    ObjectProperty<BookingFormColorScheme> colorSchemeProperty();
-
-    /**
-     * Sets the color scheme for this section.
-     * @deprecated Use CSS theme classes instead.
-     */
-    @Deprecated
-    void setColorScheme(BookingFormColorScheme scheme);
 
     /**
      * Returns whether the terms have been accepted.

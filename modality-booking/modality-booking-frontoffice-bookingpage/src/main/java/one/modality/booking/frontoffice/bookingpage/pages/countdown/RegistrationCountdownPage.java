@@ -29,9 +29,7 @@ import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuil
 import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
 import one.modality.ecommerce.policy.service.PolicyAggregate;
 
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
+import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 
@@ -80,6 +78,9 @@ public class RegistrationCountdownPage implements BookingFormPage {
     private double remainingSeconds;
     private BookingFormButton[] buttons;
 
+    // Override opening instant (if set, overrides policy aggregate)
+    private Instant overrideOpeningInstant;
+
     /**
      * Creates a new countdown page.
      *
@@ -96,6 +97,34 @@ public class RegistrationCountdownPage implements BookingFormPage {
 
         Double seconds = policyAggregate.getSecondsToOpeningDate();
         this.remainingSeconds = seconds != null ? seconds : 0;
+    }
+
+    /**
+     * Sets an override opening instant, bypassing the policy aggregate's opening date.
+     * Useful for hardcoding a specific opening time.
+     *
+     * @param openingInstant the opening instant to use
+     * @return this page for chaining
+     */
+    public RegistrationCountdownPage setOverrideOpeningInstant(Instant openingInstant) {
+        this.overrideOpeningInstant = openingInstant;
+        if (openingInstant != null) {
+            long secondsUntilOpening = java.time.Duration.between(Instant.now(), openingInstant).getSeconds();
+            this.remainingSeconds = Math.max(0, secondsUntilOpening);
+        }
+        return this;
+    }
+
+    /**
+     * Returns the opening instant (override if set, otherwise calculated from policy).
+     */
+    private Instant getOpeningInstant() {
+        if (overrideOpeningInstant != null) {
+            return overrideOpeningInstant;
+        }
+        Double secondsToOpening = policyAggregate.getSecondsToOpeningDate();
+        if (secondsToOpening == null) return null;
+        return Instant.now().plusSeconds(secondsToOpening.longValue());
     }
 
     @Override
@@ -305,7 +334,7 @@ public class RegistrationCountdownPage implements BookingFormPage {
     private HBox buildTimeUnit(String value, Object labelI18nKey) {
         // Value label - uses CSS class for themed text color
         Label valueLabel = new Label(value);
-        valueLabel.getStyleClass().add(registration_countdown_timer_value);
+        valueLabel.getStyleClass().addAll(bookingpage_text_4xl, bookingpage_font_bold, bookingpage_text_primary);
         valueLabel.setMinWidth(60);
         valueLabel.setAlignment(Pos.CENTER);
 
@@ -318,7 +347,7 @@ public class RegistrationCountdownPage implements BookingFormPage {
 
         // Label below
         Label label = I18nControls.newLabel(labelI18nKey);
-        label.getStyleClass().add(registration_countdown_timer_label);
+        label.getStyleClass().addAll(bookingpage_text_sm, bookingpage_font_medium, bookingpage_text_muted);
 
         VBox unitContainer = new VBox(8);
         unitContainer.setAlignment(Pos.CENTER);
@@ -334,7 +363,7 @@ public class RegistrationCountdownPage implements BookingFormPage {
         infoBox.setAlignment(Pos.TOP_LEFT);
         infoBox.setPadding(new Insets(28));
         infoBox.setMaxWidth(600);
-        infoBox.getStyleClass().addAll("bookingpage-info-card", registration_countdown_info_card);
+        infoBox.getStyleClass().addAll(bookingpage_info_card, registration_countdown_info_card);
 
         // Header with info icon
         HBox header = new HBox(12);
@@ -370,7 +399,7 @@ public class RegistrationCountdownPage implements BookingFormPage {
 
         SVGPath checkIcon = BookingPageUIBuilder.createThemedIcon("M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z", 0.75);
         Label reassuranceLabel = I18nControls.newLabel(BookingPageI18nKeys.TakeYourTime);
-        reassuranceLabel.getStyleClass().addAll(bookingpage_text_sm, registration_countdown_reassurance_text);
+        reassuranceLabel.getStyleClass().addAll(bookingpage_text_sm, bookingpage_text_dark);
         reassuranceLabel.setWrapText(true);
 
         reassurance.getChildren().addAll(checkIcon, reassuranceLabel);
@@ -389,7 +418,7 @@ public class RegistrationCountdownPage implements BookingFormPage {
         numberCircle.setMaxSize(28, 28);
         numberCircle.getStyleClass().add(registration_countdown_step_number);
         Label numberLabel = new Label(String.valueOf(number));
-        numberLabel.getStyleClass().add(registration_countdown_step_number_text);
+        numberLabel.getStyleClass().addAll(bookingpage_text_sm, bookingpage_font_semibold, bookingpage_text_white);
         numberCircle.getChildren().add(numberLabel);
 
         // Text content with {0} placeholder replaced by windowMinutes
@@ -411,11 +440,9 @@ public class RegistrationCountdownPage implements BookingFormPage {
     }
 
     private String formatOpeningDate() {
-        Double secondsToOpening = policyAggregate.getSecondsToOpeningDate();
-        if (secondsToOpening == null) return "";
+        Instant openingInstant = getOpeningInstant();
+        if (openingInstant == null) return "";
 
-        // Calculate opening date from now + seconds
-        Instant openingInstant = Instant.now().plusSeconds(secondsToOpening.longValue());
         ZoneId zoneId = ZoneId.systemDefault();
 
         // Try to get event timezone if available, fallback to system default

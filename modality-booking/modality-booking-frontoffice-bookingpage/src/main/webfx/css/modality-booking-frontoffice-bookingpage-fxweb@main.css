@@ -113,9 +113,6 @@
     -fx-border-width: 0 0 2px 0;
 }
 
-.step-progress-item {
-}
-
 .step-bubble {
     -fx-background-radius: 20px;
     /* 50% */
@@ -164,20 +161,6 @@
     -fx-effect: dropshadow(three-pass-box, rgba(0, 0, 0, 0.1), 8, 0, 0, 2);
 }
 
-/* Step Title & Desc */
-.step-title {
-    -fx-font-family: 'Poppins';
-    -fx-font-weight: bold;
-    -fx-font-size: 24px;
-    -fx-text-fill: #000000;
-}
-
-.step-desc {
-    -fx-font-family: 'Poppins';
-    -fx-font-size: 13px;
-    -fx-text-fill: #838788;
-}
-
 /* Section */
 .section-title {
     -fx-font-family: 'Poppins';
@@ -210,26 +193,6 @@
     -fx-background-color: -booking-form-selected-bg;
 }
 
-.package-title {
-    -fx-font-family: 'Poppins';
-    -fx-font-size: 18px;
-    -fx-font-weight: bold;
-    -fx-text-fill: #292A33;
-}
-
-.package-price {
-    -fx-font-family: 'Poppins';
-    -fx-font-size: 24px;
-    -fx-text-fill: -booking-form-primary;
-    -fx-font-weight: bold;
-}
-
-.package-desc {
-    -fx-font-family: 'Poppins';
-    -fx-font-size: 13px;
-    -fx-text-fill: #838788;
-}
-
 /* Room Card */
 .room-card {
     -fx-border-color: #e0e0e0;
@@ -256,26 +219,6 @@
     -fx-background-color: #f5f5f5;
 }
 
-.room-name {
-    -fx-font-family: 'Poppins';
-    -fx-font-size: 16px;
-    -fx-font-weight: bold;
-    -fx-text-fill: #292A33;
-}
-
-.room-desc {
-    -fx-font-family: 'Poppins';
-    -fx-font-size: 13px;
-    -fx-text-fill: #838788;
-}
-
-.room-price {
-    -fx-font-family: 'Poppins';
-    -fx-font-size: 28px;
-    -fx-text-fill: -booking-form-primary;
-    -fx-font-weight: bold;
-}
-
 /* Badges */
 .availability-badge {
     -fx-background-radius: 20px;
@@ -299,7 +242,7 @@
 }
 
 /* Buttons */
-.btn-primary, .booking-form-btn-primary {
+.booking-form-btn-primary {
     -fx-background-color: -booking-form-primary;
     -fx-text-fill: -booking-form-text-on-primary;
     -fx-font-size: 16px;
@@ -307,17 +250,17 @@
     -fx-background-radius: 8px;
 }
 
-.btn-primary:hover, .booking-form-btn-primary:hover {
+.booking-form-btn-primary:hover {
     -fx-effect: dropshadow(three-pass-box, rgba(0, 0, 0, 0.3), 20, 0, 0, 6);
 }
 
-.btn-primary:disabled, .booking-form-btn-primary:disabled {
+.booking-form-btn-primary:disabled {
     -fx-opacity: 0.5;
     -fx-effect: none;
 }
 
 /* Back Button */
-.btn-back, .booking-form-btn-back {
+.booking-form-btn-back {
     -fx-background-color: white;
     -fx-text-fill: -booking-form-text-secondary;
     -fx-font-size: 16px;
@@ -328,13 +271,13 @@
     -fx-border-radius: 8px;
 }
 
-.btn-back:hover, .booking-form-btn-back:hover {
+.booking-form-btn-back:hover {
     -fx-background-color: #f8f9fa;
     -fx-border-color: #adb5bd;
 }
 
 /* Secondary Action Button */
-.btn-secondary, .booking-form-btn-secondary {
+.booking-form-btn-secondary {
     -fx-background-color: #f8f9fa;
     -fx-text-fill: -booking-form-text-secondary;
     -fx-font-size: 16px;
@@ -345,7 +288,7 @@
     -fx-border-radius: 8px;
 }
 
-.btn-secondary:hover, .booking-form-btn-secondary:hover {
+.booking-form-btn-secondary:hover {
     -fx-border-color: -booking-form-primary;
     -fx-text-fill: -booking-form-primary;
     -fx-background-color: -booking-form-selected-bg;
@@ -368,11 +311,6 @@
     -fx-cursor: default;
 }
 
-.booking-form-primary-btn-text {
-    -fx-text-fill: white;
-    -fx-font-weight: bold;
-    -fx-font-size: 16px;
-}
 
 /* Async spinner color on primary buttons - white for contrast */
 .booking-form-btn-primary .webfx-extras-spinner,
@@ -448,13 +386,6 @@
     -fx-cursor: hand;
 }
 
-.checkbox-label {
-    -fx-font-family: 'Poppins';
-    -fx-font-weight: bold;
-    -fx-font-size: 16px;
-    -fx-text-fill: #292A33;
-}
-
 /* Toggle Button - scoped to booking containers to avoid affecting menu items */
 .booking-container .toggle-button {
     -fx-background-color: #FFFFFF;
@@ -521,10 +452,6 @@
     -fx-border-color: transparent transparent #0096D6 transparent;
 }
 
-/* Button Group */
-.button-group {
-}
-
 .button-option {
     -fx-background-color: #FFFFFF;
     -fx-border-color: #E6E7E7;
@@ -550,9 +477,6 @@
 }
 
 /* Accommodation Button */
-.accommodation-grid {
-}
-
 .accommodation-button {
     -fx-background-color: #FFFFFF;
     -fx-border-color: #E6E7E7;
@@ -601,38 +525,6 @@
    Booking Form Step Progress Header
    ========================================== */
 
-.booking-form-step-progress {
-    /* Padding controlled in Java - ResponsiveStepProgressHeader.java */
-}
-
-.booking-form-step-progress-wrapper {
-    /* Padding controlled in Java - ResponsiveStepProgressHeader.java */
-}
-
-.booking-form-step-progress-desktop {
-}
-
-.booking-form-step-progress-tablet {
-}
-
-.booking-form-step-progress-mobile {
-}
-
-.booking-form-step-item {
-}
-
-.booking-form-step-bubble {
-    /* Removed unnecessary gray border already on circle */
-}
-
-.booking-form-step-bubble-tablet {
-    /* Removed unnecessary gray border already on circle */
-}
-
-.booking-form-step-number {
-    -fx-font-weight: bold;
-    -fx-font-size: 14px;
-}
 
 .booking-form-step-label {
     -fx-font-size: 12px;
@@ -654,14 +546,6 @@
     -fx-fill: #dee2e6;
 }
 
-.booking-form-step-current-label {
-    -fx-font-size: 14px;
-    -fx-font-weight: bold;
-}
-
-.booking-form-mobile-progress-bar {
-}
-
 .booking-form-mobile-progress-fill {
     -fx-background-radius: 2;
 }
@@ -678,162 +562,20 @@
     -fx-border-radius: 12;
 }
 
-.booking-form-event-header-title {
-    -fx-font-size: 28px;
-    -fx-font-weight: 600;
-    -fx-text-fill: #212529;
-}
-
-/* Mobile-specific title styling - smaller font for narrow screens */
-.booking-form-event-header-title-mobile {
-    -fx-font-size: 20px;
-    -fx-font-weight: 600;
-    -fx-text-fill: #212529;
-}
 
 /* ==========================================
    Booking Form Audio Recording Card
    ========================================== */
 
-.booking-form-audio-recording-section {
-}
-
-.booking-form-audio-recording-cards {
-}
-
-.booking-form-audio-recording-card {
-    -fx-background-color: white;
-    -fx-background-radius: 8;
-    -fx-border-color: #dee2e6;
-    -fx-border-width: 2;
-    -fx-border-radius: 8;
-    -fx-cursor: hand;
-}
-
-.booking-form-audio-recording-card:hover {
-    -fx-border-color: -booking-form-hover-border;
-    -fx-background-color: -booking-form-selected-bg;
-}
-
-.booking-form-audio-recording-card.selected {
-    -fx-border-color: -booking-form-primary;
-    -fx-background-color: -booking-form-selected-bg;
-}
-
 /* ==========================================
    Booking Page UI Builder Components
    ========================================== */
 
-/* Selectable Card */
-.booking-form-selectable-card {
-    -fx-cursor: hand;
-}
-
-.booking-form-selectable-card:hover {
-    -fx-border-color: -booking-form-hover-border;
-    -fx-background-color: -booking-form-selected-bg;
-}
-
-.booking-form-selectable-card.selected {
-    -fx-border-color: -booking-form-primary;
-    -fx-background-color: -booking-form-selected-bg;
-}
-
 /* Toggle Button */
-.booking-form-toggle-button {
-    -fx-cursor: hand;
-}
-
-.booking-form-toggle-button:hover {
-    -fx-border-color: -booking-form-hover-border;
-    -fx-background-color: -booking-form-selected-bg;
-}
-
+/* Toggle button: compose with selectable + bg-white + border-card + rounded in Java */
+/* Override: selected uses primary bg (different from standard selectable) */
 .booking-form-toggle-button.selected {
     -fx-background-color: -booking-form-primary;
-    -fx-border-color: -booking-form-primary;
-}
-
-/* Toggle Button Text */
-.booking-form-toggle-button-text {
-    -fx-text-fill: #212529;
-    -fx-font-weight: 600;
-    -fx-font-size: 16px;
-}
-
-.booking-form-toggle-button.selected .booking-form-toggle-button-text {
-    -fx-text-fill: white;
-}
-
-/* Checkbox Option Row */
-.booking-form-checkbox-option {
-    -fx-cursor: hand;
-}
-
-.booking-form-checkbox-option:hover {
-    -fx-border-color: -booking-form-hover-border;
-    -fx-background-color: -booking-form-selected-bg;
-}
-
-.booking-form-checkbox-option.selected {
-    -fx-border-color: -booking-form-primary;
-    -fx-background-color: -booking-form-selected-bg;
-}
-
-/* Radio Option Row */
-.booking-form-radio-option {
-    -fx-cursor: hand;
-}
-
-.booking-form-radio-option:hover {
-    -fx-border-color: -booking-form-hover-border;
-    -fx-background-color: -booking-form-selected-bg;
-}
-
-.booking-form-radio-option.selected {
-    -fx-border-color: -booking-form-primary;
-    -fx-background-color: -booking-form-selected-bg;
-}
-
-/* Note: Info box styling moved to BookingPageUIBuilder section below
-   using .bookingpage-info-box-* classes */
-
-/* Option Row (common base for checkbox/radio options) */
-.booking-form-option-row {
-    -fx-cursor: hand;
-    -fx-background-color: white;
-    -fx-border-color: #e9ecef;
-    -fx-border-width: 2;
-    -fx-border-radius: 8;
-    -fx-background-radius: 8;
-}
-
-.booking-form-option-row:hover {
-    -fx-background-color: -booking-form-selected-bg;
-    -fx-border-color: -booking-form-hover-border;
-}
-
-.booking-form-option-row.selected {
-    -fx-background-color: -booking-form-selected-bg;
-    -fx-border-color: -booking-form-primary;
-}
-
-/* Pill Option - rounded pill button for options like dietary preferences */
-.bookingpage-pill-option {
-    -fx-background-color: white;
-    -fx-background-radius: 20;
-    -fx-border-color: #dee2e6;
-    -fx-border-width: 1;
-    -fx-border-radius: 20;
-    -fx-cursor: hand;
-}
-
-.bookingpage-pill-option:hover {
-    -fx-border-color: -booking-form-hover-border;
-}
-
-.bookingpage-pill-option.selected {
-    -fx-background-color: -booking-form-selected-bg;
     -fx-border-color: -booking-form-primary;
 }
 
@@ -909,12 +651,51 @@
     -fx-fill: transparent;
 }
 
+/* Attendance Type Card Icons (Accommodation Section) */
+.bookingpage-attendance-icon-circle {
+    -fx-background-color: #F3F4F6;
+    -fx-background-radius: 28;
+}
+
+.bookingpage-attendance-icon-circle.selected {
+    -fx-background-color: -booking-form-primary;
+}
+
+.bookingpage-attendance-icon {
+    -fx-stroke: #6B7280;
+    -fx-stroke-width: 1.5;
+    -fx-fill: transparent;
+}
+
+.bookingpage-attendance-icon.selected {
+    -fx-stroke: white;
+}
+
+/* Accommodation Room Card Radio Checkmark (24px circular with checkmark) */
+.bookingpage-room-checkmark-circle {
+    -fx-fill: white;
+    -fx-stroke: #D1D5DB;
+    -fx-stroke-width: 2;
+}
+
+.bookingpage-room-checkmark-circle.selected {
+    -fx-fill: -booking-form-primary;
+    -fx-stroke: -booking-form-primary;
+}
+
+.bookingpage-room-checkmark-circle.disabled {
+    -fx-opacity: 0.5;
+}
+
+.bookingpage-room-checkmark-icon {
+    -fx-stroke: white;
+    -fx-stroke-width: 2.5;
+    -fx-fill: transparent;
+}
+
 /* ==========================================
    Booking Form Section Spacing
    ========================================== */
-
-.booking-form-themed-section {
-}
 
 .booking-form-section-header {
     -fx-background-color: -booking-form-selected-bg;
@@ -924,11 +705,6 @@
     -fx-border-radius: 8 0 0 8;
 }
 
-.booking-form-section-header-title {
-    -fx-font-size: 20px;
-    -fx-font-weight: 600;
-    -fx-text-fill: #475569;
-}
 
 /* ==========================================
    Static Bootstrap-Derived Utility Classes
@@ -966,6 +742,36 @@
 
 .bookingpage-text-center {
     -fx-text-alignment: center;
+}
+
+/* Additional text colors for specific sections */
+.bookingpage-text-amber-dark {
+    -fx-text-fill: #92400E;
+}
+
+.bookingpage-text-slate {
+    -fx-text-fill: #334155;
+}
+
+.bookingpage-text-slate-light {
+    -fx-text-fill: #64748B;
+}
+
+.bookingpage-text-red-dark {
+    -fx-text-fill: #991B1B;
+}
+
+.bookingpage-text-blue-dark {
+    -fx-text-fill: #0D47A1;
+}
+
+.bookingpage-text-gray-dark {
+    -fx-text-fill: #374151;
+}
+
+/* Additional font size for small badges/labels */
+.bookingpage-text-xxs {
+    -fx-font-size: 11px;
 }
 
 /* Icon Colors (match text colors for SVGPath stroke icons) */
@@ -1015,12 +821,37 @@
     -fx-font-size: 18px;
 }
 
+.bookingpage-text-xlg {
+    -fx-font-size: 20px;
+}
+
 .bookingpage-text-2xl {
     -fx-font-size: 24px;
 }
 
 .bookingpage-text-3xl {
     -fx-font-size: 28px;
+}
+
+.bookingpage-text-4xl {
+    -fx-font-size: 36px;
+}
+
+.bookingpage-text-5xl {
+    -fx-font-size: 48px;
+}
+
+/* Text Colors - theme-aware */
+.bookingpage-text-white {
+    -fx-text-fill: white;
+}
+
+.bookingpage-text-theme-secondary {
+    -fx-text-fill: -booking-form-text-secondary;
+}
+
+.bookingpage-text-emerald {
+    -fx-text-fill: #10B981;
 }
 
 /* Font Weights */
@@ -1098,115 +929,82 @@
     -fx-border-radius: 50%;
 }
 
-/* Common Card Styles */
-.bookingpage-card {
-    -fx-background-color: white;
-    -fx-background-radius: 8;
-    -fx-border-color: #dee2e6;
-    -fx-border-width: 2;
-    -fx-border-radius: 8;
+.bookingpage-rounded-10 {
+    -fx-background-radius: 10;
+    -fx-border-radius: 10;
+}
+
+.bookingpage-rounded-pill {
+    -fx-background-radius: 20;
+    -fx-border-radius: 20;
+}
+
+/* ==========================================
+   Level 1: Behavior — Selectable interaction
+   ========================================== */
+
+.bookingpage-selectable {
     -fx-cursor: hand;
 }
 
-.bookingpage-card:hover {
+.bookingpage-selectable:hover {
     -fx-border-color: -booking-form-hover-border;
     -fx-background-color: -booking-form-selected-bg;
 }
 
-.bookingpage-card.selected {
+.bookingpage-selectable.selected {
     -fx-border-color: -booking-form-primary;
     -fx-background-color: -booking-form-selected-bg;
 }
 
-/* Selected cards don't change on hover */
-.bookingpage-card.selected:hover {
+.bookingpage-selectable.selected:hover {
     -fx-border-color: -booking-form-primary;
     -fx-background-color: -booking-form-selected-bg;
 }
 
-.bookingpage-card.disabled {
+.bookingpage-selectable.disabled {
     -fx-opacity: 0.7;
     -fx-cursor: default;
 }
 
-.bookingpage-card.disabled:hover {
-    -fx-border-color: #dee2e6;
+.bookingpage-selectable.disabled:hover {
+    -fx-border-color: -booking-form-card-border;
     -fx-background-color: white;
 }
 
-/* Static/informative card - no hover effects */
-.bookingpage-card-static {
+/* Level 2: Background — disabled:hover resets */
+.bookingpage-bg-white.disabled:hover {
     -fx-background-color: white;
-    -fx-background-radius: 8;
-    -fx-border-color: #dee2e6;
-    -fx-border-width: 2;
-    -fx-border-radius: 8;
-    -fx-cursor: default;
 }
 
-.bookingpage-card-light {
+.bookingpage-bg-light.disabled:hover {
     -fx-background-color: #f8f9fa;
-    -fx-background-radius: 8;
-    -fx-border-color: #dee2e6;
+}
+
+/* ==========================================
+   Level 3: Border — Card and subtle borders
+   ========================================== */
+
+.bookingpage-border-card {
+    -fx-border-color: -booking-form-card-border;
+    -fx-border-width: 2;
+}
+
+.bookingpage-border-card.disabled:hover {
+    -fx-border-color: -booking-form-card-border;
+}
+
+.bookingpage-border-subtle {
+    -fx-border-color: -booking-form-card-border;
     -fx-border-width: 1;
-    -fx-border-radius: 8;
 }
 
-.bookingpage-card-lighter {
-    -fx-background-color: #F4F4F4;
-    -fx-background-radius: 12;
-}
-
-/* =============================================
-   GENERIC CARD TYPES (by selection pattern)
-   ============================================= */
-
-/* Passive Card - non-interactive, display only (new generic name for card-static) */
-.bookingpage-passive-card {
-    -fx-background-color: -booking-form-card-bg;
-    -fx-background-radius: 8;
-    -fx-border-color: -booking-form-card-border;
-    -fx-border-width: 2;
-    -fx-border-radius: 8;
-    -fx-cursor: default;
-}
-
-/* Selectable Card - card with checkmark badge in corner when selected */
-.bookingpage-selectable-card {
-    -fx-background-color: -booking-form-card-bg;
-    -fx-background-radius: 12;
-    -fx-border-color: -booking-form-card-border;
-    -fx-border-width: 2;
-    -fx-border-radius: 12;
-    -fx-cursor: hand;
-}
-
-.bookingpage-selectable-card:hover {
-    -fx-border-color: -booking-form-hover-border;
-    -fx-background-color: -booking-form-selected-bg;
-}
-
-.bookingpage-selectable-card.selected {
+.bookingpage-border-themed {
     -fx-border-color: -booking-form-primary;
-    -fx-background-color: -booking-form-selected-bg;
+    -fx-border-width: 2;
 }
 
-.bookingpage-selectable-card.selected:hover {
-    -fx-border-color: -booking-form-primary;
-    -fx-background-color: -booking-form-selected-bg;
-}
-
-.bookingpage-selectable-card.disabled {
-    -fx-opacity: 0.7;
-    -fx-cursor: default;
-}
-
-.bookingpage-selectable-card.disabled:hover {
-    -fx-border-color: -booking-form-card-border;
-    -fx-background-color: -booking-form-card-bg;
-}
-
-/* Sold out card - dashed border, muted colors */
+/* Sold out card - dashed border, muted colors (override for selectable cards) */
 .bookingpage-selectable-card.soldout {
     -fx-border-color: -booking-form-card-disabled-border;
     -fx-border-style: dashed;
@@ -1217,46 +1015,6 @@
 .bookingpage-selectable-card.soldout:hover {
     -fx-border-color: -booking-form-card-disabled-border;
     -fx-background-color: -booking-form-card-disabled-bg;
-}
-
-/* Checkbox Card - card with embedded checkbox on left */
-.bookingpage-checkbox-card {
-    -fx-background-color: -booking-form-card-bg;
-    -fx-background-radius: 8;
-    -fx-border-color: -booking-form-card-border;
-    -fx-border-width: 2;
-    -fx-border-radius: 8;
-    -fx-cursor: hand;
-}
-
-.bookingpage-checkbox-card:hover {
-    -fx-border-color: -booking-form-hover-border;
-    -fx-background-color: -booking-form-selected-bg;
-}
-
-.bookingpage-checkbox-card.selected {
-    -fx-border-color: -booking-form-primary;
-    -fx-background-color: -booking-form-selected-bg;
-}
-
-/* Radio Card - card with embedded radio on left */
-.bookingpage-radio-card {
-    -fx-background-color: -booking-form-card-bg;
-    -fx-background-radius: 8;
-    -fx-border-color: -booking-form-card-border;
-    -fx-border-width: 2;
-    -fx-border-radius: 8;
-    -fx-cursor: hand;
-}
-
-.bookingpage-radio-card:hover {
-    -fx-border-color: -booking-form-hover-border;
-    -fx-background-color: -booking-form-selected-bg;
-}
-
-.bookingpage-radio-card.selected {
-    -fx-border-color: -booking-form-primary;
-    -fx-background-color: -booking-form-selected-bg;
 }
 
 /* Warning/Info Box */
@@ -1295,45 +1053,6 @@
 
 .bookingpage-input:focused {
     -fx-border-color: -booking-form-primary;
-}
-
-/* Label Combinations (font-size + weight + color) */
-.bookingpage-label-title {
-    -fx-font-size: 16px;
-    -fx-font-weight: 700;
-    -fx-text-fill: #212529;
-}
-
-.bookingpage-label-subtitle {
-    -fx-font-size: 14px;
-    -fx-font-weight: 600;
-    -fx-text-fill: #212529;
-}
-
-.bookingpage-label-body {
-    -fx-font-size: 14px;
-    -fx-text-fill: #212529;
-}
-
-.bookingpage-label-caption {
-    -fx-font-size: 13px;
-    -fx-text-fill: #6c757d;
-}
-
-.bookingpage-label-small {
-    -fx-font-size: 12px;
-    -fx-text-fill: #6c757d;
-}
-
-/* Price Labels */
-.bookingpage-price-large {
-    -fx-font-size: 24px;
-    -fx-font-weight: 700;
-}
-
-.bookingpage-price-medium {
-    -fx-font-size: 18px;
-    -fx-font-weight: 700;
 }
 
 /* Section Headers */
@@ -1422,13 +1141,7 @@
     -fx-border-radius: 12 12 0 0;
 }
 
-/* Gray bordered card (replaces border(BORDER_GRAY, 2, RADII_12)) */
-.bookingpage-card-bordered {
-    -fx-border-color: #E6E7E7;
-    -fx-border-width: 2;
-    -fx-border-radius: 12;
-    -fx-background-radius: 12;
-}
+/* Card bordered: compose with border-card + rounded-lg in Java */
 
 /* ==========================================
    Progress Bar Styling
@@ -1549,8 +1262,6 @@
     -fx-background-color: -booking-form-selected-bg;
     -fx-border-width: 1;
     -fx-border-color: -booking-form-primary;
-    -fx-border-radius: 8;
-    -fx-background-radius: 8;
 }
 
 /* Info Box - Neutral (gray, for "Price includes" type messages) */
@@ -1594,21 +1305,6 @@
     -fx-background-radius: 8;
 }
 
-.bookingpage-price-includes-bold {
-    -fx-font-size: 13px;
-    -fx-font-weight: 700;
-    -fx-text-fill: #495057;
-}
-
-.bookingpage-price-includes-primary {
-    -fx-font-size: 13px;
-    -fx-text-fill: #495057;
-}
-
-.bookingpage-price-includes-secondary {
-    -fx-font-size: 12px;
-    -fx-text-fill: #6c757d;
-}
 
 /* Amber Price Includes Info Box (per FestivalRegistrationV2.jsx mockup) */
 .bookingpage-price-includes-box-amber {
@@ -1619,21 +1315,6 @@
     -fx-background-radius: 8;
 }
 
-.bookingpage-price-includes-amber-bold {
-    -fx-font-size: 13px;
-    -fx-font-weight: 700;
-    -fx-text-fill: #92400E;
-}
-
-.bookingpage-price-includes-amber-primary {
-    -fx-font-size: 13px;
-    -fx-text-fill: #92400E;
-}
-
-.bookingpage-price-includes-amber-secondary {
-    -fx-font-size: 12px;
-    -fx-text-fill: #B45309;
-}
 
 /* No Accommodation Separator */
 .bookingpage-no-accommodation-line {
@@ -1649,11 +1330,6 @@
     -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.08), 3, 0, 0, 1);
 }
 
-.bookingpage-no-accommodation-text {
-    -fx-font-size: 13px;
-    -fx-font-weight: 700;
-    -fx-text-fill: #374151;
-}
 
 /* Info Box - Outline Primary (transparent bg, primary color border all around) */
 .bookingpage-info-box-outline-primary {
@@ -1667,11 +1343,6 @@
     -fx-text-fill: -booking-form-primary;
 }
 
-/* Info Box Message */
-.bookingpage-info-box-message {
-    -fx-font-size: 14px;
-    -fx-text-fill: #212529;
-}
 
 /* ========================================
    Loading & Status Indicators
@@ -1794,28 +1465,24 @@
 /* Badge - success (green) */
 .bookingpage-badge-success {
     -fx-background-color: #d4edda;
-    -fx-background-radius: 4;
     -fx-text-fill: #155724;
 }
 
 /* Badge - warning (yellow/amber) */
 .bookingpage-badge-warning {
     -fx-background-color: #fff3cd;
-    -fx-background-radius: 4;
     -fx-text-fill: #856404;
 }
 
 /* Badge - danger (red) */
 .bookingpage-badge-danger {
     -fx-background-color: #f8d7da;
-    -fx-background-radius: 4;
     -fx-text-fill: #721c24;
 }
 
 /* Badge - info (theme colored) */
 .bookingpage-badge-info {
     -fx-background-color: -booking-form-selected-bg;
-    -fx-background-radius: 4;
     -fx-text-fill: -booking-form-primary;
 }
 
@@ -1836,11 +1503,6 @@
     -fx-cursor: default;
 }
 
-.bookingpage-btn-coming-soon-text {
-    -fx-text-fill: -booking-form-text-secondary;
-    -fx-font-weight: 600;
-    -fx-font-size: 14px;
-}
 
 /* Select Type Button - uses theme primary color */
 /* Note: Padding set in Java code (RegistrationTypeSection.java) */
@@ -1960,15 +1622,6 @@
     -fx-background-radius: 6;
 }
 
-.bookingpage-discount-label {
-    -fx-text-fill: -booking-form-primary;
-    -fx-font-weight: 500;
-}
-
-.bookingpage-discount-value {
-    -fx-text-fill: -booking-form-primary;
-    -fx-font-weight: 600;
-}
 
 /* Small primary button (Select All) - uses theme color */
 .bookingpage-btn-small-primary {
@@ -2106,25 +1759,6 @@
    GP Class Price Summary Styling
    ========================================== */
 
-/* Price summary title - "Your Selection" */
-.gpclass-price-summary-title {
-    -fx-font-size: 16;
-    -fx-font-weight: 700;
-    -fx-text-fill: #212529;
-}
-
-/* Price summary total label - "Total" */
-.gpclass-price-summary-total-label {
-    -fx-font-size: 18;
-    -fx-font-weight: 700;
-    -fx-text-fill: #212529;
-}
-
-/* Price summary total value - the price amount */
-.gpclass-price-summary-total-value {
-    -fx-font-size: 24;
-    -fx-font-weight: 700;
-}
 
 /* Price summary divider line */
 .gpclass-price-summary-divider {
@@ -2236,38 +1870,13 @@
     -fx-background-color: white;
 }
 
-/* Registration type card - base styling */
-.bookingpage-registration-type-card {
-    -fx-background-color: white;
-    -fx-background-radius: 12;
-    -fx-border-color: #dee2e6;
-    -fx-border-width: 2;
-    -fx-border-radius: 12;
-    -fx-cursor: hand;
-}
-
-/* Registration type card - hover state */
+/* Registration type card - hover dropshadow override */
 .bookingpage-registration-type-card:hover {
-    -fx-border-color: -booking-form-primary;
-    -fx-background-color: -booking-form-selected-bg;
     -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.12), 16, 0, 0, 6);
 }
 
-/* Registration type card - selected state */
-.bookingpage-registration-type-card.selected {
-    -fx-border-color: -booking-form-primary;
-    -fx-background-color: -booking-form-selected-bg;
-}
-
 /* Registration type card - disabled state (Coming Soon) */
-.bookingpage-registration-type-card.disabled {
-    -fx-opacity: 0.7;
-    -fx-cursor: default;
-}
-
 .bookingpage-registration-type-card.disabled:hover {
-    -fx-border-color: #dee2e6;
-    -fx-background-color: white;
     -fx-effect: none;
 }
 
@@ -2315,52 +1924,8 @@
     -fx-background-color: #f8f9fa;
 }
 
-/* ==========================================
-   Festival Day Section - Time Selection
-   ========================================== */
-
-/* Time section container - arrival */
-.bookingpage-time-section-arrival {
-    -fx-background-color: white;
-    -fx-border-color: -booking-form-primary;
-    -fx-border-width: 2;
-    -fx-border-radius: 12;
-    -fx-background-radius: 12;
-}
-
-/* Time section container - departure */
-.bookingpage-time-section-departure {
-    -fx-background-color: white;
-    -fx-border-color: -booking-form-primary-dark;
-    -fx-border-width: 2;
-    -fx-border-radius: 12;
-    -fx-background-radius: 12;
-}
-
-/* Time section header title */
-.bookingpage-time-section-title {
-    -fx-font-size: 13px;
-    -fx-font-weight: 700;
-    -fx-text-fill: -booking-form-text-primary;
-}
-
-/* Time section clock icon - arrival (primary color) */
-.bookingpage-time-section-icon-arrival {
-    -fx-fill: -booking-form-primary;
-}
-
-/* Time section clock icon - departure (dark theme color) */
-.bookingpage-time-section-icon-departure {
-    -fx-fill: -booking-form-primary-dark;
-}
-
-/* Time option card - base */
+/* Time option card: compose with bg-white + border-card + rounded-10 in Java */
 .bookingpage-time-option {
-    -fx-background-color: white;
-    -fx-border-color: #E6E7E7;
-    -fx-border-width: 2;
-    -fx-border-radius: 10;
-    -fx-background-radius: 10;
     -fx-cursor: hand;
 }
 
@@ -2405,26 +1970,6 @@
     -fx-text-fill: -booking-form-primary-dark;
 }
 
-/* Time option range (subtitle showing time) */
-.bookingpage-time-option-range {
-    -fx-font-size: 12px;
-    -fx-text-fill: #6c757d;
-}
-
-/* Time option meal note */
-.bookingpage-time-option-meal {
-    -fx-font-size: 11px;
-}
-
-/* Time option meal note - positive (has meals) */
-.bookingpage-time-option-meal-positive {
-    -fx-text-fill: -booking-form-primary;
-}
-
-/* Time option meal note - negative (no meals) */
-.bookingpage-time-option-meal-negative {
-    -fx-text-fill: #9ca3af;
-}
 
 /* ==========================================
    Sticky Price Header Component
@@ -2442,10 +1987,6 @@
     -fx-background-radius: 8;
 }
 
-.sticky-price-header-separator {
-    -fx-font-size: 13px;
-    -fx-text-fill: #9CA3AF;
-}
 
 /* ==========================================
    Sold Out Ribbon Component
@@ -2526,17 +2067,17 @@
     -fx-text-fill: #b0b0b0;
 }
 
+/* Error text (red) */
+.bookingpage-text-error {
+    -fx-text-fill: #dc3545;
+}
+
 /* ==========================================
    Festival Day Card Component
    ========================================== */
 
-/* Festival day card - base */
+/* Festival day card: compose with bg-white + border-card + rounded-10 in Java */
 .bookingpage-festival-day-card {
-    -fx-background-color: white;
-    -fx-border-color: #E6E7E7;
-    -fx-border-width: 2;
-    -fx-border-radius: 10;
-    -fx-background-radius: 10;
     -fx-cursor: hand;
 }
 
@@ -2703,6 +2244,42 @@
 }
 
 /* ==========================================
+   Date Selector Cards Component
+   ========================================== */
+
+/* Date selector card: compose with bg-white + border-card + rounded-10 in Java */
+.bookingpage-date-selector-card {
+    -fx-cursor: hand;
+}
+
+.bookingpage-date-selector-card:hover {
+    -fx-border-color: -booking-form-hover-border;
+}
+
+/* Date selector card - active (currently selecting) */
+.bookingpage-date-selector-card.active {
+    -fx-border-color: -booking-form-primary;
+}
+
+/* Date selector card - has selected date */
+.bookingpage-date-selector-card.selected {
+    -fx-background-color: -booking-form-selected-bg;
+}
+
+
+/* Date selector card value (the date or "Select date" text) */
+.bookingpage-date-selector-value {
+    -fx-font-size: 16px;
+    -fx-font-weight: 600;
+    -fx-text-fill: #212529;
+}
+
+.bookingpage-date-selector-card.selected .bookingpage-date-selector-value {
+    -fx-text-fill: -booking-form-primary;
+}
+
+
+/* ==========================================
    Time Section Component
    ========================================== */
 
@@ -2734,25 +2311,6 @@
    Additional Options Section
    ========================================== */
 
-/* Parking type pill option */
-.bookingpage-parking-type {
-    -fx-background-color: white;
-    -fx-background-radius: 20;
-    -fx-border-color: #dee2e6;
-    -fx-border-width: 1;
-    -fx-border-radius: 20;
-    -fx-cursor: hand;
-}
-
-.bookingpage-parking-type:hover {
-    -fx-border-color: -booking-form-hover-border;
-}
-
-.bookingpage-parking-type.selected {
-    -fx-background-color: -booking-form-selected-bg;
-    -fx-border-color: -booking-form-primary;
-}
-
 /* Shuttle section container */
 .bookingpage-shuttle-section {
     -fx-background-color: white;
@@ -2760,25 +2318,6 @@
     -fx-border-width: 2;
     -fx-border-radius: 10;
     -fx-background-radius: 10;
-}
-
-/* Shuttle option row */
-.bookingpage-shuttle-row {
-    -fx-background-color: #f9fafb;
-    -fx-border-color: #e5e7eb;
-    -fx-border-width: 1;
-    -fx-border-radius: 8;
-    -fx-background-radius: 8;
-    -fx-cursor: hand;
-}
-
-.bookingpage-shuttle-row:hover {
-    -fx-border-color: -booking-form-hover-border;
-}
-
-.bookingpage-shuttle-row.selected {
-    -fx-background-color: -booking-form-selected-bg;
-    -fx-border-color: -booking-form-primary;
 }
 
 /* ==========================================
@@ -2800,12 +2339,6 @@
     -fx-border-width: 2;
 }
 
-/* Form field label */
-.bookingpage-form-label {
-    -fx-font-size: 14px;
-    -fx-font-weight: 500;
-    -fx-text-fill: #374151;
-}
 
 /* Required asterisk */
 .bookingpage-required-asterisk {
@@ -2850,20 +2383,8 @@
     -fx-stroke: white;
 }
 
-/* Individual shuttle trip card */
-.bookingpage-shuttle-trip {
-    -fx-background-color: -booking-form-card-bg;
-    -fx-border-color: #dee2e6;
-    -fx-border-width: 1;
-    -fx-border-radius: 8;
-    -fx-background-radius: 8;
-    -fx-cursor: hand;
-}
-
-.bookingpage-shuttle-trip:hover {
-    -fx-border-color: -booking-form-hover-border;
-}
-
+/* Shuttle trip: compose with selectable + bg-white + border-subtle + rounded in Java */
+/* Override: selected increases border width */
 .bookingpage-shuttle-trip.selected {
     -fx-border-color: -booking-form-primary;
     -fx-border-width: 2;
@@ -2887,20 +2408,8 @@
     /* Dashed borders not supported in JavaFX, using solid */
 }
 
-/* Radio pill button for parking type selection */
-.bookingpage-radio-pill {
-    -fx-background-color: white;
-    -fx-background-radius: 20;
-    -fx-border-color: #dee2e6;
-    -fx-border-width: 1;
-    -fx-border-radius: 20;
-    -fx-cursor: hand;
-}
-
-.bookingpage-radio-pill:hover {
-    -fx-border-color: -booking-form-hover-border;
-}
-
+/* Radio pill: compose with selectable + bg-white + border-subtle + rounded-pill in Java */
+/* Override: selected increases border width */
 .bookingpage-radio-pill.selected {
     -fx-border-color: -booking-form-primary;
     -fx-border-width: 2;
@@ -2948,10 +2457,6 @@
     -fx-text-fill: #fafaf9;
 }
 
-/* Strikethrough text style */
-.bookingpage-strikethrough {
-    -fx-strikethrough: true;
-}
 
 /* Sold out card overlay styling */
 .bookingpage-checkbox-card.soldout {
@@ -2966,23 +2471,9 @@
    Gender Selection Buttons
    ========================================== */
 
-.bookingpage-gender-button {
-    -fx-border-color: #dee2e6;
-    -fx-border-width: 2px;
-    -fx-border-radius: 8px;
-    -fx-background-color: white;
-    -fx-text-fill: #495057;
-    -fx-cursor: hand;
-    -fx-background-radius: 8px;
-}
-
-.bookingpage-gender-button:hover {
-    -fx-border-color: -booking-form-hover-border;
-}
-
+/* Gender button: compose with selectable + bg-white + border-card + rounded in Java */
+/* Override: selected adds text emphasis */
 .bookingpage-gender-button.selected {
-    -fx-border-color: -booking-form-primary;
-    -fx-background-color: -booking-form-selected-bg;
     -fx-text-fill: #212529;
     -fx-font-weight: 600;
 }
@@ -3006,21 +2497,6 @@
     -fx-effect: dropshadow(three-pass-box, rgba(0, 0, 0, 0.2), 3, 0, 0, 1);
 }
 
-.bookingpage-toggle-label {
-    -fx-font-size: 14px;
-    -fx-font-weight: 500;
-    -fx-text-fill: #212529;
-}
-
-.bookingpage-toggle-item {
-    -fx-font-size: 13px;
-    -fx-text-fill: #6c757d;
-}
-
-.bookingpage-terms-link {
-    -fx-text-fill: -booking-form-primary;
-    -fx-font-weight: 500;
-}
 
 /* ==========================================
    Email Verification Success Icon
@@ -3031,16 +2507,6 @@
     -fx-background-radius: 16px;
 }
 
-.bookingpage-success-title {
-    -fx-font-size: 14px;
-    -fx-font-weight: 600;
-    -fx-text-fill: #10B981;
-}
-
-.bookingpage-success-subtitle {
-    -fx-font-size: 13px;
-    -fx-text-fill: #6c757d;
-}
 
 /* ==========================================
    Info Banner (Email Sent Confirmation)
@@ -3053,307 +2519,6 @@
     -fx-background-radius: 8px;
 }
 
-/* ==========================================
-   Registration Waiting Section (Timer Page)
-   ========================================== */
-
-/* Header badge container */
-.registration-waiting-badge {
-    -fx-background-color: -booking-form-selected-bg;
-    -fx-background-radius: 20;
-    -fx-border-color: -booking-form-primary;
-    -fx-border-radius: 20;
-    -fx-border-width: 1;
-}
-
-/* Badge icon */
-.registration-waiting-badge-icon {
-    -fx-stroke: -booking-form-primary;
-    -fx-fill: transparent;
-    -fx-stroke-width: 1.5;
-}
-
-/* Badge text */
-.registration-waiting-badge-text {
-    -fx-font-size: 12px;
-    -fx-font-weight: 600;
-    -fx-text-fill: -booking-form-primary;
-}
-
-/* Summary header with bottom border */
-.registration-waiting-summary-header {
-    -fx-background-color: -booking-form-selected-bg;
-    -fx-border-color: #E6E7E7;
-    -fx-border-width: 0 0 1 0;
-}
-
-/* Summary icon */
-.registration-waiting-summary-icon {
-    -fx-stroke: -booking-form-primary;
-    -fx-fill: transparent;
-    -fx-stroke-width: 2;
-}
-
-/* Countdown timer container */
-.registration-waiting-countdown {
-    -fx-border-color: -booking-form-primary;
-    -fx-border-width: 2;
-    -fx-border-radius: 16;
-    -fx-background-color: white;
-    -fx-background-radius: 16;
-}
-
-/* Countdown title text */
-.registration-waiting-countdown-title {
-    -fx-font-size: 14px;
-    -fx-font-weight: 500;
-    -fx-text-fill: -booking-form-text-secondary;
-}
-
-/* Timer digit box */
-.registration-waiting-digit {
-    -fx-background-color: -booking-form-selected-bg;
-    -fx-background-radius: 12;
-    -fx-font-size: 48px;
-    -fx-font-weight: 700;
-    -fx-text-fill: -booking-form-primary;
-}
-
-/* Timer digit label (HOURS, MINUTES, SECONDS) */
-.registration-waiting-digit-label {
-    -fx-font-size: 11px;
-    -fx-font-weight: 600;
-    -fx-text-fill: -booking-form-text-secondary;
-}
-
-/* Timer digit pane background */
-.registration-waiting-digit-pane {
-    -fx-background-color: -booking-form-selected-bg;
-    -fx-background-radius: 12;
-}
-
-/* Timer colon separator */
-.registration-waiting-colon {
-    -fx-font-size: 48px;
-    -fx-font-weight: 700;
-    -fx-text-fill: -booking-form-primary;
-}
-
-/* What to expect box */
-.registration-waiting-expect-box {
-    -fx-background-color: #f8f9fa;
-    -fx-border-color: #E6E7E7;
-    -fx-border-width: 1;
-    -fx-border-radius: 12;
-    -fx-background-radius: 12;
-}
-
-/* What to expect header */
-.registration-waiting-expect-header {
-    -fx-font-size: 14px;
-    -fx-font-weight: 600;
-    -fx-text-fill: -booking-form-text-primary;
-}
-
-/* What to expect emoji */
-.registration-waiting-expect-emoji {
-    -fx-font-size: 16px;
-}
-
-/* What to expect item text */
-.registration-waiting-expect-item {
-    -fx-font-size: 13px;
-    -fx-text-fill: -booking-form-text-secondary;
-}
-
-/* Checkmark icon */
-.registration-waiting-checkmark {
-    -fx-fill: #16A34A;
-}
-
-/* Danger warning text */
-.registration-waiting-warning {
-    -fx-font-size: 14px;
-    -fx-font-weight: 700;
-    -fx-text-fill: #dc3545;
-}
-
-/* Cancel booking button */
-.registration-waiting-cancel-btn {
-    -fx-background-color: white;
-    -fx-border-color: #dc3545;
-    -fx-border-width: 1;
-    -fx-border-radius: 8;
-    -fx-background-radius: 8;
-    -fx-font-size: 14px;
-    -fx-font-weight: 500;
-    -fx-text-fill: #dc3545;
-    -fx-cursor: hand;
-}
-
-.registration-waiting-cancel-btn:hover {
-    -fx-background-color: #dc3545;
-    -fx-text-fill: white;
-}
-
-/* Header title */
-.registration-waiting-title {
-    -fx-font-size: 24px;
-    -fx-font-weight: 600;
-    -fx-text-fill: #212529;
-}
-
-/* Summary card container */
-.registration-waiting-summary-card {
-    -fx-background-color: white;
-    -fx-background-radius: 12;
-    -fx-border-color: #E5E7EB;
-    -fx-border-radius: 12;
-    -fx-border-width: 1;
-}
-
-/* Summary card header */
-.registration-waiting-summary-header {
-    -fx-background-color: -booking-form-selected-bg;
-    -fx-background-radius: 12 12 0 0;
-}
-
-/* Summary header title */
-.registration-waiting-summary-header-title {
-    -fx-font-size: 16px;
-    -fx-font-weight: 600;
-    -fx-text-fill: -booking-form-primary;
-}
-
-/* Summary clipboard icon */
-.registration-waiting-summary-icon {
-    -fx-fill: -booking-form-primary;
-}
-
-/* Opening date display */
-.registration-waiting-opening-date {
-    -fx-font-size: 14px;
-    -fx-font-weight: 600;
-    -fx-text-fill: #212529;
-}
-
-/* Placeholder text */
-.registration-waiting-placeholder {
-    -fx-font-size: 14px;
-    -fx-text-fill: #6c757d;
-}
-
-
-/* Submitting title text */
-.registration-waiting-submitting-title {
-    -fx-font-size: 18px;
-    -fx-font-weight: 600;
-    -fx-text-fill: -booking-form-primary;
-}
-
-/* Submitting subtitle text */
-.registration-waiting-submitting-subtitle {
-    -fx-font-size: 14px;
-    -fx-text-fill: #6c757d;
-}
-
-/* Pulsing icon for submitting state (reuse queue-processing style) */
-.registration-waiting-pulse-icon {
-    -fx-background-color: -booking-form-selected-bg;
-    -fx-background-radius: 40;
-}
-
-/* ==========================================
-   Queue Processing Section (Queue Page)
-   ========================================== */
-
-/* Pulsing icon circle */
-.queue-processing-pulse-icon {
-    -fx-background-color: -booking-form-selected-bg;
-    -fx-background-radius: 40;
-}
-
-/* Progress card container */
-.queue-processing-card {
-    -fx-background-color: white;
-    -fx-background-radius: 12;
-    -fx-border-color: -booking-form-primary;
-    -fx-border-radius: 12;
-    -fx-border-width: 2;
-}
-
-/* Progress bar track */
-.queue-processing-bar-track {
-    -fx-background-color: #E5E7EB;
-    -fx-background-radius: 6;
-}
-
-/* Progress bar fill */
-.queue-processing-bar-fill {
-    -fx-background-color: -booking-form-primary;
-    -fx-background-radius: 6;
-}
-
-/* Position display container */
-.queue-processing-position {
-    -fx-background-color: -booking-form-selected-bg;
-    -fx-background-radius: 8;
-}
-
-/* Position number */
-.queue-processing-position-number {
-    -fx-font-size: 28px;
-    -fx-font-weight: 700;
-    -fx-text-fill: -booking-form-primary;
-}
-
-/* Position total */
-.queue-processing-position-total {
-    -fx-font-size: 16px;
-    -fx-font-weight: 500;
-    -fx-text-fill: -booking-form-text-secondary;
-}
-
-/* Why the wait info box */
-.queue-processing-why-box {
-    -fx-background-color: #FFF8E7;
-    -fx-border-color: #FFE4B3;
-    -fx-border-width: 1;
-    -fx-border-radius: 12;
-    -fx-background-radius: 12;
-}
-
-/* Why the wait header text */
-.queue-processing-why-header {
-    -fx-font-size: 14px;
-    -fx-font-weight: 600;
-    -fx-text-fill: #92400E;
-}
-
-/* Why the wait explanation text */
-.queue-processing-why-text {
-    -fx-font-size: 13px;
-    -fx-text-fill: #92400E;
-}
-
-/* Danger warning text (same as waiting section) */
-.queue-processing-warning {
-    -fx-font-size: 14px;
-    -fx-font-weight: 700;
-    -fx-text-fill: #dc3545;
-}
-
-/* Duration note text */
-.queue-processing-note {
-    -fx-font-size: 13px;
-    -fx-text-fill: -booking-form-text-secondary;
-}
-
-/* Compact summary container */
-.queue-processing-summary {
-    -fx-background-color: #f8f9fa;
-    -fx-background-radius: 8;
-}
 
 /* =====================================================
  * UNIFIED REGISTRATION QUEUE SECTION
@@ -3380,19 +2545,11 @@
     -fx-stroke-width: 2.5;
 }
 
-.registration-queue-danger-title {
-    -fx-font-size: 16px;
-    -fx-font-weight: 700;
-    -fx-text-fill: #991B1B;
-}
 
-.registration-queue-danger-message {
-    -fx-font-size: 14px;
-    -fx-text-fill: #B91C1C;
-}
-
-/* === STATUS HEADER === */
-.registration-queue-status-header {
+/* === STATUS HEADER / COUNTDOWN / PROGRESS (shared themed card style) === */
+.registration-queue-status-header,
+.registration-queue-countdown,
+.registration-queue-progress {
     -fx-background-color: white;
     -fx-border-color: -booking-form-primary;
     -fx-border-width: 2;
@@ -3415,16 +2572,6 @@
     -fx-stroke-width: 2;
 }
 
-.registration-queue-status-title {
-    -fx-font-size: 24px;
-    -fx-font-weight: 700;
-    -fx-text-fill: #212529;
-}
-
-.registration-queue-status-subtitle {
-    -fx-font-size: 14px;
-    -fx-text-fill: #6c757d;
-}
 
 /* === QUEUE EXPLANATION CARD === */
 .registration-queue-explanation {
@@ -3446,36 +2593,13 @@
     -fx-stroke-width: 2;
 }
 
-.registration-queue-explanation-header {
-    -fx-font-size: 15px;
-    -fx-font-weight: 600;
-    -fx-text-fill: #334155;
-}
 
-.registration-queue-explanation-step {
-}
 
 .registration-queue-explanation-number {
     -fx-background-color: -booking-form-selected-bg;
     -fx-background-radius: 12;
 }
 
-.registration-queue-explanation-number-text {
-    -fx-font-size: 12px;
-    -fx-font-weight: 700;
-    -fx-text-fill: -booking-form-primary;
-}
-
-.registration-queue-explanation-step-title {
-    -fx-font-size: 13px;
-    -fx-font-weight: 600;
-    -fx-text-fill: #334155;
-}
-
-.registration-queue-explanation-step-desc {
-    -fx-font-size: 12px;
-    -fx-text-fill: #64748B;
-}
 
 /* === TEMPORARY NOTICE (AMBER) === */
 .registration-queue-notice {
@@ -3497,49 +2621,14 @@
     -fx-stroke-width: 2;
 }
 
-.registration-queue-notice-title {
-    -fx-font-size: 13px;
-    -fx-font-weight: 600;
-    -fx-text-fill: #92400E;
-}
 
-.registration-queue-notice-desc {
-    -fx-font-size: 12px;
-    -fx-text-fill: #A16207;
-}
 
-/* === COUNTDOWN SECTION === */
-.registration-queue-countdown {
-    -fx-background-color: white;
-    -fx-border-color: -booking-form-primary;
-    -fx-border-width: 2;
-    -fx-border-radius: 12;
-    -fx-background-radius: 12;
-}
-
-.registration-queue-countdown-label {
-    -fx-font-size: 13px;
-    -fx-font-weight: 500;
-    -fx-text-fill: #6c757d;
-}
-
-.registration-queue-countdown-digit {
-    -fx-font-size: 48px;
-    -fx-font-weight: 700;
-    -fx-text-fill: -booking-form-primary;
-    -fx-font-family: monospace;
-}
 
 .registration-queue-countdown-digit-box {
     -fx-background-color: -booking-form-selected-bg;
     -fx-background-radius: 10;
 }
 
-.registration-queue-countdown-colon {
-    -fx-font-size: 36px;
-    -fx-font-weight: 700;
-    -fx-text-fill: -booking-form-primary;
-}
 
 .registration-queue-countdown-unit {
     -fx-font-size: 11px;
@@ -3555,31 +2644,7 @@
     -fx-background-radius: 6;
 }
 
-/* === PROGRESS SECTION === */
-.registration-queue-progress {
-    -fx-background-color: white;
-    -fx-border-color: -booking-form-primary;
-    -fx-border-width: 2;
-    -fx-border-radius: 12;
-    -fx-background-radius: 12;
-}
 
-.registration-queue-progress-header {
-    -fx-font-size: 13px;
-    -fx-font-weight: 600;
-    -fx-text-fill: -booking-form-primary;
-}
-
-.registration-queue-progress-label {
-    -fx-font-size: 13px;
-    -fx-text-fill: #6c757d;
-}
-
-.registration-queue-progress-percent {
-    -fx-font-size: 13px;
-    -fx-font-weight: 600;
-    -fx-text-fill: -booking-form-primary;
-}
 
 .registration-queue-progress-track {
     -fx-background-color: #E5E7EB;
@@ -3596,16 +2661,6 @@
     -fx-background-radius: 8;
 }
 
-.registration-queue-position-text {
-    -fx-font-size: 13px;
-    -fx-text-fill: #0D47A1;
-}
-
-.registration-queue-position-number {
-    -fx-font-size: 18px;
-    -fx-font-weight: 700;
-    -fx-text-fill: -booking-form-primary;
-}
 
 .registration-queue-status-message {
     -fx-font-size: 13px;
@@ -3632,29 +2687,6 @@
     -fx-fill: transparent;
     -fx-stroke: -booking-form-primary;
     -fx-stroke-width: 2;
-}
-
-.registration-queue-summary-title {
-    -fx-font-size: 15px;
-    -fx-font-weight: 600;
-    -fx-text-fill: #0D47A1;
-}
-
-.registration-queue-placeholder {
-    -fx-font-size: 14px;
-    -fx-text-fill: #6c757d;
-}
-
-.registration-queue-summary-label {
-    -fx-font-size: 14px;
-    -fx-font-weight: 500;
-    -fx-text-fill: #6c757d;
-}
-
-.registration-queue-summary-value {
-    -fx-font-size: 14px;
-    -fx-font-weight: 600;
-    -fx-text-fill: #292A33;
 }
 
 /* === ACTION BUTTON === */
@@ -3692,18 +2724,6 @@
     -fx-background-radius: 40;
 }
 
-/* Title - 24px, warm brown color */
-.bookingpage-warning-title {
-    -fx-font-size: 24px;
-    -fx-font-weight: bold;
-    -fx-text-fill: #92400E;
-}
-
-/* Subtitle - 15px, gray (for Label/Hyperlink) */
-.bookingpage-warning-subtitle {
-    -fx-font-size: 15px;
-    -fx-text-fill: #6c757d;
-}
 
 /* Subtitle - 15px, gray (for Text nodes in TextFlow) */
 .bookingpage-warning-subtitle-text {
@@ -3711,17 +2731,6 @@
     -fx-fill: #6c757d;
 }
 
-/* Orders link in subtitle - uses theme primary color */
-.bookingpage-orders-link {
-    -fx-text-fill: -booking-form-primary;
-}
-
-/* Pay Later box title - 15px, semi-bold, dark */
-.bookingpage-paylater-title {
-    -fx-font-size: 15px;
-    -fx-font-weight: 600;
-    -fx-text-fill: #212529;
-}
 
 /* Pay Later box description - 14px, gray (for Label/Hyperlink) */
 .bookingpage-paylater-desc {
@@ -3744,18 +2753,6 @@
     -fx-background-radius: 8;
 }
 
-/* "DECLINE REASON" header - uppercase, small, amber */
-.bookingpage-decline-reason-header {
-    -fx-font-size: 11px;
-    -fx-font-weight: bold;
-    -fx-text-fill: #92400E;
-}
-
-/* Failure reason message - 14px, dark amber */
-.bookingpage-decline-reason-message {
-    -fx-font-size: 14px;
-    -fx-text-fill: #78350F;
-}
 
 /* Small warning icon circle (32px) */
 .bookingpage-warning-icon-circle-sm {
@@ -3781,17 +2778,6 @@
     -fx-background-color: white;
 }
 
-.registration-countdown-timer-value {
-    -fx-font-size: 36px;
-    -fx-font-weight: 700;
-    -fx-text-fill: -booking-form-primary;
-}
-
-.registration-countdown-timer-label {
-    -fx-font-size: 13px;
-    -fx-text-fill: #6c757d;
-    -fx-font-weight: 500;
-}
 
 .registration-countdown-timer-box {
     -fx-background-color: -booking-form-selected-bg;
@@ -3801,7 +2787,8 @@
     -fx-background-radius: 12;
 }
 
-.registration-countdown-info-card {
+.registration-countdown-info-card,
+.registration-offline-info-card {
     -fx-background-color: #F8F9FA;
     -fx-background-radius: 16;
     -fx-border-color: #E6E7E7;
@@ -3818,26 +2805,10 @@
     -fx-background-radius: 14;
 }
 
-.registration-countdown-step-number-text {
-    -fx-text-fill: white;
-    -fx-font-size: 13px;
-    -fx-font-weight: 600;
-}
-
-.registration-countdown-reassurance-text {
-    -fx-text-fill: #1f2937;
-}
 
 /* Registration Offline Page */
 .registration-offline-page {
     -fx-background-color: white;
-}
-
-.registration-offline-info-card {
-    -fx-background-color: #F8F9FA;
-    -fx-background-radius: 16;
-    -fx-border-color: #E6E7E7;
-    -fx-border-radius: 16;
 }
 
 .registration-offline-lightbulb-icon {
@@ -3850,15 +2821,235 @@
     -fx-background-radius: 12;
 }
 
-.registration-offline-text-gray {
-    -fx-text-fill: #4B5563;
+
+/* ==========================================
+   Child Carer Section
+   ========================================== */
+
+/* Carer selection card - disabled override (different opacity) */
+.bookingpage-childcarer-card.disabled {
+    -fx-opacity: 0.6;
+    -fx-cursor: default;
 }
 
-.registration-offline-text-light-gray {
-    -fx-text-fill: #9CA3AF;
+.bookingpage-childcarer-card.disabled:hover {
+    -fx-border-color: -booking-form-card-border;
+    -fx-background-color: -booking-form-card-bg;
 }
 
-.registration-offline-email-link {
-    -fx-text-fill: -booking-form-primary;
+/* External carer fields container - uses theme colors */
+.bookingpage-childcarer-external-fields {
+    -fx-background-color: -booking-form-selected-bg;
+    -fx-background-radius: 8;
+    -fx-border-color: -booking-form-hover-border;
+    -fx-border-width: 1;
+    -fx-border-radius: 8;
+}
+
+/* Carer avatar circle - uses fill for Circle shape */
+.bookingpage-childcarer-avatar {
+    -fx-fill: #E5E7EB;
+}
+
+.bookingpage-childcarer-avatar-external {
+    -fx-fill: -booking-form-primary;
+}
+
+/* Icon on primary background (white stroke) */
+.bookingpage-icon-on-primary {
+    -fx-stroke: -booking-form-text-on-primary;
+    -fx-fill: transparent;
+}
+
+/* Selection indicator circle */
+.bookingpage-childcarer-indicator {
+    -fx-background-color: transparent;
+    -fx-border-color: -booking-form-card-border;
+    -fx-border-width: 2;
+    -fx-border-radius: 11;
+}
+
+.bookingpage-childcarer-indicator.selected {
+    -fx-background-color: -booking-form-primary;
+    -fx-border-color: -booking-form-primary;
+}
+
+/* Policy checkbox indicator */
+.bookingpage-childcarer-checkbox {
+    -fx-background-color: -booking-form-card-bg;
+    -fx-background-radius: 6;
+    -fx-border-color: -booking-form-card-border;
+    -fx-border-width: 2;
+    -fx-border-radius: 6;
+}
+
+.bookingpage-childcarer-checkbox.selected {
+    -fx-background-color: -booking-form-primary;
+    -fx-border-color: -booking-form-primary;
+}
+
+/* ==========================================
+   Attendance Type Selection (Onsite vs Day Visitor)
+   ========================================== */
+
+/* Room options container (gray background when Onsite selected) */
+.bookingpage-room-options-container {
+    -fx-background-color: #f8f9fa;
+    -fx-background-radius: 12;
+}
+
+/* Ordained badge */
+.bookingpage-ordained-badge {
+    -fx-background-color: #EEF2FF;
+    -fx-background-radius: 12;
+    -fx-text-fill: #4338CA;
+    -fx-font-size: 11px;
     -fx-font-weight: 500;
 }
+
+/* Child Age Badge (Member Selection Section) */
+.bookingpage-child-age-badge {
+    -fx-background-color: #FEF3C7;
+    -fx-background-radius: 20;
+}
+
+
+/* ==========================================
+   Structural CSS class markers (used by Java)
+   ========================================== */
+
+/* Booking form structure */
+.booking-form-audio-recording-cards { }
+.booking-form-audio-recording-section { }
+.booking-form-checkmark-badge { }
+.booking-form-container { }
+.booking-form-existing-summary { }
+.booking-form-loading-overlay { }
+.booking-form-mobile-progress-bar { }
+.booking-form-prerequisite-section { }
+.booking-form-rate-badge { }
+.booking-form-rate-type-section { }
+.booking-form-step-active-circle { }
+.booking-form-step-bubble { }
+.booking-form-step-bubble-tablet { }
+.booking-form-step-count-label { }
+.booking-form-step-item { }
+.booking-form-step-name-label { }
+.booking-form-step-progress { }
+.booking-form-step-progress-desktop { }
+.booking-form-step-progress-mobile { }
+.booking-form-step-progress-tablet { }
+.booking-form-step-progress-wrapper { }
+.booking-form-terms-checkbox { }
+.booking-form-terms-section { }
+.booking-form-user-badge { }
+.booking-form-user-badge-name { }
+
+/* Booking page sections */
+.bookingpage-accommodation-card { }
+.bookingpage-accommodation-section { }
+.bookingpage-account-info-box { }
+.bookingpage-account-info-link { }
+.bookingpage-account-info-text { }
+.bookingpage-account-info-title { }
+.bookingpage-additional-options-section { }
+.bookingpage-already-booked { }
+.bookingpage-assistance-section { }
+.bookingpage-audio-phase-section { }
+.bookingpage-bank-error-box { }
+.bookingpage-bank-error-label { }
+.bookingpage-bank-error-message { }
+.bookingpage-bank-error-meta { }
+.bookingpage-btn-danger-outline { }
+.bookingpage-btn-secondary-outline { }
+.bookingpage-checkbox-description { }
+.bookingpage-checkbox-label { }
+.bookingpage-childcarer-section { }
+.bookingpage-confirmation-section { }
+.bookingpage-contact-footer { }
+.bookingpage-contact-link { }
+.bookingpage-default-rate-section { }
+.bookingpage-error-description { }
+.bookingpage-error-details-section { }
+.bookingpage-error-details-title { }
+.bookingpage-existing-booking-section { }
+.bookingpage-failed-payment-header { }
+.bookingpage-failed-payment-icon-circle { }
+.bookingpage-failed-payment-ref-box { }
+.bookingpage-failed-payment-ref-label { }
+.bookingpage-failed-payment-ref-value { }
+.bookingpage-failed-payment-section { }
+.bookingpage-failed-payment-subtitle { }
+.bookingpage-failed-payment-title { }
+.bookingpage-festival-day-section { }
+.bookingpage-form-field { }
+.bookingpage-info-card { }
+.bookingpage-info-text { }
+.bookingpage-inline-childcarer { }
+.bookingpage-meals-section { }
+.bookingpage-member-selection-section { }
+.bookingpage-navigation-back-button { }
+.bookingpage-navigation-bar { }
+.bookingpage-navigation-buttons { }
+.bookingpage-navigation-next-button { }
+.bookingpage-navigation-title { }
+.bookingpage-ordination-card { }
+.bookingpage-ordination-datetime { }
+.bookingpage-ordination-section { }
+.bookingpage-payment-canceled-section { }
+.bookingpage-payment-refused-section { }
+.bookingpage-payment-section { }
+.bookingpage-pending-bookings-section { }
+.bookingpage-pending-payment-account-box { }
+.bookingpage-pending-payment-account-link { }
+.bookingpage-pending-payment-account-text { }
+.bookingpage-pending-payment-account-title { }
+.bookingpage-pending-payment-badge-text { }
+.bookingpage-pending-payment-contact-email { }
+.bookingpage-pending-payment-contact-email-box { }
+.bookingpage-pending-payment-contact-section { }
+.bookingpage-pending-payment-contact-text { }
+.bookingpage-pending-payment-contact-title { }
+.bookingpage-pending-payment-header { }
+.bookingpage-pending-payment-icon-circle { }
+.bookingpage-pending-payment-info-description { }
+.bookingpage-pending-payment-info-icon { }
+.bookingpage-pending-payment-info-section { }
+.bookingpage-pending-payment-info-subtitle { }
+.bookingpage-pending-payment-info-title { }
+.bookingpage-pending-payment-next-title { }
+.bookingpage-pending-payment-ref-box { }
+.bookingpage-pending-payment-ref-label { }
+.bookingpage-pending-payment-ref-value { }
+.bookingpage-pending-payment-section { }
+.bookingpage-pending-payment-status-badge { }
+.bookingpage-pending-payment-step-desc { }
+.bookingpage-pending-payment-step-item { }
+.bookingpage-pending-payment-step-number { }
+.bookingpage-pending-payment-step-number-text { }
+.bookingpage-pending-payment-step-title { }
+.bookingpage-pending-payment-subtitle { }
+.bookingpage-pending-payment-summary-label { }
+.bookingpage-pending-payment-summary-row { }
+.bookingpage-pending-payment-summary-row-last { }
+.bookingpage-pending-payment-summary-total { }
+.bookingpage-pending-payment-summary-value { }
+.bookingpage-pending-payment-timeline { }
+.bookingpage-pending-payment-timeline-text { }
+.bookingpage-pending-payment-title { }
+.bookingpage-roommate-section { }
+.bookingpage-step-number { }
+.bookingpage-suggestion-item { }
+.bookingpage-summary-section { }
+.bookingpage-translation-section { }
+.bookingpage-translation-subsection { }
+.bookingpage-transport-section { }
+.bookingpage-your-information-section { }
+.default-rate-card { }
+.error { }
+.gpclass-date-cards-container { }
+.gpclass-date-selection-section { }
+.gpclass-price-summary { }
+.registration-queue-container { }
+.registration-queue-dynamic-area { }
+

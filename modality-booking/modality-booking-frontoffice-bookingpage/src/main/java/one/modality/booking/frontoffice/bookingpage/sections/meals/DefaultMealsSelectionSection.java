@@ -24,7 +24,8 @@ import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
 import one.modality.booking.frontoffice.bookingpage.components.StyledSectionHeader;
 import one.modality.booking.frontoffice.bookingpage.sections.dates.HasFestivalDaySelectionSection;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
+import one.modality.base.shared.entities.formatters.EventPriceFormatter;
+
 import one.modality.ecommerce.policy.service.PolicyAggregate;
 import one.modality.ecommerce.shared.pricecalculator.AttendanceBill;
 import one.modality.ecommerce.shared.pricecalculator.DocumentBill;
@@ -68,9 +69,6 @@ import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelecto
  */
 public class DefaultMealsSelectionSection implements HasMealsSelectionSection {
 
-    // === COLOR SCHEME ===
-    protected final ObjectProperty<BookingFormColorScheme> colorScheme = new SimpleObjectProperty<>(BookingFormColorScheme.DEFAULT);
-
     // === ACCOMMODATION STATE ===
     // When true, breakfast is included automatically
     protected boolean hasAccommodation = true;  // Default to true (assume staying overnight)
@@ -78,10 +76,10 @@ public class DefaultMealsSelectionSection implements HasMealsSelectionSection {
     protected boolean hasExtendedStay = false;
 
     // === MEAL SELECTION ===
-    // Meals are selected by default since accommodation price includes meals
-    protected final BooleanProperty wantsBreakfast = new SimpleBooleanProperty(true);  // Auto-included with accommodation
-    protected final BooleanProperty wantsLunch = new SimpleBooleanProperty(true);
-    protected final BooleanProperty wantsDinner = new SimpleBooleanProperty(true);
+    // Meals default to false - breakfast is auto-included when accommodation is selected
+    protected final BooleanProperty wantsBreakfast = new SimpleBooleanProperty(false);
+    protected final BooleanProperty wantsLunch = new SimpleBooleanProperty(false);
+    protected final BooleanProperty wantsDinner = new SimpleBooleanProperty(false);
     @Deprecated
     protected final ObjectProperty<DietaryPreference> dietaryPreference = new SimpleObjectProperty<>(DietaryPreference.VEGETARIAN);
     protected final ObjectProperty<Item> selectedDietaryItem = new SimpleObjectProperty<>();  // API-driven dietary option
@@ -165,7 +163,7 @@ public class DefaultMealsSelectionSection implements HasMealsSelectionSection {
     protected void buildUI() {
         container.setAlignment(Pos.TOP_LEFT);
         container.setSpacing(16);
-        container.getStyleClass().add("bookingpage-meals-section");
+        container.getStyleClass().add(bookingpage_meals_section);
 
         // Section header
         HBox sectionHeader = new StyledSectionHeader(BookingPageI18nKeys.Meals, StyledSectionHeader.ICON_UTENSILS);
@@ -378,7 +376,9 @@ public class DefaultMealsSelectionSection implements HasMealsSelectionSection {
     }
 
     /**
-     * Adds meal summary lines with price breakdown to the summary box.
+     * Adds meal summary lines with price breakdown to the summary box (preview fallback).
+     * Used before DocumentBill data is available; once populateFromDocumentBill() is called,
+     * addMealSummaryFromDocumentBill() provides accurate WorkingBooking-based prices instead.
      * Shows separate lines for early arrival, regular, and late departure meals when prices differ.
      * Format: "3 Lunches: Mon 21 Apr - Wed 23 Apr - $30"
      */
@@ -914,12 +914,7 @@ public class DefaultMealsSelectionSection implements HasMealsSelectionSection {
         card.setAlignment(Pos.CENTER_LEFT);
         card.setPadding(new Insets(16));
         card.setCursor(Cursor.HAND);
-        card.getStyleClass().add(bookingpage_checkbox_card);
-
-        // Apply border styling in Java per project conventions
-        BookingFormColorScheme scheme = colorScheme.get();
-        if (scheme == null) scheme = BookingFormColorScheme.DEFAULT;
-        final BookingFormColorScheme finalScheme = scheme;
+        card.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded, bookingpage_checkbox_card);
 
         // Initial selection state - CSS handles styling via .selected class
         if (selectedProperty.get()) {
@@ -927,7 +922,7 @@ public class DefaultMealsSelectionSection implements HasMealsSelectionSection {
         }
 
         // Checkbox indicator
-        StackPane checkbox = BookingPageUIBuilder.createCheckboxIndicator(selectedProperty, colorScheme);
+        StackPane checkbox = BookingPageUIBuilder.createCheckboxIndicator(selectedProperty);
 
         // SVG Icon (sun for lunch, moon for dinner) - flat gray non-colored style
         Node iconNode;
@@ -1064,12 +1059,7 @@ public class DefaultMealsSelectionSection implements HasMealsSelectionSection {
         HBox card = new HBox(12);
         card.setAlignment(Pos.CENTER_LEFT);
         card.setPadding(new Insets(16));
-        card.getStyleClass().add(bookingpage_checkbox_card);
-
-        // Apply border styling in Java per project conventions
-        BookingFormColorScheme scheme = colorScheme.get();
-        if (scheme == null) scheme = BookingFormColorScheme.DEFAULT;
-        final BookingFormColorScheme finalScheme = scheme;
+        card.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded, bookingpage_checkbox_card);
 
         // Always selected style when accommodation is selected (breakfast is auto-included)
         // CSS handles styling via .selected class
@@ -1078,7 +1068,7 @@ public class DefaultMealsSelectionSection implements HasMealsSelectionSection {
         }
 
         // Checkbox indicator (always checked when has accommodation)
-        StackPane checkbox = BookingPageUIBuilder.createCheckboxIndicator(wantsBreakfast, colorScheme);
+        StackPane checkbox = BookingPageUIBuilder.createCheckboxIndicator(wantsBreakfast);
 
         // Coffee cup icon for breakfast (using simple path) - flat gray non-colored style
         SVGPath coffeeIcon = new SVGPath();
@@ -1163,7 +1153,7 @@ public class DefaultMealsSelectionSection implements HasMealsSelectionSection {
         option.setAlignment(Pos.CENTER_LEFT);
         option.setPadding(new Insets(8, 16, 8, 16));
         option.setCursor(Cursor.HAND);
-        option.getStyleClass().add(bookingpage_pill_option);
+        option.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_subtle, bookingpage_rounded_pill);
 
         // Use the item name for the label
         String itemName = dietItem.getName() != null ? dietItem.getName() : "Unknown";
@@ -1199,42 +1189,27 @@ public class DefaultMealsSelectionSection implements HasMealsSelectionSection {
         }
     }
 
-    @Deprecated
     protected HBox createDietaryOption(Object labelKey, DietaryPreference preference) {
         HBox option = new HBox(8);
         option.setAlignment(Pos.CENTER_LEFT);
         option.setPadding(new Insets(8, 16, 8, 16));
         option.setCursor(Cursor.HAND);
-        option.getStyleClass().add(bookingpage_pill_option);
+        option.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_subtle, bookingpage_rounded_pill);
 
         Label label = I18nControls.newLabel(labelKey);
         label.getStyleClass().addAll(bookingpage_text_base, bookingpage_font_medium, bookingpage_text_dark);
 
         option.getChildren().add(label);
 
-        // Initial style
-        updateDietaryOptionStyleLegacy(option, dietaryPreference.get() == preference);
+        updateDietaryOptionStyle(option, dietaryPreference.get() == preference);
 
-        // Selection handling
         dietaryPreference.addListener((obs, old, newVal) -> {
-            updateDietaryOptionStyleLegacy(option, newVal == preference);
+            updateDietaryOptionStyle(option, newVal == preference);
         });
 
         option.setOnMouseClicked(e -> dietaryPreference.set(preference));
 
         return option;
-    }
-
-    @Deprecated
-    private void updateDietaryOptionStyleLegacy(HBox option, boolean selected) {
-        // CSS handles visual styling via .selected class
-        if (selected) {
-            if (!option.getStyleClass().contains(BookingPageCssSelectors.selected)) {
-                option.getStyleClass().add(BookingPageCssSelectors.selected);
-            }
-        } else {
-            option.getStyleClass().remove(BookingPageCssSelectors.selected);
-        }
     }
 
     protected void setupBindings() {
@@ -1260,7 +1235,7 @@ public class DefaultMealsSelectionSection implements HasMealsSelectionSection {
     }
 
     protected String formatPrice(int priceInCents) {
-        return "$" + (priceInCents / 100);
+        return EventPriceFormatter.formatWithCurrency(priceInCents, workingBookingProperties != null ? workingBookingProperties.getEvent() : null);
     }
 
     // ========================================
@@ -1373,16 +1348,6 @@ public class DefaultMealsSelectionSection implements HasMealsSelectionSection {
     // ========================================
     // HasMealsSelectionSection INTERFACE
     // ========================================
-
-    @Override
-    public ObjectProperty<BookingFormColorScheme> colorSchemeProperty() {
-        return colorScheme;
-    }
-
-    @Override
-    public void setColorScheme(BookingFormColorScheme scheme) {
-        this.colorScheme.set(scheme);
-    }
 
     @Override
     public void setBreakfastPricePerDay(int price) {
@@ -1708,31 +1673,16 @@ public class DefaultMealsSelectionSection implements HasMealsSelectionSection {
 
     @Override
     public int getTotalMealsCost() {
-        // Prefer DocumentBill prices when available (more accurate)
-        if (!mealBillPrices.isEmpty()) {
-            int total = 0;
-            if (wantsBreakfast.get() && mealBillPrices.containsKey("breakfast")) {
-                total += mealBillPrices.get("breakfast");
-            }
-            if (wantsLunch.get() && mealBillPrices.containsKey("lunch")) {
-                total += mealBillPrices.get("lunch");
-            }
-            if (wantsDinner.get() && mealBillPrices.containsKey("dinner")) {
-                total += mealBillPrices.get("dinner");
-            }
-            return total;
-        }
-
-        // Fallback to manual calculation
+        // Uses DocumentBill prices from WorkingBooking (populated via populateFromDocumentBill())
         int total = 0;
-        if (wantsBreakfast.get()) {
-            total += breakfastPricePerDay * daysCount;
+        if (wantsBreakfast.get() && mealBillPrices.containsKey("breakfast")) {
+            total += mealBillPrices.get("breakfast");
         }
-        if (wantsLunch.get()) {
-            total += lunchPricePerDay * daysCount;
+        if (wantsLunch.get() && mealBillPrices.containsKey("lunch")) {
+            total += mealBillPrices.get("lunch");
         }
-        if (wantsDinner.get()) {
-            total += dinnerPricePerDay * daysCount;
+        if (wantsDinner.get() && mealBillPrices.containsKey("dinner")) {
+            total += mealBillPrices.get("dinner");
         }
         return total;
     }

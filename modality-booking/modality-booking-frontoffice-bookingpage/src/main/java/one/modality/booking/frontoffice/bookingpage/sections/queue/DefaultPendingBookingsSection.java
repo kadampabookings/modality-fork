@@ -21,7 +21,7 @@ import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
 import one.modality.booking.frontoffice.bookingpage.components.price.UnifiedPriceDisplay;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
+
 
 import java.util.function.Consumer;
 
@@ -39,7 +39,6 @@ import static one.modality.booking.frontoffice.bookingpage.components.BookingPag
 public class DefaultPendingBookingsSection implements HasPendingBookingsSection {
 
     // === PROPERTIES ===
-    protected final ObjectProperty<BookingFormColorScheme> colorScheme = new SimpleObjectProperty<>(BookingFormColorScheme.DEFAULT);
     protected final SimpleBooleanProperty validProperty = new SimpleBooleanProperty(false);
 
     // === BOOKINGS ===
@@ -72,7 +71,7 @@ public class DefaultPendingBookingsSection implements HasPendingBookingsSection 
     protected void buildUI() {
         container.setAlignment(Pos.TOP_CENTER);
         container.setSpacing(0);
-        container.getStyleClass().add("bookingpage-pending-bookings-section");
+        container.getStyleClass().add(bookingpage_pending_bookings_section);
 
         // Header with checkmark icon
         VBox headerSection = buildHeaderSection();
@@ -199,7 +198,7 @@ public class DefaultPendingBookingsSection implements HasPendingBookingsSection 
         Label nameLabel = new Label(booking.getPersonName());
         nameLabel.getStyleClass().addAll(bookingpage_text_xl, bookingpage_font_bold, bookingpage_text_dark);
         Label emailLabel = new Label(booking.getPersonEmail());
-        emailLabel.getStyleClass().add(bookingpage_label_caption);
+        emailLabel.getStyleClass().addAll(bookingpage_text_sm, bookingpage_text_muted);
         nameBox.getChildren().addAll(nameLabel, emailLabel);
         HBox.setHgrow(nameBox, Priority.ALWAYS);
 
@@ -255,7 +254,7 @@ public class DefaultPendingBookingsSection implements HasPendingBookingsSection 
             String eventDetails = booking.getEventDetails();
             eventDatesLabel.setText(eventDetails != null ? eventDetails : "");
         }
-        eventDatesLabel.getStyleClass().add(bookingpage_label_caption);
+        eventDatesLabel.getStyleClass().addAll(bookingpage_text_sm, bookingpage_text_muted);
         eventDatesLabel.setWrapText(true);
         eventInfoBox.getChildren().addAll(eventNameLabel, eventDatesLabel);
         VBox.setMargin(eventInfoBox, new Insets(0, 0, 16, 0));
@@ -285,7 +284,7 @@ public class DefaultPendingBookingsSection implements HasPendingBookingsSection 
         Label totalPriceLabel = new Label(unifiedPriceDisplay != null
                 ? unifiedPriceDisplay.formatPrice(booking.getTotalAmount())
                 : one.modality.base.shared.entities.formatters.EventPriceFormatter.formatWithCurrency(booking.getTotalAmount(), event));
-        totalPriceLabel.getStyleClass().addAll(bookingpage_price_large, bookingpage_text_primary);
+        totalPriceLabel.getStyleClass().addAll(bookingpage_text_2xl, bookingpage_font_bold, bookingpage_text_primary);
 
         totalRow.getChildren().addAll(totalTextLabel, spacer, totalPriceLabel);
         totalSection.getChildren().add(totalRow);
@@ -329,7 +328,7 @@ public class DefaultPendingBookingsSection implements HasPendingBookingsSection 
                 ? unifiedPriceDisplay.formatPrice(balance)
                 : one.modality.base.shared.entities.formatters.EventPriceFormatter.formatWithCurrency(balance, event));
         // Always use theme primary color for balance due
-        balanceAmountLabel.getStyleClass().addAll(bookingpage_price_medium, bookingpage_text_primary);
+        balanceAmountLabel.getStyleClass().addAll(bookingpage_text_xl, bookingpage_font_bold, bookingpage_text_primary);
 
         balanceRow.getChildren().addAll(balanceTextLabel, balanceSpacer, balanceAmountLabel);
         totalSection.getChildren().add(balanceRow);
@@ -457,7 +456,7 @@ public class DefaultPendingBookingsSection implements HasPendingBookingsSection 
         HBox.setHgrow(spacer3, Priority.ALWAYS);
 
         totalAmountLabel = new Label();
-        totalAmountLabel.getStyleClass().addAll(bookingpage_price_large, bookingpage_text_primary);
+        totalAmountLabel.getStyleClass().addAll(bookingpage_text_2xl, bookingpage_font_bold, bookingpage_text_primary);
 
         amountRow.getChildren().addAll(amountTextLabel, spacer3, totalAmountLabel);
 
@@ -518,16 +517,6 @@ public class DefaultPendingBookingsSection implements HasPendingBookingsSection 
     }
 
     // === HasPendingBookingsSection INTERFACE ===
-
-    @Override
-    public ObjectProperty<BookingFormColorScheme> colorSchemeProperty() {
-        return colorScheme;
-    }
-
-    @Override
-    public void setColorScheme(BookingFormColorScheme scheme) {
-        this.colorScheme.set(scheme);
-    }
 
     @Override
     public void addBooking(BookingItem booking) {

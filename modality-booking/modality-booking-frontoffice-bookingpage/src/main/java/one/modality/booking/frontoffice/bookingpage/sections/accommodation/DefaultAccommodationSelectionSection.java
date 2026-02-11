@@ -16,8 +16,11 @@ import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Label;
 import javafx.scene.layout.*;
+import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.shape.SVGPath;
+import javafx.scene.shape.StrokeLineCap;
+import javafx.scene.shape.StrokeLineJoin;
 import one.modality.base.shared.entities.Item;
 import one.modality.base.shared.entities.ItemPolicy;
 import one.modality.base.shared.entities.Rate;
@@ -26,7 +29,7 @@ import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
 import one.modality.booking.frontoffice.bookingpage.components.StyledSectionHeader;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
+import one.modality.base.shared.entities.formatters.EventPriceFormatter;
 import one.modality.ecommerce.policy.service.PolicyAggregate;
 
 import java.util.Comparator;
@@ -68,29 +71,36 @@ import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelecto
  */
 public class DefaultAccommodationSelectionSection implements HasAccommodationSelectionSection {
 
-    // === COLOR SCHEME ===
-    protected final ObjectProperty<BookingFormColorScheme> colorScheme = new SimpleObjectProperty<>(BookingFormColorScheme.DEFAULT);
-
     // === VALIDITY ===
     protected final SimpleBooleanProperty validProperty = new SimpleBooleanProperty(false);
 
     // === SELECTED OPTION ===
     protected final ObjectProperty<AccommodationOption> selectedOptionProperty = new SimpleObjectProperty<>();
 
+    // === ATTENDANCE TYPE (Onsite vs Day Visitor) ===
+    protected final ObjectProperty<AttendanceType> attendanceTypeProperty = new SimpleObjectProperty<>();
+
     // === OPTIONS LIST ===
     protected final ObservableList<AccommodationOption> accommodationOptions = FXCollections.observableArrayList();
 
-    // === PRICING INFO ===
-    protected int fullEventTeachingPrice = 0;
-    protected int fullEventNights = 0;
-    protected int fullEventMealsPrice = 0;
+    // Pricing is always pre-calculated via WorkingBooking (see AccommodationOption.preCalculatedTotalPrice)
 
     // === UI COMPONENTS ===
     protected final VBox container = new VBox();
+    protected FlowPane attendanceTypeContainer;  // Onsite vs Day Visitor cards
+    protected VBox roomOptionsWrapper;  // Gray background wrapper for room options
     protected VBox optionsContainer;  // Changed from FlowPane to VBox for full-width cards
-    protected HBox priceIncludesInfoBox;
     protected final Map<AccommodationOption, VBox> optionCardMap = new HashMap<>();
     protected final Map<AccommodationOption, StackPane> checkmarkBadgeMap = new HashMap<>();
+    // Attendance type card references for selection updates
+    protected VBox onsiteCard;
+    protected VBox dayVisitorCard;
+    protected StackPane onsiteCheckmark;
+    protected StackPane dayVisitorCheckmark;
+    protected StackPane onsiteIconCircle;
+    protected StackPane dayVisitorIconCircle;
+    protected SVGPath onsiteIcon;
+    protected SVGPath dayVisitorIcon;
 
     // === PRICE BREAKDOWN SUPPORT ===
     /** Map from itemId to breakdown items for displaying price details. */
@@ -164,37 +174,52 @@ public class DefaultAccommodationSelectionSection implements HasAccommodationSel
     protected void buildUI() {
         container.setAlignment(Pos.TOP_CENTER);
         container.setSpacing(0);
-        container.getStyleClass().add("bookingpage-accommodation-section");
+        container.getStyleClass().add(bookingpage_accommodation_section);
 
-        // Section header with icon
-        HBox sectionHeader = new StyledSectionHeader(BookingPageI18nKeys.AccommodationOptions, StyledSectionHeader.ICON_HOME);
+        // Attendance type selection (Onsite vs Day Visitor cards)
+        attendanceTypeContainer = createAttendanceTypeCards();
+        VBox.setMargin(attendanceTypeContainer, new Insets(0, 0, 32, 0));
 
-        // Info box explaining what price includes (per JSX mockup - amber style)
-        priceIncludesInfoBox = BookingPageUIBuilder.createAmberPriceIncludesInfoBox(
-            I18n.getI18nText(BookingPageI18nKeys.PriceIncludesTeachingsAccommodationMeals),
-            I18n.getI18nText(BookingPageI18nKeys.AdjustDatesAndOptionsNextStep)
-        );
+        // Room options container (only shown when Onsite selected)
+        roomOptionsWrapper = new VBox(20);
+        roomOptionsWrapper.getStyleClass().add(bookingpage_room_options_container);
+        roomOptionsWrapper.setPadding(new Insets(24));
 
-        // Options container - VBox for full-width cards (changed from FlowPane)
+        Label selectAccomLabel = I18nControls.newLabel(BookingPageI18nKeys.SelectYourAccommodation);
+        selectAccomLabel.getStyleClass().addAll(bookingpage_text_lg, bookingpage_font_semibold);
+
         optionsContainer = new VBox(12);  // 12px gap between cards per JSX
         optionsContainer.setAlignment(Pos.TOP_CENTER);
-        optionsContainer.setFillWidth(true);  // Ensure cards take full width
+        optionsContainer.setFillWidth(true);
 
-        container.getChildren().addAll(sectionHeader, priceIncludesInfoBox, optionsContainer);
-        VBox.setMargin(sectionHeader, new Insets(0, 0, 16, 0));
-        VBox.setMargin(priceIncludesInfoBox, new Insets(0, 0, 20, 0));  // marginBottom: 20px per JSX
+        roomOptionsWrapper.getChildren().addAll(selectAccomLabel, optionsContainer);
+        roomOptionsWrapper.setVisible(false);
+        roomOptionsWrapper.setManaged(false);
+
+        container.getChildren().addAll(attendanceTypeContainer, roomOptionsWrapper);
 
         // Setup responsive design for card layouts
         setupResponsiveDesign();
     }
 
     protected void setupBindings() {
+        // Update validity based on attendance type and room selection
+        attendanceTypeProperty.addListener((obs, oldType, newType) -> {
+            updateAttendanceTypeUI(newType);
+            updateValidity();
+
+            // When Day Visitor is selected, auto-select the day visitor option
+            if (newType == AttendanceType.DAY_VISITOR) {
+                AccommodationOption dayVisitorOpt = findDayVisitorOption();
+                if (dayVisitorOpt != null) {
+                    selectedOptionProperty.set(dayVisitorOpt);
+                }
+            }
+        });
+
         // Update validity and visual state when option is selected
         selectedOptionProperty.addListener((obs, oldOption, newOption) -> {
-            boolean isValid = newOption != null && newOption.isAvailable();
-            validProperty.set(isValid);
-
-            // Update card styles via CSS classes and checkmark visibility
+            // Update card styles via CSS classes and checkmark badge visibility
             if (oldOption != null) {
                 VBox oldCard = optionCardMap.get(oldOption);
                 if (oldCard != null) {
@@ -216,6 +241,8 @@ public class DefaultAccommodationSelectionSection implements HasAccommodationSel
                 }
             }
 
+            updateValidity();
+
             // Notify callback
             if (onOptionSelected != null && newOption != null) {
                 onOptionSelected.accept(newOption);
@@ -225,6 +252,231 @@ public class DefaultAccommodationSelectionSection implements HasAccommodationSel
         // Rebuild cards when list changes
         accommodationOptions.addListener((ListChangeListener<AccommodationOption>) change ->
             UiScheduler.runInUiThread(this::rebuildOptionCards));
+    }
+
+    /**
+     * Updates the validity property based on current attendance type and room selection.
+     */
+    protected void updateValidity() {
+        AttendanceType type = attendanceTypeProperty.get();
+        if (type == null) {
+            validProperty.set(false);
+        } else if (type == AttendanceType.DAY_VISITOR) {
+            validProperty.set(true);
+        } else {
+            // ONSITE: need a room selected
+            AccommodationOption selected = selectedOptionProperty.get();
+            validProperty.set(selected != null && selected.isAvailable() && !selected.isDayVisitor());
+        }
+    }
+
+    /**
+     * Updates the attendance type card UI (selected state, checkmarks, icons).
+     */
+    protected void updateAttendanceTypeUI(AttendanceType newType) {
+        boolean isOnsite = newType == AttendanceType.ONSITE;
+        boolean isDayVisitor = newType == AttendanceType.DAY_VISITOR;
+
+        // Update Onsite card
+        if (onsiteCard != null) {
+            if (isOnsite) {
+                onsiteCard.getStyleClass().add(selected);
+            } else {
+                onsiteCard.getStyleClass().remove(selected);
+            }
+        }
+        if (onsiteCheckmark != null) {
+            onsiteCheckmark.setVisible(isOnsite);
+        }
+        // Update icon circle background via CSS class toggle
+        if (onsiteIconCircle != null) {
+            if (isOnsite) {
+                onsiteIconCircle.getStyleClass().add(selected);
+            } else {
+                onsiteIconCircle.getStyleClass().remove(selected);
+            }
+        }
+        // Update icon stroke color directly
+        if (onsiteIcon != null) {
+            onsiteIcon.setStroke(isOnsite ? Color.WHITE : Color.web("#6B7280"));
+        }
+
+        // Update Day Visitor card
+        if (dayVisitorCard != null) {
+            if (isDayVisitor) {
+                dayVisitorCard.getStyleClass().add(selected);
+            } else {
+                dayVisitorCard.getStyleClass().remove(selected);
+            }
+        }
+        if (dayVisitorCheckmark != null) {
+            dayVisitorCheckmark.setVisible(isDayVisitor);
+        }
+        // Update icon circle background via CSS class toggle
+        if (dayVisitorIconCircle != null) {
+            if (isDayVisitor) {
+                dayVisitorIconCircle.getStyleClass().add(selected);
+            } else {
+                dayVisitorIconCircle.getStyleClass().remove(selected);
+            }
+        }
+        // Update icon stroke color directly
+        if (dayVisitorIcon != null) {
+            dayVisitorIcon.setStroke(isDayVisitor ? Color.WHITE : Color.web("#6B7280"));
+        }
+
+        // Show/hide room options based on attendance type
+        if (roomOptionsWrapper != null) {
+            roomOptionsWrapper.setVisible(isOnsite);
+            roomOptionsWrapper.setManaged(isOnsite);
+        }
+    }
+
+    /**
+     * Finds the Day Visitor option in the options list.
+     */
+    protected AccommodationOption findDayVisitorOption() {
+        return accommodationOptions.stream()
+            .filter(AccommodationOption::isDayVisitor)
+            .findFirst()
+            .orElse(null);
+    }
+
+    // ========================================
+    // ATTENDANCE TYPE CARDS (Onsite vs Day Visitor)
+    // ========================================
+
+    /**
+     * Creates the attendance type selection cards (Onsite vs Day Visitor).
+     * Cards use FlowPane for responsive wrapping but take full available width.
+     */
+    protected FlowPane createAttendanceTypeCards() {
+        FlowPane flowPane = new FlowPane();
+        flowPane.setHgap(20);
+        flowPane.setVgap(20);
+        flowPane.setAlignment(Pos.CENTER);
+
+        // Create Onsite card
+        onsiteCard = createAttendanceTypeCard(
+            AttendanceType.ONSITE,
+            BookingPageI18nKeys.Onsite,
+            BookingPageI18nKeys.OnsiteDescription,
+            true  // isHouse icon
+        );
+
+        // Create Day Visitor card
+        dayVisitorCard = createAttendanceTypeCard(
+            AttendanceType.DAY_VISITOR,
+            BookingPageI18nKeys.DayVisitor,
+            BookingPageI18nKeys.DayVisitorDescription,
+            false  // isSun icon
+        );
+
+        flowPane.getChildren().addAll(onsiteCard, dayVisitorCard);
+
+        // Bind card widths to take equal share of container width (minus gap)
+        flowPane.widthProperty().addListener((obs, oldVal, newVal) -> {
+            double containerWidth = newVal.doubleValue();
+            if (containerWidth > 500) {
+                // Desktop: two cards side by side, each taking half minus gap
+                double cardWidth = (containerWidth - 20) / 2;
+                onsiteCard.setPrefWidth(cardWidth);
+                dayVisitorCard.setPrefWidth(cardWidth);
+            } else {
+                // Mobile: cards stack, each takes full width
+                onsiteCard.setPrefWidth(containerWidth);
+                dayVisitorCard.setPrefWidth(containerWidth);
+            }
+        });
+
+        return flowPane;
+    }
+
+    /**
+     * Creates a single attendance type card.
+     */
+    protected VBox createAttendanceTypeCard(AttendanceType type, Object titleI18nKey, Object descI18nKey, boolean isHouseIcon) {
+        VBox card = new VBox(12);
+        card.setAlignment(Pos.CENTER);
+        card.setPadding(new Insets(24));
+        card.setMinWidth(200);
+        card.setMaxWidth(Double.MAX_VALUE);
+        card.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded_lg);
+
+        // Icon circle (56px) - styled via CSS class
+        StackPane iconCircle = new StackPane();
+        iconCircle.setPrefSize(56, 56);
+        iconCircle.setMinSize(56, 56);
+        iconCircle.setMaxSize(56, 56);
+        iconCircle.getStyleClass().add(bookingpage_attendance_icon_circle);
+
+        // Icon SVG - MUST set stroke/fill properties for visibility
+        SVGPath icon = new SVGPath();
+        if (isHouseIcon) {
+            // House icon (stroke-based outline)
+            icon.setContent("M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6");
+        } else {
+            // Sun icon (stroke-based outline)
+            icon.setContent("M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z");
+        }
+        // Set stroke properties for icon visibility
+        icon.setStroke(Color.web("#6B7280"));
+        icon.setStrokeWidth(1.5);
+        icon.setStrokeLineCap(StrokeLineCap.ROUND);
+        icon.setStrokeLineJoin(StrokeLineJoin.ROUND);
+        icon.setFill(Color.TRANSPARENT);
+        icon.setScaleX(1.2);
+        icon.setScaleY(1.2);
+        iconCircle.getChildren().add(icon);
+
+        // Store references for selection updates
+        if (isHouseIcon) {
+            onsiteIconCircle = iconCircle;
+            onsiteIcon = icon;
+        } else {
+            dayVisitorIconCircle = iconCircle;
+            dayVisitorIcon = icon;
+        }
+
+        // Title
+        Label titleLabel = I18nControls.newLabel(titleI18nKey);
+        titleLabel.getStyleClass().addAll(bookingpage_text_lg, bookingpage_font_semibold);
+
+        // Description
+        Label descLabel = I18nControls.newLabel(descI18nKey);
+        descLabel.getStyleClass().addAll(bookingpage_text_sm, bookingpage_text_muted);
+        descLabel.setWrapText(true);
+        descLabel.setAlignment(Pos.CENTER);
+
+        // Content
+        VBox content = new VBox(12);
+        content.setAlignment(Pos.CENTER);
+        content.getChildren().addAll(iconCircle, titleLabel, descLabel);
+
+        // Checkmark badge (24px, top-right when selected)
+        StackPane checkmark = BookingPageUIBuilder.createCheckmarkBadgeCss(24);
+        checkmark.setVisible(false);
+
+        // Store reference for selection updates
+        if (isHouseIcon) {
+            onsiteCheckmark = checkmark;
+        } else {
+            dayVisitorCheckmark = checkmark;
+        }
+
+        // Wrapper with checkmark positioning
+        StackPane wrapper = new StackPane(content, checkmark);
+        StackPane.setAlignment(checkmark, Pos.TOP_RIGHT);
+        StackPane.setMargin(checkmark, new Insets(-8, -8, 0, 0));
+
+        card.getChildren().add(wrapper);
+
+        // Click handler
+        card.setOnMouseClicked(e -> {
+            attendanceTypeProperty.set(type);
+        });
+
+        return card;
     }
 
     protected void rebuildOptionCards() {
@@ -238,36 +490,20 @@ public class DefaultAccommodationSelectionSection implements HasAccommodationSel
 
         AccommodationOption matchingOption = null;
 
-        // Separate options into accommodation and day visitor groups
-        List<AccommodationOption> accommodationOpts = accommodationOptions.stream()
+        // Filter to only room options:
+        // - Exclude day visitor (handled by attendance type selection)
+        // - Exclude share accommodation options
+        List<AccommodationOption> roomOpts = accommodationOptions.stream()
             .filter(opt -> !opt.isDayVisitor())
+            .filter(opt -> {
+                Item item = opt.getItemEntity();
+                // Exclude share_mate items (Share Accommodation option)
+                return item == null || !Boolean.TRUE.equals(item.isShare_mate());
+            })
             .collect(Collectors.toList());
 
-        List<AccommodationOption> dayVisitorOpts = accommodationOptions.stream()
-            .filter(AccommodationOption::isDayVisitor)
-            .collect(Collectors.toList());
-
-        // Add accommodation cards first
-        for (AccommodationOption option : accommodationOpts) {
-            boolean isSelected = selectedItemId != null && selectedItemId.equals(option.getItemId());
-            VBox card = createOptionCard(option, isSelected);
-            optionsContainer.getChildren().add(card);
-            optionCardMap.put(option, card);
-
-            if (isSelected) {
-                matchingOption = option;
-            }
-        }
-
-        // Add separator if both groups exist
-        if (!accommodationOpts.isEmpty() && !dayVisitorOpts.isEmpty()) {
-            HBox separator = BookingPageUIBuilder.createNoAccommodationSeparator();
-            VBox.setMargin(separator, new Insets(28, 0, 20, 0));
-            optionsContainer.getChildren().add(separator);
-        }
-
-        // Add day visitor cards
-        for (AccommodationOption option : dayVisitorOpts) {
+        // Add room option cards
+        for (AccommodationOption option : roomOpts) {
             boolean isSelected = selectedItemId != null && selectedItemId.equals(option.getItemId());
             VBox card = createOptionCard(option, isSelected);
             optionsContainer.getChildren().add(card);
@@ -292,14 +528,12 @@ public class DefaultAccommodationSelectionSection implements HasAccommodationSel
 
         VBox card = new VBox(8);
         card.setMaxWidth(Double.MAX_VALUE);  // Full width cards
-        // Note: Padding is applied to contentBox instead of card when soldout,
+        // Padding is applied to contentBox instead of card when soldout,
         // so the ribbon can extend to card edges
-/*
         if (!isSoldOut) {
             card.setPadding(new Insets(20));
         }
-*/
-        card.getStyleClass().add(bookingpage_selectable_card);
+        card.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded_lg, bookingpage_selectable_card);
 
         // Apply CSS classes for different states (styling handled in CSS)
         if (isSoldOut) {
@@ -310,9 +544,9 @@ public class DefaultAccommodationSelectionSection implements HasAccommodationSel
 
         // Content container - has padding when soldout (since card doesn't)
         VBox contentBox = new VBox(8);
-        //if (isSoldOut) {
+        if (isSoldOut) {
             contentBox.setPadding(new Insets(20));
-        //}
+        }
 
         // === HEADER ROW: Room name (left) + Total Price (right) ===
         // Using VBox as container for responsive layout switching (horizontal/vertical)
@@ -342,7 +576,7 @@ public class DefaultAccommodationSelectionSection implements HasAccommodationSel
             priceLabel.getStyleClass().add(bookingpage_text_dark);
         }
 
-        // Per person / Per room indicator (skip for Day Visitor and Share Accommodation)
+        // Per person / Per room indicator (skip for Day Visitor)
         if (!option.isDayVisitor()) {
             Object pricingTypeKey = option.isPerPerson() ? BookingPageI18nKeys.PerPerson : BookingPageI18nKeys.PerRoom;
             Label pricingTypeLabel = I18nControls.newLabel(pricingTypeKey);
@@ -352,7 +586,7 @@ public class DefaultAccommodationSelectionSection implements HasAccommodationSel
             priceContainer.getChildren().add(priceLabel);
         }
 
-        // Store checkmark badge reference (will be created later for available cards)
+        // Store checkmark badge reference (32px, will be created later for available cards)
         StackPane checkmarkBadge = null;
         if (isAvailable) {
             checkmarkBadge = BookingPageUIBuilder.createCheckmarkBadgeCss(32);
@@ -365,42 +599,31 @@ public class DefaultAccommodationSelectionSection implements HasAccommodationSel
 
         contentBox.getChildren().add(headerContainer);
 
-        // === PRICE BREAKDOWN (debug only - change DEBUG_SHOW_PRICE_BREAKDOWN to true to enable) ===
-        if (DEBUG_SHOW_PRICE_BREAKDOWN) {
-            VBox breakdownBox = createBreakdownBox(option, isSoldOut);
-            if (breakdownBox != null) {
-                contentBox.getChildren().add(breakdownBox);
-            }
+        // === BADGES ROW: Constraint badge (separate row, not inline with name) ===
+        if (option.hasConstraint()) {
+            HBox badgesRow = new HBox(8);
+            badgesRow.setAlignment(Pos.CENTER_LEFT);
+            HBox constraintBadge = createConstraintBadge(option, isSoldOut);
+            badgesRow.getChildren().add(constraintBadge);
+            contentBox.getChildren().add(badgesRow);
         }
 
-        // === BADGES ROW: Constraint badges (MIN_NIGHTS, FULL_EVENT_ONLY) + date restriction badges ===
-        // Use FlowPane to wrap badges to next line if not enough horizontal space
-        boolean hasBadges = option.hasConstraint() || option.hasDateRestrictions();
-        if (hasBadges) {
-            FlowPane badgesRow = new FlowPane();
-            badgesRow.setHgap(8);
-            badgesRow.setVgap(4);
-            badgesRow.setAlignment(Pos.CENTER_LEFT);
+        // === DATE RESTRICTION BADGES ROW ===
+        if (option.hasDateRestrictions()) {
+            FlowPane restrictionBadges = new FlowPane();
+            restrictionBadges.setHgap(8);
+            restrictionBadges.setVgap(4);
 
-            // Existing constraint badge (MIN_NIGHTS, FULL_EVENT_ONLY)
-            if (option.hasConstraint()) {
-                HBox constraintBadge = createConstraintBadge(option, isSoldOut);
-                badgesRow.getChildren().add(constraintBadge);
-            }
-
-            // No Early Arrival badge
             if (!option.isEarlyArrivalAllowed()) {
                 HBox earlyBadge = createDateRestrictionBadge(BookingPageI18nKeys.NoEarlyArrival, isSoldOut);
-                badgesRow.getChildren().add(earlyBadge);
+                restrictionBadges.getChildren().add(earlyBadge);
             }
-
-            // No Late Departure badge
             if (!option.isLateDepartureAllowed()) {
                 HBox lateBadge = createDateRestrictionBadge(BookingPageI18nKeys.NoLateDeparture, isSoldOut);
-                badgesRow.getChildren().add(lateBadge);
+                restrictionBadges.getChildren().add(lateBadge);
             }
 
-            contentBox.getChildren().add(badgesRow);
+            contentBox.getChildren().add(restrictionBadges);
         }
 
         // === DESCRIPTION (at bottom, 13px muted) ===
@@ -418,7 +641,6 @@ public class DefaultAccommodationSelectionSection implements HasAccommodationSel
 
         // === SHARING NOTE for "Per room" accommodations with capacity > 1 ===
         // Explains that one person books the room, roommates use "Share Accommodation"
-        // Only shown for rooms that can accommodate more than 1 person
         if (!option.isDayVisitor() && !option.isPerPerson()) {
             Item item = option.getItemEntity();
             Integer capacity = item != null ? item.getCapacity() : null;
@@ -443,7 +665,7 @@ public class DefaultAccommodationSelectionSection implements HasAccommodationSel
             // StackPane wrapper to position checkmark in top-right corner
             StackPane wrapper = new StackPane(contentBox, existingCheckmarkBadge);
             StackPane.setAlignment(existingCheckmarkBadge, Pos.TOP_RIGHT);
-            StackPane.setMargin(existingCheckmarkBadge, new Insets(20 - 8, 20 - 8, 0, 0)); // 20 added after removing the card padding
+            StackPane.setMargin(existingCheckmarkBadge, new Insets(-8, -8, 0, 0));
 
             card.getChildren().add(wrapper);
         } else {
@@ -463,9 +685,6 @@ public class DefaultAccommodationSelectionSection implements HasAccommodationSel
                 clip.widthProperty().bind(card.widthProperty());
                 clip.heightProperty().bind(card.heightProperty());
                 card.setClip(clip);
-
-                // Adding a right margin so that the prices in sold-out accommodation types align with those not sold-out.
-                StackPane.setMargin(contentBox, new Insets(0, 40, 0, 0));
             }
             card.getChildren().add(wrapper);
         }
@@ -493,7 +712,7 @@ public class DefaultAccommodationSelectionSection implements HasAccommodationSel
         row.getChildren().addAll(totalLabel, totalTextLabel);
 
         // Per night breakdown (if applicable)
-        if (pricePerNight > 0 && fullEventNights > 0) {
+        if (pricePerNight > 0) {
             String perNightText = " " + I18n.getI18nText(BookingPageI18nKeys.PerNightFormat, formatPrice(pricePerNight));
             Label breakdownLabel = new Label(perNightText);
             breakdownLabel.getStyleClass().addAll(bookingpage_text_xs, bookingpage_text_muted);
@@ -747,30 +966,12 @@ public class DefaultAccommodationSelectionSection implements HasAccommodationSel
     }
 
     protected int calculateTotalPrice(AccommodationOption option) {
-        // Use pre-calculated price from WorkingBooking if available
-        if (option.hasPreCalculatedPrice()) {
-            return option.getPreCalculatedTotalPrice();
-        }
-
-        // Fallback to legacy manual calculation
-        int totalPrice;
-        int accommodationPrice = 0;
-
-        // For "Day Visitor" option, no accommodation cost but include meals
-        if (option.isDayVisitor()) {
-            totalPrice = fullEventTeachingPrice + fullEventMealsPrice;
-        } else {
-            // Total = teaching price + meals + (accommodation per night * nights)
-            accommodationPrice = option.getPricePerNight() * fullEventNights;
-            totalPrice = fullEventTeachingPrice + fullEventMealsPrice + accommodationPrice;
-        }
-
-        return totalPrice;
+        // Price is always pre-calculated via WorkingBooking by the form class
+        return option.hasPreCalculatedPrice() ? option.getPreCalculatedTotalPrice() : 0;
     }
 
     protected String formatPrice(int priceInCents) {
-        // TODO: Use proper currency formatting from WorkingBookingProperties
-        return "$" + (priceInCents / 100);
+        return EventPriceFormatter.formatWithCurrency(priceInCents, workingBookingProperties != null ? workingBookingProperties.getEvent() : null);
     }
 
     // ========================================
@@ -797,37 +998,26 @@ public class DefaultAccommodationSelectionSection implements HasAccommodationSel
         return validProperty;
     }
 
+    @Override
+    public String getValidationMessage() {
+        AttendanceType type = attendanceTypeProperty.get();
+        if (type == null) {
+            return null; // No attendance type selected yet - don't show warning
+        }
+        if (type == AttendanceType.DAY_VISITOR) {
+            return null; // Day visitor is always valid
+        }
+        // ONSITE: check if room is selected
+        AccommodationOption selected = selectedOptionProperty.get();
+        if (selected == null || !selected.isAvailable() || selected.isDayVisitor()) {
+            return I18n.getI18nText(BookingPageI18nKeys.PleaseSelectAccommodation);
+        }
+        return null; // Valid room selected
+    }
+
     // ========================================
     // HasAccommodationSelectionSection INTERFACE
     // ========================================
-
-    @Override
-    public ObjectProperty<BookingFormColorScheme> colorSchemeProperty() {
-        return colorScheme;
-    }
-
-    @Override
-    public void setColorScheme(BookingFormColorScheme scheme) {
-        this.colorScheme.set(scheme);
-    }
-
-    @Override
-    public void setFullEventTeachingPrice(int price) {
-        this.fullEventTeachingPrice = price;
-        rebuildOptionCards();
-    }
-
-    @Override
-    public void setFullEventNights(int nights) {
-        this.fullEventNights = nights;
-        rebuildOptionCards();
-    }
-
-    @Override
-    public void setFullEventMealsPrice(int price) {
-        this.fullEventMealsPrice = price;
-        rebuildOptionCards();
-    }
 
     @Override
     public void addAccommodationOption(AccommodationOption option) {
@@ -883,6 +1073,16 @@ public class DefaultAccommodationSelectionSection implements HasAccommodationSel
     @Override
     public ObjectProperty<AccommodationOption> selectedOptionProperty() {
         return selectedOptionProperty;
+    }
+
+    @Override
+    public ObjectProperty<AttendanceType> attendanceTypeProperty() {
+        return attendanceTypeProperty;
+    }
+
+    @Override
+    public void setAttendanceType(AttendanceType type) {
+        attendanceTypeProperty.set(type);
     }
 
     @Override

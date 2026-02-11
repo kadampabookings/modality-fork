@@ -1,5 +1,6 @@
-package one.modality.event.frontoffice.activities.book.event.slides;
+package one.modality.booking.frontoffice.bookingpage.standard;
 
+import dev.webfx.extras.async.AsyncSpinner;
 import dev.webfx.extras.i18n.controls.I18nControls;
 import dev.webfx.extras.panes.FlexPane;
 import dev.webfx.extras.panes.MonoPane;
@@ -19,16 +20,11 @@ import one.modality.base.client.i18n.BaseI18nKeys;
 import one.modality.base.shared.entities.Event;
 import one.modality.base.shared.entities.formatters.EventPriceFormatter;
 import one.modality.booking.frontoffice.bookingform.GatewayPaymentForm;
-import one.modality.ecommerce.client.i18n.EcommerceI18nKeys;
 import one.modality.ecommerce.payment.CancelPaymentResult;
 import one.modality.ecommerce.payment.CompletePaymentResult;
 import one.modality.ecommerce.payment.client.WebPaymentForm;
-import one.modality.event.frontoffice.activities.book.BookI18nKeys;
 
 import java.util.function.Consumer;
-
-import static one.modality.event.frontoffice.activities.book.event.slides.StepSlide.turnOffButtonWaitMode;
-import static one.modality.event.frontoffice.activities.book.event.slides.StepSlide.turnOnButtonWaitMode;
 
 /**
  * @author Bruno Salmon
@@ -47,9 +43,8 @@ public final class ProvidedGatewayPaymentForm implements GatewayPaymentForm {
 
         Label gatewayLogo = new Label();
         I18nControls.bindI18nProperties(gatewayLogo, webPaymentForm.getGatewayName());
-        //VBox.setMargin(gatewayLogo, new Insets(10, 0, 20, 0));
 
-        I18nControls.bindI18nProperties(payButton, BookI18nKeys.Pay1, EventPriceFormatter.formatWithCurrency(webPaymentForm.getAmount(), event));
+        I18nControls.bindI18nProperties(payButton, "Pay1", EventPriceFormatter.formatWithCurrency(webPaymentForm.getAmount(), event));
         Layouts.setManagedAndVisibleProperties(payButton, !webPaymentForm.hasHtmlPayButton());
         webPaymentForm.setHtmlPayButtonText(payButton.getText());
         webPaymentForm.setHtmlHeaderText("Please enter your payment information");
@@ -106,19 +101,19 @@ public final class ProvidedGatewayPaymentForm implements GatewayPaymentForm {
 
         webPaymentForm
             .setOnLoadFailure(errorMsg -> {
-                errorConsumer.accept(BookI18nKeys.ErrorWhileLoadingPaymentForm);
+                errorConsumer.accept("ErrorWhileLoadingPaymentForm");
                 Console.log(errorMsg);
             })
             .setOnInitFailure(errorMsg -> {
-                errorConsumer.accept(BookI18nKeys.ErrorWhileInitializingHTMLPaymentForm);
+                errorConsumer.accept("ErrorWhileInitializingHTMLPaymentForm");
                 Console.log(errorMsg);
             })
             .setOnVerificationFailure(errorMsg -> {
-                errorConsumer.accept(BookI18nKeys.ErrorPaymentGatewayFailure);
+                errorConsumer.accept("ErrorPaymentGatewayFailure");
                 Console.log(errorMsg);
             })
             .setOnPaymentFailure(errorMsg -> {
-                errorConsumer.accept(BookI18nKeys.ErrorPaymentModalityFailure);
+                errorConsumer.accept("ErrorPaymentModalityFailure");
                 Console.log(errorMsg);
             })
             .setOnPaymentCompletion(successConsumer);
@@ -139,18 +134,18 @@ public final class ProvidedGatewayPaymentForm implements GatewayPaymentForm {
         return mainVbox;
     }
 
-    //@Override
-    void turnOnWaitMode() {
+    private void turnOnWaitMode() {
         if (pressedButton == payButton)
-            turnOnButtonWaitMode(payButton, cancelButton);
+            AsyncSpinner.displayButtonSpinner(payButton, cancelButton);
         else
-            turnOnButtonWaitMode(cancelButton, payButton);
+            AsyncSpinner.displayButtonSpinner(cancelButton, payButton);
     }
 
-    //@Override
-    void turnOffWaitMode() {
-        turnOffButtonWaitMode(payButton, EcommerceI18nKeys.Pay);
-        turnOffButtonWaitMode(cancelButton, BaseI18nKeys.Cancel);
+    private void turnOffWaitMode() {
+        AsyncSpinner.hideButtonSpinner(payButton);
+        I18nControls.bindI18nGraphicProperty(payButton, "Pay1");
+        AsyncSpinner.hideButtonSpinner(cancelButton);
+        I18nControls.bindI18nGraphicProperty(cancelButton, BaseI18nKeys.Cancel);
     }
 
 }

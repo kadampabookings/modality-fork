@@ -17,6 +17,7 @@ import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.BookingFormButton;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
 import one.modality.booking.frontoffice.bookingpage.CompositeBookingFormPage;
+import one.modality.booking.frontoffice.bookingpage.components.PreviewPriceCalculator;
 import one.modality.booking.frontoffice.bookingpage.sections.accommodation.DefaultAccommodationSoldOutSection;
 import one.modality.booking.frontoffice.bookingpage.sections.accommodation.HasAccommodationSelectionSection;
 import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
@@ -166,8 +167,10 @@ public class BookingFormSoldOutHandler {
 
         // Build list of ALL accommodation options (excluding only the originally selected sold-out item)
         // Other items that are also sold out will show with SOLD OUT ribbon
+        LocalDate arrivalDate = callback.getMainEventStartDate();
+        LocalDate departureDate = callback.getMainEventEndDate();
         List<HasAccommodationSelectionSection.AccommodationOption> alternatives =
-            buildAlternativeOptions(policyAggregate, soldOutInfo.getSitePrimaryKey(), soldOutInfo.getItemPrimaryKey());
+            buildAlternativeOptions(policyAggregate, soldOutInfo.getSitePrimaryKey(), soldOutInfo.getItemPrimaryKey(), arrivalDate, departureDate);
 
         // Calculate number of nights from the booked accommodation dates
         int numberOfNights = 0;
@@ -184,7 +187,6 @@ public class BookingFormSoldOutHandler {
 
         // Create the sold-out recovery section
         DefaultAccommodationSoldOutSection soldOutSection = new DefaultAccommodationSoldOutSection();
-        soldOutSection.setColorScheme(callback.getColorScheme());
         soldOutSection.setEventName(callback.getEvent() != null ? callback.getEvent().getName() : "");
         soldOutSection.setOriginalSelection(soldOutItemName, soldOutPrice);
         soldOutSection.setNumberOfNights(numberOfNights);
@@ -264,8 +266,11 @@ public class BookingFormSoldOutHandler {
     /**
      * Builds a list of alternative accommodation options, excluding the sold-out item.
      * Always includes a Day Visitor option as a fallback.
+     * Prices are pre-calculated using PreviewPriceCalculator for accuracy.
      */
-    private List<HasAccommodationSelectionSection.AccommodationOption> buildAlternativeOptions(PolicyAggregate policy, Object excludeSiteId, Object excludeItemId) {
+    private List<HasAccommodationSelectionSection.AccommodationOption> buildAlternativeOptions(
+            PolicyAggregate policy, Object excludeSiteId, Object excludeItemId,
+            LocalDate arrivalDate, LocalDate departureDate) {
         List<HasAccommodationSelectionSection.AccommodationOption> options = new ArrayList<>();
 
         // Build accommodation options from scheduled items (if available)
@@ -327,6 +332,10 @@ public class BookingFormSoldOutHandler {
                     lateDepartureAllowed = !Boolean.FALSE.equals(itemPolicy.isLateAccommodationAllowed());
                 }
 
+                // Pre-calculate accommodation price using WorkingBooking engine
+                int preCalculatedPrice = PreviewPriceCalculator.calculateAccommodationPrice(
+                    policy, item, arrivalDate, departureDate, AttendanceMode.IN_PERSON);
+
                 HasAccommodationSelectionSection.AccommodationOption option = new HasAccommodationSelectionSection.AccommodationOption(
                     itemId,
                     item,
@@ -340,7 +349,7 @@ public class BookingFormSoldOutHandler {
                     false,         // isDayVisitor
                     null,          // imageUrl
                     perPerson,
-                    -1,            // preCalculatedTotalPrice
+                    preCalculatedPrice,
                     earlyArrivalAllowed,
                     lateDepartureAllowed
                 );
@@ -370,6 +379,10 @@ public class BookingFormSoldOutHandler {
                 boolean shareEarlyAllowed = !Boolean.FALSE.equals(sharingAccommodationItemPolicy.isEarlyAccommodationAllowed());
                 boolean shareLateAllowed = !Boolean.FALSE.equals(sharingAccommodationItemPolicy.isLateAccommodationAllowed());
 
+                // Pre-calculate sharing accommodation price using WorkingBooking engine
+                int sharePreCalculatedPrice = PreviewPriceCalculator.calculateAccommodationPrice(
+                    policy, sharingItem, arrivalDate, departureDate, AttendanceMode.IN_PERSON);
+
                 HasAccommodationSelectionSection.AccommodationOption shareAccommodation = new HasAccommodationSelectionSection.AccommodationOption(
                     sharingItem.getPrimaryKey(),
                     sharingItem,
@@ -383,7 +396,7 @@ public class BookingFormSoldOutHandler {
                     false,          // isDayVisitor = false
                     null,
                     true,           // perPerson
-                    -1,             // preCalculatedTotalPrice
+                    sharePreCalculatedPrice,
                     shareEarlyAllowed,
                     shareLateAllowed
                 );

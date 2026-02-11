@@ -15,4 +15,9 @@
         <css/>
     </java-ui-api>
 
+    <providers>
+        <!-- Default booking form provider (MODALITY_PRIORITY = 0, fallback) -->
+        <provider interface="one.modality.booking.frontoffice.bookingform.BookingFormProvider">one.modality.booking.frontoffice.bookingpage.standard.DefaultBookingFormProvider</provider>
+    </providers>
+
 </project>

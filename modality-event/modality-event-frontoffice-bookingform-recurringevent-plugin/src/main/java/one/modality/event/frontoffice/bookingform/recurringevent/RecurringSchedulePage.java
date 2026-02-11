@@ -59,9 +59,7 @@ final class RecurringSchedulePage implements BookingFormPage {
         Event event = bookingForm.getEvent();
 
         HtmlText eventDescription = new HtmlText();
-        activity.bindI18nEventExpression(eventDescription, "description");
         VBox.setMargin(eventDescription, new Insets(20, 0, 0, 0));
-        eventDescription.fontProperty().bind(activity.mediumFontProperty());
         eventDescription.getStyleClass().add(event_description_text);
         eventDescription.setMinWidth(0);
 

@@ -1,9 +1,7 @@
 package one.modality.booking.frontoffice.bookingpage.sections.options;
 
-import javafx.beans.property.ObjectProperty;
 import one.modality.base.shared.entities.BookablePeriod;
 import one.modality.booking.frontoffice.bookingpage.BookingFormSection;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
 
 import java.util.function.Consumer;
 
@@ -40,16 +38,6 @@ public interface HasRateTypeSection extends BookingFormSection {
     }
 
     /**
-     * Returns the color scheme property for theming.
-     */
-    ObjectProperty<BookingFormColorScheme> colorSchemeProperty();
-
-    /**
-     * Sets the color scheme for this section.
-     */
-    void setColorScheme(BookingFormColorScheme scheme);
-
-    /**
      * Returns the currently selected rate type.
      */
     RateType getSelectedRateType();
@@ -60,4 +48,30 @@ public interface HasRateTypeSection extends BookingFormSection {
      * Sets the callback for when the rate type changes.
      */
     void setOnRateTypeChanged(Consumer<RateType> handler);
+
+    /**
+     * Sets the displayed price for Standard rate.
+     * Price should be calculated externally using WorkingBooking + PriceCalculator.
+     *
+     * <p>Default implementation does nothing. Override in implementations
+     * that support externally calculated prices.</p>
+     *
+     * @param priceInCents the price in cents
+     */
+    default void setStandardPrice(int priceInCents) {
+        // Default: no-op. Override in implementations that support external price setting.
+    }
+
+    /**
+     * Sets the displayed price for Member rate.
+     * Price should be calculated externally using WorkingBooking + PriceCalculator.
+     *
+     * <p>Default implementation does nothing. Override in implementations
+     * that support externally calculated prices.</p>
+     *
+     * @param priceInCents the price in cents
+     */
+    default void setMemberPrice(int priceInCents) {
+        // Default: no-op. Override in implementations that support external price setting.
+    }
 }

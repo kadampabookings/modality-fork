@@ -19,7 +19,7 @@ import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.BookingFormSection;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
 import one.modality.booking.frontoffice.bookingpage.sections.summary.DefaultEventHeaderSection;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
+
 
 import java.util.function.Consumer;
 
@@ -69,9 +69,6 @@ public class DefaultRegistrationTypeSection implements BookingFormSection {
         IN_PERSON,
         ONLINE
     }
-
-    // === COLOR SCHEME ===
-    private final ObjectProperty<BookingFormColorScheme> colorScheme = new SimpleObjectProperty<>(BookingFormColorScheme.DEFAULT);
 
     // === VALIDITY ===
     private final SimpleBooleanProperty validProperty = new SimpleBooleanProperty(false);
@@ -155,7 +152,7 @@ public class DefaultRegistrationTypeSection implements BookingFormSection {
         card.setPadding(new Insets(28, 24, 28, 24));
         card.setAlignment(Pos.TOP_CENTER);
         card.setCursor(enabled ? Cursor.HAND : Cursor.DEFAULT);
-        card.getStyleClass().add(bookingpage_registration_type_card);
+        card.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded_lg, bookingpage_registration_type_card);
 
         if (!enabled) {
             card.getStyleClass().add(disabled);
@@ -210,7 +207,10 @@ public class DefaultRegistrationTypeSection implements BookingFormSection {
             HBox buttonContent = new HBox(8);
             buttonContent.setAlignment(Pos.CENTER);
 
-            Label buttonText = I18nControls.newLabel(BookingPageI18nKeys.SelectInPerson);
+            Object buttonTextKey = type == RegistrationType.IN_PERSON
+                ? BookingPageI18nKeys.SelectInPerson
+                : BookingPageI18nKeys.SelectOnline;
+            Label buttonText = I18nControls.newLabel(buttonTextKey);
             buttonText.getStyleClass().add(bookingpage_btn_select_type_text);
 
             SVGPath arrowIcon = SvgIcons.createStrokeSVGPath(ARROW_ICON_PATH, null, 2.5);
@@ -230,7 +230,7 @@ public class DefaultRegistrationTypeSection implements BookingFormSection {
             comingSoonContainer.setPadding(new Insets(12, 24, 12, 24));
 
             Label comingSoonText = I18nControls.newLabel(BookingPageI18nKeys.ComingSoon);
-            comingSoonText.getStyleClass().add(bookingpage_btn_coming_soon_text);
+            comingSoonText.getStyleClass().addAll(bookingpage_text_theme_secondary, bookingpage_font_semibold, bookingpage_text_base);
 
             comingSoonContainer.getChildren().add(comingSoonText);
             VBox.setMargin(comingSoonContainer, new Insets(8, 0, 0, 0));
@@ -288,22 +288,35 @@ public class DefaultRegistrationTypeSection implements BookingFormSection {
     // Configuration Methods
     // ========================================
 
-    public void setColorScheme(BookingFormColorScheme scheme) {
-        this.colorScheme.set(scheme);
-    }
-
-    public ObjectProperty<BookingFormColorScheme> colorSchemeProperty() {
-        return colorScheme;
-    }
-
     /**
      * Sets whether the online registration option is enabled.
      * When false (default), the online card shows "Coming Soon".
      *
+     * <p>This method rebuilds the online card if the value changes after initial construction.</p>
+     *
      * @param enabled true to enable online registration selection
      */
     public void setOnlineEnabled(boolean enabled) {
+        if (this.onlineEnabled == enabled) {
+            return; // No change
+        }
         this.onlineEnabled = enabled;
+
+        // Rebuild the online card with the new enabled state
+        if (onlineCard != null && onlineCard.getParent() instanceof Pane cardsContainer) {
+            int index = cardsContainer.getChildren().indexOf(onlineCard);
+            if (index >= 0) {
+                VBox newOnlineCard = createTypeCard(
+                    BookingPageI18nKeys.OnlineRegistration,
+                    BookingPageI18nKeys.OnlineDescription,
+                    MONITOR_ICON_PATH,
+                    RegistrationType.ONLINE,
+                    enabled
+                );
+                cardsContainer.getChildren().set(index, newOnlineCard);
+                onlineCard = newOnlineCard;
+            }
+        }
     }
 
     public void setOnTypeSelected(Consumer<RegistrationType> callback) {

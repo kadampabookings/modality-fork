@@ -13,7 +13,7 @@ import javafx.scene.layout.VBox;
 import one.modality.base.shared.entities.ScheduledItem;
 import one.modality.booking.client.workingbooking.WorkingBooking;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
-import one.modality.booking.frontoffice.bookingpage.PriceFormatter;
+import one.modality.base.shared.entities.formatters.EventPriceFormatter;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
 import one.modality.booking.frontoffice.bookingpage.components.StyledSectionHeader;
 import one.modality.booking.frontoffice.bookingpage.sections.dates.HasClassDateSelectionSection;
@@ -130,13 +130,13 @@ public class DefaultGeneralProgramSummarySection extends DefaultSummarySection {
         discountRow.setManaged(false);
 
         Label discountLabel = I18nControls.newLabel(BookingPageI18nKeys.ClassSelectionFullTermDiscount);
-        discountLabel.getStyleClass().add(bookingpage_discount_label);
+        discountLabel.getStyleClass().addAll(bookingpage_text_primary, bookingpage_font_medium);
 
         Region discountSpacer = new Region();
         HBox.setHgrow(discountSpacer, Priority.ALWAYS);
 
         discountValue = new Label();
-        discountValue.getStyleClass().add(bookingpage_discount_value);
+        discountValue.getStyleClass().addAll(bookingpage_text_primary, bookingpage_font_semibold);
 
         discountRow.getChildren().addAll(discountLabel, discountSpacer, discountValue);
         content.getChildren().add(discountRow);
@@ -149,13 +149,13 @@ public class DefaultGeneralProgramSummarySection extends DefaultSummarySection {
         alreadyPaidRow.setManaged(false);
 
         Label alreadyPaidLabel = I18nControls.newLabel(BookingPageI18nKeys.AlreadyPaid);
-        alreadyPaidLabel.getStyleClass().addAll(bookingpage_text_base, bookingpage_label_caption);
+        alreadyPaidLabel.getStyleClass().addAll(bookingpage_text_base, bookingpage_text_sm, bookingpage_text_muted);
 
         Region alreadyPaidSpacer = new Region();
         HBox.setHgrow(alreadyPaidSpacer, Priority.ALWAYS);
 
         alreadyPaidValue = new Label();
-        alreadyPaidValue.getStyleClass().addAll(bookingpage_text_base, bookingpage_label_caption);
+        alreadyPaidValue.getStyleClass().addAll(bookingpage_text_base, bookingpage_text_sm, bookingpage_text_muted);
 
         alreadyPaidRow.getChildren().addAll(alreadyPaidLabel, alreadyPaidSpacer, alreadyPaidValue);
         content.getChildren().add(alreadyPaidRow);
@@ -180,7 +180,7 @@ public class DefaultGeneralProgramSummarySection extends DefaultSummarySection {
         HBox.setHgrow(totalSpacer, Priority.ALWAYS);
 
         totalValue = new Label();
-        totalValue.getStyleClass().addAll(bookingpage_price_medium, bookingpage_font_bold, bookingpage_text_primary);
+        totalValue.getStyleClass().addAll(bookingpage_text_xl, bookingpage_font_bold, bookingpage_text_primary);
 
         totalRow.getChildren().addAll(totalLabel, totalSpacer, totalValue);
         content.getChildren().add(totalRow);
@@ -283,7 +283,7 @@ public class DefaultGeneralProgramSummarySection extends DefaultSummarySection {
     }
 
     private String formatPrice(int priceInCents) {
-        return PriceFormatter.formatPriceWithCurrencyNoDecimals(priceInCents);
+        return EventPriceFormatter.formatWithCurrency(priceInCents, workingBookingProperties != null ? workingBookingProperties.getEvent() : null);
     }
 
     @Override
@@ -314,10 +314,10 @@ public class DefaultGeneralProgramSummarySection extends DefaultSummarySection {
             if (datesText.length() > 0) {
                 datesText.append(", ");
             }
-            // Use description (dates) if available, otherwise use name
-            String lineText = line.getDescription() != null && !line.getDescription().isEmpty()
-                    ? line.getDescription()
-                    : line.getName();
+            // Use dates if available, otherwise use item name
+            String lineText = line.getDates() != null && !line.getDates().isEmpty()
+                    ? line.getDates()
+                    : line.getItemName();
             datesText.append(lineText);
             total += line.getAmount();
         }

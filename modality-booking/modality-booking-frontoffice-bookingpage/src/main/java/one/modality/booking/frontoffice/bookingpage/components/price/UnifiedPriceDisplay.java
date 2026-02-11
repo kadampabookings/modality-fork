@@ -8,6 +8,7 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
+import one.modality.base.client.i18n.I18nEntities;
 import one.modality.base.client.time.ModalityDates;
 import one.modality.base.shared.entities.Event;
 import one.modality.base.shared.entities.Item;
@@ -112,12 +113,18 @@ public class UnifiedPriceDisplay {
     /**
      * Formats the display name for a line item based on the configured format.
      *
+     * <p>If the family name equals the item name (case-insensitive), only
+     * the item name is displayed to avoid redundant text like "Teaching - Teaching".</p>
+     *
      * @param familyName ItemFamily name (can be null)
      * @param itemName Item name (should not be null, defaults to "Item")
      * @return formatted display name based on current {@link #displayFormat}
      */
     public String formatLineItemName(String familyName, String itemName) {
         String safeItemName = itemName != null ? itemName : "Item";
+
+        // If family name equals item name, just show item name to avoid redundancy
+        boolean sameNames = familyName != null && familyName.equalsIgnoreCase(safeItemName);
 
         switch (displayFormat) {
             case ITEM_ONLY:
@@ -127,13 +134,13 @@ public class UnifiedPriceDisplay {
                 return familyName != null ? familyName : safeItemName;
 
             case ITEM_PARENTHESIS_FAMILY:
-                return familyName != null
+                return (familyName != null && !sameNames)
                         ? safeItemName + " (" + familyName + ")"
                         : safeItemName;
 
             case FAMILY_DASH_ITEM:
             default:
-                return familyName != null
+                return (familyName != null && !sameNames)
                         ? familyName + " - " + safeItemName
                         : safeItemName;
         }
@@ -142,14 +149,39 @@ public class UnifiedPriceDisplay {
     /**
      * Formats the display name for a line item using entity objects.
      *
+     * <p>Uses {@link I18nEntities#translateEntity} to get the localized name
+     * from the entity's Label, falling back to the entity's name if no label exists.</p>
+     *
      * @param family the ItemFamily entity (can be null)
      * @param item the Item entity (can be null)
      * @return formatted display name
      */
     public String formatLineItemName(ItemFamily family, Item item) {
-        String familyName = family != null ? family.getName() : null;
-        String itemName = item != null ? item.getName() : null;
+        String familyName = translateEntityName(family);
+        String itemName = translateEntityName(item);
         return formatLineItemName(familyName, itemName);
+    }
+
+    /**
+     * Translates an entity to its localized display name.
+     * Uses the entity's Label if available, otherwise falls back to getName().
+     *
+     * @param entity the entity to translate (Item, ItemFamily, etc.)
+     * @return the translated name, or null if entity is null
+     */
+    private String translateEntityName(dev.webfx.stack.orm.entity.Entity entity) {
+        if (entity == null) return null;
+        // I18nEntities.translateEntity uses i18n(this) which resolves Label -> name fallback
+        String translated = I18nEntities.translateEntity(entity);
+        // Fallback to getName() if translation returns null or empty
+        if (translated == null || translated.isEmpty()) {
+            if (entity instanceof Item) {
+                return ((Item) entity).getName();
+            } else if (entity instanceof ItemFamily) {
+                return ((ItemFamily) entity).getName();
+            }
+        }
+        return translated;
     }
 
     // ========================================
@@ -351,7 +383,7 @@ public class UnifiedPriceDisplay {
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
         Label value = new Label(formatPrice(amount));
-        value.getStyleClass().addAll(bookingpage_price_medium, bookingpage_font_bold, bookingpage_text_primary);
+        value.getStyleClass().addAll(bookingpage_text_xl, bookingpage_font_bold, bookingpage_text_primary);
 
         row.getChildren().addAll(label, spacer, value);
         return row;
@@ -376,7 +408,7 @@ public class UnifiedPriceDisplay {
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
         Label value = new Label(formatPrice(amount));
-        value.getStyleClass().addAll(bookingpage_price_large, bookingpage_text_primary);
+        value.getStyleClass().addAll(bookingpage_text_2xl, bookingpage_font_bold, bookingpage_text_primary);
 
         row.getChildren().addAll(label, spacer, value);
         return row;

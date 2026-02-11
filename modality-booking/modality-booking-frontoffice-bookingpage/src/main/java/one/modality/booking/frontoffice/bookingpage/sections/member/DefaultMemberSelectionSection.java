@@ -3,7 +3,6 @@ package one.modality.booking.frontoffice.bookingpage.sections.member;
 import dev.webfx.extras.i18n.I18n;
 import dev.webfx.extras.i18n.controls.I18nControls;
 import dev.webfx.extras.webtext.HtmlText;
-import dev.webfx.kit.util.properties.FXProperties;
 import dev.webfx.platform.uischeduler.UiScheduler;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.ObjectProperty;
@@ -22,15 +21,22 @@ import javafx.scene.control.Label;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.SVGPath;
+import one.modality.base.shared.entities.Person;
 import one.modality.booking.client.workingbooking.WorkingBooking;
 import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
 import one.modality.booking.frontoffice.bookingpage.components.StyledSectionHeader;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
+import one.modality.booking.frontoffice.bookingpage.sections.childcarer.DefaultChildCarerSection;
+import one.modality.booking.frontoffice.bookingpage.sections.childcarer.HasChildCarerSection.HouseholdMember;
+import one.modality.booking.frontoffice.bookingpage.standard.BookingSelectionState;
 
+
+import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -58,10 +64,6 @@ import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelecto
  */
 public class DefaultMemberSelectionSection implements HasMemberSelectionSection {
 
-    // === COLOR SCHEME ===
-    // Kept for API compatibility - theming is now CSS-based
-    protected final ObjectProperty<BookingFormColorScheme> colorScheme = new SimpleObjectProperty<>(BookingFormColorScheme.DEFAULT);
-
     // === VALIDITY ===
     protected final SimpleBooleanProperty validProperty = new SimpleBooleanProperty(false);
 
@@ -71,6 +73,7 @@ public class DefaultMemberSelectionSection implements HasMemberSelectionSection 
     // === MEMBERS LIST ===
     protected final ObservableList<MemberInfo> householdMembers = FXCollections.observableArrayList();
     protected final Set<Object> alreadyBookedPersonIds = new HashSet<>();
+    protected final Map<Object, Object> personDocumentMap = new HashMap<>(); // personId -> documentId mapping for existing bookings
     protected final BooleanProperty hasAvailableMembers = new SimpleBooleanProperty(false);
 
     // === UI COMPONENTS ===
@@ -92,6 +95,12 @@ public class DefaultMemberSelectionSection implements HasMemberSelectionSection 
     // === DATA ===
     protected WorkingBookingProperties workingBookingProperties;
 
+    // === INLINE CHILD CARER ===
+    protected boolean inlineChildCarerEnabled = false;
+    protected VBox childCarerContainer;
+    protected DefaultChildCarerSection childCarerSection;
+    protected BookingSelectionState selectionState;
+
     public DefaultMemberSelectionSection() {
         buildUI();
         setupBindings();
@@ -100,7 +109,7 @@ public class DefaultMemberSelectionSection implements HasMemberSelectionSection 
     protected void buildUI() {
         container.setAlignment(Pos.TOP_CENTER);
         container.setSpacing(0);
-        container.getStyleClass().add("bookingpage-member-selection-section");
+        container.getStyleClass().add(bookingpage_member_selection_section);
 
         // Title - styled via CSS
         Label title = createPageTitle();
@@ -193,10 +202,6 @@ public class DefaultMemberSelectionSection implements HasMemberSelectionSection 
     protected void setupBindings() {
         // Update validity and button state when member is selected
         selectedMemberProperty.addListener((obs, oldMember, newMember) -> {
-            boolean isValid = newMember != null && !isAlreadyBooked(newMember);
-            validProperty.set(isValid);
-            continueButton.setDisable(!isValid);
-
             // Update card styles via CSS classes and checkmark visibility
             if (oldMember != null) {
                 VBox oldCard = memberCardMap.get(oldMember);
@@ -218,6 +223,14 @@ public class DefaultMemberSelectionSection implements HasMemberSelectionSection 
                     newCheckmark.setVisible(true);
                 }
             }
+
+            // Handle inline child carer if enabled
+            if (inlineChildCarerEnabled && childCarerContainer != null) {
+                updateChildCarerVisibility(newMember);
+            }
+
+            // Update validity (includes child carer validity if applicable)
+            updateValidity();
         });
 
         // Rebuild cards when list changes (ensure UI thread for async member loading)
@@ -276,10 +289,8 @@ public class DefaultMemberSelectionSection implements HasMemberSelectionSection 
         // Info text with HTML link support
         HtmlText infoText = new HtmlText();
         infoText.getStyleClass().addAll(bookingpage_text_sm, bookingpage_text_warning);
-        // Update text when language changes
-        FXProperties.runNowAndOnPropertiesChange(() -> {
-            infoText.setText(I18n.getI18nText(BookingPageI18nKeys.MemberSelectionInfoText));
-        }, I18n.dictionaryProperty());
+        // Update text when language changes (HtmlText is not Labeled, so bind textProperty directly)
+        infoText.textProperty().bind(I18n.i18nTextProperty(BookingPageI18nKeys.MemberSelectionInfoText));
         HBox.setHgrow(infoText, Priority.ALWAYS);
 
         box.getChildren().addAll(icon, infoText);
@@ -322,7 +333,7 @@ public class DefaultMemberSelectionSection implements HasMemberSelectionSection 
         card.setMaxWidth(350);
         card.setPadding(new Insets(20));
         card.setCursor(isBookable ? Cursor.HAND : Cursor.DEFAULT);
-        card.getStyleClass().add(bookingpage_selectable_card); // Use selectable card class for proper theming
+        card.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded_lg, bookingpage_selectable_card);
 
         // Apply state classes
         if (!isBookable) {
@@ -346,12 +357,23 @@ public class DefaultMemberSelectionSection implements HasMemberSelectionSection 
 
         contentBox.getChildren().addAll(nameLabel, emailLabel);
 
+        // Child age badge (for members under 18)
+        Person personEntity = member.getPersonEntity();
+        if (personEntity != null && personEntity.getBirthDate() != null) {
+            int age = calculateAge(personEntity.getBirthDate());
+            if (age >= 0 && age < 18) {
+                HBox childBadge = createChildAgeBadge(age);
+                VBox.setMargin(childBadge, new Insets(8, 0, 0, 0));
+                contentBox.getChildren().add(childBadge);
+            }
+        }
+
         // Status indicators
         if (isBooked) {
             VBox.setMargin(emailLabel, new Insets(0, 0, 8, 0));
             contentBox.getChildren().add(createStatusBadge("✗", BookingPageI18nKeys.AlreadyBookedForEvent, "#dc3545", "#dc3545")); // ✗
             card.setOpacity(0.6);
-            card.getStyleClass().add("already-booked");
+            card.getStyleClass().add(bookingpage_already_booked);
         } else if (status == MemberStatus.PENDING_INVITATION) {
             VBox.setMargin(emailLabel, new Insets(0, 0, 8, 0));
             contentBox.getChildren().add(createStatusBadge("⏳", BookingPageI18nKeys.Pending, "#6c757d", "#6c757d")); // ⏳
@@ -404,6 +426,36 @@ public class DefaultMemberSelectionSection implements HasMemberSelectionSection 
         return row;
     }
 
+    /**
+     * Calculates age from birth date.
+     */
+    protected int calculateAge(LocalDate birthDate) {
+        if (birthDate == null) return -1;
+        LocalDate now = LocalDate.now();
+        int age = now.getYear() - birthDate.getYear();
+        if (now.getDayOfYear() < birthDate.getDayOfYear()) {
+            age--;
+        }
+        return age;
+    }
+
+    /**
+     * Creates a child age badge with amber styling.
+     * Matches JSX: backgroundColor: #FEF3C7, color: #92400E
+     */
+    protected HBox createChildAgeBadge(int age) {
+        HBox badge = new HBox();
+        badge.setAlignment(Pos.CENTER_LEFT);
+        badge.setPadding(new Insets(4, 12, 4, 12));
+        badge.getStyleClass().add(bookingpage_child_age_badge);
+
+        Label label = I18nControls.newLabel(BookingPageI18nKeys.ChildAge, age);
+        label.getStyleClass().addAll(bookingpage_text_amber_dark, bookingpage_text_xs, bookingpage_font_medium);
+
+        badge.getChildren().add(label);
+        return badge;
+    }
+
     protected void handleMemberClick(MemberInfo member) {
         if (isAlreadyBooked(member)) {
             showError();
@@ -440,7 +492,7 @@ public class DefaultMemberSelectionSection implements HasMemberSelectionSection 
     }
 
     protected Button createPrimaryButton() {
-        return BookingPageUIBuilder.createPrimaryButton(BookingPageI18nKeys.Continue, colorScheme);
+        return BookingPageUIBuilder.createPrimaryButton(BookingPageI18nKeys.Continue);
     }
 
     // ========================================
@@ -514,25 +566,6 @@ public class DefaultMemberSelectionSection implements HasMemberSelectionSection 
     // HasMemberSelectionSection INTERFACE
     // ========================================
 
-    /**
-     * @deprecated Color scheme is now handled via CSS classes on parent container.
-     * Use theme classes like "theme-wisdom-blue" on a parent element instead.
-     */
-    @Deprecated
-    @Override
-    public ObjectProperty<BookingFormColorScheme> colorSchemeProperty() {
-        return colorScheme;
-    }
-
-    /**
-     * @deprecated Use CSS theme classes instead.
-     */
-    @Deprecated
-    @Override
-    public void setColorScheme(BookingFormColorScheme scheme) {
-        this.colorScheme.set(scheme);
-    }
-
     @Override
     public void setOnMemberSelected(Consumer<MemberInfo> callback) {
         this.onMemberSelected = callback;
@@ -577,6 +610,24 @@ public class DefaultMemberSelectionSection implements HasMemberSelectionSection 
         updateHasAvailableMembers();
     }
 
+    /**
+     * Sets the mapping of personId to documentId for members with existing bookings.
+     * This is used to populate child carer document references.
+     */
+    public void setPersonDocumentMap(Map<Object, Object> map) {
+        personDocumentMap.clear();
+        if (map != null) {
+            personDocumentMap.putAll(map);
+        }
+    }
+
+    /**
+     * Gets the document ID for a person if they have an existing booking.
+     */
+    public Object getDocumentIdForPerson(Object personId) {
+        return personDocumentMap.get(personId);
+    }
+
     @Override
     public void clearAlreadyBooked() {
         alreadyBookedPersonIds.clear();
@@ -597,6 +648,201 @@ public class DefaultMemberSelectionSection implements HasMemberSelectionSection 
             .filter(m -> !isAlreadyBooked(m))
             .count();
         hasAvailableMembers.set(availableCount > 0);
+    }
+
+    // ========================================
+    // INLINE CHILD CARER SUPPORT
+    // ========================================
+
+    /**
+     * Enables inline child carer selection for this member selection section.
+     * When enabled, selecting a child (under 18) will show the child carer
+     * selection form directly below the member cards.
+     *
+     * <p>Call {@link #bindToSelectionState(BookingSelectionState)} before or after
+     * calling this to ensure child carer data flows to the centralized state.</p>
+     *
+     * @param enabled true to enable inline child carer, false to disable
+     */
+    public void setInlineChildCarerEnabled(boolean enabled) {
+        this.inlineChildCarerEnabled = enabled;
+        if (enabled && childCarerContainer == null) {
+            buildChildCarerSection();
+        }
+    }
+
+    /**
+     * Returns whether inline child carer selection is enabled.
+     */
+    public boolean isInlineChildCarerEnabled() {
+        return inlineChildCarerEnabled;
+    }
+
+    /**
+     * Binds this section to the centralized BookingSelectionState.
+     * Also binds the inline child carer section if enabled.
+     *
+     * @param selectionState the centralized state to bind to
+     */
+    public void bindToSelectionState(BookingSelectionState selectionState) {
+        this.selectionState = selectionState;
+
+        // If child carer section exists, bind it to the same selection state
+        if (childCarerSection != null && selectionState != null) {
+            childCarerSection.bindToSelectionState(selectionState);
+        }
+    }
+
+    /**
+     * Returns the inline child carer section if enabled, null otherwise.
+     */
+    public DefaultChildCarerSection getChildCarerSection() {
+        return childCarerSection;
+    }
+
+    /**
+     * Builds the child carer section and adds it to the container.
+     */
+    protected void buildChildCarerSection() {
+        if (childCarerContainer != null) return; // Already built
+
+        childCarerContainer = new VBox(16);
+        childCarerContainer.setVisible(false);
+        childCarerContainer.setManaged(false);
+        childCarerContainer.getStyleClass().add(bookingpage_inline_childcarer);
+        VBox.setMargin(childCarerContainer, new Insets(24, 0, 0, 0));
+
+        childCarerSection = new DefaultChildCarerSection();
+        childCarerContainer.getChildren().add(childCarerSection.getView());
+
+        // Bind to selection state for centralized data management
+        if (selectionState != null) {
+            childCarerSection.bindToSelectionState(selectionState);
+        }
+
+        // Insert after member grid, before error box
+        int insertIndex = container.getChildren().indexOf(errorBox);
+        if (insertIndex >= 0) {
+            container.getChildren().add(insertIndex, childCarerContainer);
+        } else {
+            // Fallback: add before button row
+            int buttonRowIndex = container.getChildren().size() - 1;
+            container.getChildren().add(buttonRowIndex, childCarerContainer);
+        }
+
+        // Listen to child carer validity to update overall validity
+        childCarerSection.validProperty().addListener((obs, oldVal, newVal) -> updateValidity());
+    }
+
+    /**
+     * Updates child carer section visibility based on selected member.
+     */
+    protected void updateChildCarerVisibility(MemberInfo member) {
+        if (childCarerContainer == null) return;
+
+        if (member == null) {
+            childCarerContainer.setVisible(false);
+            childCarerContainer.setManaged(false);
+            // Reset child carer data in selection state
+            if (selectionState != null) {
+                selectionState.resetChildCarerInfo();
+            }
+            return;
+        }
+
+        Person personEntity = member.getPersonEntity();
+        boolean isChild = false;
+        int age = 0;
+        if (personEntity != null && personEntity.getBirthDate() != null) {
+            age = calculateAge(personEntity.getBirthDate());
+            isChild = age >= 0 && age < 18;
+        }
+
+        childCarerContainer.setVisible(isChild);
+        childCarerContainer.setManaged(isChild);
+
+        if (isChild) {
+            childCarerSection.setChildAge(age);
+            childCarerSection.setChildName(member.getName());
+            // Pass adult household members (excluding the selected child) as potential carers
+            childCarerSection.setHouseholdMembers(getAdultHouseholdMembers(member));
+            childCarerSection.setVisible(true);
+        } else {
+            // Not a child - reset carer data in selection state
+            childCarerSection.reset();
+            childCarerSection.setVisible(false);
+            if (selectionState != null) {
+                selectionState.resetChildCarerInfo();
+            }
+        }
+    }
+
+    /**
+     * Converts adult household members to HouseholdMember objects for the child carer section.
+     * Excludes the selected child and members under 18.
+     * Includes documentId if the member has an existing booking for the event.
+     *
+     * @param selectedChild The currently selected child member (to exclude from the list)
+     * @return List of adult household members as HouseholdMember objects
+     */
+    protected List<HouseholdMember> getAdultHouseholdMembers(MemberInfo selectedChild) {
+        List<HouseholdMember> adults = new ArrayList<>();
+        Object selectedChildId = selectedChild != null ? selectedChild.getPersonId() : null;
+
+        for (MemberInfo member : householdMembers) {
+            // Skip the selected child
+            if (selectedChildId != null && selectedChildId.equals(member.getPersonId())) {
+                continue;
+            }
+
+            // Skip non-bookable members (pending, needs validation)
+            if (!member.isBookable()) {
+                continue;
+            }
+
+            // Check if member is an adult (18+)
+            Person personEntity = member.getPersonEntity();
+            if (personEntity != null && personEntity.getBirthDate() != null) {
+                int age = calculateAge(personEntity.getBirthDate());
+                if (age >= 0 && age < 18) {
+                    continue; // Skip children
+                }
+            }
+
+            // Get document ID if this person has an existing booking for the event
+            Object documentId = personDocumentMap.get(member.getPersonId());
+
+            // Convert MemberInfo to HouseholdMember
+            // isSelf = true if this is the account owner (OWNER status)
+            boolean isSelf = member.getStatus() == MemberStatus.OWNER;
+            adults.add(new HouseholdMember(
+                member.getPersonId(),
+                member.getName(),
+                isSelf,
+                true, // isAdult - we've already filtered adults
+                documentId // Document ID for existing booking (null if no booking)
+            ));
+        }
+
+        return adults;
+    }
+
+    /**
+     * Updates the validity property considering inline child carer if enabled.
+     */
+    protected void updateValidity() {
+        MemberInfo selected = selectedMemberProperty.get();
+        boolean memberSelected = selected != null && !isAlreadyBooked(selected);
+
+        // If inline child carer is enabled and visible, require its validity
+        boolean childCarerValid = true;
+        if (inlineChildCarerEnabled && childCarerContainer != null && childCarerContainer.isVisible()) {
+            childCarerValid = childCarerSection != null && childCarerSection.validProperty().get();
+        }
+
+        boolean isValid = memberSelected && childCarerValid;
+        validProperty.set(isValid);
+        continueButton.setDisable(!isValid);
     }
 
 }

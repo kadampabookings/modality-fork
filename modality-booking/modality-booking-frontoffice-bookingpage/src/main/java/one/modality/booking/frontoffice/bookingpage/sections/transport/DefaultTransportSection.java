@@ -27,7 +27,8 @@ import one.modality.booking.frontoffice.bookingpage.BookingPageCssSelectors;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
 import one.modality.booking.frontoffice.bookingpage.components.StyledSectionHeader;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
+
+import one.modality.base.shared.entities.formatters.EventPriceFormatter;
 import one.modality.ecommerce.policy.service.PolicyAggregate;
 
 import java.time.LocalDate;
@@ -65,9 +66,6 @@ import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelecto
  * @see HasTransportSection
  */
 public class DefaultTransportSection implements HasTransportSection {
-
-    // === COLOR SCHEME ===
-    protected final ObjectProperty<BookingFormColorScheme> colorScheme = new SimpleObjectProperty<>(BookingFormColorScheme.DEFAULT);
 
     // === DATE PROPERTIES (for shuttle availability) ===
     protected final ObjectProperty<LocalDate> arrivalDateProperty = new SimpleObjectProperty<>();
@@ -153,7 +151,7 @@ public class DefaultTransportSection implements HasTransportSection {
     protected void buildUI() {
         container.setAlignment(Pos.TOP_LEFT);
         container.setSpacing(16);
-        container.getStyleClass().add("bookingpage-transport-section");
+        container.getStyleClass().add(bookingpage_transport_section);
 
         // Section header
         HBox sectionHeader = new StyledSectionHeader(BookingPageI18nKeys.Transport, StyledSectionHeader.ICON_CAR);
@@ -208,7 +206,7 @@ public class DefaultTransportSection implements HasTransportSection {
         StackPane cardWrapper = new StackPane();
 
         VBox card = new VBox(0);
-        card.getStyleClass().add(bookingpage_checkbox_card);
+        card.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded, bookingpage_checkbox_card);
 
         if (allSoldOut) {
             card.getStyleClass().add(soldout);
@@ -270,7 +268,7 @@ public class DefaultTransportSection implements HasTransportSection {
         }
 
         // Checkbox indicator - bound to parkingEnabled
-        StackPane checkbox = BookingPageUIBuilder.createCheckboxIndicator(parkingEnabledProperty, colorScheme);
+        StackPane checkbox = BookingPageUIBuilder.createCheckboxIndicator(parkingEnabledProperty);
         if (allSoldOut) {
             checkbox.getStyleClass().add(disabled);
             checkbox.setOpacity(0.5);
@@ -306,7 +304,7 @@ public class DefaultTransportSection implements HasTransportSection {
         Label priceLabel = new Label(formatUnifiedParkingPrice());
         priceLabel.getStyleClass().addAll(bookingpage_text_base, bookingpage_font_semibold);
         if (allSoldOut) {
-            priceLabel.getStyleClass().addAll(bookingpage_text_muted, bookingpage_strikethrough);
+            priceLabel.getStyleClass().addAll(bookingpage_text_muted, bookingpage_text_strikethrough);
         } else {
             priceLabel.getStyleClass().add(bookingpage_text_dark);
         }
@@ -360,7 +358,7 @@ public class DefaultTransportSection implements HasTransportSection {
         HBox pill = new HBox(6);
         pill.setAlignment(Pos.CENTER_LEFT);
         pill.setPadding(new Insets(8, 16, 8, 16));
-        pill.getStyleClass().add(bookingpage_radio_pill);
+        pill.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_subtle, bookingpage_rounded_pill, bookingpage_radio_pill);
 
         if (soldOut) {
             pill.getStyleClass().add(disabled);
@@ -377,7 +375,7 @@ public class DefaultTransportSection implements HasTransportSection {
         Label text = new Label(option.getName());
         text.getStyleClass().addAll(bookingpage_text_sm, bookingpage_font_medium);
         if (soldOut) {
-            text.getStyleClass().addAll(bookingpage_text_muted, bookingpage_strikethrough);
+            text.getStyleClass().addAll(bookingpage_text_muted, bookingpage_text_strikethrough);
         } else {
             text.getStyleClass().add(bookingpage_text_dark);
         }
@@ -490,7 +488,7 @@ public class DefaultTransportSection implements HasTransportSection {
         if (option.getPrice() == 0) {
             return "Free";
         }
-        String priceStr = "$" + (option.getPrice() / 100);
+        String priceStr = EventPriceFormatter.formatWithCurrency(option.getPrice(), workingBookingProperties != null ? workingBookingProperties.getEvent() : null);
         if (option.isPerDay()) {
             priceStr += "/day";
         }
@@ -553,7 +551,7 @@ public class DefaultTransportSection implements HasTransportSection {
 
         // Price label (only visible when any shuttle selected)
         shuttleTotalPriceLabel = new Label();
-        shuttleTotalPriceLabel.getStyleClass().addAll(bookingpage_price_medium, bookingpage_text_primary);
+        shuttleTotalPriceLabel.getStyleClass().addAll(bookingpage_text_xl, bookingpage_font_bold, bookingpage_text_primary);
         updateShuttleTotalPriceLabel();
 
         shuttleHeaderPriceBox = new HBox(shuttleTotalPriceLabel);
@@ -629,7 +627,7 @@ public class DefaultTransportSection implements HasTransportSection {
         card.getStyleClass().add(bookingpage_shuttle_trip);
 
         // Checkbox indicator
-        StackPane checkbox = BookingPageUIBuilder.createCheckboxIndicator(option.selectedProperty(), colorScheme);
+        StackPane checkbox = BookingPageUIBuilder.createCheckboxIndicator(option.selectedProperty());
 
         // Text content (trip name + date/time)
         VBox textContent = new VBox(2);
@@ -793,7 +791,7 @@ public class DefaultTransportSection implements HasTransportSection {
         if (priceInCents == 0) {
             return "Free";
         }
-        return "$" + (priceInCents / 100);
+        return EventPriceFormatter.formatWithCurrency(priceInCents, workingBookingProperties != null ? workingBookingProperties.getEvent() : null);
     }
 
     /**
@@ -801,7 +799,7 @@ public class DefaultTransportSection implements HasTransportSection {
      */
     protected String getFormattedSingleTripPrice() {
         if (shuttleOptions.isEmpty()) {
-            return "$0";
+            return formatShuttlePrice(0);
         }
         int price = shuttleOptions.stream()
             .mapToInt(ShuttleOption::getPrice)
@@ -857,16 +855,6 @@ public class DefaultTransportSection implements HasTransportSection {
     // ========================================
     // HasTransportSection INTERFACE
     // ========================================
-
-    @Override
-    public ObjectProperty<BookingFormColorScheme> colorSchemeProperty() {
-        return colorScheme;
-    }
-
-    @Override
-    public void setColorScheme(BookingFormColorScheme scheme) {
-        this.colorScheme.set(scheme);
-    }
 
     @Override
     public ObjectProperty<LocalDate> arrivalDateProperty() {

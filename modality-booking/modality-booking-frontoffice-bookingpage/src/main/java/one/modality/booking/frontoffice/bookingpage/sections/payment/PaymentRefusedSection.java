@@ -14,10 +14,7 @@ import javafx.scene.Cursor;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
-import javafx.scene.layout.HBox;
-import javafx.scene.layout.Priority;
-import javafx.scene.layout.StackPane;
-import javafx.scene.layout.VBox;
+import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.SVGPath;
 import one.modality.booking.client.workingbooking.WorkingBookingProperties;
@@ -53,7 +50,6 @@ public class PaymentRefusedSection implements BookingFormSection {
     private static final String ICON_CLOCK = "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z";
 
     // === PROPERTIES ===
-    private final ObjectProperty<BookingFormColorScheme> colorScheme = new SimpleObjectProperty<>(BookingFormColorScheme.DEFAULT);
     private final SimpleBooleanProperty validProperty = new SimpleBooleanProperty(true);
     private final IntegerProperty amountProperty = new SimpleIntegerProperty(0);
     private final ObjectProperty<PaymentFailureReason> failureReasonProperty = new SimpleObjectProperty<>(PaymentFailureReason.UNKNOWN_REASON);
@@ -77,7 +73,7 @@ public class PaymentRefusedSection implements BookingFormSection {
         container.setAlignment(Pos.TOP_CENTER);
         container.setSpacing(0);
         container.setPadding(new Insets(0, 24, 32, 24));
-        container.getStyleClass().add("bookingpage-payment-refused-section");
+        container.getStyleClass().add(bookingpage_payment_refused_section);
 
         // 1. Amber warning header
         VBox header = buildHeader();
@@ -118,12 +114,12 @@ public class PaymentRefusedSection implements BookingFormSection {
 
         // Title: "Payment Declined"
         Label titleLabel = I18nControls.newLabel(BookingPageI18nKeys.PaymentDeclinedTitle);
-        titleLabel.getStyleClass().add(bookingpage_warning_title);
+        titleLabel.getStyleClass().addAll(bookingpage_text_2xl, bookingpage_font_bold, bookingpage_text_amber_dark);
         VBox.setMargin(titleLabel, new Insets(0, 0, 8, 0));
 
         // Subtitle
         Label subtitleLabel = I18nControls.newLabel(BookingPageI18nKeys.PaymentDeclinedSubtitle);
-        subtitleLabel.getStyleClass().add(bookingpage_warning_subtitle);
+        subtitleLabel.getStyleClass().addAll(bookingpage_text_md, bookingpage_text_muted);
         subtitleLabel.setWrapText(true);
         subtitleLabel.setAlignment(Pos.CENTER);
         subtitleLabel.setMaxWidth(500);
@@ -163,11 +159,11 @@ public class PaymentRefusedSection implements BookingFormSection {
 
         // "DECLINE REASON" header
         Label headerLabel = I18nControls.newLabel(BookingPageI18nKeys.DeclineReason);
-        headerLabel.getStyleClass().add(bookingpage_decline_reason_header);
+        headerLabel.getStyleClass().addAll(bookingpage_text_xxs, bookingpage_font_bold, bookingpage_text_amber_dark);
 
         // Failure reason message (dynamically updated)
         failureReasonLabel = new Label();
-        failureReasonLabel.getStyleClass().add(bookingpage_decline_reason_message);
+        failureReasonLabel.getStyleClass().addAll(bookingpage_text_base, bookingpage_text_amber_dark);
         failureReasonLabel.setWrapText(true);
         updateFailureReasonLabel();
 
@@ -211,7 +207,7 @@ public class PaymentRefusedSection implements BookingFormSection {
         VBox.setMargin(section, new Insets(0, 0, 24, 0));
 
         Button tryAgainButton = I18nControls.newButton(BookingPageI18nKeys.TryAgain);
-        tryAgainButton.getStyleClass().addAll(booking_form_primary_btn, booking_form_primary_btn_text);
+        tryAgainButton.getStyleClass().addAll(booking_form_primary_btn, bookingpage_text_white, bookingpage_font_bold, bookingpage_text_lg);
         tryAgainButton.setPadding(new Insets(16, 24, 16, 24));
         tryAgainButton.setCursor(Cursor.HAND);
         tryAgainButton.setMaxWidth(Double.MAX_VALUE);
@@ -256,16 +252,9 @@ public class PaymentRefusedSection implements BookingFormSection {
         iconCircle.setMinSize(36, 36);
         iconCircle.setMaxSize(36, 36);
 
-        // Bind background color to color scheme
-        colorScheme.addListener((obs, old, scheme) -> {
-            if (scheme != null) {
-                iconCircle.setStyle("-fx-background-color: " + toHexString(scheme.getSelectedBg()) + "; -fx-background-radius: 18;");
-            }
-        });
-        BookingFormColorScheme scheme = colorScheme.get();
-        if (scheme != null) {
-            iconCircle.setStyle("-fx-background-color: " + toHexString(scheme.getSelectedBg()) + "; -fx-background-radius: 18;");
-        }
+        // Set background color using default color scheme
+        iconCircle.setBackground(new Background(new BackgroundFill(
+            BookingFormColorScheme.DEFAULT.getSelectedBg(), new CornerRadii(18), null)));
 
         SVGPath clockIcon = new SVGPath();
         clockIcon.setContent(ICON_CLOCK);
@@ -273,16 +262,7 @@ public class PaymentRefusedSection implements BookingFormSection {
         clockIcon.setFill(Color.TRANSPARENT);
         clockIcon.setScaleX(0.7);
         clockIcon.setScaleY(0.7);
-
-        // Bind stroke color to color scheme
-        colorScheme.addListener((obs, old, newScheme) -> {
-            if (newScheme != null) {
-                clockIcon.setStroke(newScheme.getPrimary());
-            }
-        });
-        if (scheme != null) {
-            clockIcon.setStroke(scheme.getPrimary());
-        }
+        clockIcon.setStroke(BookingFormColorScheme.DEFAULT.getPrimary());
 
         iconCircle.getChildren().add(clockIcon);
 
@@ -291,7 +271,7 @@ public class PaymentRefusedSection implements BookingFormSection {
 
         // Title: "Pay Later"
         Label titleLabel = I18nControls.newLabel(BookingPageI18nKeys.PayLater);
-        titleLabel.getStyleClass().add(bookingpage_paylater_title);
+        titleLabel.getStyleClass().addAll(bookingpage_text_md, bookingpage_font_semibold, bookingpage_text_dark);
 
         // Description with Orders link using HtmlText for WebFX compatibility
         HtmlText descHtml = new HtmlText();
@@ -311,21 +291,6 @@ public class PaymentRefusedSection implements BookingFormSection {
         box.getChildren().add(content);
 
         return box;
-    }
-
-    /**
-     * Converts a Color to a hex string (e.g., "#FF5500").
-     * GWT-compatible alternative to String.format("#%02X%02X%02X", ...).
-     */
-    private String toHexString(Color color) {
-        return "#" + toHex((int) (color.getRed() * 255))
-                   + toHex((int) (color.getGreen() * 255))
-                   + toHex((int) (color.getBlue() * 255));
-    }
-
-    private static String toHex(int value) {
-        String hex = Integer.toHexString(value).toUpperCase();
-        return hex.length() == 1 ? "0" + hex : hex;
     }
 
     // === BookingFormSection INTERFACE ===
@@ -351,10 +316,6 @@ public class PaymentRefusedSection implements BookingFormSection {
     }
 
     // === PUBLIC SETTERS ===
-
-    public void setColorScheme(BookingFormColorScheme scheme) {
-        this.colorScheme.set(scheme);
-    }
 
     public void setAmount(int amount) {
         this.amountProperty.set(amount);

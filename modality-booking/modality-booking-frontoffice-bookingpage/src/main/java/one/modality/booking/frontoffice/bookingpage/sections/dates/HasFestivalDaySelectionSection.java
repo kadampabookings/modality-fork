@@ -5,7 +5,6 @@ import javafx.beans.value.ObservableBooleanValue;
 import one.modality.booking.frontoffice.bookingpage.BookingFormSection;
 import one.modality.booking.frontoffice.bookingpage.ResettableSection;
 import one.modality.booking.frontoffice.bookingpage.standard.BookingSelectionState;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
 import one.modality.ecommerce.policy.service.PolicyAggregate;
 
 import java.time.LocalDate;
@@ -72,18 +71,6 @@ public interface HasFestivalDaySelectionSection extends BookingFormSection, Rese
         public int getTeachingPrice() { return teachingPrice; }
         public boolean isFestivalDay() { return isFestivalDay; }
     }
-
-    // === Configuration ===
-
-    /**
-     * Returns the color scheme property for theming.
-     */
-    ObjectProperty<BookingFormColorScheme> colorSchemeProperty();
-
-    /**
-     * Sets the color scheme for this section.
-     */
-    void setColorScheme(BookingFormColorScheme scheme);
 
     // === Data Management ===
 

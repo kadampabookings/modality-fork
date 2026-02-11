@@ -1,5 +1,6 @@
 package one.modality.booking.frontoffice.bookingpage.sections.prerequisite;
 
+import dev.webfx.extras.i18n.I18n;
 import dev.webfx.extras.i18n.controls.I18nControls;
 import dev.webfx.extras.webtext.HtmlText;
 import javafx.beans.property.SimpleBooleanProperty;
@@ -68,6 +69,12 @@ public class DefaultPrerequisiteSection implements HasPrerequisiteSection {
     protected StyledSectionHeader header;
     protected VBox importantInfoBox;
     protected VBox confirmBox;
+    protected Label confirmTextLabel;  // Reference to confirmation text for dynamic updates
+
+    // Dynamic content bullet points (added via setters)
+    protected HtmlText livestreamWarningBullet;
+    protected HtmlText noticeBullet;
+    protected HtmlText descriptionBullet;
 
     // Dynamic data
     protected LocalDate startDate;
@@ -128,7 +135,7 @@ public class DefaultPrerequisiteSection implements HasPrerequisiteSection {
         confirmBox = createConfirmationBox();
 
         container.getChildren().addAll(header, importantInfoBox, confirmBox);
-        container.getStyleClass().add("booking-form-prerequisite-section");
+        container.getStyleClass().add(booking_form_prerequisite_section);
         container.setMinWidth(0);
     }
 
@@ -163,7 +170,7 @@ public class DefaultPrerequisiteSection implements HasPrerequisiteSection {
     protected VBox createConfirmationBox() {
         VBox box = new VBox(16);
         box.setPadding(new Insets(20));
-        box.getStyleClass().add(bookingpage_card);
+        box.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded);
         box.setMinWidth(0);
 
         // Checkbox row
@@ -173,13 +180,13 @@ public class DefaultPrerequisiteSection implements HasPrerequisiteSection {
         // Checkbox indicator
         StackPane checkboxIndicator = BookingPageUIBuilder.createCheckboxIndicator(confirmedProperty);
 
-        // Confirmation text
-        Label confirmText = I18nControls.newLabel(confirmationTextKey);
-        confirmText.getStyleClass().addAll(bookingpage_text_base, bookingpage_text_dark);
-        confirmText.setWrapText(true);
+        // Confirmation text - store reference for dynamic updates
+        confirmTextLabel = I18nControls.newLabel(confirmationTextKey);
+        confirmTextLabel.getStyleClass().addAll(bookingpage_text_base, bookingpage_text_dark);
+        confirmTextLabel.setWrapText(true);
 
-        checkboxRow.getChildren().addAll(checkboxIndicator, confirmText);
-        HBox.setHgrow(confirmText, Priority.ALWAYS);
+        checkboxRow.getChildren().addAll(checkboxIndicator, confirmTextLabel);
+        HBox.setHgrow(confirmTextLabel, Priority.ALWAYS);
 
         box.getChildren().add(checkboxRow);
 
@@ -238,6 +245,95 @@ public class DefaultPrerequisiteSection implements HasPrerequisiteSection {
             return "";
         }
         return BookingPageUIBuilder.formatDateRangeFull(start, end);
+    }
+
+    // === Dynamic Content Methods ===
+
+    /**
+     * Shows or hides the livestream-only warning bullet point.
+     * This should be called when vodEnabled is false to warn users
+     * that the event is livestream only (no VOD recordings available).
+     *
+     * @param show true to show the warning, false to hide it
+     */
+    public void setLivestreamOnlyWarning(boolean show) {
+        if (show && livestreamWarningBullet == null) {
+            livestreamWarningBullet = new HtmlText();
+            livestreamWarningBullet.setText("\u2022 " + I18n.getI18nText(BookingPageI18nKeys.LivestreamOnlyWarning));
+            livestreamWarningBullet.getStyleClass().addAll(bookingpage_text_base, bookingpage_text_warning);
+            // Insert after title row (index 1)
+            importantInfoBox.getChildren().add(1, livestreamWarningBullet);
+        } else if (!show && livestreamWarningBullet != null) {
+            importantInfoBox.getChildren().remove(livestreamWarningBullet);
+            livestreamWarningBullet = null;
+        }
+    }
+
+    /**
+     * Sets the notice/info text from ItemFamilyPolicy.noticeLabel.
+     * This text is displayed as a bullet point in the warning box.
+     *
+     * @param text the notice text to display (already localized)
+     */
+    public void setNoticeText(String text) {
+        if (text != null && !text.isEmpty()) {
+            if (noticeBullet == null) {
+                noticeBullet = createHtmlBulletPoint(text);
+                // Insert after livestream warning if present, otherwise after title
+                int insertIndex = livestreamWarningBullet != null ? 2 : 1;
+                importantInfoBox.getChildren().add(insertIndex, noticeBullet);
+            } else {
+                noticeBullet.setText("\u2022 " + text);
+            }
+        } else if (noticeBullet != null) {
+            importantInfoBox.getChildren().remove(noticeBullet);
+            noticeBullet = null;
+        }
+    }
+
+    /**
+     * Sets the prerequisite description text from ItemFamilyPolicy.prerequisiteDescriptionLabel.
+     * This text is displayed as a bullet point in the warning box.
+     *
+     * @param text the description text to display (already localized)
+     */
+    public void setDescriptionText(String text) {
+        if (text != null && !text.isEmpty()) {
+            if (descriptionBullet == null) {
+                descriptionBullet = createHtmlBulletPoint(text);
+                // Add at end of important info box
+                importantInfoBox.getChildren().add(descriptionBullet);
+            } else {
+                descriptionBullet.setText("\u2022 " + text);
+            }
+        } else if (descriptionBullet != null) {
+            importantInfoBox.getChildren().remove(descriptionBullet);
+            descriptionBullet = null;
+        }
+    }
+
+    /**
+     * Sets the confirmation checkbox text from ItemFamilyPolicy.prerequisiteConfirmationLabel.
+     * This overrides the default confirmation text.
+     *
+     * @param text the confirmation text to display (already localized)
+     */
+    public void setConfirmationText(String text) {
+        if (text != null && !text.isEmpty() && confirmTextLabel != null) {
+            // Unbind from I18n before setting custom text
+            confirmTextLabel.textProperty().unbind();
+            confirmTextLabel.setText(text);
+        }
+    }
+
+    /**
+     * Checks if this section has any dynamic content to display.
+     * Used to determine if the section should be visible.
+     *
+     * @return true if the section has content (warnings, notices, or descriptions)
+     */
+    public boolean hasDynamicContent() {
+        return livestreamWarningBullet != null || noticeBullet != null || descriptionBullet != null;
     }
 
     // === HasPrerequisiteSection Implementation ===

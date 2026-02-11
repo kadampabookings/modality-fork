@@ -50,7 +50,6 @@ import one.modality.booking.frontoffice.bookingpage.sections.user.HasYourInforma
 import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
 import one.modality.booking.frontoffice.bookingpage.util.BookingDateFormatter;
 import one.modality.crm.shared.services.authn.fx.FXUserPerson;
-import one.modality.ecommerce.document.service.DocumentAggregate;
 import one.modality.ecommerce.policy.service.PolicyAggregate;
 import one.modality.ecommerce.shared.pricecalculator.PriceCalculator;
 import one.modality.event.frontoffice.activities.book.event.EventBookingFormSettings;
@@ -111,6 +110,9 @@ public abstract class AbstractSinglePeriodInPersonBookingForm implements Standar
 
     /** The entry point (NEW_BOOKING, MODIFY_BOOKING, PAY_BOOKING). */
     protected final BookingFormEntryPoint entryPoint;
+
+    /** The color scheme for theming the form. */
+    protected final BookingFormColorScheme colorScheme;
 
     /** The sticky price header shown at the top of the form. */
     protected final StickyPriceHeader stickyPriceHeader;
@@ -177,18 +179,21 @@ public abstract class AbstractSinglePeriodInPersonBookingForm implements Standar
     /**
      * Creates a new single-period in-person booking form.
      *
-     * @param activity   the activity providing WorkingBookingProperties
-     * @param settings   the event booking form settings
-     * @param entryPoint the entry point (NEW_BOOKING, MODIFY_BOOKING, PAY_BOOKING)
+     * @param activity    the activity providing WorkingBookingProperties
+     * @param settings    the event booking form settings
+     * @param entryPoint  the entry point (NEW_BOOKING, MODIFY_BOOKING, PAY_BOOKING)
+     * @param colorScheme the color scheme to use for theming
      */
     protected AbstractSinglePeriodInPersonBookingForm(
             HasWorkingBookingProperties activity,
             EventBookingFormSettings settings,
-            BookingFormEntryPoint entryPoint
+            BookingFormEntryPoint entryPoint,
+            BookingFormColorScheme colorScheme
     ) {
         this.settings = settings;
         this.workingBookingProperties = activity.getWorkingBookingProperties();
         this.entryPoint = entryPoint;
+        this.colorScheme = colorScheme;
 
         // Create the sticky price header
         this.stickyPriceHeader = new StickyPriceHeader();
@@ -246,16 +251,14 @@ public abstract class AbstractSinglePeriodInPersonBookingForm implements Standar
         setupWorkingBookingListener();
     }
 
-    // ========================================
-    // Abstract Methods (Required)
-    // ========================================
-
     /**
      * Returns the color scheme for this booking form.
      *
      * @return the color scheme to use for theming
      */
-    protected abstract BookingFormColorScheme getColorScheme();
+    protected BookingFormColorScheme getColorScheme() {
+        return colorScheme;
+    }
 
     // ========================================
     // Override Points (Optional)
@@ -268,7 +271,6 @@ public abstract class AbstractSinglePeriodInPersonBookingForm implements Standar
      */
     protected DefaultAccommodationSelectionSection createAccommodationSection() {
         DefaultAccommodationSelectionSection section = new DefaultAccommodationSelectionSection();
-        section.setColorScheme(getColorScheme());
         return section;
     }
 
@@ -370,24 +372,18 @@ public abstract class AbstractSinglePeriodInPersonBookingForm implements Standar
         step2EventHeaderSection = new DefaultEventHeaderSection();
 
         festivalDaySection = new DefaultFestivalDaySelectionSection();
-        festivalDaySection.setColorScheme(getColorScheme());
 
         mealsSection = new DefaultMealsSelectionSection();
-        mealsSection.setColorScheme(getColorScheme());
 
         audioRecordingPhaseSection = new DefaultAudioRecordingPhaseCoverageSection();
-        audioRecordingPhaseSection.setColorScheme(getColorScheme());
         audioRecordingPhaseSection.setVisible(false);
 
         transportSection = new DefaultTransportSection();
-        transportSection.setColorScheme(getColorScheme());
         transportSection.setVisible(false);
 
         additionalOptionsSection = new DefaultAdditionalOptionsSection();
-        additionalOptionsSection.setColorScheme(getColorScheme());
 
         roommateInfoSection = new DefaultRoommateInfoSection();
-        roommateInfoSection.setColorScheme(getColorScheme());
         roommateInfoSection.setVisible(false);
 
         bookingDetailsPage = new CompositeBookingFormPage(BookingPageI18nKeys.BookingDetails,
@@ -410,7 +406,6 @@ public abstract class AbstractSinglePeriodInPersonBookingForm implements Standar
         yourInfoEventHeaderSection = new DefaultEventHeaderSection();
 
         yourInformationSection = new DefaultYourInformationSection();
-        yourInformationSection.setColorScheme(getColorScheme());
         yourInformationSection.setBackButtonVisible(true);
 
         return new CompositeBookingFormPage(BookingPageI18nKeys.YourInformation,
@@ -432,7 +427,6 @@ public abstract class AbstractSinglePeriodInPersonBookingForm implements Standar
         memberSelectionEventHeaderSection = new DefaultEventHeaderSection();
 
         memberSelectionSection = new DefaultMemberSelectionSection();
-        memberSelectionSection.setColorScheme(getColorScheme());
         memberSelectionSection.setBackButtonVisible(true);
 
         return new CompositeBookingFormPage(BookingPageI18nKeys.MemberSelection,
@@ -623,7 +617,11 @@ public abstract class AbstractSinglePeriodInPersonBookingForm implements Standar
         if (accommodationSection != null) {
             accommodationWarningZone.addValidationSource(
                 accommodationSection.validProperty(),
-                () -> I18n.getI18nText("AccommodationRequiredWarning")
+                accommodationSection::getValidationMessage
+            );
+            // Refresh warning when attendance type changes (validProperty may not change)
+            accommodationSection.attendanceTypeProperty().addListener((obs, oldVal, newVal) ->
+                accommodationWarningZone.refresh()
             );
         }
 
@@ -1112,7 +1110,7 @@ public abstract class AbstractSinglePeriodInPersonBookingForm implements Standar
      */
     protected int calculateAccommodationPrice(PolicyAggregate policyAggregate, Item accommodationItem,
                                                LocalDate arrivalDate, LocalDate departureDate) {
-        WorkingBooking tempBooking = new WorkingBooking(policyAggregate, (DocumentAggregate) null);
+        WorkingBooking tempBooking = new WorkingBooking(policyAggregate, AttendanceMode.IN_PERSON);
 
         // Book teachings (inclusive period: arrivalDate to departureDate)
         Period teachingPeriod = createSimplePeriod(arrivalDate, departureDate);
@@ -1196,7 +1194,7 @@ public abstract class AbstractSinglePeriodInPersonBookingForm implements Standar
 
     protected int calculateShareAccommodationPrice(PolicyAggregate policyAggregate, Item sharingItem,
                                                     LocalDate arrivalDate, LocalDate departureDate) {
-        WorkingBooking tempBooking = new WorkingBooking(policyAggregate, (DocumentAggregate) null);
+        WorkingBooking tempBooking = new WorkingBooking(policyAggregate, AttendanceMode.IN_PERSON);
 
         // Book teachings (inclusive period: arrivalDate to departureDate)
         Period teachingPeriod = createSimplePeriod(arrivalDate, departureDate);
@@ -1259,6 +1257,19 @@ public abstract class AbstractSinglePeriodInPersonBookingForm implements Standar
         );
 
         accommodationSection.addAccommodationOption(option);
+    }
+
+    protected int calculateDayVisitorPrice(PolicyAggregate policyAggregate, LocalDate arrivalDate, LocalDate departureDate) {
+        WorkingBooking tempBooking = new WorkingBooking(policyAggregate, AttendanceMode.IN_PERSON);
+
+        // Book teachings (inclusive period: arrivalDate to departureDate)
+        Period teachingPeriod = createSimplePeriod(arrivalDate, departureDate);
+        tempBooking.bookScheduledItemsOverPeriod(policyAggregate.filterTeachingScheduledItems(), teachingPeriod, true);
+
+        // Book meals (no breakfast for day visitors)
+        bookMealsForPriceCalculation(tempBooking, policyAggregate, arrivalDate, departureDate, false);
+
+        return tempBooking.calculateTotal();
     }
 
     /**
@@ -1639,7 +1650,7 @@ public abstract class AbstractSinglePeriodInPersonBookingForm implements Standar
      */
     protected AccommodationPriceResult calculateAccommodationPriceWithBreakdown(PolicyAggregate policyAggregate, Item accommodationItem,
                                                                                  LocalDate arrivalDate, LocalDate departureDate, Integer accommodationAvailability) {
-        WorkingBooking tempBooking = new WorkingBooking(policyAggregate, (DocumentAggregate) null);
+        WorkingBooking tempBooking = new WorkingBooking(policyAggregate, AttendanceMode.IN_PERSON);
 
         LocalDate teachingMinDate = null;
         LocalDate teachingMaxDate = null;
@@ -1709,7 +1720,7 @@ public abstract class AbstractSinglePeriodInPersonBookingForm implements Standar
      */
     protected AccommodationPriceResult calculateShareAccommodationPriceWithBreakdown(PolicyAggregate policyAggregate, Item sharingItem,
                                                                                       LocalDate arrivalDate, LocalDate departureDate) {
-        WorkingBooking tempBooking = new WorkingBooking(policyAggregate, (DocumentAggregate) null);
+        WorkingBooking tempBooking = new WorkingBooking(policyAggregate, AttendanceMode.IN_PERSON);
 
         LocalDate teachingMinDate = null;
         LocalDate teachingMaxDate = null;
@@ -1779,7 +1790,7 @@ public abstract class AbstractSinglePeriodInPersonBookingForm implements Standar
      * Calculates day visitor price with detailed breakdown.
      */
     protected AccommodationPriceResult calculateDayVisitorPriceWithBreakdown(PolicyAggregate policyAggregate, LocalDate arrivalDate, LocalDate departureDate) {
-        WorkingBooking tempBooking = new WorkingBooking(policyAggregate, (DocumentAggregate) null);
+        WorkingBooking tempBooking = new WorkingBooking(policyAggregate, AttendanceMode.IN_PERSON);
 
         LocalDate teachingMinDate = null;
         LocalDate teachingMaxDate = null;

@@ -21,7 +21,7 @@ import javafx.scene.shape.SVGPath;
 import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.BookingFormSection;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
+
 
 import java.util.function.Supplier;
 
@@ -45,7 +45,6 @@ public class PaymentCanceledSection implements BookingFormSection {
     private static final String ICON_RETRY = "M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15";
 
     // === PROPERTIES ===
-    private final ObjectProperty<BookingFormColorScheme> colorScheme = new SimpleObjectProperty<>(BookingFormColorScheme.DEFAULT);
     private final SimpleBooleanProperty validProperty = new SimpleBooleanProperty(true);
     private final IntegerProperty amountProperty = new SimpleIntegerProperty(0);
 
@@ -63,7 +62,7 @@ public class PaymentCanceledSection implements BookingFormSection {
         container.setAlignment(Pos.TOP_CENTER);
         container.setSpacing(0);
         container.setPadding(new Insets(0, 24, 32, 24));
-        container.getStyleClass().add("bookingpage-payment-canceled-section");
+        container.getStyleClass().add(bookingpage_payment_canceled_section);
 
         // 1. Amber warning header
         VBox header = buildHeader();
@@ -98,7 +97,7 @@ public class PaymentCanceledSection implements BookingFormSection {
 
         // Title: "Payment Canceled"
         Label titleLabel = I18nControls.newLabel(BookingPageI18nKeys.PaymentCanceledTitle);
-        titleLabel.getStyleClass().add(bookingpage_warning_title);
+        titleLabel.getStyleClass().addAll(bookingpage_text_2xl, bookingpage_font_bold, bookingpage_text_amber_dark);
         VBox.setMargin(titleLabel, new Insets(0, 0, 8, 0));
 
         // Subtitle with Orders link: "Your booking is saved. Complete your payment anytime from the {0} menu."
@@ -123,7 +122,7 @@ public class PaymentCanceledSection implements BookingFormSection {
         VBox.setMargin(section, new Insets(0, 0, 24, 0));
 
         Button tryAgainButton = I18nControls.newButton(BookingPageI18nKeys.TryAgain);
-        tryAgainButton.getStyleClass().addAll(booking_form_primary_btn, booking_form_primary_btn_text);
+        tryAgainButton.getStyleClass().addAll(booking_form_primary_btn, bookingpage_text_white, bookingpage_font_bold, bookingpage_text_lg);
         tryAgainButton.setPadding(new Insets(16, 24, 16, 24));
         tryAgainButton.setCursor(Cursor.HAND);
         tryAgainButton.setMaxWidth(Double.MAX_VALUE);
@@ -174,10 +173,6 @@ public class PaymentCanceledSection implements BookingFormSection {
     }
 
     // === PUBLIC SETTERS ===
-
-    public void setColorScheme(BookingFormColorScheme scheme) {
-        this.colorScheme.set(scheme);
-    }
 
     public void setAmount(int amount) {
         this.amountProperty.set(amount);

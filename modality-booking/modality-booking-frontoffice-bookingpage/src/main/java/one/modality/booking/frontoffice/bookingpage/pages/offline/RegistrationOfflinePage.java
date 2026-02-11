@@ -65,6 +65,7 @@ public class RegistrationOfflinePage implements BookingFormPage {
     private WorkingBookingProperties workingBookingProperties;
     private VBox view;
     private BookingFormButton[] buttons;
+    private String contactEmail = ""; // Set via setContactEmail() from event/organization config
 
     /**
      * Creates a new offline page.
@@ -122,6 +123,14 @@ public class RegistrationOfflinePage implements BookingFormPage {
 
     public RegistrationOfflinePage setButtons(BookingFormButton... buttons) {
         this.buttons = buttons;
+        return this;
+    }
+
+    /**
+     * Sets the contact email for this page. Should come from event/organization configuration.
+     */
+    public RegistrationOfflinePage setContactEmail(String email) {
+        this.contactEmail = email != null ? email : "";
         return this;
     }
 
@@ -333,7 +342,7 @@ public class RegistrationOfflinePage implements BookingFormPage {
         } else {
             textLabel = I18nControls.newLabel(textI18nKey);
         }
-        textLabel.getStyleClass().addAll(bookingpage_text_sm, registration_offline_text_gray);
+        textLabel.getStyleClass().addAll(bookingpage_text_sm, bookingpage_text_secondary);
         textLabel.setWrapText(true);
 
         row.getChildren().addAll(iconCircle, textLabel);
@@ -365,13 +374,14 @@ public class RegistrationOfflinePage implements BookingFormPage {
         textContainer.setAlignment(Pos.CENTER_LEFT);
 
         Label questionLabel = I18nControls.newLabel(BookingPageI18nKeys.QuestionsContactUs);
-        questionLabel.getStyleClass().addAll(bookingpage_text_sm, registration_offline_text_gray);
+        questionLabel.getStyleClass().addAll(bookingpage_text_sm, bookingpage_text_secondary);
 
-        Hyperlink emailLink = new Hyperlink("kbs@kadampa.net");
-        emailLink.getStyleClass().add(registration_offline_email_link);
+        Hyperlink emailLink = new Hyperlink(contactEmail);
+        emailLink.getStyleClass().addAll(bookingpage_text_primary, bookingpage_font_medium);
         emailLink.setOnAction(e -> {
-            // In a real app, this would open the email client
-            // For now, just log it
+            if (contactEmail != null && !contactEmail.isEmpty()) {
+                dev.webfx.platform.windowlocation.WindowLocation.assignHref("mailto:" + contactEmail);
+            }
         });
 
         textContainer.getChildren().addAll(questionLabel, emailLink);
@@ -394,7 +404,7 @@ public class RegistrationOfflinePage implements BookingFormPage {
         infoIcon.setScaleY(0.67);
 
         Label apologyLabel = I18nControls.newLabel(BookingPageI18nKeys.ApologizeForInconvenience);
-        apologyLabel.getStyleClass().addAll(bookingpage_text_xs, registration_offline_text_light_gray);
+        apologyLabel.getStyleClass().addAll(bookingpage_text_xs, bookingpage_text_muted_light);
         apologyLabel.setWrapText(true);
         apologyLabel.setMaxWidth(400);
 

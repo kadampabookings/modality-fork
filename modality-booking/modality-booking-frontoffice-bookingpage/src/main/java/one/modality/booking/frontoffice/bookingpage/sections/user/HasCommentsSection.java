@@ -1,10 +1,8 @@
 package one.modality.booking.frontoffice.bookingpage.sections.user;
 
-import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.StringProperty;
 import one.modality.booking.frontoffice.bookingpage.BookingFormSection;
 import one.modality.booking.frontoffice.bookingpage.standard.BookingSelectionState;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
 
 /**
  * Interface for the "Comments and Special Requests" section of a booking form.
@@ -18,20 +16,6 @@ import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme
  * @see BookingFormSection
  */
 public interface HasCommentsSection extends BookingFormSection {
-
-    /**
-     * Returns the color scheme property for theming.
-     * @deprecated Color scheme is now handled via CSS classes on parent container.
-     */
-    @Deprecated
-    ObjectProperty<BookingFormColorScheme> colorSchemeProperty();
-
-    /**
-     * Sets the color scheme for this section.
-     * @deprecated Use CSS theme classes instead.
-     */
-    @Deprecated
-    void setColorScheme(BookingFormColorScheme scheme);
 
     /**
      * Returns the user's comment text.

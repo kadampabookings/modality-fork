@@ -5,7 +5,6 @@ import javafx.beans.value.ObservableBooleanValue;
 import one.modality.base.shared.entities.Item;
 import one.modality.booking.frontoffice.bookingpage.BookingFormSection;
 import one.modality.booking.frontoffice.bookingpage.ResettableSection;
-import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
 import one.modality.ecommerce.policy.service.PolicyAggregate;
 
 import one.modality.booking.frontoffice.bookingpage.standard.BookingSelectionState;
@@ -45,6 +44,17 @@ public interface HasAccommodationSelectionSection extends BookingFormSection, Re
         FULL_EVENT_ONLY,
         /** Requires a minimum number of nights */
         MIN_NIGHTS
+    }
+
+    /**
+     * Attendance type for accommodation selection.
+     * Determines whether the user stays onsite or attends as a day visitor.
+     */
+    enum AttendanceType {
+        /** User will stay onsite with accommodation */
+        ONSITE,
+        /** User attends as day visitor without accommodation */
+        DAY_VISITOR
     }
 
     /**
@@ -160,36 +170,6 @@ public interface HasAccommodationSelectionSection extends BookingFormSection, Re
         }
     }
 
-    // === Configuration ===
-
-    /**
-     * Returns the color scheme property for theming.
-     */
-    ObjectProperty<BookingFormColorScheme> colorSchemeProperty();
-
-    /**
-     * Sets the color scheme for this section.
-     */
-    void setColorScheme(BookingFormColorScheme scheme);
-
-    /**
-     * Sets the total teaching price for the full event.
-     * Used to display total cost (teaching + accommodation) on each option.
-     */
-    void setFullEventTeachingPrice(int price);
-
-    /**
-     * Sets the number of nights for the full event.
-     * Used to calculate total accommodation cost.
-     */
-    void setFullEventNights(int nights);
-
-    /**
-     * Sets the total meals price for the full event.
-     * Used to display total cost (teaching + accommodation + meals) on each option.
-     */
-    void setFullEventMealsPrice(int price);
-
     // === Data Management ===
 
     /**
@@ -219,6 +199,25 @@ public interface HasAccommodationSelectionSection extends BookingFormSection, Re
         return selectedOptionProperty().get();
     }
 
+    // === Attendance Type ===
+
+    /**
+     * Returns the attendance type property (Onsite vs Day Visitor).
+     */
+    ObjectProperty<AttendanceType> attendanceTypeProperty();
+
+    /**
+     * Returns the currently selected attendance type.
+     */
+    default AttendanceType getAttendanceType() {
+        return attendanceTypeProperty().get();
+    }
+
+    /**
+     * Sets the attendance type (Onsite vs Day Visitor).
+     */
+    void setAttendanceType(AttendanceType type);
+
     // === Callbacks ===
 
     /**
@@ -244,6 +243,19 @@ public interface HasAccommodationSelectionSection extends BookingFormSection, Re
      */
     @Override
     ObservableBooleanValue validProperty();
+
+    /**
+     * Returns a validation message when section is invalid, or null if no warning should be shown.
+     * Returns null when no attendance type is selected (nothing to validate yet).
+     *
+     * <p>This allows the warning box to only appear after the user has started
+     * interacting with the section, not on initial page load.</p>
+     *
+     * @return validation message string, or null if no warning should be displayed
+     */
+    default String getValidationMessage() {
+        return null;
+    }
 
     // === Data Population ===
 
