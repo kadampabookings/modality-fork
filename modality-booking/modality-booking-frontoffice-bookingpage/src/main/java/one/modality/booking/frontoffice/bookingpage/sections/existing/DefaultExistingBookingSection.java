@@ -1048,6 +1048,19 @@ public class DefaultExistingBookingSection implements BookingFormSection, HasExi
         otherMembersSection.setVisible(hasOtherMembers);
         otherMembersSection.setManaged(hasOtherMembers);
 
+        // Auto-skip when no existing bookings found — go directly to new booking flow
+        if (!hasExistingBookings) {
+            WorkingBooking wb = workingBookingProperties != null ? workingBookingProperties.getWorkingBooking() : null;
+            if (wb != null) {
+                wb.setModifyBookingMode(false);
+            }
+            validProperty.set(true); // Allow navigation past this page
+            if (onContinuePressed != null) {
+                onContinuePressed.run();
+            }
+            return;
+        }
+
         // Auto-select the first existing booking if there is one
         if (hasExistingBookings && selectedAction.get() == null) {
             BookingInfo first = membersWithBookings.get(0);
