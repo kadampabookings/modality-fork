@@ -1,7 +1,6 @@
 package one.modality.ecommerce.shared.pricecalculator;
 
 import dev.webfx.platform.util.collection.Collections;
-import one.modality.base.shared.entities.DocumentLine;
 import one.modality.ecommerce.document.service.DocumentAggregate;
 
 import java.util.Collection;
@@ -12,7 +11,6 @@ import java.util.Collection;
 public final class DocumentBill {
 
     private final DocumentAggregate documentAggregate;
-    private final Collection<DocumentLine> alreadyPricedLines;
     private final Collection<SiteItemBill> siteItemBills;
     final boolean ignoreLongStayDiscount;
     private final boolean update;
@@ -20,9 +18,8 @@ public final class DocumentBill {
     private int totalPrice = -1;
     private int minDeposit = -1;
 
-    DocumentBill(DocumentAggregate documentAggregate, Collection<DocumentLine> alreadyPricedLines, Collection<SiteItemBill> siteItemBills, boolean ignoreLongStayDiscount, boolean update) {
+    DocumentBill(DocumentAggregate documentAggregate, Collection<SiteItemBill> siteItemBills, boolean ignoreLongStayDiscount, boolean update) {
         this.documentAggregate = documentAggregate;
-        this.alreadyPricedLines = alreadyPricedLines;
         this.siteItemBills = siteItemBills;
         this.ignoreLongStayDiscount = ignoreLongStayDiscount;
         this.update = update;
@@ -57,9 +54,6 @@ public final class DocumentBill {
 
     private int computePrice(boolean minDeposit) {
         int price = 0;
-        for (DocumentLine pricedLine : alreadyPricedLines) {
-            price += minDeposit ? pricedLine.getPriceMinDeposit() : pricedLine.getPriceNet();
-        }
         for (SiteItemBill siteItemBill : siteItemBills)
             price += siteItemBill.computePrice(this, minDeposit);
 /* from KBS2
