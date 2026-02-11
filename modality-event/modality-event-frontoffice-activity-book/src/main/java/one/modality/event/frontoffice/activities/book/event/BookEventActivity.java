@@ -18,6 +18,7 @@ import dev.webfx.stack.orm.entity.EntityStore;
 import dev.webfx.stack.routing.uirouter.UiRouter;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleObjectProperty;
+import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import one.modality.base.client.mainframe.fx.FXMainFrameOverlayArea;
@@ -384,6 +385,7 @@ public final class BookEventActivity extends ViewDomainActivityBase implements B
                 Node bookingFormView = bookingForm.getView();
                 if (bookingFormView != null) {
                     activityContainer.setAlignment(Pos.TOP_CENTER);
+                    activityContainer.setPadding(new Insets(50, 0, 0, 0));
                     activityContainer.setContent(bookingFormView);
                     bookingForm.onWorkingBookingLoaded();
                     // Add sticky header to the main frame overlay area (if the form has one)
