@@ -96,8 +96,8 @@ public final class WorkingBooking {
         this.initialDocumentAggregate = initialDocumentAggregate;
         if (initialDocumentAggregate != null) // Case of existing booking
             initialDocumentAggregate.setPolicyAggregate(policyAggregate);
-        this.attendanceMode = initialDocumentAggregate != null ? initialDocumentAggregate.getDocument().getAttendanceMode() : attendanceMode;
         cancelChanges(); // sounds a bit weired, but this will actually initialize the document
+        this.attendanceMode = initialDocumentAggregate != null ? initialDocumentAggregate.getDocument().getAttendanceMode() : attendanceMode;
         paymentRequestedByUser = Entities.samePrimaryKey(documentPrimaryKey, paymentRequestedByUserDocumentId);
     }
 

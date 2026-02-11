@@ -48,6 +48,8 @@ import java.util.stream.Collectors;
  */
 abstract class AbstractItemFamilyPricing implements ItemFamilyPricing {
 
+    private static final boolean ALLOWS_NULL_RATES = false;
+
     private final Object itemFamilyI18nKey;
     private final PolicyAggregate eventPolicy;
     private final boolean everyday; // if false, checkboxes will appear in front of each date (ex: false for Audio Recording)
@@ -225,6 +227,8 @@ abstract class AbstractItemFamilyPricing implements ItemFamilyPricing {
                 }
                 PriceFormatter priceFormatter = EventPriceFormatter.INSTANCE;
                 Object price = priceFormatter.parseValue(rateField.getText());
+                if (ALLOWS_NULL_RATES && price == null)
+                    continue;
                 Rate rate = null;
                 if (lastUpdatedRate != null && Numbers.identicalObjectsOrNumberValues(price, lastUpdatedRate.getPrice())) {
                     rate = lastUpdatedRate; // continuing using the same rate (extending its end date)
@@ -287,7 +291,8 @@ abstract class AbstractItemFamilyPricing implements ItemFamilyPricing {
                 rateField.visibleProperty().bind(dateCheckBox.selectedProperty());
                 FXProperties.runOnPropertyChange(AbstractItemFamilyPricing.this::syncModelFromUi, dateCheckBox.selectedProperty());
             }
-            validationSupport.addRequiredInput(rateField);
+            if (!ALLOWS_NULL_RATES)
+                validationSupport.addRequiredInput(rateField);
         }
 
         boolean isValid() {

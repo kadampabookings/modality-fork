@@ -18,13 +18,8 @@ final class Kbs2PriceAlgorithm {
     }
 
     public static DocumentBill computeDocumentBill(DocumentAggregate documentAggregate, Stream<DocumentLine> documentLineStream, boolean ignoreLongStayDiscount, boolean update) {
-        List<DocumentLine> alreadyPricedLines = new ArrayList<>();
         Map<SiteItem, SiteItemBill> siteItemBills = new HashMap<>();
         documentLineStream.forEach(line -> {
-            if (line.getPriceNet() != null) {
-                alreadyPricedLines.add(line);
-                return;
-            }
             Site site = line.getSite();
             Item item = line.getItem();
             if (item.getRateAliasItem() != null)
@@ -38,7 +33,7 @@ final class Kbs2PriceAlgorithm {
                 siteItemBill.addAttendanceBill(attendanceBill);
             });
         });
-        return new DocumentBill(documentAggregate, alreadyPricedLines, siteItemBills.values(), ignoreLongStayDiscount, update);
+        return new DocumentBill(documentAggregate, siteItemBills.values(), ignoreLongStayDiscount, update);
     }
 
 }
