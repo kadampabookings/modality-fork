@@ -109,6 +109,7 @@ public class StandardBookingForm extends MultiPageBookingForm
     private final BookingFormPage[] pages;
     private final StandardBookingFormCallbacks callbacks;
     private final boolean cardPaymentOnly;
+    private final boolean fullPaymentOnly;
     private final BookingFormEntryPoint entryPoint;
 
     // State management
@@ -168,6 +169,7 @@ public class StandardBookingForm extends MultiPageBookingForm
         this.showCommentsSection = config.showCommentsSection;
         this.callbacks = config.callbacks;
         this.cardPaymentOnly = config.cardPaymentOnly;
+        this.fullPaymentOnly = config.fullPaymentOnly;
         this.entryPoint = config.entryPoint;
         this.navigationClickable = config.navigationClickable;
         this.stickyHeader = config.stickyHeader;
@@ -351,6 +353,7 @@ public class StandardBookingForm extends MultiPageBookingForm
     protected BookingFormPage createDefaultPaymentPage() {
         defaultPaymentSection = new DefaultPaymentSection();
         defaultPaymentSection.setCardPaymentOnly(cardPaymentOnly);
+        defaultPaymentSection.setFullPaymentOnly(fullPaymentOnly);
         return new CompositeBookingFormPage(BookingPageI18nKeys.Payment,
             defaultPaymentSection)
             .setStep(true)

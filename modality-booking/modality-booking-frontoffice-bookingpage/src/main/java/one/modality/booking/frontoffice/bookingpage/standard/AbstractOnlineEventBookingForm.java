@@ -175,7 +175,8 @@ public abstract class AbstractOnlineEventBookingForm implements StandardBookingF
      * @param builder the builder to configure
      */
     protected void configureBuilder(StandardBookingFormBuilder builder) {
-        // Default: no additional configuration
+        builder.withCardPaymentOnly(true);
+        builder.withFullPaymentOnly(true);
     }
 
     /**
@@ -587,6 +588,7 @@ public abstract class AbstractOnlineEventBookingForm implements StandardBookingF
      * @param section the section to hide
      */
     private void hidePrerequisiteSection(DefaultPrerequisiteSection section) {
+        section.setConfirmed(true); // Mark as valid so it doesn't block page validity
         Node view = section.getView();
         if (view != null) {
             view.setVisible(false);
