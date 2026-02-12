@@ -53,8 +53,10 @@ public final class AddDocumentLineEvent extends AbstractDocumentLineEvent {
     @Override
     public void replayEventOnDocumentLine() {
         super.replayEventOnDocumentLine();
-        documentLine.setSite(isForSubmit() ? sitePrimaryKey : entityStore.getEntity(Site.class, sitePrimaryKey, true)); // Should be found from PolicyAggregate
-        documentLine.setItem(isForSubmit() ? itemPrimaryKey : entityStore.getEntity(Item.class, itemPrimaryKey, true)); // Should be found from PolicyAggregate
+        // Note: For KBS2/KBS3 mixed events, it's possible that the site or item is not found in the KBS3 policy,
+        // so we call entityStore.getOrCreateEntity() to at least prevent possible later NPE
+        documentLine.setSite(isForSubmit() ? sitePrimaryKey : entityStore.getOrCreateEntity(Site.class, sitePrimaryKey, true)); // Should be found from PolicyAggregate
+        documentLine.setItem(isForSubmit() ? itemPrimaryKey : entityStore.getOrCreateEntity(Item.class, itemPrimaryKey, true)); // Should be found from PolicyAggregate
         documentLine.setAllocate(allocate);
     }
 }
