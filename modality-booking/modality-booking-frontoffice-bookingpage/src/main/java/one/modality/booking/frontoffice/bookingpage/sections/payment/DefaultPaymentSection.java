@@ -64,6 +64,7 @@ public class DefaultPaymentSection implements HasPaymentSection {
     protected int paymentsMade = 0; // Amount already paid (for display in booking summary)
     protected Set<PaymentOption> availablePaymentOptions = EnumSet.allOf(PaymentOption.class);
     protected Set<PaymentMethod> availablePaymentMethods = EnumSet.of(PaymentMethod.CARD, PaymentMethod.BANK); // PAYPAL not implemented
+    protected boolean fullPaymentOnly = false;
 
     // === UI COMPONENTS ===
     protected final VBox container = new VBox();
@@ -1019,6 +1020,11 @@ public class DefaultPaymentSection implements HasPaymentSection {
             depositPercentage = 0;
         }
 
+        // Respect fullPaymentOnly flag - don't recalculate options
+        if (fullPaymentOnly) {
+            return;
+        }
+
         // Determine which payment options should be available
         Set<PaymentOption> newOptions = EnumSet.allOf(PaymentOption.class);
 
@@ -1055,6 +1061,12 @@ public class DefaultPaymentSection implements HasPaymentSection {
         boolean hasMultipleOptions = availablePaymentOptions.size() > 1;
         paymentAmountSection.setVisible(hasMultipleOptions);
         paymentAmountSection.setManaged(hasMultipleOptions);
+    }
+
+    @Override
+    public void setFullPaymentOnly(boolean fullPaymentOnly) {
+        this.fullPaymentOnly = fullPaymentOnly;
+        HasPaymentSection.super.setFullPaymentOnly(fullPaymentOnly);
     }
 
     @Override

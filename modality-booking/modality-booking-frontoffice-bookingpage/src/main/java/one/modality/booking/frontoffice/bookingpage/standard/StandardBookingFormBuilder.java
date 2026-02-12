@@ -69,6 +69,7 @@ public class StandardBookingFormBuilder {
     boolean showUserBadge = false;
     StandardBookingFormCallbacks callbacks;
     boolean cardPaymentOnly = false;
+    boolean fullPaymentOnly = false;
     BookingFormEntryPoint entryPoint = BookingFormEntryPoint.NEW_BOOKING;
     boolean skipMemberSelection = false;
     boolean navigationClickable = true;
@@ -194,6 +195,18 @@ public class StandardBookingFormBuilder {
      */
     public StandardBookingFormBuilder withCardPaymentOnly(boolean cardOnly) {
         this.cardPaymentOnly = cardOnly;
+        return this;
+    }
+
+    /**
+     * Sets whether only full payment should be available (no deposit or custom amount).
+     * Default is false (deposit, custom, and full payment available).
+     *
+     * @param fullOnly true to only allow full payment, false to allow all options
+     * @return This builder for chaining
+     */
+    public StandardBookingFormBuilder withFullPaymentOnly(boolean fullOnly) {
+        this.fullPaymentOnly = fullOnly;
         return this;
     }
 
