@@ -464,6 +464,37 @@ public abstract class AbstractOnlineEventBookingForm implements StandardBookingF
     }
 
     // ========================================
+    // StandardBookingFormCallbacks Implementation
+    // ========================================
+
+    @Override
+    public void onBeforeSummary() {
+        configureTerms();
+    }
+
+    /**
+     * Configures the terms text and URL from the event's termsUrlEn field.
+     * Called from onBeforeSummary() before the summary page is displayed.
+     */
+    protected void configureTerms() {
+        form.setTermsText(I18n.getI18nText(BookingPageI18nKeys.AcceptBookingTermsText));
+
+        WorkingBookingProperties props = form.getWorkingBookingProperties();
+        if (props == null) return;
+
+        PolicyAggregate policyAggregate = props.getPolicyAggregate();
+        if (policyAggregate == null) return;
+
+        Event event = policyAggregate.getEvent();
+        if (event == null) return;
+
+        String termsUrl = event.getTermsUrlEn();
+        if (termsUrl != null && !termsUrl.isEmpty()) {
+            form.setTermsUrl(termsUrl);
+        }
+    }
+
+    // ========================================
     // Public Accessors
     // ========================================
 
