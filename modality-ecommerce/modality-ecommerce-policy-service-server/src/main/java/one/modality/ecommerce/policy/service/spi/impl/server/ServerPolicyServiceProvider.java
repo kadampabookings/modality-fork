@@ -68,7 +68,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
         ",descriptionLabel,noticeLabel,minDay,default,genderInfoRequired,earlyAccommodationAllowed,lateAccommodationAllowed,minOccupancy,forceSoldOut" +
         " from ItemPolicy ip";
     private final static String RATES_QUERY_BASE =
-        "select site,item,price,perDay,perPerson,facilityFee_price,facilityFee_discount,startDate,endDate,onDate,offDate,minDeposit" +
+        "select site,item,price,perDay,perPerson,applicableToInPerson,applicableToOnline,facilityFee_price,facilityFee_discount,startDate,endDate,onDate,offDate,minDeposit" +
         ",cutoffDate,minDeposit2" +
         ",age1_max,age1_price,age1_discount,age2_max,age2_price,age2_discount" +
         ",resident_price,resident_discount,resident2_price,resident2_discount" +

@@ -112,7 +112,9 @@ public final class SiteItemBill {
         LocalDate lastDay = Collections.last(bas).getDate();
         DocumentAggregate documentAggregate = documentBill.getDocumentAggregate();
         PolicyAggregate policyAggregate = documentAggregate.getPolicyAggregate();
+        boolean inPerson = documentAggregate.getDocument().isInPerson();
         List<Rate> rates = policyAggregate.filterRatesStreamOfSiteAndItem(siteItem.getSite(), siteItem.getItem(), perDayRates)
+            .filter(r -> inPerson ? r.isApplicableToInPerson() : r.isApplicableToOnline())
             .filter(r -> Rates.isOnTodayAndApplicableOverPeriod(r, firstDay, lastDay))
             //.filter(r -> r.getRateMatchesDocument(bill.getDocument()))
             .collect(Collectors.toList());

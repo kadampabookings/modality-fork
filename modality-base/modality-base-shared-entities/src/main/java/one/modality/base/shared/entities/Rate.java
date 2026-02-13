@@ -22,6 +22,8 @@ public interface Rate extends
     String maxDay = "maxDay";
     String perDay = "perDay";
     String perPerson = "perPerson";
+    String applicableToInPerson = "applicableToInPerson";
+    String applicableToOnline = "applicableToOnline";
     String price = "price";
     String minDeposit = "minDeposit";
     String cutoffDate = "cutoffDate";
@@ -114,6 +116,22 @@ public interface Rate extends
 
     default Boolean isPerPerson() {
         return getBooleanFieldValue(perPerson);
+    }
+
+    default void setApplicableToInPerson(Boolean value) {
+        setFieldValue(applicableToInPerson, value);
+    }
+
+    default Boolean isApplicableToInPerson() {
+        return getBooleanFieldValue(applicableToInPerson);
+    }
+
+    default void setApplicableToOnline(Boolean value) {
+        setFieldValue(applicableToOnline, value);
+    }
+
+    default Boolean isApplicableToOnline() {
+        return getBooleanFieldValue(applicableToOnline);
     }
 
     default void setPrice(Object value) {
