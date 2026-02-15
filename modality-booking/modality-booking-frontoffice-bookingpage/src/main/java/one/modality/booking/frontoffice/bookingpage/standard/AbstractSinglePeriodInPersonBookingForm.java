@@ -962,11 +962,48 @@ public abstract class AbstractSinglePeriodInPersonBookingForm implements Standar
         }
     }
 
+    /**
+     * Propagates workingBookingProperties to all sections early, so they can access
+     * the Event (for currency formatting, etc.) before page navigation would normally set it.
+     */
+    protected void propagateWorkingBookingPropertiesToSections() {
+        if (workingBookingProperties == null) return;
+
+        if (accommodationSection != null) {
+            accommodationSection.setWorkingBookingProperties(workingBookingProperties);
+        }
+        if (festivalDaySection != null) {
+            festivalDaySection.setWorkingBookingProperties(workingBookingProperties);
+        }
+        if (mealsSection != null) {
+            mealsSection.setWorkingBookingProperties(workingBookingProperties);
+        }
+        if (transportSection != null) {
+            transportSection.setWorkingBookingProperties(workingBookingProperties);
+        }
+        if (audioRecordingPhaseSection != null) {
+            audioRecordingPhaseSection.setWorkingBookingProperties(workingBookingProperties);
+        }
+        if (additionalOptionsSection != null) {
+            additionalOptionsSection.setWorkingBookingProperties(workingBookingProperties);
+        }
+        if (roommateInfoSection != null) {
+            roommateInfoSection.setWorkingBookingProperties(workingBookingProperties);
+        }
+    }
+
     // ========================================
     // Population Methods
     // ========================================
 
     protected void populateAllOptions() {
+        // Ensure all sections have workingBookingProperties before populating options.
+        // This is needed because populateAllOptions() can fire (via the totalProperty listener)
+        // before page navigation calls CompositeBookingFormPage.setWorkingBookingProperties().
+        // Without this, sections like DefaultAccommodationSelectionSection.formatPrice() would
+        // see a null event and default to GBP currency.
+        propagateWorkingBookingPropertiesToSections();
+
         populateEventBoundaries();
         populateAccommodationOptions();
         populateFestivalDays();
