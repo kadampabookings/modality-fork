@@ -29,8 +29,14 @@ final class DocumentSubmitController {
         if (eventPrimaryKey == null) { // Case when the event primary key must be loaded from the document (ex: booking cancellation)
             return request.document().<Document>onExpressionLoaded("event")
                 .compose(document -> {
-                    DocumentSubmitRequest requestWithEventKeyProvided = DocumentSubmitRequest.create(request.argument(), Entities.getPrimaryKey(document.getEventId()));
-                    return submitDocumentChanges(requestWithEventKeyProvided);
+                    // We reuse the same request but with the resolved eventPrimaryKey, to avoid
+                    // re-replaying events into a new UpdateStore (which would cause duplicate inserts).
+                    DocumentSubmitRequest resolvedRequest = new DocumentSubmitRequest(
+                        request.argument(), request.runId(), request.updateStore(),
+                        request.document(), request.documentLine(),
+                        Entities.getPrimaryKey(document.getEventId()), request.queueToken()
+                    );
+                    return submitDocumentChanges(resolvedRequest);
                 });
         }
 
