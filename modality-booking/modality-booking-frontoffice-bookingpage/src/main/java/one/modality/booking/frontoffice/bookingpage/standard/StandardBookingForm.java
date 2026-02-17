@@ -1290,7 +1290,6 @@ public class StandardBookingForm extends MultiPageBookingForm
         int totalPrice = workingBookingProperties.getTotal();
         int paidDeposit = workingBookingProperties.getDeposit();
         int remainingAmount = totalPrice - paidDeposit;  // Balance to pay = total - deposit
-        int minDeposit = Math.min(workingBookingProperties.getMinDeposit(), Math.max(0, remainingAmount));
 
         // Add booking item with TOTAL PRICE (not remaining) for display in booking summary
         defaultPaymentSection.addBookingItem(new HasPaymentSection.PaymentBookingItem(
@@ -1306,7 +1305,11 @@ public class StandardBookingForm extends MultiPageBookingForm
         // - depositAmount = remaining min deposit (what still needs to be paid to meet min deposit)
         defaultPaymentSection.setTotalAmount(remainingAmount);  // Balance to pay (Total Amount Due)
         defaultPaymentSection.setPaymentsMade(paidDeposit);     // Previous payments (for display)
-        int remainingMinDeposit = Math.max(0, minDeposit - paidDeposit);
+        // Calculate remaining min deposit: how much more is needed to meet the minimum deposit requirement
+        // Use getMinDeposit() directly (not capped to remainingAmount first) to avoid double-subtracting paidDeposit
+        int remainingMinDeposit = Math.min(
+            Math.max(0, workingBookingProperties.getMinDeposit() - paidDeposit),
+            Math.max(0, remainingAmount));
         defaultPaymentSection.setDepositAmount(remainingMinDeposit);  // Remaining min deposit needed
     }
 
