@@ -134,15 +134,6 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
         // Initial button style (primary - "Select All")
         selectAllActionButton.getStyleClass().add(bookingpage_btn_small_primary);
 
-        // Update message and button based on selection changes
-        selectedItems.addListener((ListChangeListener<ScheduledItem>) change -> {
-            // Keeping the working booking updated when the user selects/deselects classes
-            if (workingBookingProperties != null) {
-                workingBookingProperties.getWorkingBooking().bookScheduledItems(selectedItems, true);
-            }
-            updateSelectAllBar();
-        });
-
         selectAllActionButton.setOnAction(e -> {
             boolean allSelected = selectedItems.size() == availableItems.size();
             if (allSelected) {
@@ -211,10 +202,11 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
         // This binding will be updated in updateValidityBinding() for modifications
         validProperty.bind(Bindings.isNotEmpty(selectedItems));
 
-        // Update price summary when selection changes
+        // Update UI and working booking when selection changes
         selectedItems.addListener((ListChangeListener<ScheduledItem>) change -> {
+            updateSelectAllBar();
+            updateWorkingBooking();     // Must run before updatePriceSummary so the price reflects the current selection
             updatePriceSummary();
-            updateWorkingBooking();
             updateValidityBinding();
         });
     }
@@ -624,10 +616,14 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
         availableItems.setAll(scheduledItems);
 
         // Pre-select already booked items (they are locked and cannot be deselected)
-        for (ScheduledItem item : scheduledItems) {
-            if (isAlreadyBooked(item) && !selectedItems.contains(item)) {
-                selectedItems.add(item);
-            }
+        // Use batch addAll() to fire the listener only ONCE with the complete list,
+        // avoiding intermediate states where replaceExistingDates=true removes items
+        // that would be added back on the next iteration.
+        List<ScheduledItem> bookedItems = scheduledItems.stream()
+                .filter(item -> isAlreadyBooked(item) && !selectedItems.contains(item))
+                .collect(Collectors.toList());
+        if (!bookedItems.isEmpty()) {
+            selectedItems.addAll(bookedItems);
         }
 
         // Get pricing info - use the rate for the first scheduled item (more accurate than generic daily rate)
