@@ -12,6 +12,7 @@ import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import one.modality.base.shared.entities.ScheduledItem;
 import one.modality.booking.client.workingbooking.WorkingBooking;
+import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
 import one.modality.base.shared.entities.formatters.EventPriceFormatter;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
@@ -66,6 +67,14 @@ public class DefaultGeneralProgramSummarySection extends DefaultSummarySection {
         dateSelectionSection.getSelectedItems().addListener((ListChangeListener<ScheduledItem>) change -> {
             updatePriceContent();
         });
+    }
+
+    @Override
+    public void setWorkingBookingProperties(WorkingBookingProperties props) {
+        super.setWorkingBookingProperties(props);
+        // Re-render price content now that workingBookingProperties is available
+        // (needed because the date selection listener may have rendered before this was set)
+        updatePriceContent();
     }
 
     @Override
@@ -237,13 +246,34 @@ public class DefaultGeneralProgramSummarySection extends DefaultSummarySection {
             discountRow.setManaged(false);
         }
 
-            // Hide "Already paid" row for new bookings
+        // When modifying an existing booking, show differential pricing
+        if (isModification && workingBookingProperties != null) {
+            int deposit = workingBookingProperties.getDeposit();  // Actual payments from MoneyTransfers
+            if (deposit > 0) {
+                // Show "Already Paid" row with actual payment amount
+                alreadyPaidValue.setText("-" + formatPrice(deposit));
+                alreadyPaidRow.setVisible(true);
+                alreadyPaidRow.setManaged(true);
+
+                // Change label to "Balance Due" and show remaining amount
+                I18nControls.bindI18nProperties(totalLabel, BookingPageI18nKeys.BalanceDue);
+                int balanceDue = total - deposit;
+                totalValue.setText(formatPrice(Math.max(0, balanceDue)));
+            } else {
+                // No payments made yet — show normal total
+                alreadyPaidRow.setVisible(false);
+                alreadyPaidRow.setManaged(false);
+                I18nControls.bindI18nProperties(totalLabel, BookingPageI18nKeys.Total);
+                totalValue.setText(formatPrice(total));
+            }
+        } else {
+            // New booking — hide "Already Paid" row, show normal total
             alreadyPaidRow.setVisible(false);
             alreadyPaidRow.setManaged(false);
-
-            // Show normal total (totalLabel already bound via I18nControls)
+            I18nControls.bindI18nProperties(totalLabel, BookingPageI18nKeys.Total);
             totalValue.setText(formatPrice(total));
         }
+    }
 
     /**
      * Checks if this is a modification of an existing booking and calculates the initial price.
@@ -343,11 +373,27 @@ public class DefaultGeneralProgramSummarySection extends DefaultSummarySection {
         discountRow.setVisible(false);
         discountRow.setManaged(false);
 
-        // Hide already paid row
-        alreadyPaidRow.setVisible(false);
-        alreadyPaidRow.setManaged(false);
-
-        // Update total (totalLabel already bound via I18nControls)
-        totalValue.setText(formatPrice(total));
+        // Show differential pricing for modifications with prior payments
+        checkIfModification();
+        if (isModification && workingBookingProperties != null) {
+            int deposit = workingBookingProperties.getDeposit();
+            if (deposit > 0) {
+                alreadyPaidValue.setText("-" + formatPrice(deposit));
+                alreadyPaidRow.setVisible(true);
+                alreadyPaidRow.setManaged(true);
+                I18nControls.bindI18nProperties(totalLabel, BookingPageI18nKeys.BalanceDue);
+                totalValue.setText(formatPrice(Math.max(0, total - deposit)));
+            } else {
+                alreadyPaidRow.setVisible(false);
+                alreadyPaidRow.setManaged(false);
+                I18nControls.bindI18nProperties(totalLabel, BookingPageI18nKeys.Total);
+                totalValue.setText(formatPrice(total));
+            }
+        } else {
+            alreadyPaidRow.setVisible(false);
+            alreadyPaidRow.setManaged(false);
+            I18nControls.bindI18nProperties(totalLabel, BookingPageI18nKeys.Total);
+            totalValue.setText(formatPrice(total));
+        }
     }
 }

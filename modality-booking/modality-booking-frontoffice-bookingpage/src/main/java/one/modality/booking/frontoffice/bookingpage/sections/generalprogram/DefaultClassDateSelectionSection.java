@@ -492,15 +492,10 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
         subtotalRow.setPadding(new Insets(0, 12, 0, 12));
 
         Label subtotalLabel = new Label();
-        if (hasExistingBooking) {
-            // Modification: show new selections only
-            if (newlySelectedCount == 0) {
-                subtotalLabel.setText(I18n.getI18nText(BookingPageI18nKeys.ClassSelectionNoNewClassesSelected));
-            } else {
-                subtotalLabel.setText(I18n.getI18nText(BookingPageI18nKeys.ClassSelectionNewClassesSelected, newlySelectedCount, formatPrice(pricePerClass)));
-            }
-        } else if (allSelected) {
+        if (allSelected) {
             subtotalLabel.setText(I18n.getI18nText(BookingPageI18nKeys.ClassSelectionFullTermPrice, availableItems.size()));
+        } else if (hasExistingBooking && newlySelectedCount == 0) {
+            subtotalLabel.setText(I18n.getI18nText(BookingPageI18nKeys.ClassSelectionNoNewClassesSelected));
         } else {
             subtotalLabel.setText(I18n.getI18nText(BookingPageI18nKeys.ClassSelectionSingleClassPrice, selectedItems.size(), formatPrice(pricePerClass)));
         }
@@ -535,6 +530,26 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
             priceSummaryBox.getChildren().add(discountRow);
         }
 
+        // Already Paid row (for modifications with prior payments)
+        int deposit = hasExistingBooking && workingBookingProperties != null ? workingBookingProperties.getDeposit() : 0;
+        if (deposit > 0) {
+            HBox alreadyPaidRow = new HBox();
+            alreadyPaidRow.setAlignment(Pos.CENTER_LEFT);
+            alreadyPaidRow.setPadding(new Insets(0, 12, 0, 12));
+
+            Label alreadyPaidLabel = I18nControls.newLabel(BookingPageI18nKeys.AlreadyPaid);
+            alreadyPaidLabel.getStyleClass().addAll(bookingpage_text_base, bookingpage_text_muted);
+
+            Region alreadyPaidSpacer = new Region();
+            HBox.setHgrow(alreadyPaidSpacer, Priority.ALWAYS);
+
+            Label alreadyPaidValue = new Label("-" + formatPrice(deposit));
+            alreadyPaidValue.getStyleClass().addAll(bookingpage_text_base, bookingpage_text_muted);
+
+            alreadyPaidRow.getChildren().addAll(alreadyPaidLabel, alreadyPaidSpacer, alreadyPaidValue);
+            priceSummaryBox.getChildren().add(alreadyPaidRow);
+        }
+
         // Divider
         Region divider = new Region();
         divider.setMinHeight(1);
@@ -542,18 +557,19 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
         divider.getStyleClass().add(gpclass_price_summary_divider);
         VBox.setMargin(divider, new Insets(4, 0, 4, 0));
 
-        // Total row
+        // Total row - show "Balance Due" for modifications with prior payments, "Total" otherwise
         HBox totalRow = new HBox();
         totalRow.setAlignment(Pos.CENTER_LEFT);
         totalRow.setPadding(new Insets(0, 12, 0, 12)); // Match subtotal row padding for value alignment
 
-        Label totalLabel = I18nControls.newLabel(BookingPageI18nKeys.Total);
+        Label totalLabel = I18nControls.newLabel(deposit > 0 ? BookingPageI18nKeys.BalanceDue : BookingPageI18nKeys.Total);
         totalLabel.getStyleClass().addAll(bookingpage_text_xl, bookingpage_font_bold, bookingpage_text_dark);
 
         Region totalSpacer = new Region();
         HBox.setHgrow(totalSpacer, Priority.ALWAYS);
 
-        Label totalValue = new Label(formatPrice(total));
+        int displayTotal = deposit > 0 ? Math.max(0, total - deposit) : total;
+        Label totalValue = new Label(formatPrice(displayTotal));
         totalValue.getStyleClass().addAll(bookingpage_text_2xl, bookingpage_font_bold, bookingpage_text_primary);
 
         totalRow.getChildren().addAll(totalLabel, totalSpacer, totalValue);
