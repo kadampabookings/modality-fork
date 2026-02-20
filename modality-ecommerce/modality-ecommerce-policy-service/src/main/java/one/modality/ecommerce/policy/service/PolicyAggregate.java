@@ -5,7 +5,6 @@ import dev.webfx.platform.console.Console;
 import dev.webfx.platform.util.Booleans;
 import dev.webfx.platform.util.collection.Collections;
 import dev.webfx.stack.db.query.QueryResult;
-import dev.webfx.stack.orm.domainmodel.DataSourceModel;
 import dev.webfx.stack.orm.dql.sqlcompiler.mapping.QueryRowToEntityMapping;
 import dev.webfx.stack.orm.entity.Entities;
 import dev.webfx.stack.orm.entity.EntityList;
@@ -29,28 +28,16 @@ import java.util.stream.Stream;
 public final class PolicyAggregate {
 
     // Fields intended for serialisation
-    private final String eventQueryBase;
     private final QueryResult eventQueryResult;
-    private final String scheduledItemsQueryBase;
     private final QueryResult scheduledItemsQueryResult;
-    private final String scheduledBoundariesQueryBase;
     private final QueryResult scheduledBoundariesQueryResult;
-    private final String eventPartsQueryBase;
     private final QueryResult eventPartsQueryResult;
-    private final String eventSelectionsQueryBase;
     private final QueryResult eventSelectionsQueryResult;
-    private final String eventPhasesQueryBase;
     private final QueryResult eventPhasesQueryResult;
-    private final String eventPhaseCoveragesQueryBase;
     private final QueryResult eventPhaseCoveragesQueryResult;
-    private final String itemFamilyPoliciesQueryBase;
     private final QueryResult itemFamilyPoliciesQueryResult;
-    private final String itemPoliciesQueryBase;
     private final QueryResult itemPoliciesQueryResult;
-    private final String ratesQueryBase;
     private final QueryResult ratesQueryResult;
-    @Deprecated
-    private final String bookablePeriodsQueryBase;
     @Deprecated
     private final QueryResult bookablePeriodsQueryResult;
     private final long creationTimeMillis = System.currentTimeMillis();
@@ -73,78 +60,65 @@ public final class PolicyAggregate {
     private EntityList<BookablePeriod> bookablePeriods;
 
     public PolicyAggregate(
-        String eventQueryBase, QueryResult eventQueryResult,
-        String scheduledItemsQueryBase, QueryResult scheduledItemsQueryResult,
-        String scheduledBoundariesQueryBase, QueryResult scheduledBoundariesQueryResult,
-        String eventPartsQueryBase, QueryResult eventPartsQueryResult,
-        String eventSelectionsQueryBase, QueryResult eventSelectionsQueryResult,
-        String eventPhasesQueryBase, QueryResult eventPhasesQueryResult,
-        String eventPhaseCoveragesQueryBase, QueryResult phaseCoveragesQueryResult,
-        String itemFamilyPoliciesQueryBase, QueryResult itemFamilyPoliciesQueryResult,
-        String itemPoliciesQueryBase, QueryResult itemPoliciesQueryResult,
-        String ratesQueryBase, QueryResult ratesQueryResult,
-        String bookablePeriodsQueryBase, QueryResult bookablePeriodsQueryResult
+        QueryResult eventQueryResult,
+        QueryResult scheduledItemsQueryResult,
+        QueryResult scheduledBoundariesQueryResult,
+        QueryResult eventPartsQueryResult,
+        QueryResult eventSelectionsQueryResult,
+        QueryResult eventPhasesQueryResult,
+        QueryResult phaseCoveragesQueryResult,
+        QueryResult itemFamilyPoliciesQueryResult,
+        QueryResult itemPoliciesQueryResult,
+        QueryResult ratesQueryResult,
+        QueryResult bookablePeriodsQueryResult
     ) {
-        this.eventQueryBase = eventQueryBase;
         this.eventQueryResult = eventQueryResult;
-        this.scheduledItemsQueryBase = scheduledItemsQueryBase;
         this.scheduledItemsQueryResult = scheduledItemsQueryResult;
-        this.scheduledBoundariesQueryBase = scheduledBoundariesQueryBase;
         this.scheduledBoundariesQueryResult = scheduledBoundariesQueryResult;
-        this.eventPartsQueryBase = eventPartsQueryBase;
         this.eventPartsQueryResult = eventPartsQueryResult;
-        this.eventSelectionsQueryBase = eventSelectionsQueryBase;
         this.eventSelectionsQueryResult = eventSelectionsQueryResult;
-        this.eventPhasesQueryBase = eventPhasesQueryBase;
         this.eventPhasesQueryResult = eventPhasesQueryResult;
-        this.eventPhaseCoveragesQueryBase = eventPhaseCoveragesQueryBase;
         this.eventPhaseCoveragesQueryResult = phaseCoveragesQueryResult;
-        this.ratesQueryBase = ratesQueryBase;
         this.ratesQueryResult = ratesQueryResult;
-        this.itemFamilyPoliciesQueryBase = itemFamilyPoliciesQueryBase;
         this.itemFamilyPoliciesQueryResult = itemFamilyPoliciesQueryResult;
-        this.itemPoliciesQueryBase = itemPoliciesQueryBase;
         this.itemPoliciesQueryResult = itemPoliciesQueryResult;
-        this.bookablePeriodsQueryBase = bookablePeriodsQueryBase;
         this.bookablePeriodsQueryResult = bookablePeriodsQueryResult;
     }
 
     public void rebuildEntities(Event event) {
         entityStore = EntityStore.createAbove(event.getStore());
-        DataSourceModel dataSourceModel = entityStore.getDataSourceModel();
-        QueryRowToEntityMapping queryMapping = dataSourceModel.parseAndCompileSelect(eventQueryBase).getQueryMapping();
+        QueryRowToEntityMapping queryMapping = (QueryRowToEntityMapping) eventQueryResult.getEntityMapping();
         // The event returned by PolicyAggregate is a different instance from the passes event and may contain some
         // additional fields such as termsUrlEn
         this.event = Collections.first(QueryResultToEntitiesMapper.mapQueryResultToEntities(eventQueryResult, queryMapping, entityStore, "events"));
         secondsToOpeningDateAtLoadingTime = this.event.getDoubleFieldValue(Event.secondsToOpeningDateAtLoadingTime);
         secondsToBookingProcessStartAtLoadingTime = this.event.getDoubleFieldValue(Event.secondsToBookingProcessStartAtLoadingTime);
-        queryMapping = dataSourceModel.parseAndCompileSelect(scheduledItemsQueryBase).getQueryMapping();
+        queryMapping = (QueryRowToEntityMapping) scheduledItemsQueryResult.getEntityMapping();
         scheduledItems = QueryResultToEntitiesMapper.mapQueryResultToEntities(scheduledItemsQueryResult, queryMapping, entityStore, "scheduledItems");
-        queryMapping = dataSourceModel.parseAndCompileSelect(scheduledBoundariesQueryBase).getQueryMapping();
+        queryMapping = (QueryRowToEntityMapping) scheduledBoundariesQueryResult.getEntityMapping();
         scheduledBoundaries = QueryResultToEntitiesMapper.mapQueryResultToEntities(scheduledBoundariesQueryResult, queryMapping, entityStore, "scheduledBoundaries");
-        queryMapping = dataSourceModel.parseAndCompileSelect(eventPartsQueryBase).getQueryMapping();
+        queryMapping = (QueryRowToEntityMapping) eventPartsQueryResult.getEntityMapping();
         eventParts = QueryResultToEntitiesMapper.mapQueryResultToEntities(eventPartsQueryResult, queryMapping, entityStore, "eventParts");
-        queryMapping = dataSourceModel.parseAndCompileSelect(eventSelectionsQueryBase).getQueryMapping();
+        queryMapping = (QueryRowToEntityMapping) eventSelectionsQueryResult.getEntityMapping();
         eventSelections = QueryResultToEntitiesMapper.mapQueryResultToEntities(eventSelectionsQueryResult, queryMapping, entityStore, "eventSelections");
-        queryMapping = dataSourceModel.parseAndCompileSelect(eventPhasesQueryBase).getQueryMapping();
+        queryMapping = (QueryRowToEntityMapping) eventPhasesQueryResult.getEntityMapping();
         eventPhases = QueryResultToEntitiesMapper.mapQueryResultToEntities(eventPhasesQueryResult, queryMapping, entityStore, "eventPhases");
-        queryMapping = dataSourceModel.parseAndCompileSelect(eventPhaseCoveragesQueryBase).getQueryMapping();
+        queryMapping = (QueryRowToEntityMapping) eventPhaseCoveragesQueryResult.getEntityMapping();
         phaseCoverages = QueryResultToEntitiesMapper.mapQueryResultToEntities(eventPhaseCoveragesQueryResult, queryMapping, entityStore, "phaseCoverages");
-        queryMapping = dataSourceModel.parseAndCompileSelect(itemFamilyPoliciesQueryBase).getQueryMapping();
+        queryMapping = (QueryRowToEntityMapping) itemFamilyPoliciesQueryResult.getEntityMapping();
         itemFamilyPolicies = QueryResultToEntitiesMapper.mapQueryResultToEntities(itemFamilyPoliciesQueryResult, queryMapping, entityStore, "itemFamilyPolicies");
-        queryMapping = dataSourceModel.parseAndCompileSelect(itemPoliciesQueryBase).getQueryMapping();
+        queryMapping = (QueryRowToEntityMapping) itemPoliciesQueryResult.getEntityMapping();
         itemPolicies = QueryResultToEntitiesMapper.mapQueryResultToEntities(itemPoliciesQueryResult, queryMapping, entityStore, "itemPolicies");
-        queryMapping = dataSourceModel.parseAndCompileSelect(ratesQueryBase).getQueryMapping();
+        queryMapping = (QueryRowToEntityMapping) ratesQueryResult.getEntityMapping();
         rates = QueryResultToEntitiesMapper.mapQueryResultToEntities(ratesQueryResult, queryMapping, entityStore, "rates");
-        queryMapping = dataSourceModel.parseAndCompileSelect(bookablePeriodsQueryBase).getQueryMapping();
+        queryMapping = (QueryRowToEntityMapping) bookablePeriodsQueryResult.getEntityMapping();
         bookablePeriods = QueryResultToEntitiesMapper.mapQueryResultToEntities(bookablePeriodsQueryResult, queryMapping, entityStore, "bookablePeriods");
     }
 
     public Future<Void> reloadAvailabilities() {
         return PolicyService.loadAvailabilities(new LoadPolicyArgument(event))
             .onSuccess(scheduledItemsQueryResult -> {
-                DataSourceModel dataSourceModel = entityStore.getDataSourceModel();
-                QueryRowToEntityMapping queryMapping = dataSourceModel.parseAndCompileSelect(scheduledItemsQueryBase).getQueryMapping();
+                QueryRowToEntityMapping queryMapping = (QueryRowToEntityMapping) scheduledItemsQueryResult.getEntityMapping();
                 scheduledItems = QueryResultToEntitiesMapper.mapQueryResultToEntities(scheduledItemsQueryResult, queryMapping, entityStore, "scheduledItems");
             })
             .mapEmpty();
@@ -428,89 +402,44 @@ public final class PolicyAggregate {
 
     // The following methods are meant to be used for serialization, not by the application code
 
-
-    public String getEventQueryBase() {
-        return eventQueryBase;
-    }
-
     public QueryResult getEventQueryResult() {
         return eventQueryResult;
-    }
-
-    public String getScheduledItemsQueryBase() {
-        return scheduledItemsQueryBase;
     }
 
     public QueryResult getScheduledItemsQueryResult() {
         return scheduledItemsQueryResult;
     }
 
-    public String getScheduledBoundariesQueryBase() {
-        return scheduledBoundariesQueryBase;
-    }
-
     public QueryResult getScheduledBoundariesQueryResult() {
         return scheduledBoundariesQueryResult;
-    }
-
-    public String getEventPartsQueryBase() {
-        return eventPartsQueryBase;
     }
 
     public QueryResult getEventPartsQueryResult() {
         return eventPartsQueryResult;
     }
 
-    public String getEventSelectionsQueryBase() {
-        return eventSelectionsQueryBase;
-    }
-
     public QueryResult getEventSelectionsQueryResult() {
         return eventSelectionsQueryResult;
-    }
-
-    public String getEventPhasesQueryBase() {
-        return eventPhasesQueryBase;
     }
 
     public QueryResult getEventPhasesQueryResult() {
         return eventPhasesQueryResult;
     }
 
-    public String getEventPhaseCoveragesQueryBase() {
-        return eventPhaseCoveragesQueryBase;
-    }
-
     public QueryResult getEventPhaseCoveragesQueryResult() {
         return eventPhaseCoveragesQueryResult;
-    }
-
-    public String getItemFamilyPoliciesQueryBase() {
-        return itemFamilyPoliciesQueryBase;
     }
 
     public QueryResult getItemFamilyPoliciesQueryResult() {
         return itemFamilyPoliciesQueryResult;
     }
 
-    public String getItemPoliciesQueryBase() {
-        return itemPoliciesQueryBase;
-    }
-
     public QueryResult getItemPoliciesQueryResult() {
         return itemPoliciesQueryResult;
     }
 
-    public String getRatesQueryBase() {
-        return ratesQueryBase;
-    }
-
     public QueryResult getRatesQueryResult() {
         return ratesQueryResult;
-    }
-
-    public String getBookablePeriodsQueryBase() {
-        return bookablePeriodsQueryBase;
     }
 
     public QueryResult getBookablePeriodsQueryResult() {
