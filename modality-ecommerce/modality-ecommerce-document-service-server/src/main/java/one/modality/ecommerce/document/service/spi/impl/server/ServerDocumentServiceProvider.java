@@ -5,6 +5,7 @@ import dev.webfx.platform.ast.ReadOnlyAstArray;
 import dev.webfx.platform.async.Future;
 import dev.webfx.platform.console.Console;
 import dev.webfx.platform.util.Arrays;
+import dev.webfx.platform.util.Numbers;
 import dev.webfx.platform.util.Strings;
 import dev.webfx.platform.util.collection.Collections;
 import dev.webfx.stack.com.serial.SerialCodecManager;
@@ -74,7 +75,7 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
             String queryReplacement = " in (select Document where !cancelled and (%field%=$1 and event=$2) order by id desc %limit%)"
                 .replace("%field%", personProvided ? "person" : "person.frontendAccount")
                 .replace("%limit%", limitTo1 ? "limit 1" : "");
-            Object[] queryArguments = {personProvided ? argument.personPrimaryKey() : argument.accountPrimaryKey(), argument.eventPrimaryKey()};
+            Object[] queryArguments = {personProvided ? argument.personPrimaryKey() : argument.accountPrimaryKey(), Numbers.toShortestNumber(argument.eventPrimaryKey())};
             if (docPk != null) {
                 queryReplacement = queryReplacement.replace(") order by", " or id=$3) order by");
                 queryArguments = Arrays.add(Object[]::new, queryArguments, docPk);
