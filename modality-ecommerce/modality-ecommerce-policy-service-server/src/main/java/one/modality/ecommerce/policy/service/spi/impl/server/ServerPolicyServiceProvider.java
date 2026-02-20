@@ -2,6 +2,7 @@ package one.modality.ecommerce.policy.service.spi.impl.server;
 
 import dev.webfx.platform.async.Batch;
 import dev.webfx.platform.async.Future;
+import dev.webfx.platform.util.Numbers;
 import dev.webfx.stack.db.query.QueryArgument;
 import dev.webfx.stack.db.query.QueryResult;
 import dev.webfx.stack.db.query.QueryService;
@@ -20,7 +21,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
     @Override
     public Future<PolicyAggregate> loadPolicy(LoadPolicyArgument argument) {
         // Managing the case of recurring event only for now
-        Object eventPk = argument.getEventPk();
+        Number eventPk = Numbers.toShortestNumber(argument.getEventPk());
         return QueryService.executeQueryBatch(
                 new Batch<>(new QueryArgument[]{
                     // 0 - Loading event
