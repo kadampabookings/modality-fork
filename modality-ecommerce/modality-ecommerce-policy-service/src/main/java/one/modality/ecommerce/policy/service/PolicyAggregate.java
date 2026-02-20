@@ -84,9 +84,11 @@ public final class PolicyAggregate {
         this.itemPoliciesQueryResult = itemPoliciesQueryResult;
         this.bookablePeriodsQueryResult = bookablePeriodsQueryResult;
     }
-
     public void rebuildEntities(Event event) {
-        entityStore = EntityStore.createAbove(event.getStore());
+        rebuildEntities(EntityStore.createAbove(event.getStore()));
+    }
+
+    public void rebuildEntities(EntityStore entityStore) {
         QueryRowToEntityMapping queryMapping = (QueryRowToEntityMapping) eventQueryResult.getEntityMapping();
         // The event returned by PolicyAggregate is a different instance from the passes event and may contain some
         // additional fields such as termsUrlEn
