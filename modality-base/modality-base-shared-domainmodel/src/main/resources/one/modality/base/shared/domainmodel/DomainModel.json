@@ -1598,6 +1598,14 @@
     "item": "Item",
     "package": "Package"
   },
+  "PassTemplate": {
+    "createdAt": "date",
+    "createdBy": "Person",
+    "design": "string",
+    "modifiedAt": "date",
+    "name": "string",
+    "removed": "boolean"
+  },
   "Person": {
     "abcNames": "string",
     "accountPerson": "Person",
