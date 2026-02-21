@@ -1604,6 +1604,7 @@
     "design": "string",
     "modifiedAt": "date",
     "name": "string",
+    "organization": "Organization",
     "removed": "boolean"
   },
   "Person": {
