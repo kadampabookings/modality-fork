@@ -15,11 +15,10 @@ import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.scene.text.TextAlignment;
-import one.modality.base.shared.domainmodel.formatters.PriceFormatter;
 import one.modality.base.shared.entities.DocumentLine;
 import one.modality.base.shared.entities.Event;
 import one.modality.base.shared.entities.ItemFamily;
-import one.modality.base.shared.entities.formatters.PriceUtil;
+import one.modality.base.shared.entities.formatters.EventPriceFormatter;
 import one.modality.base.shared.knownitems.KnownItemFamily;
 
 import java.time.LocalDate;
@@ -46,22 +45,22 @@ import static one.modality.booking.backoffice.activities.registration.Registrati
 public class BookingTimelineCanvas extends Region {
 
     // Layout constants (from JSX ux object) - increased for better visibility
-    private static final int ROW_HEADER_WIDTH = 160;   // Left side for option name
-    private static final int DAY_COLUMN_WIDTH = 50;    // Wider day columns for better gantt visibility
+    private static final int ROW_HEADER_WIDTH = 160; // Left side for option name
+    private static final int DAY_COLUMN_WIDTH = 50; // Wider day columns for better gantt visibility
     private static final int HEADER_HEIGHT = 45;
     private static final int PERIOD_BAR_HEIGHT = 28;
-    private static final int ROW_HEIGHT = 36;          // Taller rows for better readability
-    private static final int CELL_HEIGHT = 22;         // Taller cells
-    private static final int CELL_GAP = 2;             // Gap between day cells (reduced for tighter bars)
+    private static final int ROW_HEIGHT = 36; // Taller rows for better readability
+    private static final int CELL_HEIGHT = 22; // Taller cells
+    private static final int CELL_GAP = 2; // Gap between day cells (reduced for tighter bars)
     private static final int CELL_PADDING = CELL_GAP / 2; // Half gap on each side of cell (1 pixel)
     private static final int CELL_RADIUS = 6;
-    private static final int PRICE_COLUMN_WIDTH = 80;  // Right side for price
+    private static final int PRICE_COLUMN_WIDTH = 80; // Right side for price
     private static final int ACTION_COLUMN_WIDTH = 90; // Right side for action buttons (edit, cancel, delete)
-    private static final int ICON_SIZE = 18;           // Category icon size
-    private static final int ACTION_ICON_SIZE = 16;    // Action button icon size
+    private static final int ICON_SIZE = 18; // Category icon size
+    private static final int ACTION_ICON_SIZE = 16; // Action button icon size
 
     // Color constants for excluded days and hover
-    private static final Color EXCLUDED_CELL_BG = Color.WHITE;  // Empty/gap cells are white
+    private static final Color EXCLUDED_CELL_BG = Color.WHITE; // Empty/gap cells are white
     private static final Color HOVER_BG = Color.web("#1e3a5f");
     private static final Color GRID_LINE_COLOR = Color.web("#e8e4df"); // Light vertical grid lines
 
@@ -74,19 +73,24 @@ public class BookingTimelineCanvas extends Region {
     private final ObjectProperty<Event> eventProperty = new SimpleObjectProperty<>();
     private final ObservableList<DocumentLine> documentLines = FXCollections.observableArrayList();
 
-    // Attendance dates per line (key = DocumentLine ID primary key, value = set of attended dates)
-    // This determines which days are "included" (colored) vs "excluded" (grey) in the gantt bar
+    // Attendance dates per line (key = DocumentLine ID primary key, value = set of
+    // attended dates)
+    // This determines which days are "included" (colored) vs "excluded" (grey) in
+    // the gantt bar
     private Map<Object, Set<LocalDate>> attendanceDatesMap = new HashMap<>();
 
-    // Original attendance dates from database (used to distinguish gaps from pending removals)
-    // A cross (X) is only shown when a date was originally included but is now being removed
+    // Original attendance dates from database (used to distinguish gaps from
+    // pending removals)
+    // A cross (X) is only shown when a date was originally included but is now
+    // being removed
     private Map<Object, Set<LocalDate>> originalAttendanceDatesMap = new HashMap<>();
 
     // Pending status for lines that are being cancelled/deleted but not yet saved
     // Key = DocumentLine ID primary key, Value = "cancelled" or "deleted"
     private Map<Object, String> pendingStatusMap = new HashMap<>();
 
-    // Computed prices for lines (key = DocumentLine ID primary key, value = price in cents)
+    // Computed prices for lines (key = DocumentLine ID primary key, value = price
+    // in cents)
     // Used to display updated prices after attendance changes (before saving)
     private Map<Object, Integer> computedPricesMap = new HashMap<>();
 
@@ -103,7 +107,8 @@ public class BookingTimelineCanvas extends Region {
     private java.util.function.Consumer<DocumentLine> onRestoreClicked;
     private java.util.function.Consumer<DocumentLine> onEditClicked;
 
-    // Cancellation check predicate - checks if a DocumentLine is cancelled using WorkingBooking API
+    // Cancellation check predicate - checks if a DocumentLine is cancelled using
+    // WorkingBooking API
     // This is set by BookingTab to use workingBooking.isDocumentLineCancelled()
     private java.util.function.Predicate<DocumentLine> cancellationChecker;
 
@@ -117,7 +122,7 @@ public class BookingTimelineCanvas extends Region {
 
         // Set up repaint on changes
         FXProperties.runOnPropertiesChange(this::requestRepaint,
-            eventStartProperty, eventEndProperty, bookingStartProperty, bookingEndProperty);
+                eventStartProperty, eventEndProperty, bookingStartProperty, bookingEndProperty);
 
         documentLines.addListener((ListChangeListener<DocumentLine>) c -> {
             requestLayout(); // Request layout to update canvas size for new line count
@@ -160,7 +165,8 @@ public class BookingTimelineCanvas extends Region {
         int newDayIndex = getDayIndexAtX(x);
         String newAction = getActionAtX(x, newRowIndex);
 
-        if (newRowIndex != hoveredRowIndex || newDayIndex != hoveredDayIndex || !Objects.equals(newAction, hoveredAction)) {
+        if (newRowIndex != hoveredRowIndex || newDayIndex != hoveredDayIndex
+                || !Objects.equals(newAction, hoveredAction)) {
             hoveredRowIndex = newRowIndex;
             hoveredDayIndex = newDayIndex;
             hoveredAction = newAction;
@@ -222,32 +228,39 @@ public class BookingTimelineCanvas extends Region {
 
     /**
      * Gets the row index at a Y coordinate.
+     * 
      * @return row index or -1 if not over a row
      */
     private int getRowIndexAtY(double y) {
         double contentY = y - HEADER_HEIGHT; // Period bars removed
-        if (contentY < 0) return -1;
+        if (contentY < 0)
+            return -1;
 
         int rowIndex = (int) (contentY / ROW_HEIGHT);
-        if (rowIndex >= documentLines.size()) return -1;
+        if (rowIndex >= documentLines.size())
+            return -1;
         return rowIndex;
     }
 
     /**
      * Gets the day index at an X coordinate.
+     * 
      * @return day index or -1 if not over a day column
      */
     private int getDayIndexAtX(double x) {
         double contentX = x - ROW_HEADER_WIDTH;
-        if (contentX < 0) return -1;
+        if (contentX < 0)
+            return -1;
 
         LocalDate eventStart = eventStartProperty.get();
         LocalDate eventEnd = eventEndProperty.get();
-        if (eventStart == null || eventEnd == null) return -1;
+        if (eventStart == null || eventEnd == null)
+            return -1;
 
         int dayCount = (int) ChronoUnit.DAYS.between(eventStart, eventEnd) + 1;
         int dayIndex = (int) (contentX / DAY_COLUMN_WIDTH);
-        if (dayIndex >= dayCount) return -1;
+        if (dayIndex >= dayCount)
+            return -1;
         return dayIndex;
     }
 
@@ -256,20 +269,24 @@ public class BookingTimelineCanvas extends Region {
      */
     private LocalDate getDateForDayIndex(int dayIndex) {
         LocalDate eventStart = eventStartProperty.get();
-        if (eventStart == null || dayIndex < 0) return null;
+        if (eventStart == null || dayIndex < 0)
+            return null;
         return eventStart.plusDays(dayIndex);
     }
 
     /**
      * Gets the action at an X coordinate for a given row.
+     * 
      * @return "edit", "cancel", "delete", or null if not over an action button
      */
     private String getActionAtX(double x, int rowIndex) {
-        if (rowIndex < 0 || rowIndex >= documentLines.size()) return null;
+        if (rowIndex < 0 || rowIndex >= documentLines.size())
+            return null;
 
         LocalDate eventStart = eventStartProperty.get();
         LocalDate eventEnd = eventEndProperty.get();
-        if (eventStart == null || eventEnd == null) return null;
+        if (eventStart == null || eventEnd == null)
+            return null;
 
         int dayCount = (int) ChronoUnit.DAYS.between(eventStart, eventEnd) + 1;
         double actionAreaStart = ROW_HEADER_WIDTH + dayCount * DAY_COLUMN_WIDTH + PRICE_COLUMN_WIDTH;
@@ -291,26 +308,35 @@ public class BookingTimelineCanvas extends Region {
     }
 
     /**
-     * Checks if a cell is clickable (within the line's date range, not cancelled, and no pending status).
+     * Checks if a cell is clickable (within the line's date range, not cancelled,
+     * and no pending status).
      */
     private boolean isCellClickable(int rowIndex, int dayIndex) {
-        if (rowIndex < 0 || dayIndex < 0) return false;
-        if (rowIndex >= documentLines.size()) return false;
+        if (rowIndex < 0 || dayIndex < 0)
+            return false;
+        if (rowIndex >= documentLines.size())
+            return false;
 
         DocumentLine line = documentLines.get(rowIndex);
         LocalDate date = getDateForDayIndex(dayIndex);
-        if (date == null) return false;
+        if (date == null)
+            return false;
 
         // Check if line is cancelled or has pending status
-        if (isLineCancelled(line)) return false;
-        if (getPendingStatus(line) != null) return false;
+        if (isLineCancelled(line))
+            return false;
+        if (getPendingStatus(line) != null)
+            return false;
 
         // Check if date is within line's range
         LocalDate lineStart = line.getStartDate();
         LocalDate lineEnd = line.getEndDate();
-        if (lineStart == null) lineStart = bookingStartProperty.get();
-        if (lineEnd == null) lineEnd = bookingEndProperty.get();
-        if (lineStart == null || lineEnd == null) return false;
+        if (lineStart == null)
+            lineStart = bookingStartProperty.get();
+        if (lineEnd == null)
+            lineEnd = bookingEndProperty.get();
+        if (lineStart == null || lineEnd == null)
+            return false;
 
         return !date.isBefore(lineStart) && !date.isAfter(lineEnd);
     }
@@ -369,14 +395,18 @@ public class BookingTimelineCanvas extends Region {
             return attendanceDates.contains(date);
         }
 
-        // Fallback: use line dates or booking dates (for lines without attendance records)
+        // Fallback: use line dates or booking dates (for lines without attendance
+        // records)
         LocalDate lineStart = line.getStartDate();
         LocalDate lineEnd = line.getEndDate();
 
         // Default to booking dates if not set
-        if (lineStart == null) lineStart = bookingStartProperty.get();
-        if (lineEnd == null) lineEnd = bookingEndProperty.get();
-        if (lineStart == null || lineEnd == null) return false;
+        if (lineStart == null)
+            lineStart = bookingStartProperty.get();
+        if (lineEnd == null)
+            lineEnd = bookingEndProperty.get();
+        if (lineStart == null || lineEnd == null)
+            return false;
 
         // Check if date is within line's range
         return !date.isBefore(lineStart) && !date.isAfter(lineEnd);
@@ -385,7 +415,8 @@ public class BookingTimelineCanvas extends Region {
     /**
      * Sets the original attendance dates from the database.
      * Used to distinguish between gaps (never selected) and pending removals.
-     * Creates a deep copy to prevent modifications from affecting the original data.
+     * Creates a deep copy to prevent modifications from affecting the original
+     * data.
      */
     public void setOriginalAttendanceDates(Map<Object, Set<LocalDate>> originalDates) {
         // Deep copy to prevent external modifications from affecting original dates
@@ -443,7 +474,8 @@ public class BookingTimelineCanvas extends Region {
     }
 
     /**
-     * Sets the callback for when the restore button is clicked on a line with pending status.
+     * Sets the callback for when the restore button is clicked on a line with
+     * pending status.
      */
     public void setOnRestoreClicked(java.util.function.Consumer<DocumentLine> callback) {
         this.onRestoreClicked = callback;
@@ -458,7 +490,8 @@ public class BookingTimelineCanvas extends Region {
 
     /**
      * Sets the predicate for checking if a DocumentLine is cancelled.
-     * This should be set to use workingBooking.isDocumentLineCancelled() for accurate cancellation detection.
+     * This should be set to use workingBooking.isDocumentLineCancelled() for
+     * accurate cancellation detection.
      */
     public void setCancellationChecker(java.util.function.Predicate<DocumentLine> checker) {
         this.cancellationChecker = checker;
@@ -466,7 +499,8 @@ public class BookingTimelineCanvas extends Region {
     }
 
     /**
-     * Checks if a DocumentLine is cancelled using the cancellation checker predicate.
+     * Checks if a DocumentLine is cancelled using the cancellation checker
+     * predicate.
      * Falls back to checking line.isCancelled() if no checker is set.
      */
     private boolean isLineCancelled(DocumentLine line) {
@@ -481,7 +515,8 @@ public class BookingTimelineCanvas extends Region {
 
     /**
      * Sets the pending status for a document line (before saving).
-     * @param line the document line
+     * 
+     * @param line   the document line
      * @param status "cancelled", "deleted", or null to clear
      */
     public void setPendingStatus(DocumentLine line, String status) {
@@ -498,6 +533,7 @@ public class BookingTimelineCanvas extends Region {
 
     /**
      * Gets the pending status for a document line.
+     * 
      * @return "cancelled", "deleted", or null if no pending status
      */
     public String getPendingStatus(DocumentLine line) {
@@ -542,6 +578,7 @@ public class BookingTimelineCanvas extends Region {
     /**
      * Sets the computed prices map for document lines.
      * Used to display updated prices after attendance changes.
+     * 
      * @param prices map of line ID to price in cents
      */
     public void setComputedPrices(Map<Object, Integer> prices) {
@@ -674,7 +711,8 @@ public class BookingTimelineCanvas extends Region {
             gc.setFill(TEXT_MUTED);
             gc.setFont(Font.font("System", 12));
             gc.setTextAlign(TextAlignment.CENTER);
-            gc.fillText("No booking options selected", ROW_HEADER_WIDTH + (dayCount * DAY_COLUMN_WIDTH) / 2.0, y + ROW_HEIGHT / 2.0);
+            gc.fillText("No booking options selected", ROW_HEADER_WIDTH + (dayCount * DAY_COLUMN_WIDTH) / 2.0,
+                    y + ROW_HEIGHT / 2.0);
             gc.setTextAlign(TextAlignment.LEFT);
         }
     }
@@ -707,7 +745,8 @@ public class BookingTimelineCanvas extends Region {
     }
 
     /**
-     * Draws light vertical grid lines between day columns for easier visual separation.
+     * Draws light vertical grid lines between day columns for easier visual
+     * separation.
      */
     private void drawVerticalGridLines(GraphicsContext gc, int dayCount, double height) {
         gc.setStroke(GRID_LINE_COLOR);
@@ -724,8 +763,8 @@ public class BookingTimelineCanvas extends Region {
      * Draws a period bar (event or booking).
      */
     private void drawPeriodBar(GraphicsContext gc, LocalDate periodStart, LocalDate periodEnd,
-                               LocalDate eventStart, int dayCount, double y,
-                               Color bgColor, Color textColor, String label) {
+            LocalDate eventStart, int dayCount, double y,
+            Color bgColor, Color textColor, String label) {
 
         // Calculate X positions
         int startDayOffset = (int) ChronoUnit.DAYS.between(eventStart, periodStart);
@@ -735,7 +774,8 @@ public class BookingTimelineCanvas extends Region {
         startDayOffset = Math.max(0, startDayOffset);
         endDayOffset = Math.min(dayCount - 1, endDayOffset);
 
-        if (startDayOffset > endDayOffset) return;
+        if (startDayOffset > endDayOffset)
+            return;
 
         double startX = ROW_HEADER_WIDTH + startDayOffset * DAY_COLUMN_WIDTH;
         double endX = ROW_HEADER_WIDTH + (endDayOffset + 1) * DAY_COLUMN_WIDTH;
@@ -755,7 +795,8 @@ public class BookingTimelineCanvas extends Region {
      * Draws a line item row with cells for each day.
      * Layout: [Category Icon + Option Name] [Gantt Cells...] [Price] [Actions]
      */
-    private void drawLineRow(GraphicsContext gc, DocumentLine line, LocalDate eventStart, int dayCount, double y, int rowIndex) {
+    private void drawLineRow(GraphicsContext gc, DocumentLine line, LocalDate eventStart, int dayCount, double y,
+            int rowIndex) {
         // Determine category for coloring
         String category = getCategoryFromLine(line);
         Color cellColor = getCategoryBgColor(category);
@@ -781,8 +822,10 @@ public class BookingTimelineCanvas extends Region {
         LocalDate lineEnd = line.getEndDate();
 
         // Fallback to booking dates (arrival/departure) to keep bar range constant
-        if (lineStart == null) lineStart = bookingStartProperty.get();
-        if (lineEnd == null) lineEnd = bookingEndProperty.get();
+        if (lineStart == null)
+            lineStart = bookingStartProperty.get();
+        if (lineEnd == null)
+            lineEnd = bookingEndProperty.get();
 
         // Determine if we have valid dates for drawing cells
         boolean hasDates = (lineStart != null && lineEnd != null);
@@ -814,9 +857,11 @@ public class BookingTimelineCanvas extends Region {
             double cellY = y + (ROW_HEIGHT - CELL_HEIGHT) / 2.0;
 
             if (isNightBased) {
-                // For accommodation: draw continuous bar from middle of arrival to middle of departure
+                // For accommodation: draw continuous bar from middle of arrival to middle of
+                // departure
                 // This represents nights (check-in afternoon, check-out morning)
-                drawAccommodationBar(gc, line, eventStart, startDayOffset, endDayOffset, cellY, cellColor, isLineHovered, isInactive);
+                drawAccommodationBar(gc, line, eventStart, startDayOffset, endDayOffset, cellY, cellColor,
+                        isLineHovered, isInactive);
             } else {
                 // For non-accommodation: draw individual day cells
                 for (int day = startDayOffset; day <= endDayOffset; day++) {
@@ -870,7 +915,8 @@ public class BookingTimelineCanvas extends Region {
                         drawStripedOverlay(gc, cellX, cellY, cellWidth, CELL_HEIGHT, isPendingDeleted);
                     }
 
-                    // Draw X icon only for dates being removed (was originally selected, now unselected)
+                    // Draw X icon only for dates being removed (was originally selected, now
+                    // unselected)
                     // Gaps that existed in the original data should show as empty, not with X
                     boolean wasOriginallySelected = wasOriginallyIncluded(line, cellDate);
                     if (!isIncluded && wasOriginallySelected && !isInactive) {
@@ -904,16 +950,19 @@ public class BookingTimelineCanvas extends Region {
     }
 
     /**
-     * Draws an accommodation bar that spans from middle of arrival day to middle of departure day.
+     * Draws an accommodation bar that spans from middle of arrival day to middle of
+     * departure day.
      * This represents nights (check-in in afternoon, check-out in morning).
      */
     private void drawAccommodationBar(GraphicsContext gc, DocumentLine line, LocalDate eventStart,
-                                       int startDayOffset, int endDayOffset, double cellY,
-                                       Color cellColor, boolean isLineHovered, boolean isInactive) {
+            int startDayOffset, int endDayOffset, double cellY,
+            Color cellColor, boolean isLineHovered, boolean isInactive) {
         // For accommodation, we draw individual "night" segments
         // Each night starts at mid-day and ends at mid-day of the next day
-        // If last night is the 29th, checkout is morning of 30th, so bar extends to mid-30th
-        // For days 0-4 (nights of 24,25,26,27,28,29), bars are: 0.5-1.5, 1.5-2.5, 2.5-3.5, 3.5-4.5, 4.5-5.5
+        // If last night is the 29th, checkout is morning of 30th, so bar extends to
+        // mid-30th
+        // For days 0-4 (nights of 24,25,26,27,28,29), bars are: 0.5-1.5, 1.5-2.5,
+        // 2.5-3.5, 3.5-4.5, 4.5-5.5
 
         double halfDay = DAY_COLUMN_WIDTH / 2.0;
 
@@ -974,7 +1023,8 @@ public class BookingTimelineCanvas extends Region {
                 drawStripedOverlay(gc, barX, cellY, barWidth, CELL_HEIGHT, isPendingDeleted);
             }
 
-            // Draw X icon only for nights being removed (was originally selected, now unselected)
+            // Draw X icon only for nights being removed (was originally selected, now
+            // unselected)
             // Gaps that existed in the original data should show as empty, not with X
             boolean wasOriginallySelected = wasOriginallyIncluded(line, nightDate);
             if (!isIncluded && wasOriginallySelected && !isInactive) {
@@ -1021,7 +1071,8 @@ public class BookingTimelineCanvas extends Region {
 
     /**
      * Draws the price column on the right side with right alignment.
-     * For cancelled items: shows deposit as active price, original price struck through below.
+     * For cancelled items: shows deposit as active price, original price struck
+     * through below.
      */
     private void drawPriceColumn(GraphicsContext gc, DocumentLine line, int dayCount, double y, boolean isCancelled) {
         double priceAreaStart = ROW_HEADER_WIDTH + dayCount * DAY_COLUMN_WIDTH;
@@ -1039,13 +1090,14 @@ public class BookingTimelineCanvas extends Region {
             // For cancelled items: show deposit as active price, original struck through
             if (deposit > 0) {
                 // Show deposit amount as the kept amount (active price)
-                String depositText = PriceUtil.formatWithCurrency(deposit, event);
+                String depositText = EventPriceFormatter.formatWithCurrency(deposit, eventProperty.get());
                 gc.setFill(WARM_ORANGE); // Orange to indicate deposit/cancellation fee
                 gc.setFont(Font.font("System", FontWeight.SEMI_BOLD, 11));
                 gc.fillText(depositText, priceX, y + ROW_HEIGHT / 2.0 - 2);
 
                 // Show original price struck through below
-                String originalText = PriceUtil.formatWithCurrency(originalPrice != null ? originalPrice : 0, event);
+                String originalText = EventPriceFormatter.formatWithCurrency(originalPrice != null ? originalPrice : 0,
+                        eventProperty.get());
                 gc.setFill(TEXT_MUTED);
                 gc.setFont(Font.font("System", FontWeight.NORMAL, 9));
                 double originalY = y + ROW_HEIGHT / 2.0 + 10;
@@ -1057,7 +1109,8 @@ public class BookingTimelineCanvas extends Region {
                 gc.strokeLine(priceX - textWidth, originalY - 3, priceX, originalY - 3);
             } else {
                 // No deposit - show original price struck through
-                String priceText = PriceUtil.formatWithCurrency(originalPrice != null ? originalPrice : 0, event);
+                String priceText = EventPriceFormatter.formatWithCurrency(originalPrice != null ? originalPrice : 0,
+                        eventProperty.get());
                 gc.setFill(TEXT_MUTED);
                 gc.setFont(Font.font("System", FontWeight.SEMI_BOLD, 11));
                 gc.fillText(priceText, priceX, y + ROW_HEIGHT / 2.0 + 4);
@@ -1069,7 +1122,8 @@ public class BookingTimelineCanvas extends Region {
             }
         } else {
             // Normal price display
-            String priceText = originalPrice != null ? PriceUtil.formatWithCurrency(originalPrice, event) : "-";
+            String priceText = originalPrice != null ? EventPriceFormatter.formatWithCurrency(originalPrice, eventProperty.get())
+                    : "-";
             gc.setFill(WARM_BROWN);
             gc.setFont(Font.font("System", FontWeight.SEMI_BOLD, 11));
             gc.fillText(priceText, priceX, y + ROW_HEIGHT / 2.0 + 4);
@@ -1078,12 +1132,15 @@ public class BookingTimelineCanvas extends Region {
     }
 
     /**
-     * Draws the action buttons (edit, cancel, delete) on the right side of each row.
+     * Draws the action buttons (edit, cancel, delete) on the right side of each
+     * row.
      * When item has pending cancelled status, shows a restore button.
-     * When item has pending deleted status, no buttons shown (deletion cannot be undone).
+     * When item has pending deleted status, no buttons shown (deletion cannot be
+     * undone).
      * When item is newly added (not yet saved), no buttons shown.
      */
-    private void drawActionButtons(GraphicsContext gc, DocumentLine line, int dayCount, double y, int rowIndex, boolean hasPendingStatus) {
+    private void drawActionButtons(GraphicsContext gc, DocumentLine line, int dayCount, double y, int rowIndex,
+            boolean hasPendingStatus) {
         // Don't show buttons for newly added lines that haven't been saved yet
         if (Entities.isNew(line)) {
             return;
@@ -1105,7 +1162,8 @@ public class BookingTimelineCanvas extends Region {
             String pendingStatus = getPendingStatus(line);
             if ("cancelled".equals(pendingStatus)) {
                 // Show restore button for cancelled items (can be restored)
-                boolean restoreHovered = isHovered && ("cancel".equals(hoveredAction) || "delete".equals(hoveredAction) || "edit".equals(hoveredAction));
+                boolean restoreHovered = isHovered && ("cancel".equals(hoveredAction) || "delete".equals(hoveredAction)
+                        || "edit".equals(hoveredAction));
                 drawRestoreIcon(gc, actionX + ACTION_COLUMN_WIDTH / 2.0, centerY, restoreHovered);
             }
             // For deleted items, don't show any buttons (deletion cannot be undone)
@@ -1258,10 +1316,12 @@ public class BookingTimelineCanvas extends Region {
     }
 
     /**
-     * Draws a diagonal striped overlay pattern on a cell for cancelled/deleted items.
+     * Draws a diagonal striped overlay pattern on a cell for cancelled/deleted
+     * items.
      * Based on JSX cancelledPattern/deletedPattern styles.
      */
-    private void drawStripedOverlay(GraphicsContext gc, double x, double y, double width, double height, boolean isDeleted) {
+    private void drawStripedOverlay(GraphicsContext gc, double x, double y, double width, double height,
+            boolean isDeleted) {
         // Save current alpha and reset to full opacity for visible stripes
         double currentAlpha = gc.getGlobalAlpha();
         gc.setGlobalAlpha(1.0);
@@ -1275,8 +1335,8 @@ public class BookingTimelineCanvas extends Region {
 
         // Set stripe color - use semi-transparent darker colors for visibility
         Color stripeColor = isDeleted
-            ? Color.rgb(220, 38, 38, 0.4)   // Red-tinted for delete
-            : Color.rgb(128, 128, 128, 0.3); // Gray for cancel (visible on any background)
+                ? Color.rgb(220, 38, 38, 0.4) // Red-tinted for delete
+                : Color.rgb(128, 128, 128, 0.3); // Gray for cancel (visible on any background)
 
         gc.setStroke(stripeColor);
         gc.setLineWidth(2);
@@ -1313,12 +1373,14 @@ public class BookingTimelineCanvas extends Region {
 
     /**
      * Draws a status badge above the gantt bar for cancelled/pending items.
-     * Shows "CANCELLED" for already-cancelled, "CANCELLING" for pending cancel, "REMOVING" for pending delete.
+     * Shows "CANCELLED" for already-cancelled, "CANCELLING" for pending cancel,
+     * "REMOVING" for pending delete.
      */
-    private void drawStatusBadge(GraphicsContext gc, int startDayOffset, double y, boolean isCancelled, boolean isPendingCancelled, boolean isPendingDeleted) {
+    private void drawStatusBadge(GraphicsContext gc, int startDayOffset, double y, boolean isCancelled,
+            boolean isPendingCancelled, boolean isPendingDeleted) {
         // Badge position - above the row, aligned to the start of the gantt bar
         double badgeX = ROW_HEADER_WIDTH + startDayOffset * DAY_COLUMN_WIDTH + CELL_PADDING;
-        double badgeY = y + 2;  // Near the top of the row
+        double badgeY = y + 2; // Near the top of the row
 
         // Badge text and colors based on status
         String text;
@@ -1367,12 +1429,18 @@ public class BookingTimelineCanvas extends Region {
      */
     private String getCategoryIcon(String category) {
         switch (category) {
-            case "accommodation": return "\uD83D\uDECF"; // Bed emoji
-            case "meals": return "\uD83C\uDF7D"; // Fork and knife
-            case "diet": return "\uD83E\uDD57"; // Salad
-            case "transport": return "\uD83D\uDE8C"; // Bus
-            case "parking": return "\uD83C\uDD7F"; // P button
-            default: return "\uD83D\uDCDA"; // Books (program)
+            case "accommodation":
+                return "\uD83D\uDECF"; // Bed emoji
+            case "meals":
+                return "\uD83C\uDF7D"; // Fork and knife
+            case "diet":
+                return "\uD83E\uDD57"; // Salad
+            case "transport":
+                return "\uD83D\uDE8C"; // Bus
+            case "parking":
+                return "\uD83C\uDD7F"; // P button
+            default:
+                return "\uD83D\uDCDA"; // Books (program)
         }
     }
 
@@ -1381,12 +1449,18 @@ public class BookingTimelineCanvas extends Region {
      */
     private Color getCategoryFgColor(String category) {
         switch (category) {
-            case "accommodation": return ACCOMMODATION_FG;
-            case "meals": return MEALS_FG;
-            case "diet": return DIET_FG;
-            case "transport": return TRANSPORT_FG;
-            case "parking": return PARKING_FG;
-            default: return PROGRAM_FG;
+            case "accommodation":
+                return ACCOMMODATION_FG;
+            case "meals":
+                return MEALS_FG;
+            case "diet":
+                return DIET_FG;
+            case "transport":
+                return TRANSPORT_FG;
+            case "parking":
+                return PARKING_FG;
+            default:
+                return PROGRAM_FG;
         }
     }
 
@@ -1394,11 +1468,13 @@ public class BookingTimelineCanvas extends Region {
      * Truncates text to fit within a given width.
      */
     private String truncateText(String text, double maxWidth, GraphicsContext gc) {
-        if (text == null) return "";
+        if (text == null)
+            return "";
         // Approximate character width (rough estimate)
         double charWidth = 6;
         int maxChars = (int) (maxWidth / charWidth);
-        if (text.length() <= maxChars) return text;
+        if (text.length() <= maxChars)
+            return text;
         return text.substring(0, Math.max(0, maxChars - 2)) + "...";
     }
 
@@ -1406,7 +1482,6 @@ public class BookingTimelineCanvas extends Region {
      * Formats a price value using PriceUtil (handles cents to currency conversion).
      * Always shows two decimal places (e.g., £0.00, £48.00).
      */
-
 
     /**
      * Draws an X icon for excluded days.
@@ -1443,14 +1518,17 @@ public class BookingTimelineCanvas extends Region {
      * Checks if a line is an accommodation (night-based) item.
      */
     private boolean isAccommodationLine(DocumentLine line) {
-        if (line.getItem() == null) return false;
+        if (line.getItem() == null)
+            return false;
         ItemFamily family = line.getItem().getFamily();
-        if (family == null) return false;
+        if (family == null)
+            return false;
 
         String familyCode = family.getCode();
         String familyName = family.getName();
         String search = (familyCode != null ? familyCode : familyName);
-        if (search == null) return false;
+        if (search == null)
+            return false;
 
         search = search.toLowerCase();
         return search.contains("acco") || search.contains("accommodation") || search.contains("room");
@@ -1461,7 +1539,7 @@ public class BookingTimelineCanvas extends Region {
      * This ensures the cell stays within its specified bounds.
      */
     private void drawCellWithCorners(GraphicsContext gc, double x, double y, double w, double h,
-                                     boolean roundLeft, boolean roundRight) {
+            boolean roundLeft, boolean roundRight) {
         double r = CELL_RADIUS;
 
         gc.beginPath();

@@ -17,7 +17,7 @@ import javafx.scene.text.FontWeight;
 import one.modality.base.client.mainframe.fx.FXMainFrameDialogArea;
 import one.modality.base.shared.entities.DocumentLine;
 import one.modality.base.shared.entities.Event;
-import one.modality.base.shared.entities.formatters.PriceUtil;
+import one.modality.base.shared.entities.formatters.EventPriceFormatter;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -261,8 +261,8 @@ public class ConfirmActionModal {
 
         Label desc;
         if (deposit > 0) {
-            desc = new Label(PriceUtil.formatWithCurrency(deposit, event) + " will be kept as minimum deposit\n" +
-                "Original: " + PriceUtil.formatWithCurrency(price, event));
+            desc = new Label(EventPriceFormatter.formatWithCurrency(deposit, event) + " will be kept as minimum deposit\n" +
+                             "Original: " + EventPriceFormatter.formatWithCurrency(price, event));
             desc.setStyle("-fx-strikethrough: false;");
         } else {
             desc = new Label("No deposit required – full refund");
@@ -337,9 +337,9 @@ public class ConfirmActionModal {
         boolean isCancelled = Boolean.TRUE.equals(line.isCancelled());
         String descText;
         if (isCancelled) {
-            descText = "The full price of " + PriceUtil.formatWithCurrency(price, event) + " will be charged again.";
+            descText = "The full price of " + EventPriceFormatter.formatWithCurrency(price, event) + " will be charged again.";
         } else {
-            descText = "This option will be visible again and charged at " + PriceUtil.formatWithCurrency(price, event) + ".";
+            descText = "This option will be visible again and charged at " + EventPriceFormatter.formatWithCurrency(price, event) + ".";
         }
 
         Label desc = new Label(descText);

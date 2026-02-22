@@ -28,8 +28,7 @@ import one.modality.base.shared.entities.ScheduledItem;
 import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
-import one.modality.booking.frontoffice.bookingpage.components.StyledSectionHeader;
-import one.modality.base.shared.entities.formatters.PriceUtil;
+import one.modality.base.shared.entities.formatters.EventPriceFormatter;
 import one.modality.ecommerce.policy.service.PolicyAggregate;
 
 import java.util.Comparator;
@@ -971,7 +970,7 @@ public class DefaultAccommodationSelectionSection implements HasAccommodationSel
     }
 
     protected String formatPrice(int priceInCents) {
-        return PriceUtil.formatWithCurrency(priceInCents, workingBookingProperties != null ? workingBookingProperties.getEvent() : null);
+        return EventPriceFormatter.formatWithCurrency(priceInCents, workingBookingProperties != null ? workingBookingProperties.getEvent() : null);
     }
 
     // ========================================

@@ -25,7 +25,7 @@ import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
 import one.modality.booking.frontoffice.bookingpage.components.StyledSectionHeader;
-import one.modality.base.shared.entities.formatters.PriceUtil;
+import one.modality.base.shared.entities.formatters.EventPriceFormatter;
 
 import one.modality.ecommerce.policy.service.PolicyAggregate;
 import one.modality.ecommerce.shared.pricecalculator.PriceCalculator;
@@ -257,7 +257,7 @@ public class DefaultAudioRecordingPhaseCoverageSection implements HasAudioRecord
      * Formats a price in cents for display.
      */
     protected String formatPrice(int priceInCents) {
-        return PriceUtil.formatWithCurrency(priceInCents, workingBookingProperties != null ? workingBookingProperties.getEvent() : null);
+        return EventPriceFormatter.formatWithCurrency(priceInCents, workingBookingProperties != null ? workingBookingProperties.getEvent() : null);
     }
 
     // ========================================

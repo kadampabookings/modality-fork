@@ -28,7 +28,7 @@ import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
 import one.modality.booking.frontoffice.bookingpage.components.StyledSectionHeader;
 
-import one.modality.base.shared.entities.formatters.PriceUtil;
+import one.modality.base.shared.entities.formatters.EventPriceFormatter;
 import one.modality.ecommerce.policy.service.PolicyAggregate;
 
 import java.time.LocalDate;
@@ -488,7 +488,7 @@ public class DefaultTransportSection implements HasTransportSection {
         if (option.getPrice() == 0) {
             return "Free";
         }
-        String priceStr = PriceUtil.formatWithCurrency(option.getPrice(), workingBookingProperties != null ? workingBookingProperties.getEvent() : null);
+        String priceStr = EventPriceFormatter.formatWithCurrency(option.getPrice(), workingBookingProperties != null ? workingBookingProperties.getEvent() : null);
         if (option.isPerDay()) {
             priceStr += "/day";
         }
@@ -791,7 +791,7 @@ public class DefaultTransportSection implements HasTransportSection {
         if (priceInCents == 0) {
             return "Free";
         }
-        return PriceUtil.formatWithCurrency(priceInCents, workingBookingProperties != null ? workingBookingProperties.getEvent() : null);
+        return EventPriceFormatter.formatWithCurrency(priceInCents, workingBookingProperties != null ? workingBookingProperties.getEvent() : null);
     }
 
     /**

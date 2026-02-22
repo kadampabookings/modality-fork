@@ -18,7 +18,7 @@ import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.SVGPath;
 import one.modality.base.shared.entities.Event;
-import one.modality.base.shared.entities.formatters.PriceUtil;
+import one.modality.base.shared.entities.formatters.EventPriceFormatter;
 import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
@@ -253,7 +253,7 @@ public class DefaultFailedPaymentSection implements HasFailedPaymentSection {
         Runnable updateAmount = () -> {
             int amount = amountDueProperty.get();
             Event event = workingBookingProperties != null ? workingBookingProperties.getEvent() : null;
-            String formatted = PriceUtil.formatWithCurrency(amount, event);
+            String formatted = EventPriceFormatter.formatWithCurrency(amount, event);
             value.setText(formatted);
         };
         amountDueProperty.addListener((obs, old, val) -> updateAmount.run());

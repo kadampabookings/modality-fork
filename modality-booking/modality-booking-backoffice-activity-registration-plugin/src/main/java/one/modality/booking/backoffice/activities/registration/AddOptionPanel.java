@@ -21,7 +21,7 @@ import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import one.modality.base.shared.entities.*;
-import one.modality.base.shared.entities.formatters.PriceUtil;
+import one.modality.base.shared.entities.formatters.EventPriceFormatter;
 import one.modality.base.shared.knownitems.KnownItemFamily;
 import one.modality.booking.client.workingbooking.WorkingBooking;
 import one.modality.ecommerce.policy.service.PolicyAggregate;
@@ -40,7 +40,8 @@ import static one.modality.booking.backoffice.activities.registration.Registrati
  * - Items belonging to selected family as chips
  * - Availability from ScheduledItem.getGuestsAvailability()
  * <p>
- * Based on RegistrationDashboardFull.jsx AddOptionPanel section (lines 5600-5815).
+ * Based on RegistrationDashboardFull.jsx AddOptionPanel section (lines
+ * 5600-5815).
  *
  * @author Claude Code
  */
@@ -70,7 +71,7 @@ public class AddOptionPanel {
     private FlowPane itemChipsContainer;
 
     public AddOptionPanel(ViewDomainActivityBase activity, RegistrationPresentationModel pm,
-                          Document document, UpdateStore updateStore) {
+            Document document, UpdateStore updateStore) {
         this.activity = activity;
         this.pm = pm;
         this.document = document;
@@ -257,7 +258,8 @@ public class AddOptionPanel {
      * Updates the item chips based on the selected family.
      */
     private void updateItemChips() {
-        if (itemChipsContainer == null) return;
+        if (itemChipsContainer == null)
+            return;
         itemChipsContainer.getChildren().clear();
 
         ItemFamily selectedFamily = selectedFamilyProperty.get();
@@ -271,10 +273,10 @@ public class AddOptionPanel {
 
         // Filter items by selected family
         List<ItemWithAvailability> familyItems = availableItems.stream()
-            .filter(item -> item.item != null && item.item.getFamily() != null
-                && Entities.samePrimaryKey(item.item.getFamily(), selectedFamily))
-            .sorted(Comparator.comparing(item -> item.item.getName() != null ? item.item.getName() : ""))
-            .collect(Collectors.toList());
+                .filter(item -> item.item != null && item.item.getFamily() != null
+                        && Entities.samePrimaryKey(item.item.getFamily(), selectedFamily))
+                .sorted(Comparator.comparing(item -> item.item.getName() != null ? item.item.getName() : ""))
+                .collect(Collectors.toList());
 
         if (familyItems.isEmpty()) {
             String familyName = selectedFamily.getName() != null ? selectedFamily.getName() : "this category";
@@ -373,7 +375,8 @@ public class AddOptionPanel {
 
         // Price for available items
         if (!"soldOut".equals(status) && addedCount == 0 && itemData.price != null && itemData.price > 0) {
-            String formattedPrice = PriceUtil.formatWithCurrency(itemData.price, event);
+            Event event = document != null ? document.getEvent() : null;
+            String formattedPrice = EventPriceFormatter.formatWithCurrency(itemData.price, event);
             Label priceLabel = new Label(formattedPrice);
             priceLabel.setFont(Font.font("System", 9));
             priceLabel.setTextFill(Color.web("#6b7280"));
@@ -496,7 +499,8 @@ public class AddOptionPanel {
 
         for (ScheduledItem si : scheduledItems) {
             Item item = si.getItem();
-            if (item == null) continue;
+            if (item == null)
+                continue;
 
             ItemFamily family = item.getFamily();
             if (family != null) {
@@ -521,7 +525,8 @@ public class AddOptionPanel {
                 // Update availability if this one is lower
                 Integer newAvail = si.getGuestsAvailability();
                 if (newAvail != null && (itemData.availability == null || newAvail < itemData.availability)) {
-                    itemData = new ItemWithAvailability(item, itemData.site, newAvail, itemData.price, itemData.isTemporal);
+                    itemData = new ItemWithAvailability(item, itemData.site, newAvail, itemData.price,
+                            itemData.isTemporal);
                     itemsMap.put(key, itemData);
                 }
             }
@@ -531,7 +536,8 @@ public class AddOptionPanel {
         javafx.application.Platform.runLater(() -> {
             availableFamilies.setAll(families);
             availableItems.setAll(itemsMap.values());
-            System.out.println("AddOptionPanel: Loaded " + families.size() + " families, " + itemsMap.size() + " items");
+            System.out
+                    .println("AddOptionPanel: Loaded " + families.size() + " families, " + itemsMap.size() + " items");
         });
     }
 
@@ -539,22 +545,23 @@ public class AddOptionPanel {
      * Gets the price for an item from PolicyAggregate rates.
      */
     private Integer getItemPrice(Item item, Site site) {
-        if (workingBooking == null) return null;
+        if (workingBooking == null)
+            return null;
 
         PolicyAggregate policyAggregate = workingBooking.getPolicyAggregate();
-        if (policyAggregate == null) return null;
+        if (policyAggregate == null)
+            return null;
 
         // Try to find a rate for this item/site
         return policyAggregate.filterDailyRatesStreamOfSiteAndItem(site, item)
-            .findFirst()
-            .map(Rate::getPrice)
-            .orElse(null);
+                .findFirst()
+                .map(Rate::getPrice)
+                .orElse(null);
     }
 
     /**
      * Formats a price (in cents) using the event's currency.
      */
-
 
     /**
      * Gets the status of an item (available, limited, soldOut).
@@ -576,12 +583,15 @@ public class AddOptionPanel {
      * Counts how many times an item is already added to the booking.
      */
     private int countItemAlreadyAdded(Item item, Site site) {
-        if (item == null) return 0;
+        if (item == null)
+            return 0;
 
         int count = 0;
         for (DocumentLine line : existingLines) {
-            if (Boolean.TRUE.equals(line.getFieldValue("removed"))) continue;
-            if (Boolean.TRUE.equals(line.isCancelled())) continue;
+            if (Boolean.TRUE.equals(line.getFieldValue("removed")))
+                continue;
+            if (Boolean.TRUE.equals(line.isCancelled()))
+                continue;
 
             if (Entities.samePrimaryKey(line.getItem(), item)) {
                 if (site != null) {
@@ -600,7 +610,8 @@ public class AddOptionPanel {
      * Adds an item to the current booking using WorkingBooking API.
      */
     private void addItemToBooking(ItemWithAvailability itemData) {
-        if (workingBooking == null || itemData.item == null) return;
+        if (workingBooking == null || itemData.item == null)
+            return;
 
         System.out.println("AddOptionPanel: Adding item " + itemData.item.getName() + " to booking");
 
@@ -625,16 +636,18 @@ public class AddOptionPanel {
      * Adds a temporal item by booking its ScheduledItems.
      */
     private void addTemporalItem(ItemWithAvailability itemData) {
-        if (workingBooking == null) return;
+        if (workingBooking == null)
+            return;
 
         PolicyAggregate policyAggregate = workingBooking.getPolicyAggregate();
-        if (policyAggregate == null) return;
+        if (policyAggregate == null)
+            return;
 
         // Find all ScheduledItems for this item/site
         List<ScheduledItem> scheduledItemsToBook = policyAggregate.getScheduledItems().stream()
-            .filter(si -> Entities.samePrimaryKey(si.getItem(), itemData.item))
-            .filter(si -> itemData.site == null || Entities.samePrimaryKey(si.getSite(), itemData.site))
-            .collect(Collectors.toList());
+                .filter(si -> Entities.samePrimaryKey(si.getItem(), itemData.item))
+                .filter(si -> itemData.site == null || Entities.samePrimaryKey(si.getSite(), itemData.site))
+                .collect(Collectors.toList());
 
         if (!scheduledItemsToBook.isEmpty()) {
             // Book all scheduled items for this item
@@ -665,21 +678,32 @@ public class AddOptionPanel {
      * Gets the emoji icon for an ItemFamily.
      */
     private String getFamilyEmoji(ItemFamily family) {
-        if (family == null) return "\u25CF"; // ●
+        if (family == null)
+            return "\u25CF"; // ●
 
         KnownItemFamily knownFamily = family.getItemFamilyType();
         if (knownFamily != null) {
             switch (knownFamily) {
-                case ACCOMMODATION: return "\uD83D\uDECF\uFE0F"; // 🛏️
-                case MEALS: return "\uD83C\uDF7D\uFE0F"; // 🍽️
-                case DIET: return "\uD83E\uDD57"; // 🥗
-                case TEACHING: return "\uD83D\uDCDA"; // 📚
-                case TRANSPORT: return "\uD83D\uDE90"; // 🚐
-                case PARKING: return "\uD83C\uDD7F\uFE0F"; // 🅿️
-                case TAX: return "\uD83D\uDCB0"; // 💰
-                case AUDIO_RECORDING: return "\uD83C\uDFA7"; // 🎧
-                case VIDEO: return "\uD83C\uDFA5"; // 🎥
-                default: break;
+                case ACCOMMODATION:
+                    return "\uD83D\uDECF\uFE0F"; // 🛏️
+                case MEALS:
+                    return "\uD83C\uDF7D\uFE0F"; // 🍽️
+                case DIET:
+                    return "\uD83E\uDD57"; // 🥗
+                case TEACHING:
+                    return "\uD83D\uDCDA"; // 📚
+                case TRANSPORT:
+                    return "\uD83D\uDE90"; // 🚐
+                case PARKING:
+                    return "\uD83C\uDD7F\uFE0F"; // 🅿️
+                case TAX:
+                    return "\uD83D\uDCB0"; // 💰
+                case AUDIO_RECORDING:
+                    return "\uD83C\uDFA7"; // 🎧
+                case VIDEO:
+                    return "\uD83C\uDFA5"; // 🎥
+                default:
+                    break;
             }
         }
 
@@ -687,12 +711,18 @@ public class AddOptionPanel {
         String name = family.getName();
         if (name != null) {
             name = name.toLowerCase();
-            if (name.contains("acco") || name.contains("room")) return "\uD83D\uDECF\uFE0F";
-            if (name.contains("meal") || name.contains("food")) return "\uD83C\uDF7D\uFE0F";
-            if (name.contains("diet")) return "\uD83E\uDD57";
-            if (name.contains("teach") || name.contains("program")) return "\uD83D\uDCDA";
-            if (name.contains("transp")) return "\uD83D\uDE90";
-            if (name.contains("park")) return "\uD83C\uDD7F\uFE0F";
+            if (name.contains("acco") || name.contains("room"))
+                return "\uD83D\uDECF\uFE0F";
+            if (name.contains("meal") || name.contains("food"))
+                return "\uD83C\uDF7D\uFE0F";
+            if (name.contains("diet"))
+                return "\uD83E\uDD57";
+            if (name.contains("teach") || name.contains("program"))
+                return "\uD83D\uDCDA";
+            if (name.contains("transp"))
+                return "\uD83D\uDE90";
+            if (name.contains("park"))
+                return "\uD83C\uDD7F\uFE0F";
         }
 
         return "\u2605"; // ★
@@ -702,21 +732,32 @@ public class AddOptionPanel {
      * Gets the color for an ItemFamily.
      */
     private Color getFamilyColor(ItemFamily family) {
-        if (family == null) return Color.web("#6b7280");
+        if (family == null)
+            return Color.web("#6b7280");
 
         KnownItemFamily knownFamily = family.getItemFamilyType();
         if (knownFamily != null) {
             switch (knownFamily) {
-                case ACCOMMODATION: return Color.web("#059669"); // Green
-                case MEALS: return Color.web("#d97706"); // Orange
-                case DIET: return Color.web("#7c3aed"); // Purple
-                case TEACHING: return Color.web("#be185d"); // Pink
-                case TRANSPORT: return Color.web("#0284c7"); // Blue
-                case PARKING: return Color.web("#64748b"); // Slate
-                case TAX: return Color.web("#dc2626"); // Red
-                case AUDIO_RECORDING: return Color.web("#4f46e5"); // Indigo
-                case VIDEO: return Color.web("#0891b2"); // Cyan
-                default: break;
+                case ACCOMMODATION:
+                    return Color.web("#059669"); // Green
+                case MEALS:
+                    return Color.web("#d97706"); // Orange
+                case DIET:
+                    return Color.web("#7c3aed"); // Purple
+                case TEACHING:
+                    return Color.web("#be185d"); // Pink
+                case TRANSPORT:
+                    return Color.web("#0284c7"); // Blue
+                case PARKING:
+                    return Color.web("#64748b"); // Slate
+                case TAX:
+                    return Color.web("#dc2626"); // Red
+                case AUDIO_RECORDING:
+                    return Color.web("#4f46e5"); // Indigo
+                case VIDEO:
+                    return Color.web("#0891b2"); // Cyan
+                default:
+                    break;
             }
         }
 

@@ -16,6 +16,7 @@ import javafx.scene.shape.SVGPath;
 import one.modality.base.shared.entities.Document;
 import one.modality.base.shared.entities.Event;
 import one.modality.base.shared.entities.Person;
+import one.modality.base.shared.entities.formatters.EventPriceFormatter;
 import one.modality.booking.client.workingbooking.WorkingBooking;
 import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
@@ -504,7 +505,7 @@ public class DefaultSummarySection implements HasSummarySection {
         }
 
         // Amount label (right-aligned, doesn't wrap)
-        Label amountLabel = new Label(one.modality.base.shared.entities.formatters.PriceUtil.formatWithCurrency(line.getAmount(), event));
+        Label amountLabel = new Label(EventPriceFormatter.formatWithCurrency(line.getAmount(), event));
         amountLabel.getStyleClass().addAll(bookingpage_text_base, bookingpage_font_semibold, bookingpage_text_dark);
         amountLabel.setMinWidth(Region.USE_PREF_SIZE);
 
@@ -518,7 +519,7 @@ public class DefaultSummarySection implements HasSummarySection {
             if (unifiedPriceDisplay != null) {
                 totalAmountLabel.setText(unifiedPriceDisplay.formatPrice(totalAmount));
             } else {
-                totalAmountLabel.setText(one.modality.base.shared.entities.formatters.PriceUtil.formatWithCurrency(totalAmount, event));
+                totalAmountLabel.setText(EventPriceFormatter.formatWithCurrency(totalAmount, event));
             }
             // Note: CSS class "bookingpage-text-primary" handles theme color
         }

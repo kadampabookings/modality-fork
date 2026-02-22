@@ -60,18 +60,17 @@ public final class PolicyAggregate {
     private EntityList<BookablePeriod> bookablePeriods;
 
     public PolicyAggregate(
-        QueryResult eventQueryResult,
-        QueryResult scheduledItemsQueryResult,
-        QueryResult scheduledBoundariesQueryResult,
-        QueryResult eventPartsQueryResult,
-        QueryResult eventSelectionsQueryResult,
-        QueryResult eventPhasesQueryResult,
-        QueryResult phaseCoveragesQueryResult,
-        QueryResult itemFamilyPoliciesQueryResult,
-        QueryResult itemPoliciesQueryResult,
-        QueryResult ratesQueryResult,
-        QueryResult bookablePeriodsQueryResult
-    ) {
+            QueryResult eventQueryResult,
+            QueryResult scheduledItemsQueryResult,
+            QueryResult scheduledBoundariesQueryResult,
+            QueryResult eventPartsQueryResult,
+            QueryResult eventSelectionsQueryResult,
+            QueryResult eventPhasesQueryResult,
+            QueryResult phaseCoveragesQueryResult,
+            QueryResult itemFamilyPoliciesQueryResult,
+            QueryResult itemPoliciesQueryResult,
+            QueryResult ratesQueryResult,
+            QueryResult bookablePeriodsQueryResult) {
         this.eventQueryResult = eventQueryResult;
         this.scheduledItemsQueryResult = scheduledItemsQueryResult;
         this.scheduledBoundariesQueryResult = scheduledBoundariesQueryResult;
@@ -84,46 +83,63 @@ public final class PolicyAggregate {
         this.itemPoliciesQueryResult = itemPoliciesQueryResult;
         this.bookablePeriodsQueryResult = bookablePeriodsQueryResult;
     }
+
     public void rebuildEntities(Event event) {
         rebuildEntities(EntityStore.createAbove(event.getStore()));
     }
 
     public void rebuildEntities(EntityStore entityStore) {
+        this.entityStore = entityStore;
         QueryRowToEntityMapping queryMapping = (QueryRowToEntityMapping) eventQueryResult.getEntityMapping();
-        // The event returned by PolicyAggregate is a different instance from the passes event and may contain some
+        // The event returned by PolicyAggregate is a different instance from the passes
+        // event and may contain some
         // additional fields such as termsUrlEn
-        this.event = Collections.first(QueryResultToEntitiesMapper.mapQueryResultToEntities(eventQueryResult, queryMapping, entityStore, "events"));
+        this.event = Collections.first(QueryResultToEntitiesMapper.mapQueryResultToEntities(eventQueryResult,
+                queryMapping, entityStore, "events"));
         secondsToOpeningDateAtLoadingTime = this.event.getDoubleFieldValue(Event.secondsToOpeningDateAtLoadingTime);
-        secondsToBookingProcessStartAtLoadingTime = this.event.getDoubleFieldValue(Event.secondsToBookingProcessStartAtLoadingTime);
+        secondsToBookingProcessStartAtLoadingTime = this.event
+                .getDoubleFieldValue(Event.secondsToBookingProcessStartAtLoadingTime);
         queryMapping = (QueryRowToEntityMapping) scheduledItemsQueryResult.getEntityMapping();
-        scheduledItems = QueryResultToEntitiesMapper.mapQueryResultToEntities(scheduledItemsQueryResult, queryMapping, entityStore, "scheduledItems");
+        scheduledItems = QueryResultToEntitiesMapper.mapQueryResultToEntities(scheduledItemsQueryResult, queryMapping,
+                entityStore, "scheduledItems");
         queryMapping = (QueryRowToEntityMapping) scheduledBoundariesQueryResult.getEntityMapping();
-        scheduledBoundaries = QueryResultToEntitiesMapper.mapQueryResultToEntities(scheduledBoundariesQueryResult, queryMapping, entityStore, "scheduledBoundaries");
+        scheduledBoundaries = QueryResultToEntitiesMapper.mapQueryResultToEntities(scheduledBoundariesQueryResult,
+                queryMapping, entityStore, "scheduledBoundaries");
         queryMapping = (QueryRowToEntityMapping) eventPartsQueryResult.getEntityMapping();
-        eventParts = QueryResultToEntitiesMapper.mapQueryResultToEntities(eventPartsQueryResult, queryMapping, entityStore, "eventParts");
+        eventParts = QueryResultToEntitiesMapper.mapQueryResultToEntities(eventPartsQueryResult, queryMapping,
+                entityStore, "eventParts");
         queryMapping = (QueryRowToEntityMapping) eventSelectionsQueryResult.getEntityMapping();
-        eventSelections = QueryResultToEntitiesMapper.mapQueryResultToEntities(eventSelectionsQueryResult, queryMapping, entityStore, "eventSelections");
+        eventSelections = QueryResultToEntitiesMapper.mapQueryResultToEntities(eventSelectionsQueryResult, queryMapping,
+                entityStore, "eventSelections");
         queryMapping = (QueryRowToEntityMapping) eventPhasesQueryResult.getEntityMapping();
-        eventPhases = QueryResultToEntitiesMapper.mapQueryResultToEntities(eventPhasesQueryResult, queryMapping, entityStore, "eventPhases");
+        eventPhases = QueryResultToEntitiesMapper.mapQueryResultToEntities(eventPhasesQueryResult, queryMapping,
+                entityStore, "eventPhases");
         queryMapping = (QueryRowToEntityMapping) eventPhaseCoveragesQueryResult.getEntityMapping();
-        phaseCoverages = QueryResultToEntitiesMapper.mapQueryResultToEntities(eventPhaseCoveragesQueryResult, queryMapping, entityStore, "phaseCoverages");
+        phaseCoverages = QueryResultToEntitiesMapper.mapQueryResultToEntities(eventPhaseCoveragesQueryResult,
+                queryMapping, entityStore, "phaseCoverages");
         queryMapping = (QueryRowToEntityMapping) itemFamilyPoliciesQueryResult.getEntityMapping();
-        itemFamilyPolicies = QueryResultToEntitiesMapper.mapQueryResultToEntities(itemFamilyPoliciesQueryResult, queryMapping, entityStore, "itemFamilyPolicies");
+        itemFamilyPolicies = QueryResultToEntitiesMapper.mapQueryResultToEntities(itemFamilyPoliciesQueryResult,
+                queryMapping, entityStore, "itemFamilyPolicies");
         queryMapping = (QueryRowToEntityMapping) itemPoliciesQueryResult.getEntityMapping();
-        itemPolicies = QueryResultToEntitiesMapper.mapQueryResultToEntities(itemPoliciesQueryResult, queryMapping, entityStore, "itemPolicies");
+        itemPolicies = QueryResultToEntitiesMapper.mapQueryResultToEntities(itemPoliciesQueryResult, queryMapping,
+                entityStore, "itemPolicies");
         queryMapping = (QueryRowToEntityMapping) ratesQueryResult.getEntityMapping();
-        rates = QueryResultToEntitiesMapper.mapQueryResultToEntities(ratesQueryResult, queryMapping, entityStore, "rates");
+        rates = QueryResultToEntitiesMapper.mapQueryResultToEntities(ratesQueryResult, queryMapping, entityStore,
+                "rates");
         queryMapping = (QueryRowToEntityMapping) bookablePeriodsQueryResult.getEntityMapping();
-        bookablePeriods = QueryResultToEntitiesMapper.mapQueryResultToEntities(bookablePeriodsQueryResult, queryMapping, entityStore, "bookablePeriods");
+        bookablePeriods = QueryResultToEntitiesMapper.mapQueryResultToEntities(bookablePeriodsQueryResult, queryMapping,
+                entityStore, "bookablePeriods");
     }
 
     public Future<Void> reloadAvailabilities() {
         return PolicyService.loadAvailabilities(new LoadPolicyArgument(event))
-            .onSuccess(scheduledItemsQueryResult -> {
-                QueryRowToEntityMapping queryMapping = (QueryRowToEntityMapping) scheduledItemsQueryResult.getEntityMapping();
-                scheduledItems = QueryResultToEntitiesMapper.mapQueryResultToEntities(scheduledItemsQueryResult, queryMapping, entityStore, "scheduledItems");
-            })
-            .mapEmpty();
+                .onSuccess(scheduledItemsQueryResult -> {
+                    QueryRowToEntityMapping queryMapping = (QueryRowToEntityMapping) scheduledItemsQueryResult
+                            .getEntityMapping();
+                    scheduledItems = QueryResultToEntitiesMapper.mapQueryResultToEntities(scheduledItemsQueryResult,
+                            queryMapping, entityStore, "scheduledItems");
+                })
+                .mapEmpty();
     }
 
     public EntityStore getEntityStore() {
@@ -143,7 +159,8 @@ public final class PolicyAggregate {
     }
 
     private Double getSecondsNow(Double secondsAtLoadingTime) {
-        if (secondsAtLoadingTime == null) return null;
+        if (secondsAtLoadingTime == null)
+            return null;
         return secondsAtLoadingTime - (System.currentTimeMillis() - creationTimeMillis) / 1000.0;
     }
 
@@ -206,7 +223,8 @@ public final class PolicyAggregate {
     public EventPart getEarlyArrivalPart() {
         // Should be listed first
         EventPart firstPart = Collections.first(getEventParts());
-        if (firstPart == null) return null;
+        if (firstPart == null)
+            return null;
         if (firstPart.getStartDate().isBefore(getEvent().getStartDate()))
             return firstPart;
         for (EventSelection eventSelection : getEventSelections()) {
@@ -219,7 +237,8 @@ public final class PolicyAggregate {
     public EventPart getLateDeparturePart() {
         // Should be listed last
         EventPart lastPart = Collections.last(getEventParts());
-        if (lastPart == null) return null;
+        if (lastPart == null)
+            return null;
         if (lastPart.getEndDate().isAfter(getEvent().getEndDate()))
             return lastPart;
         for (EventSelection eventSelection : getEventSelections()) {
@@ -237,37 +256,39 @@ public final class PolicyAggregate {
      */
     public ItemPolicy getItemPolicy(Item item) {
         return getItemPolicies().stream()
-            .filter(ip -> Entities.samePrimaryKey(ip.getItem(), item))
-            .findFirst().orElse(null);
+                .filter(ip -> Entities.samePrimaryKey(ip.getItem(), item))
+                .findFirst().orElse(null);
     }
 
     public List<ItemPolicy> getDietItemPolicies() {
         return getItemPolicies().stream()
-            .filter(ip -> ip.getItem().getItemFamilyType() == KnownItemFamily.DIET)
-            .collect(Collectors.toList());
+                .filter(ip -> ip.getItem().getItemFamilyType() == KnownItemFamily.DIET)
+                .collect(Collectors.toList());
     }
 
     public List<ItemPolicy> getTranslationItemPolicies() {
         return getItemPolicies().stream()
-            .filter(ip -> ip.getItem().getItemFamilyType() == KnownItemFamily.TRANSLATION)
-            .collect(Collectors.toList());
+                .filter(ip -> ip.getItem().getItemFamilyType() == KnownItemFamily.TRANSLATION)
+                .collect(Collectors.toList());
     }
 
     public ItemPolicy getSharingAccommodationItemPolicy() {
         return getItemPolicies().stream()
-            .filter(ip -> Booleans.isTrue(ip.getItem().isShare_mate()) && ip.getItem().getItemFamilyType() == KnownItemFamily.ACCOMMODATION)
-            .findFirst().orElse(null);
+                .filter(ip -> Booleans.isTrue(ip.getItem().isShare_mate())
+                        && ip.getItem().getItemFamilyType() == KnownItemFamily.ACCOMMODATION)
+                .findFirst().orElse(null);
     }
 
     public ItemFamilyPolicy getItemFamilyPolicy(KnownItemFamily knownItemFamily) {
         return getItemFamilyPolicies().stream()
-            .filter(ifp -> ifp.getItemFamilyType() == knownItemFamily)
-            .findFirst().orElse(null);
+                .filter(ifp -> ifp.getItemFamilyType() == knownItemFamily)
+                .findFirst().orElse(null);
     }
 
     public List<EventPhaseCoverage> getAudioRecordingPhaseCoverages() {
         ItemFamilyPolicy audioRecordingPolicy = getItemFamilyPolicy(KnownItemFamily.AUDIO_RECORDING);
-        if (audioRecordingPolicy == null) return Collections.emptyList();
+        if (audioRecordingPolicy == null)
+            return Collections.emptyList();
         return audioRecordingPolicy.getEventPhaseCoverages();
     }
 
@@ -277,17 +298,20 @@ public final class PolicyAggregate {
 
     private Timeline findMealsTimeline(LocalTime startsAfter, LocalTime startsBefore) {
         return scheduledItems.stream()
-            .map(ScheduledItem::getTimeline)
-            .distinct()
-            .filter(timeline -> {
-                if (timeline == null) return false;
-                Item item = timeline.getItem();
-                if (item == null || !Entities.samePrimaryKey(item.getFamily(), KnownItemFamily.MEALS.getPrimaryKey()))
-                    return false;
-                LocalTime startTime = timeline.getStartTime();
-                return startTime != null && (startsBefore == null || startTime.isBefore(startsBefore)) && (startsAfter == null || startTime.isAfter(startsAfter));
-            }).findFirst()
-            .orElse(null);
+                .map(ScheduledItem::getTimeline)
+                .distinct()
+                .filter(timeline -> {
+                    if (timeline == null)
+                        return false;
+                    Item item = timeline.getItem();
+                    if (item == null
+                            || !Entities.samePrimaryKey(item.getFamily(), KnownItemFamily.MEALS.getPrimaryKey()))
+                        return false;
+                    LocalTime startTime = timeline.getStartTime();
+                    return startTime != null && (startsBefore == null || startTime.isBefore(startsBefore))
+                            && (startsAfter == null || startTime.isAfter(startsAfter));
+                }).findFirst()
+                .orElse(null);
     }
 
     public Timeline getBreakfastTimeline() {
@@ -326,7 +350,9 @@ public final class PolicyAggregate {
         List<Rate> dailyRates = getDailyRates();
         int dailyRatesCount = dailyRates.size();
         if (dailyRatesCount > 1) {
-            Console.warn("PolicyAggregate.getDailyRate() is meant to be used with single daily rate policies, but this policy has " + dailyRatesCount + " rates.");
+            Console.warn(
+                    "PolicyAggregate.getDailyRate() is meant to be used with single daily rate policies, but this policy has "
+                            + dailyRatesCount + " rates.");
         }
         return Collections.first(dailyRates);
     }
@@ -341,7 +367,8 @@ public final class PolicyAggregate {
     }
 
     public Stream<Rate> filterRatesStreamOfSiteAndItem(Site site, Item item, boolean perDay) {
-        return perDay ? filterDailyRatesStreamOfSiteAndItem(site, item) : filterFixedRatesStreamOfSiteAndItem(site, item);
+        return perDay ? filterDailyRatesStreamOfSiteAndItem(site, item)
+                : filterFixedRatesStreamOfSiteAndItem(site, item);
     }
 
     public Stream<Rate> filterDailyRatesStreamOfSiteAndItem(Site site, Item item) {
@@ -352,13 +379,15 @@ public final class PolicyAggregate {
         return Rates.filterRatesOfSiteAndItem(getFixedRatesStream(), site, item);
     }
 
-    public Stream<Rate> filterRatesStreamOfSiteAndItemOnTodayAndApplicableOverPeriod(Site site, Item item, boolean perDay, LocalDate startDate, LocalDate endDate) {
+    public Stream<Rate> filterRatesStreamOfSiteAndItemOnTodayAndApplicableOverPeriod(Site site, Item item,
+            boolean perDay, LocalDate startDate, LocalDate endDate) {
         return filterRatesStreamOfSiteAndItem(site, item, perDay)
-            .filter(r -> Rates.isOnTodayAndApplicableOverPeriod(r, startDate, endDate));
+                .filter(r -> Rates.isOnTodayAndApplicableOverPeriod(r, startDate, endDate));
     }
 
     public Rate getScheduledItemDailyRate(ScheduledItem scheduledItem) {
-        return getSiteItemDailyRateOverPeriod(scheduledItem.getSite(), scheduledItem.getItem(), scheduledItem.getDate(), scheduledItem.getDate());
+        return getSiteItemDailyRateOverPeriod(scheduledItem.getSite(), scheduledItem.getItem(), scheduledItem.getDate(),
+                scheduledItem.getDate());
     }
 
     public Rate getSiteItemDailyRateOverPeriod(Site site, Item item, Period period) {
@@ -367,7 +396,7 @@ public final class PolicyAggregate {
 
     public Rate getSiteItemDailyRateOverPeriod(Site site, Item item, LocalDate startDate, LocalDate endDate) {
         return filterRatesStreamOfSiteAndItemOnTodayAndApplicableOverPeriod(site, item, true, startDate, endDate)
-            .findFirst().orElse(null);
+                .findFirst().orElse(null);
     }
 
     public boolean hasFacilityFees() {
@@ -381,7 +410,8 @@ public final class PolicyAggregate {
 
     @Deprecated
     public List<BookablePeriod> getBookablePeriods(KnownItemFamily knownItemFamily) {
-        return Collections.filter(getBookablePeriods(), bp -> Entities.samePrimaryKey(bp.getStartScheduledItem().getItem().getFamily(), knownItemFamily.getPrimaryKey()));
+        return Collections.filter(getBookablePeriods(), bp -> Entities
+                .samePrimaryKey(bp.getStartScheduledItem().getItem().getFamily(), knownItemFamily.getPrimaryKey()));
     }
 
     @Deprecated
@@ -396,13 +426,16 @@ public final class PolicyAggregate {
         List<ScheduledItem> familyScheduledItems = filterScheduledItemsOfFamily(knownItemFamily);
         BookablePeriod wholeBookablePeriod = entityStore.createEntity(BookablePeriod.class);
         wholeBookablePeriod.setEvent(event);
-        wholeBookablePeriod.setStartScheduledItem(Collections.first(familyScheduledItems)); // should be the first teaching date
-        wholeBookablePeriod.setEndScheduledItem(Collections.last(familyScheduledItems)); // should be the last teaching date
+        wholeBookablePeriod.setStartScheduledItem(Collections.first(familyScheduledItems)); // should be the first
+                                                                                            // teaching date
+        wholeBookablePeriod.setEndScheduledItem(Collections.last(familyScheduledItems)); // should be the last teaching
+                                                                                         // date
         wholeBookablePeriod.setFieldValue("i18nKey", i18nKey); // Will be recognized by I18nFunction
         return wholeBookablePeriod;
     }
 
-    // The following methods are meant to be used for serialization, not by the application code
+    // The following methods are meant to be used for serialization, not by the
+    // application code
 
     public QueryResult getEventQueryResult() {
         return eventQueryResult;

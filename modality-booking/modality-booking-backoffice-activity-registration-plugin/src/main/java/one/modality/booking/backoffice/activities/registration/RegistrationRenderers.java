@@ -5,7 +5,6 @@ import dev.webfx.platform.util.Booleans;
 import dev.webfx.platform.util.Numbers;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
-import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.layout.*;
@@ -16,7 +15,7 @@ import javafx.scene.text.FontWeight;
 import one.modality.base.client.mainframe.fx.FXMainFrameDialogArea;
 import one.modality.base.shared.entities.Document;
 import one.modality.base.shared.entities.Event;
-import one.modality.base.shared.entities.formatters.PriceUtil;
+import one.modality.base.shared.entities.formatters.EventPriceFormatter;
 import one.modality.ecommerce.backoffice.operations.entities.document.registration.ToggleCancelDocumentRequest;
 
 import java.time.LocalDate;
@@ -392,8 +391,8 @@ final class RegistrationRenderers {
 
             // Amount: 12px, color: textMuted - format using PriceUtil (converts cents to currency)
             Event event = doc.getEvent();
-            String paidFormatted = PriceUtil.formatWithCurrency(paidAmount, event);
-            String totalFormatted = PriceUtil.formatWithCurrency(total, event);
+            String paidFormatted = EventPriceFormatter.formatWithCurrency(paidAmount, event);
+            String totalFormatted = EventPriceFormatter.formatWithCurrency(total, event);
             Label amountLabel = new Label(paidFormatted + " / " + totalFormatted);
             amountLabel.setFont(FONT_12);
             amountLabel.setTextFill(TEXT_MUTED);

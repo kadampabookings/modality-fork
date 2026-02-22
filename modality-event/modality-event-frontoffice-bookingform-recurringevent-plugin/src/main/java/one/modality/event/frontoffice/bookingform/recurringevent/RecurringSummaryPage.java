@@ -25,7 +25,7 @@ import one.modality.base.client.i18n.I18nEntities;
 import one.modality.base.client.icons.SvgIcons;
 import one.modality.base.client.time.FrontOfficeTimeFormats;
 import one.modality.base.shared.entities.*;
-import one.modality.base.shared.entities.formatters.PriceUtil;
+import one.modality.base.shared.entities.formatters.EventPriceFormatter;
 import one.modality.ecommerce.client.i18n.EcommerceI18nKeys;
 import one.modality.booking.client.workingbooking.WorkingBooking;
 import one.modality.booking.client.workingbooking.WorkingBookingProperties;
@@ -141,7 +141,7 @@ final class RecurringSummaryPage implements BookingFormPage {
         // THIRD PART: DISCOUNT, IF ANY
         int total = workingBookingProperties.getTotal();
         if (total < noDiscountTotalPrice) {
-            Label price = new Label(PriceUtil.formatWithCurrency(total - noDiscountTotalPrice, event));
+            Label price = new Label(EventPriceFormatter.formatWithCurrency(total - noDiscountTotalPrice, event));
             addRow(
                 I18nControls.newLabel(EcommerceI18nKeys.Discount),
                 price,
@@ -173,7 +173,7 @@ final class RecurringSummaryPage implements BookingFormPage {
                     LocalizedTime.formatMonthDayProperty(date, FrontOfficeTimeFormats.BOOKING_CHECKOUT_DATE_FORMAT));
                 int dailyRatePrice = workingBooking.getDailyRatePrice();
                 totalPrice[0] += dailyRatePrice;
-                Label price = new Label(PriceUtil.formatWithCurrency(dailyRatePrice, event));
+                Label price = new Label(EventPriceFormatter.formatWithCurrency(dailyRatePrice, event));
 
                 Hyperlink trashOption = new Hyperlink();
                 trashOption.setGraphic(SvgIcons.setSVGPathFill(SvgIcons.createTrashSVGPath(), Color.RED));
@@ -198,7 +198,7 @@ final class RecurringSummaryPage implements BookingFormPage {
             Label name = new Label(event.getName() + (existing ? " - (already booked)" : ""));
             List<Attendance> attendances = attendancesStream.collect(Collectors.toList());
             int price = new PriceCalculator(documentAggregate).calculateLinePrice(attendances);
-            Label priceLabel = new Label(PriceUtil.formatWithCurrency(price, event));
+            Label priceLabel = new Label(EventPriceFormatter.formatWithCurrency(price, event));
             addRow(name, priceLabel, null);
             totalPrice[0] += price;
         }

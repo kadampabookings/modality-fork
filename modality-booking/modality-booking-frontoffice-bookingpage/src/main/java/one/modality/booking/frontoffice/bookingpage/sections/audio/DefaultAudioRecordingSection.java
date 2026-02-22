@@ -2,9 +2,7 @@ package one.modality.booking.frontoffice.bookingpage.sections.audio;
 import one.modality.booking.frontoffice.bookingpage.BookingPageCssSelectors;
 
 import dev.webfx.extras.i18n.controls.I18nControls;
-import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleBooleanProperty;
-import javafx.beans.property.SimpleObjectProperty;
 import javafx.beans.value.ObservableBooleanValue;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -21,7 +19,7 @@ import one.modality.base.shared.entities.BookablePeriod;
 import one.modality.base.shared.entities.Item;
 import one.modality.base.shared.entities.Event;
 import one.modality.base.shared.entities.ScheduledItem;
-import one.modality.base.shared.entities.formatters.PriceUtil;
+import one.modality.base.shared.entities.formatters.EventPriceFormatter;
 import one.modality.booking.client.workingbooking.WorkingBooking;
 import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
@@ -430,7 +428,7 @@ public class DefaultAudioRecordingSection implements HasAudioRecordingSection {
             HBox.setHgrow(titleContainer, Priority.ALWAYS);
 
             // Price - styled via CSS
-            Label priceLabel = new Label(PriceUtil.formatWithCurrency(price, event));
+            Label priceLabel = new Label(EventPriceFormatter.formatWithCurrency(price, event));
             priceLabel.getStyleClass().addAll(bookingpage_font_bold, bookingpage_text_base, bookingpage_text_dark);
 
             // Layout

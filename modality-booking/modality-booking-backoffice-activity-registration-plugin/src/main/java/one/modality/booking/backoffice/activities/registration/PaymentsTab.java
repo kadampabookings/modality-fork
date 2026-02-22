@@ -20,13 +20,11 @@ import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
-import one.modality.base.shared.domainmodel.formatters.PriceFormatter;
 import one.modality.base.shared.entities.Document;
-import one.modality.base.shared.entities.Event;
 import one.modality.base.shared.entities.History;
 import one.modality.base.shared.entities.Method;
 import one.modality.base.shared.entities.MoneyTransfer;
-import one.modality.base.shared.entities.formatters.PriceUtil;
+import one.modality.base.shared.entities.formatters.EventPriceFormatter;
 import one.modality.crm.shared.services.authn.fx.FXUserName;
 
 import javafx.application.Platform;
@@ -62,7 +60,8 @@ public class PaymentsTab {
 
     private final BooleanProperty activeProperty = new SimpleBooleanProperty(false);
 
-    // Document ID property for reactive binding (stores primary key value, not entity)
+    // Document ID property for reactive binding (stores primary key value, not
+    // entity)
     private final ObjectProperty<Object> documentIdProperty = new SimpleObjectProperty<>();
 
     // Loaded payments from database
@@ -93,7 +92,8 @@ public class PaymentsTab {
     private ToggleButton otherToggle;
     private TextField referenceField;
 
-    public PaymentsTab(ViewDomainActivityBase activity, RegistrationPresentationModel pm, Document document, UpdateStore updateStore) {
+    public PaymentsTab(ViewDomainActivityBase activity, RegistrationPresentationModel pm, Document document,
+            UpdateStore updateStore) {
         this.activity = activity;
         this.pm = pm;
         this.document = document;
@@ -143,21 +143,23 @@ public class PaymentsTab {
         // Total price card
         Integer priceNet = document.getPriceNet();
         totalAmount = priceNet != null ? priceNet : 0;
-        VBox totalBox = createSummaryCard("Total Amount", PriceUtil.formatWithCurrency(totalAmount, document.getEvent()), CREAM, WARM_BROWN, CREAM_BORDER, null);
+        VBox totalBox = createSummaryCard("Total Amount",
+                EventPriceFormatter.formatWithCurrency(totalAmount, document.getEvent()), CREAM, WARM_BROWN, CREAM_BORDER, null);
 
         // Total paid card - store reference to label for updating
         Integer deposit = document.getPriceDeposit();
         int paid = deposit != null ? deposit : 0;
-        paidAmountLabel = new Label(PriceUtil.formatWithCurrency(paid, document.getEvent()));
+        paidAmountLabel = new Label(EventPriceFormatter.formatWithCurrency(paid, document.getEvent()));
         VBox paidBox = createSummaryCard("Paid Amount", null, SUCCESS_BG, SUCCESS, SUCCESS_BORDER, paidAmountLabel);
 
         // Balance card - store reference to label and card for updating
         int balance = totalAmount - paid;
-        outstandingLabel = new Label(PriceUtil.formatWithCurrency(balance, document.getEvent()));
+        outstandingLabel = new Label(EventPriceFormatter.formatWithCurrency(balance, document.getEvent()));
         javafx.scene.paint.Color balanceBg = balance > 0 ? RED_LIGHT : SUCCESS_BG;
         javafx.scene.paint.Color balanceColor = balance > 0 ? DANGER : SUCCESS;
         javafx.scene.paint.Color balanceBorder = balance > 0 ? DANGER_BORDER : SUCCESS_BORDER;
-        outstandingCard = createSummaryCard("Outstanding", null, balanceBg, balanceColor, balanceBorder, outstandingLabel);
+        outstandingCard = createSummaryCard("Outstanding", null, balanceBg, balanceColor, balanceBorder,
+                outstandingLabel);
 
         summary.getChildren().addAll(totalBox, paidBox, outstandingCard);
         return summary;
@@ -165,9 +167,12 @@ public class PaymentsTab {
 
     /**
      * Creates a summary card with styled background and values.
-     * @param existingValueLabel if not null, use this label instead of creating a new one
+     * 
+     * @param existingValueLabel if not null, use this label instead of creating a
+     *                           new one
      */
-    private VBox createSummaryCard(String label, String value, javafx.scene.paint.Color bg, javafx.scene.paint.Color textColor, javafx.scene.paint.Color borderColor, Label existingValueLabel) {
+    private VBox createSummaryCard(String label, String value, javafx.scene.paint.Color bg,
+            javafx.scene.paint.Color textColor, javafx.scene.paint.Color borderColor, Label existingValueLabel) {
         VBox card = new VBox(8);
         card.setPadding(new Insets(20));
         card.setBackground(createBackground(bg, BORDER_RADIUS_MEDIUM));
@@ -222,7 +227,7 @@ public class PaymentsTab {
         CornerRadii topRoundedCorners = new CornerRadii(BORDER_RADIUS_MEDIUM, BORDER_RADIUS_MEDIUM, 0, 0, false);
         header.setBackground(new Background(new BackgroundFill(CREAM, topRoundedCorners, null)));
         header.setBorder(new Border(new BorderStroke(BORDER, BorderStrokeStyle.SOLID,
-            topRoundedCorners, new BorderWidths(1, 1, 1, 1))));
+                topRoundedCorners, new BorderWidths(1, 1, 1, 1))));
         header.setAlignment(Pos.CENTER_LEFT);
 
         // Icon badge
@@ -257,7 +262,7 @@ public class PaymentsTab {
         CornerRadii bottomRoundedCorners = new CornerRadii(0, 0, BORDER_RADIUS_MEDIUM, BORDER_RADIUS_MEDIUM, false);
         listWrapper.setBackground(new Background(new BackgroundFill(BG_CARD, bottomRoundedCorners, null)));
         listWrapper.setBorder(new Border(new BorderStroke(BORDER, BorderStrokeStyle.SOLID,
-            bottomRoundedCorners, new BorderWidths(0, 1, 1, 1))));
+                bottomRoundedCorners, new BorderWidths(0, 1, 1, 1))));
 
         // Outer container
         VBox container = new VBox();
@@ -303,13 +308,13 @@ public class PaymentsTab {
 
         // Update paid amount label
         if (paidAmountLabel != null) {
-            paidAmountLabel.setText(PriceUtil.formatWithCurrency(paidAmount, document.getEvent()));
+            paidAmountLabel.setText(EventPriceFormatter.formatWithCurrency(paidAmount, document.getEvent()));
         }
 
         // Update outstanding label and card styling
         int outstanding = totalAmount - paidAmount;
         if (outstandingLabel != null) {
-            outstandingLabel.setText(PriceUtil.formatWithCurrency(outstanding, document.getEvent()));
+            outstandingLabel.setText(EventPriceFormatter.formatWithCurrency(outstanding, document.getEvent()));
         }
 
         // Update outstanding card background/border color based on balance
@@ -332,8 +337,8 @@ public class PaymentsTab {
         row.setAlignment(Pos.CENTER_LEFT);
         if (showBorder) {
             row.setBorder(new Border(new BorderStroke(
-                BORDER_LIGHT, BorderStrokeStyle.SOLID, CornerRadii.EMPTY,
-                new BorderWidths(0, 0, 1, 0))));
+                    BORDER_LIGHT, BorderStrokeStyle.SOLID, CornerRadii.EMPTY,
+                    new BorderWidths(0, 0, 1, 0))));
         }
 
         // Left section: Date and method info
@@ -351,8 +356,8 @@ public class PaymentsTab {
         String methodName = payment.getMethod() != null ? payment.getMethod().getName() : "Unknown";
         String reference = payment.getTransactionRef();
         String methodText = reference != null && !reference.isEmpty()
-            ? methodName + " \u2022 " + reference
-            : methodName;
+                ? methodName + " \u2022 " + reference
+                : methodName;
         Label methodLabel = new Label(methodText);
         methodLabel.setFont(Font.font("System", 13));
         methodLabel.setStyle("-fx-text-fill: #8a857f;"); // TEXT_MUTED color
@@ -365,7 +370,7 @@ public class PaymentsTab {
 
         // Amount (large, green, bold)
         Integer amount = payment.getAmount();
-        String amountStr = PriceUtil.formatWithCurrency(amount != null ? amount : 0, document.getEvent());
+        String amountStr = EventPriceFormatter.formatWithCurrency(amount != null ? amount : 0, document.getEvent());
         Label amountLabel = new Label(amountStr);
         amountLabel.setFont(Font.font("System", FontWeight.BOLD, 20));
         amountLabel.setStyle("-fx-text-fill: #16a34a;"); // SUCCESS color
@@ -388,7 +393,8 @@ public class PaymentsTab {
      * Formats a payment date in a friendly format.
      */
     private String formatPaymentDate(LocalDateTime dateTime) {
-        if (dateTime == null) return "Unknown date";
+        if (dateTime == null)
+            return "Unknown date";
         // Format: "Mon, 15 February 2025"
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("EEE, d MMMM yyyy", Locale.ENGLISH);
         return dateTime.format(formatter);
@@ -406,7 +412,7 @@ public class PaymentsTab {
         CornerRadii topCorners = new CornerRadii(BORDER_RADIUS_MEDIUM, BORDER_RADIUS_MEDIUM, 0, 0, false);
         header.setBackground(new Background(new BackgroundFill(SAND, topCorners, null)));
         header.setBorder(new Border(new BorderStroke(BORDER, BorderStrokeStyle.SOLID,
-            topCorners, new BorderWidths(1, 1, 0, 1))));
+                topCorners, new BorderWidths(1, 1, 0, 1))));
         header.setAlignment(Pos.CENTER_LEFT);
 
         // Icon badge (orange plus)
@@ -431,7 +437,7 @@ public class PaymentsTab {
         CornerRadii bottomCorners = new CornerRadii(0, 0, BORDER_RADIUS_MEDIUM, BORDER_RADIUS_MEDIUM, false);
         formContent.setBackground(new Background(new BackgroundFill(BG_CARD, bottomCorners, null)));
         formContent.setBorder(new Border(new BorderStroke(BORDER, BorderStrokeStyle.SOLID,
-            bottomCorners, new BorderWidths(0, 1, 1, 1))));
+                bottomCorners, new BorderWidths(0, 1, 1, 1))));
 
         // Form row (4 columns)
         HBox formRow = new HBox(16);
@@ -507,7 +513,8 @@ public class PaymentsTab {
         buttonContent.getChildren().addAll(plusIcon, buttonText);
         addButton.setGraphic(buttonContent);
         addButton.setContentDisplay(ContentDisplay.GRAPHIC_ONLY);
-        // Apply JSX-matching style: warmBrown background, 10px 20px padding, 8px border radius
+        // Apply JSX-matching style: warmBrown background, 10px 20px padding, 8px border
+        // radius
         addButton.setBackground(createBackground(WARM_BROWN, BORDER_RADIUS_MEDIUM));
         addButton.setPadding(new Insets(10, 20, 10, 20));
         addButton.setCursor(javafx.scene.Cursor.HAND);
@@ -567,27 +574,28 @@ public class PaymentsTab {
             history.setDocument(document);
             history.setMoneyTransfer(payment);
             history.setUsername(FXUserName.getUserName());
-            history.setComment("Payment recorded: " + PriceUtil.formatWithCurrency((int, document.getEvent())(amount * 100)) + " via " + methodName);
+            history.setComment("Payment recorded: "
+                               + EventPriceFormatter.formatWithCurrency((int) (amount * 100), document.getEvent()) + " via " + methodName);
 
             // Submit changes to database
             paymentStore.submitChanges()
-                .onSuccess(batch -> {
-                    Console.log("Payment added successfully: " + amount + " via " + methodName);
-                    // UI updates must run on FX application thread
-                    Platform.runLater(() -> {
-                        // Clear form
-                        amountField.clear();
-                        referenceField.clear();
-                        datePicker.setValue(LocalDate.now());
-                        // Refresh the mapper to load new data
-                        if (paymentsMapper != null) {
-                            paymentsMapper.refreshWhenActive();
-                        }
+                    .onSuccess(batch -> {
+                        Console.log("Payment added successfully: " + amount + " via " + methodName);
+                        // UI updates must run on FX application thread
+                        Platform.runLater(() -> {
+                            // Clear form
+                            amountField.clear();
+                            referenceField.clear();
+                            datePicker.setValue(LocalDate.now());
+                            // Refresh the mapper to load new data
+                            if (paymentsMapper != null) {
+                                paymentsMapper.refreshWhenActive();
+                            }
+                        });
+                    })
+                    .onFailure(e -> {
+                        Console.log("Failed to add payment: " + e.getMessage());
                     });
-                })
-                .onFailure(e -> {
-                    Console.log("Failed to add payment: " + e.getMessage());
-                });
 
         } catch (NumberFormatException e) {
             Console.log("Invalid payment amount: " + amountText);
@@ -603,10 +611,10 @@ public class PaymentsTab {
             Console.log("PaymentsTab: Setting up payments mapper for document " + documentIdProperty.get());
 
             paymentsMapper = ReactiveEntitiesMapper.<MoneyTransfer>createPushReactiveChain(activity)
-                .always("{class: 'MoneyTransfer', fields: 'date,method.name,transactionRef,comment,amount,pending,successful', orderBy: 'date desc'}")
-                .always(documentIdProperty, docId -> where("document=$1", docId))
-                .storeEntitiesInto(loadedPayments)
-                .start();
+                    .always("{class: 'MoneyTransfer', fields: 'date,method.name,transactionRef,comment,amount,pending,successful', orderBy: 'date desc'}")
+                    .always(documentIdProperty, docId -> where("document=$1", docId))
+                    .storeEntitiesInto(loadedPayments)
+                    .start();
 
             // Listen for changes and refresh the list
             ObservableLists.runNowAndOnListChange(change -> {
@@ -625,19 +633,19 @@ public class PaymentsTab {
     private void loadPaymentMethods() {
         if (methodsByName.isEmpty()) {
             EntityStore.create(DataSourceModelService.getDefaultDataSourceModel())
-                .<Method>executeQuery("select code,name from Method")
-                .onSuccess(methods -> {
-                    for (Method m : methods) {
-                        if (m.getName() != null) {
-                            methodsByName.put(m.getName().toLowerCase(), m);
+                    .<Method>executeQuery("select code,name from Method")
+                    .onSuccess(methods -> {
+                        for (Method m : methods) {
+                            if (m.getName() != null) {
+                                methodsByName.put(m.getName().toLowerCase(), m);
+                            }
+                            if (m.getCode() != null) {
+                                methodsByName.put(m.getCode().toLowerCase(), m);
+                            }
                         }
-                        if (m.getCode() != null) {
-                            methodsByName.put(m.getCode().toLowerCase(), m);
-                        }
-                    }
-                    Console.log("Loaded " + methodsByName.size() + " payment methods");
-                })
-                .onFailure(e -> Console.log("Failed to load payment methods: " + e.getMessage()));
+                        Console.log("Loaded " + methodsByName.size() + " payment methods");
+                    })
+                    .onFailure(e -> Console.log("Failed to load payment methods: " + e.getMessage()));
         }
     }
 
@@ -662,17 +670,21 @@ public class PaymentsTab {
      * Formats a price value (amount in cents) with 2 decimal places.
      */
 
-
     /**
      * Gets the selected payment method from the toggle group.
      */
     private String getSelectedPaymentMethod() {
         Toggle selected = methodToggleGroup.getSelectedToggle();
-        if (selected == cashToggle) return "Cash";
-        if (selected == cardToggle) return "Card";
-        if (selected == bankToggle) return "Bank Transfer";
-        if (selected == checkToggle) return "Check";
-        if (selected == otherToggle) return "Other";
+        if (selected == cashToggle)
+            return "Cash";
+        if (selected == cardToggle)
+            return "Card";
+        if (selected == bankToggle)
+            return "Bank Transfer";
+        if (selected == checkToggle)
+            return "Check";
+        if (selected == otherToggle)
+            return "Other";
         return "Card";
     }
 

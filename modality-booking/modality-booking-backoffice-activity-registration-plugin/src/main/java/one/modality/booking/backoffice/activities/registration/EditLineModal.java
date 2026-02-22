@@ -25,9 +25,8 @@ import javafx.scene.shape.Circle;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import one.modality.base.client.mainframe.fx.FXMainFrameDialogArea;
-import one.modality.base.shared.domainmodel.formatters.PriceFormatter;
 import one.modality.base.shared.entities.*;
-import one.modality.base.shared.entities.formatters.PriceUtil;
+import one.modality.base.shared.entities.formatters.EventPriceFormatter;
 import one.modality.booking.client.workingbooking.WorkingBooking;
 import one.modality.crm.shared.services.authn.fx.FXUserName;
 import one.modality.ecommerce.policy.service.PolicyAggregate;
@@ -740,7 +739,7 @@ public class EditLineModal {
         int quantity = getDurationDays();
         int standardPrice = pricePerUnit * quantity;
 
-        Label standardValue = new Label(PriceUtil.formatWithCurrency(pricePerUnit, event) + " × " + quantity + " = " + PriceUtil.formatWithCurrency(standardPrice, event));
+        Label standardValue = new Label(EventPriceFormatter.formatWithCurrency(pricePerUnit, event) + " × " + quantity + " = " + EventPriceFormatter.formatWithCurrency(standardPrice, event));
         standardValue.setFont(Font.font("System", FontWeight.MEDIUM, 12));
         standardValue.setTextFill(TEXT_SECONDARY);
 
@@ -785,7 +784,7 @@ public class EditLineModal {
         fixedInputBox.setBorder(createBorder(Color.web("#fbbf24"), 6));
         fixedInputBox.setBackground(createBackground(Color.web("#fffbeb"), 6));
 
-        String currencySymbol = PriceUtil.getEventCurrencySymbol(event);
+        String currencySymbol = EventPriceFormatter.getEventCurrencySymbol(event);
         Label currencyLabel = new Label(currencySymbol);
         currencyLabel.setFont(Font.font("System", FontWeight.SEMI_BOLD, 12));
         currencyLabel.setTextFill(Color.web("#92400e"));
@@ -815,7 +814,7 @@ public class EditLineModal {
         totalLabel.setFont(Font.font(9));
         totalLabel.setTextFill(Color.web("#15803d"));
 
-        totalValueLabel = new Label(PriceUtil.formatWithCurrency(currentTotal, event));
+        totalValueLabel = new Label(EventPriceFormatter.formatWithCurrency(currentTotal, event));
         totalValueLabel.setFont(Font.font("System", FontWeight.BOLD, 15));
         totalValueLabel.setTextFill(Color.web("#166534"));
 
@@ -975,7 +974,7 @@ public class EditLineModal {
 
             // Update UI to show new price (unless custom price is set)
             if (!hasCustomPriceProperty.get() && totalValueLabel != null) {
-                totalValueLabel.setText(PriceUtil.formatWithCurrency(newTotal, event));
+                totalValueLabel.setText(EventPriceFormatter.formatWithCurrency(newTotal, event));
             }
         }
     }

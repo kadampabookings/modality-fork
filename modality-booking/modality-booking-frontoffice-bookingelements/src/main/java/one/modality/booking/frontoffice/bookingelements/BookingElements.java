@@ -33,7 +33,7 @@ import one.modality.base.client.mainframe.fx.FXMainFrameDialogArea;
 import one.modality.base.shared.entities.AttendanceMode;
 import one.modality.base.shared.entities.Person;
 import one.modality.base.shared.entities.ScheduledItem;
-import one.modality.base.shared.entities.formatters.PriceUtil;
+import one.modality.base.shared.entities.formatters.EventPriceFormatter;
 import one.modality.booking.client.workingbooking.FXPersonToBook;
 import one.modality.booking.client.workingbooking.WorkingBooking;
 import one.modality.booking.client.workingbooking.WorkingBookingProperties;
@@ -260,7 +260,7 @@ public final class BookingElements {
         periodWorkingBooking.bookScheduledItems(bookableScheduledItems, true);
         int bookedTotalPrice = new PriceCalculator(periodWorkingBooking.getLastestDocumentAggregate()).calculateTotalPrice();
         int optionPrice = bookedTotalPrice - unbookedTotalPrice;
-        priceLabel.setText(PriceUtil.formatWithCurrency(optionPrice, policyAggregate.getEvent()));
+        priceLabel.setText(EventPriceFormatter.formatWithCurrency(optionPrice, policyAggregate.getEvent()));
     }
 
     public static Button createPersonToBookButton(boolean embedPersonToBookText) {

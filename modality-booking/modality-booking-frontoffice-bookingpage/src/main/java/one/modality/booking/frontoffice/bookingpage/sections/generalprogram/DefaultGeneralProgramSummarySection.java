@@ -10,11 +10,12 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
+import one.modality.base.shared.entities.Event;
 import one.modality.base.shared.entities.ScheduledItem;
 import one.modality.booking.client.workingbooking.WorkingBooking;
 import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
-import one.modality.base.shared.entities.formatters.PriceUtil;
+import one.modality.base.shared.entities.formatters.EventPriceFormatter;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
 import one.modality.booking.frontoffice.bookingpage.components.StyledSectionHeader;
 import one.modality.booking.frontoffice.bookingpage.sections.dates.HasClassDateSelectionSection;
@@ -33,8 +34,10 @@ import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelecto
  * Default summary section for General Program Class booking forms.
  * Shows selected class dates and pricing with full term discount.
  *
- * <p>This section integrates with {@link HasClassDateSelectionSection} to display
- * a dynamic price breakdown based on the selected class dates.</p>
+ * <p>
+ * This section integrates with {@link HasClassDateSelectionSection} to display
+ * a dynamic price breakdown based on the selected class dates.
+ * </p>
  *
  * @author Claude
  */
@@ -59,7 +62,8 @@ public class DefaultGeneralProgramSummarySection extends DefaultSummarySection {
     private int initialBookingPrice = 0;
 
     public DefaultGeneralProgramSummarySection(HasClassDateSelectionSection dateSelectionSection) {
-        super();  // This calls buildUI() -> buildPriceBreakdownSection() before dateSelectionSection is set
+        super(); // This calls buildUI() -> buildPriceBreakdownSection() before
+                 // dateSelectionSection is set
         this.dateSelectionSection = dateSelectionSection;
 
         // Now that dateSelectionSection is set, update the content and add listener
@@ -73,7 +77,8 @@ public class DefaultGeneralProgramSummarySection extends DefaultSummarySection {
     public void setWorkingBookingProperties(WorkingBookingProperties props) {
         super.setWorkingBookingProperties(props);
         // Re-render price content now that workingBookingProperties is available
-        // (needed because the date selection listener may have rendered before this was set)
+        // (needed because the date selection listener may have rendered before this was
+        // set)
         updatePriceContent();
     }
 
@@ -194,14 +199,16 @@ public class DefaultGeneralProgramSummarySection extends DefaultSummarySection {
         totalRow.getChildren().addAll(totalLabel, totalSpacer, totalValue);
         content.getChildren().add(totalRow);
 
-        // Note: Don't call updatePriceContent() here - dateSelectionSection is not yet set during super() constructor
+        // Note: Don't call updatePriceContent() here - dateSelectionSection is not yet
+        // set during super() constructor
         // It will be called from our constructor after dateSelectionSection is assigned
 
         return content;
     }
 
     private void updatePriceContent() {
-        // Guard against null during initial construction (super() calls buildUI before our field is set)
+        // Guard against null during initial construction (super() calls buildUI before
+        // our field is set)
         if (dateSelectionSection == null || datesLabel == null) {
             return;
         }
@@ -215,30 +222,36 @@ public class DefaultGeneralProgramSummarySection extends DefaultSummarySection {
         int discount = dateSelectionSection.getDiscount();
         int total = dateSelectionSection.getTotalPrice();
 
-            // Update dates label
-            if (!selectedItems.isEmpty()) {
-                String datesText = formatSelectedDates(selectedItems);
-                datesLabel.setText(datesText);
-                datesLabel.setVisible(true);
-                datesLabel.setManaged(true);
-            } else {
-                datesLabel.setText(I18n.getI18nText(BookingPageI18nKeys.ClassSelectionNoClassesSelected));
-                datesLabel.setVisible(true);
-                datesLabel.setManaged(true);
-            }
+        // Update dates label
+        if (!selectedItems.isEmpty()) {
+            String datesText = formatSelectedDates(selectedItems);
+            datesLabel.setText(datesText);
+            datesLabel.setVisible(true);
+            datesLabel.setManaged(true);
+        } else {
+            datesLabel.setText(I18n.getI18nText(BookingPageI18nKeys.ClassSelectionNoClassesSelected));
+            datesLabel.setVisible(true);
+            datesLabel.setManaged(true);
+        }
 
-            // Update subtotal
-            int numSelected = selectedItems.size();
-            if (allSelected) {
-                subtotalLabel.setText(I18n.getI18nText(BookingPageI18nKeys.ClassSelectionFullTermPrice, numSelected));
-            } else {
-                subtotalLabel.setText(I18n.getI18nText(BookingPageI18nKeys.ClassSelectionXSelected, numSelected));
-            }
-            subtotalValue.setText(PriceUtil.formatWithCurrency(subtotal, event));
+        // Get event for currency formatting
+        Event event = null;
+        if (workingBookingProperties != null) {
+            event = workingBookingProperties.getEvent();
+        }
+
+        // Update subtotal
+        int numSelected = selectedItems.size();
+        if (allSelected) {
+            subtotalLabel.setText(I18n.getI18nText(BookingPageI18nKeys.ClassSelectionFullTermPrice, numSelected));
+        } else {
+            subtotalLabel.setText(I18n.getI18nText(BookingPageI18nKeys.ClassSelectionXSelected, numSelected));
+        }
+        subtotalValue.setText(EventPriceFormatter.formatWithCurrency(subtotal, event));
 
         // Update discount
         if (discount > 0) {
-            discountValue.setText("-" + PriceUtil.formatWithCurrency(discount, event));
+            discountValue.setText("-" + EventPriceFormatter.formatWithCurrency(discount, event));
             discountRow.setVisible(true);
             discountRow.setManaged(true);
         } else {
@@ -248,35 +261,36 @@ public class DefaultGeneralProgramSummarySection extends DefaultSummarySection {
 
         // When modifying an existing booking, show differential pricing
         if (isModification && workingBookingProperties != null) {
-            int deposit = workingBookingProperties.getDeposit();  // Actual payments from MoneyTransfers
+            int deposit = workingBookingProperties.getDeposit(); // Actual payments from MoneyTransfers
             if (deposit > 0) {
                 // Show "Already Paid" row with actual payment amount
-                alreadyPaidValue.setText("-" + PriceUtil.formatWithCurrency(deposit, event));
+                alreadyPaidValue.setText("-" + EventPriceFormatter.formatWithCurrency(deposit, event));
                 alreadyPaidRow.setVisible(true);
                 alreadyPaidRow.setManaged(true);
 
                 // Change label to "Balance Due" and show remaining amount
                 I18nControls.bindI18nProperties(totalLabel, BookingPageI18nKeys.BalanceDue);
                 int balanceDue = total - deposit;
-                totalValue.setText(PriceUtil.formatWithCurrency(Math.max(0, balanceDue, event)));
+                totalValue.setText(EventPriceFormatter.formatWithCurrency(Math.max(0, balanceDue), event));
             } else {
                 // No payments made yet — show normal total
                 alreadyPaidRow.setVisible(false);
                 alreadyPaidRow.setManaged(false);
                 I18nControls.bindI18nProperties(totalLabel, BookingPageI18nKeys.Total);
-                totalValue.setText(PriceUtil.formatWithCurrency(total, event));
+                totalValue.setText(EventPriceFormatter.formatWithCurrency(total, event));
             }
         } else {
             // New booking — hide "Already Paid" row, show normal total
             alreadyPaidRow.setVisible(false);
             alreadyPaidRow.setManaged(false);
             I18nControls.bindI18nProperties(totalLabel, BookingPageI18nKeys.Total);
-            totalValue.setText(PriceUtil.formatWithCurrency(total, event));
+            totalValue.setText(EventPriceFormatter.formatWithCurrency(total, event));
         }
     }
 
     /**
-     * Checks if this is a modification of an existing booking and calculates the initial price.
+     * Checks if this is a modification of an existing booking and calculates the
+     * initial price.
      */
     private void checkIfModification() {
         if (workingBookingProperties == null) {
@@ -306,13 +320,11 @@ public class DefaultGeneralProgramSummarySection extends DefaultSummarySection {
     private String formatSelectedDates(List<ScheduledItem> items) {
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("EEE d MMM", Locale.ENGLISH);
         return items.stream()
-            .filter(item -> item.getDate() != null)
-            .sorted((a, b) -> a.getDate().compareTo(b.getDate()))
-            .map(item -> item.getDate().format(formatter))
-            .collect(Collectors.joining(", "));
+                .filter(item -> item.getDate() != null)
+                .sorted((a, b) -> a.getDate().compareTo(b.getDate()))
+                .map(item -> item.getDate().format(formatter))
+                .collect(Collectors.joining(", "));
     }
-
-
 
     @Override
     public void refreshPriceBreakdown() {
@@ -355,7 +367,8 @@ public class DefaultGeneralProgramSummarySection extends DefaultSummarySection {
         datesLabel.setVisible(true);
         datesLabel.setManaged(true);
 
-        // Get class count from dateSelectionSection if available, otherwise count price lines
+        // Get class count from dateSelectionSection if available, otherwise count price
+        // lines
         int classCount;
         if (dateSelectionSection != null) {
             classCount = dateSelectionSection.getSelectedItems().size();
@@ -365,7 +378,11 @@ public class DefaultGeneralProgramSummarySection extends DefaultSummarySection {
 
         // Show class count and total
         subtotalLabel.setText(classCount + " class" + (classCount != 1 ? "es" : ""));
-        subtotalValue.setText(PriceUtil.formatWithCurrency(total, event));
+        Event event = null;
+        if (workingBookingProperties != null) {
+            event = workingBookingProperties.getEvent();
+        }
+        subtotalValue.setText(EventPriceFormatter.formatWithCurrency(total, event));
 
         // Hide discount for external price lines
         discountRow.setVisible(false);
@@ -376,22 +393,22 @@ public class DefaultGeneralProgramSummarySection extends DefaultSummarySection {
         if (isModification && workingBookingProperties != null) {
             int deposit = workingBookingProperties.getDeposit();
             if (deposit > 0) {
-                alreadyPaidValue.setText("-" + PriceUtil.formatWithCurrency(deposit, event));
+                alreadyPaidValue.setText("-" + EventPriceFormatter.formatWithCurrency(deposit, event));
                 alreadyPaidRow.setVisible(true);
                 alreadyPaidRow.setManaged(true);
                 I18nControls.bindI18nProperties(totalLabel, BookingPageI18nKeys.BalanceDue);
-                totalValue.setText(PriceUtil.formatWithCurrency(Math.max(0, total - deposit, event)));
+                totalValue.setText(EventPriceFormatter.formatWithCurrency(Math.max(0, total - deposit), event));
             } else {
                 alreadyPaidRow.setVisible(false);
                 alreadyPaidRow.setManaged(false);
                 I18nControls.bindI18nProperties(totalLabel, BookingPageI18nKeys.Total);
-                totalValue.setText(PriceUtil.formatWithCurrency(total, event));
+                totalValue.setText(EventPriceFormatter.formatWithCurrency(total, event));
             }
         } else {
             alreadyPaidRow.setVisible(false);
             alreadyPaidRow.setManaged(false);
             I18nControls.bindI18nProperties(totalLabel, BookingPageI18nKeys.Total);
-            totalValue.setText(PriceUtil.formatWithCurrency(total, event));
+            totalValue.setText(EventPriceFormatter.formatWithCurrency(total, event));
         }
     }
 }

@@ -13,7 +13,7 @@ import one.modality.base.client.time.ModalityDates;
 import one.modality.base.shared.entities.Event;
 import one.modality.base.shared.entities.Item;
 import one.modality.base.shared.entities.ItemFamily;
-import one.modality.base.shared.entities.formatters.PriceUtil;
+import one.modality.base.shared.entities.formatters.EventPriceFormatter;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
 
@@ -26,7 +26,7 @@ import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelecto
  * <p>
  * This class centralizes:
  * <ul>
- *   <li>Price formatting using event-aware currency ({@link PriceUtil})</li>
+ *   <li>Price formatting using event-aware currency ({@link EventPriceFormatter})</li>
  *   <li>Date range formatting using {@link ModalityDates}</li>
  *   <li>Flexible ItemFamily + Item name formatting</li>
  *   <li>Reusable UI components for price rows, line items, and summaries</li>
@@ -89,13 +89,13 @@ public class UnifiedPriceDisplay {
 
     /**
      * Formats a price amount using the event's currency.
-     * Delegates to {@link PriceUtil#formatWithCurrency(Object, Event)}.
+     * Delegates to {@link EventPriceFormatter#formatWithCurrency(Object, Event)}.
      *
      * @param amountInCents the price in cents/pence
      * @return formatted price string (e.g., "£ 100.00", "€ 50.00", "$ 75.00")
      */
     public String formatPrice(int amountInCents) {
-        return PriceUtil.formatWithCurrency(amountInCents, event);
+        return EventPriceFormatter.formatWithCurrency(amountInCents, event);
     }
 
     /**

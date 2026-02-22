@@ -13,10 +13,9 @@ import javafx.scene.control.Hyperlink;
 import javafx.scene.control.Label;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
-import javafx.scene.shape.Circle;
 import javafx.scene.shape.SVGPath;
 import one.modality.base.shared.entities.Event;
-import one.modality.base.shared.entities.formatters.PriceUtil;
+import one.modality.base.shared.entities.formatters.EventPriceFormatter;
 import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
@@ -25,7 +24,6 @@ import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme
 import java.time.LocalDate;
 
 import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelectors.*;
-import static one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder.*;
 
 /**
  * Default implementation of the Pending Payment section.
@@ -265,7 +263,7 @@ public class DefaultPendingPaymentSection implements HasPendingPaymentSection {
         Runnable updateAmount = () -> {
             int amount = totalAmountProperty.get();
             Event event = workingBookingProperties != null ? workingBookingProperties.getEvent() : null;
-            String formatted = PriceUtil.formatWithCurrency(amount, event);
+            String formatted = EventPriceFormatter.formatWithCurrency(amount, event);
             value.setText(formatted);
         };
         totalAmountProperty.addListener((obs, old, val) -> updateAmount.run());

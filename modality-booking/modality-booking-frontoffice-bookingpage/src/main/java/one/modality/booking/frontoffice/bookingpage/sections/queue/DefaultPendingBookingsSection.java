@@ -1,9 +1,7 @@
 package one.modality.booking.frontoffice.bookingpage.sections.queue;
 
 import dev.webfx.extras.i18n.controls.I18nControls;
-import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleBooleanProperty;
-import javafx.beans.property.SimpleObjectProperty;
 import javafx.beans.value.ObservableBooleanValue;
 import javafx.collections.FXCollections;
 import javafx.collections.ListChangeListener;
@@ -17,6 +15,7 @@ import javafx.scene.paint.Color;
 import javafx.scene.shape.SVGPath;
 import one.modality.base.shared.entities.Document;
 import one.modality.base.shared.entities.Event;
+import one.modality.base.shared.entities.formatters.EventPriceFormatter;
 import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
@@ -283,7 +282,7 @@ public class DefaultPendingBookingsSection implements HasPendingBookingsSection 
 
         Label totalPriceLabel = new Label(unifiedPriceDisplay != null
                 ? unifiedPriceDisplay.formatPrice(booking.getTotalAmount())
-                : one.modality.base.shared.entities.formatters.PriceUtil.formatWithCurrency(booking.getTotalAmount(), event));
+                : EventPriceFormatter.formatWithCurrency(booking.getTotalAmount(), event));
         totalPriceLabel.getStyleClass().addAll(bookingpage_text_2xl, bookingpage_font_bold, bookingpage_text_primary);
 
         totalRow.getChildren().addAll(totalTextLabel, spacer, totalPriceLabel);
@@ -304,7 +303,7 @@ public class DefaultPendingBookingsSection implements HasPendingBookingsSection 
 
         Label paidAmountLabel = new Label(unifiedPriceDisplay != null
                 ? unifiedPriceDisplay.formatPrice(paidAmount)
-                : one.modality.base.shared.entities.formatters.PriceUtil.formatWithCurrency(paidAmount, event));
+                : EventPriceFormatter.formatWithCurrency(paidAmount, event));
         // Green if paid > 0, muted if 0
         if (paidAmount > 0) {
             paidAmountLabel.getStyleClass().addAll(bookingpage_text_base, bookingpage_font_semibold, bookingpage_text_success);
@@ -326,7 +325,7 @@ public class DefaultPendingBookingsSection implements HasPendingBookingsSection 
 
         Label balanceAmountLabel = new Label(unifiedPriceDisplay != null
                 ? unifiedPriceDisplay.formatPrice(balance)
-                : one.modality.base.shared.entities.formatters.PriceUtil.formatWithCurrency(balance, event));
+                : EventPriceFormatter.formatWithCurrency(balance, event));
         // Always use theme primary color for balance due
         balanceAmountLabel.getStyleClass().addAll(bookingpage_text_xl, bookingpage_font_bold, bookingpage_text_primary);
 
@@ -391,7 +390,7 @@ public class DefaultPendingBookingsSection implements HasPendingBookingsSection 
             priceLabel = I18nControls.newLabel(BookingPageI18nKeys.Included);
             priceLabel.getStyleClass().addAll(bookingpage_text_sm, bookingpage_font_semibold, bookingpage_text_muted);
         } else {
-            priceLabel = new Label(one.modality.base.shared.entities.formatters.PriceUtil.formatWithCurrency(item.getAmount(), event));
+            priceLabel = new Label(EventPriceFormatter.formatWithCurrency(item.getAmount(), event));
             priceLabel.getStyleClass().addAll(bookingpage_text_sm, bookingpage_font_bold, bookingpage_text_primary);
         }
         priceLabel.setAlignment(Pos.CENTER_RIGHT);
@@ -476,12 +475,12 @@ public class DefaultPendingBookingsSection implements HasPendingBookingsSection 
         if (totalCostLabel != null) {
             totalCostLabel.setText(unifiedPriceDisplay != null
                     ? unifiedPriceDisplay.formatPrice(total)
-                    : one.modality.base.shared.entities.formatters.PriceUtil.formatWithCurrency(total, event));
+                    : EventPriceFormatter.formatWithCurrency(total, event));
         }
         if (totalAmountLabel != null) {
             totalAmountLabel.setText(unifiedPriceDisplay != null
                     ? unifiedPriceDisplay.formatPrice(total)
-                    : one.modality.base.shared.entities.formatters.PriceUtil.formatWithCurrency(total, event));
+                    : EventPriceFormatter.formatWithCurrency(total, event));
         }
     }
 

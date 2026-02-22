@@ -18,7 +18,7 @@ import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import one.modality.base.client.i18n.BaseI18nKeys;
 import one.modality.base.shared.entities.Event;
-import one.modality.base.shared.entities.formatters.PriceUtil;
+import one.modality.base.shared.entities.formatters.EventPriceFormatter;
 import one.modality.booking.frontoffice.bookingform.GatewayPaymentForm;
 import one.modality.ecommerce.payment.CancelPaymentResult;
 import one.modality.ecommerce.payment.CompletePaymentResult;
@@ -44,7 +44,7 @@ public final class ProvidedGatewayPaymentForm implements GatewayPaymentForm {
         Label gatewayLogo = new Label();
         I18nControls.bindI18nProperties(gatewayLogo, webPaymentForm.getGatewayName());
 
-        I18nControls.bindI18nProperties(payButton, "Pay1", PriceUtil.formatWithCurrency(webPaymentForm.getAmount(), event));
+        I18nControls.bindI18nProperties(payButton, "Pay1", EventPriceFormatter.formatWithCurrency(webPaymentForm.getAmount(), event));
         Layouts.setManagedAndVisibleProperties(payButton, !webPaymentForm.hasHtmlPayButton());
         webPaymentForm.setHtmlPayButtonText(payButton.getText());
         webPaymentForm.setHtmlHeaderText("Please enter your payment information");
