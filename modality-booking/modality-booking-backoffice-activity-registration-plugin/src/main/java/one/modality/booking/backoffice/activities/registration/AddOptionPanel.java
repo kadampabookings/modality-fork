@@ -21,7 +21,7 @@ import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import one.modality.base.shared.entities.*;
-import one.modality.base.shared.entities.formatters.EventPriceFormatter;
+import one.modality.base.shared.entities.formatters.PriceUtil;
 import one.modality.base.shared.knownitems.KnownItemFamily;
 import one.modality.booking.client.workingbooking.WorkingBooking;
 import one.modality.ecommerce.policy.service.PolicyAggregate;
@@ -373,7 +373,7 @@ public class AddOptionPanel {
 
         // Price for available items
         if (!"soldOut".equals(status) && addedCount == 0 && itemData.price != null && itemData.price > 0) {
-            String formattedPrice = formatPrice(itemData.price);
+            String formattedPrice = PriceUtil.formatWithCurrency(itemData.price, event);
             Label priceLabel = new Label(formattedPrice);
             priceLabel.setFont(Font.font("System", 9));
             priceLabel.setTextFill(Color.web("#6b7280"));
@@ -554,10 +554,7 @@ public class AddOptionPanel {
     /**
      * Formats a price (in cents) using the event's currency.
      */
-    private String formatPrice(int priceInCents) {
-        Event event = workingBooking != null ? workingBooking.getEvent() : null;
-        return EventPriceFormatter.formatWithCurrency(priceInCents, event);
-    }
+
 
     /**
      * Gets the status of an item (available, limited, soldOut).

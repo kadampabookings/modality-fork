@@ -16,7 +16,7 @@ import javafx.scene.text.FontWeight;
 import one.modality.base.client.mainframe.fx.FXMainFrameDialogArea;
 import one.modality.base.shared.entities.Document;
 import one.modality.base.shared.entities.Event;
-import one.modality.base.shared.entities.formatters.EventPriceFormatter;
+import one.modality.base.shared.entities.formatters.PriceUtil;
 import one.modality.ecommerce.backoffice.operations.entities.document.registration.ToggleCancelDocumentRequest;
 
 import java.time.LocalDate;
@@ -390,10 +390,10 @@ final class RegistrationRenderers {
                 badge = createBadge("Unpaid", DANGER, DANGER_LIGHT, 12);
             }
 
-            // Amount: 12px, color: textMuted - format using EventPriceFormatter (converts cents to currency)
+            // Amount: 12px, color: textMuted - format using PriceUtil (converts cents to currency)
             Event event = doc.getEvent();
-            String paidFormatted = EventPriceFormatter.formatWithCurrency(paidAmount, event);
-            String totalFormatted = EventPriceFormatter.formatWithCurrency(total, event);
+            String paidFormatted = PriceUtil.formatWithCurrency(paidAmount, event);
+            String totalFormatted = PriceUtil.formatWithCurrency(total, event);
             Label amountLabel = new Label(paidFormatted + " / " + totalFormatted);
             amountLabel.setFont(FONT_12);
             amountLabel.setTextFill(TEXT_MUTED);

@@ -18,7 +18,7 @@ import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import one.modality.base.shared.entities.BookablePeriod;
 import one.modality.base.shared.entities.Event;
-import one.modality.base.shared.entities.formatters.EventPriceFormatter;
+import one.modality.base.shared.entities.formatters.PriceUtil;
 import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.BookingFormSection;
 import one.modality.booking.frontoffice.bookingpage.BookingPageCssSelectors;
@@ -337,7 +337,7 @@ public class DefaultRateTypeSection implements HasRateTypeSection, BookingFormSe
      */
     protected String formatPrice(int priceInCents) {
         Event event = getEvent();
-        return EventPriceFormatter.formatWithCurrency(priceInCents, event);
+        return PriceUtil.formatWithCurrency(priceInCents, event);
     }
 
     /**

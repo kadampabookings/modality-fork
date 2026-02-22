@@ -14,7 +14,7 @@ import one.modality.base.shared.entities.ScheduledItem;
 import one.modality.booking.client.workingbooking.WorkingBooking;
 import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
-import one.modality.base.shared.entities.formatters.EventPriceFormatter;
+import one.modality.base.shared.entities.formatters.PriceUtil;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
 import one.modality.booking.frontoffice.bookingpage.components.StyledSectionHeader;
 import one.modality.booking.frontoffice.bookingpage.sections.dates.HasClassDateSelectionSection;
@@ -234,11 +234,11 @@ public class DefaultGeneralProgramSummarySection extends DefaultSummarySection {
             } else {
                 subtotalLabel.setText(I18n.getI18nText(BookingPageI18nKeys.ClassSelectionXSelected, numSelected));
             }
-            subtotalValue.setText(formatPrice(subtotal));
+            subtotalValue.setText(PriceUtil.formatWithCurrency(subtotal, event));
 
         // Update discount
         if (discount > 0) {
-            discountValue.setText("-" + formatPrice(discount));
+            discountValue.setText("-" + PriceUtil.formatWithCurrency(discount, event));
             discountRow.setVisible(true);
             discountRow.setManaged(true);
         } else {
@@ -251,27 +251,27 @@ public class DefaultGeneralProgramSummarySection extends DefaultSummarySection {
             int deposit = workingBookingProperties.getDeposit();  // Actual payments from MoneyTransfers
             if (deposit > 0) {
                 // Show "Already Paid" row with actual payment amount
-                alreadyPaidValue.setText("-" + formatPrice(deposit));
+                alreadyPaidValue.setText("-" + PriceUtil.formatWithCurrency(deposit, event));
                 alreadyPaidRow.setVisible(true);
                 alreadyPaidRow.setManaged(true);
 
                 // Change label to "Balance Due" and show remaining amount
                 I18nControls.bindI18nProperties(totalLabel, BookingPageI18nKeys.BalanceDue);
                 int balanceDue = total - deposit;
-                totalValue.setText(formatPrice(Math.max(0, balanceDue)));
+                totalValue.setText(PriceUtil.formatWithCurrency(Math.max(0, balanceDue, event)));
             } else {
                 // No payments made yet — show normal total
                 alreadyPaidRow.setVisible(false);
                 alreadyPaidRow.setManaged(false);
                 I18nControls.bindI18nProperties(totalLabel, BookingPageI18nKeys.Total);
-                totalValue.setText(formatPrice(total));
+                totalValue.setText(PriceUtil.formatWithCurrency(total, event));
             }
         } else {
             // New booking — hide "Already Paid" row, show normal total
             alreadyPaidRow.setVisible(false);
             alreadyPaidRow.setManaged(false);
             I18nControls.bindI18nProperties(totalLabel, BookingPageI18nKeys.Total);
-            totalValue.setText(formatPrice(total));
+            totalValue.setText(PriceUtil.formatWithCurrency(total, event));
         }
     }
 
@@ -312,9 +312,7 @@ public class DefaultGeneralProgramSummarySection extends DefaultSummarySection {
             .collect(Collectors.joining(", "));
     }
 
-    private String formatPrice(int priceInCents) {
-        return EventPriceFormatter.formatWithCurrency(priceInCents, workingBookingProperties != null ? workingBookingProperties.getEvent() : null);
-    }
+
 
     @Override
     public void refreshPriceBreakdown() {
@@ -367,7 +365,7 @@ public class DefaultGeneralProgramSummarySection extends DefaultSummarySection {
 
         // Show class count and total
         subtotalLabel.setText(classCount + " class" + (classCount != 1 ? "es" : ""));
-        subtotalValue.setText(formatPrice(total));
+        subtotalValue.setText(PriceUtil.formatWithCurrency(total, event));
 
         // Hide discount for external price lines
         discountRow.setVisible(false);
@@ -378,22 +376,22 @@ public class DefaultGeneralProgramSummarySection extends DefaultSummarySection {
         if (isModification && workingBookingProperties != null) {
             int deposit = workingBookingProperties.getDeposit();
             if (deposit > 0) {
-                alreadyPaidValue.setText("-" + formatPrice(deposit));
+                alreadyPaidValue.setText("-" + PriceUtil.formatWithCurrency(deposit, event));
                 alreadyPaidRow.setVisible(true);
                 alreadyPaidRow.setManaged(true);
                 I18nControls.bindI18nProperties(totalLabel, BookingPageI18nKeys.BalanceDue);
-                totalValue.setText(formatPrice(Math.max(0, total - deposit)));
+                totalValue.setText(PriceUtil.formatWithCurrency(Math.max(0, total - deposit, event)));
             } else {
                 alreadyPaidRow.setVisible(false);
                 alreadyPaidRow.setManaged(false);
                 I18nControls.bindI18nProperties(totalLabel, BookingPageI18nKeys.Total);
-                totalValue.setText(formatPrice(total));
+                totalValue.setText(PriceUtil.formatWithCurrency(total, event));
             }
         } else {
             alreadyPaidRow.setVisible(false);
             alreadyPaidRow.setManaged(false);
             I18nControls.bindI18nProperties(totalLabel, BookingPageI18nKeys.Total);
-            totalValue.setText(formatPrice(total));
+            totalValue.setText(PriceUtil.formatWithCurrency(total, event));
         }
     }
 }

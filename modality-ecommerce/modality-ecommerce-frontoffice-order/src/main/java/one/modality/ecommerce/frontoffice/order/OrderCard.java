@@ -33,7 +33,7 @@ import one.modality.base.shared.entities.Document;
 import one.modality.base.shared.entities.DocumentLine;
 import one.modality.base.shared.entities.Event;
 import one.modality.base.shared.entities.EventState;
-import one.modality.base.shared.entities.formatters.EventPriceFormatter;
+import one.modality.base.shared.entities.formatters.PriceUtil;
 import one.modality.ecommerce.client.i18n.EcommerceI18nKeys;
 import one.modality.booking.frontoffice.bookingelements.BookingElements;
 import one.modality.event.client.lifecycle.EventLifeCycle;
@@ -149,10 +149,10 @@ public final class OrderCard {
         int deposit = orderDocument.getPriceDeposit();
         int remainingAmount = totalPriceNet - deposit;
         Event event = orderDocument.getEvent();
-        orderPriceLabel.setText(EventPriceFormatter.formatWithCurrency(totalPriceNet, event));
-        totalValue.setText(EventPriceFormatter.formatWithCurrency(totalPriceNet, event));
-        paidValue.setText(EventPriceFormatter.formatWithCurrency(deposit, event));
-        remainingValue.setText(EventPriceFormatter.formatWithCurrency(remainingAmount, event));
+        orderPriceLabel.setText(PriceUtil.formatWithCurrency(totalPriceNet, event));
+        totalValue.setText(PriceUtil.formatWithCurrency(totalPriceNet, event));
+        paidValue.setText(PriceUtil.formatWithCurrency(deposit, event));
+        remainingValue.setText(PriceUtil.formatWithCurrency(remainingAmount, event));
 
         // Updating buttons visibility
         Boolean cancelled = orderDocument.isCancelled();

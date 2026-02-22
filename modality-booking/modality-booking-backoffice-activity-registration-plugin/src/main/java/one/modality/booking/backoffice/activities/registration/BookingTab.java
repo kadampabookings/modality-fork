@@ -26,7 +26,7 @@ import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import one.modality.base.shared.domainmodel.formatters.PriceFormatter;
 import one.modality.base.shared.entities.*;
-import one.modality.base.shared.entities.formatters.EventPriceFormatter;
+import one.modality.base.shared.entities.formatters.PriceUtil;
 import one.modality.base.shared.knownitems.KnownItemFamily;
 import one.modality.booking.client.workingbooking.WorkingBooking;
 import one.modality.crm.shared.services.authn.fx.FXUserName;
@@ -378,7 +378,7 @@ public class BookingTab {
         labelText.setFont(Font.font("System", 9));
         labelText.setTextFill(TEXT_MUTED);
 
-        Label priceText = new Label(formatPrice(document.getPriceNet() != null ? document.getPriceNet() : 0));
+        Label priceText = new Label(PriceUtil.formatWithCurrency(document.getPriceNet(, document.getEvent()) != null ? document.getPriceNet() : 0));
         priceText.setFont(Font.font("System", FontWeight.BOLD, 16));
         priceText.setTextFill(WARM_BROWN);
 
@@ -1225,7 +1225,7 @@ public class BookingTab {
 
         // Price - right-aligned, bold
         Integer price = line.getPriceNet();
-        Label priceLabel = new Label(formatPrice(price != null ? price : 0));
+        Label priceLabel = new Label(PriceUtil.formatWithCurrency(price != null ? price : 0, document.getEvent()));
         priceLabel.setFont(Font.font("System", FontWeight.BOLD, 12));
         priceLabel.setTextFill(isInactive ? TEXT_MUTED : WARM_BROWN);
         priceLabel.setMinWidth(60);
@@ -1429,9 +1429,9 @@ public class BookingTab {
 
         int balance = subtotal - paid;
 
-        subtotalAmountLabel.setText(formatPrice(subtotal));
-        paidAmountLabel.setText(formatPrice(paid));
-        balanceAmountLabel.setText(formatPrice(balance));
+        subtotalAmountLabel.setText(PriceUtil.formatWithCurrency(subtotal, document.getEvent()));
+        paidAmountLabel.setText(PriceUtil.formatWithCurrency(paid, document.getEvent()));
+        balanceAmountLabel.setText(PriceUtil.formatWithCurrency(balance, document.getEvent()));
 
         // Update balance box colors
         Color balanceColor = balance > 0 ? DANGER : SUCCESS;
@@ -1608,12 +1608,7 @@ public class BookingTab {
         return date.getDayOfMonth() + " " + date.getMonth().toString().substring(0, 3);
     }
 
-    private String formatPrice(int amount) {
-        Event event = document.getEvent();
-        String currencySymbol = EventPriceFormatter.getEventCurrencySymbol(event);
-        // Use PriceFormatter with show00cents=true to always show 2 decimal places
-        return PriceFormatter.formatWithCurrency(amount, currencySymbol, true);
-    }
+
 
     // Note: Timeline canvas updates automatically via property binding
     // (timelineCanvas.bookingStartProperty().bind(arrivalDateProperty))

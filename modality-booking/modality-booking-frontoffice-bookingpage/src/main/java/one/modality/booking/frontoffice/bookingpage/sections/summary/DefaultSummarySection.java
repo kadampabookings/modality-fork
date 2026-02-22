@@ -504,7 +504,7 @@ public class DefaultSummarySection implements HasSummarySection {
         }
 
         // Amount label (right-aligned, doesn't wrap)
-        Label amountLabel = new Label(one.modality.base.shared.entities.formatters.EventPriceFormatter.formatWithCurrency(line.getAmount(), event));
+        Label amountLabel = new Label(one.modality.base.shared.entities.formatters.PriceUtil.formatWithCurrency(line.getAmount(), event));
         amountLabel.getStyleClass().addAll(bookingpage_text_base, bookingpage_font_semibold, bookingpage_text_dark);
         amountLabel.setMinWidth(Region.USE_PREF_SIZE);
 
@@ -518,7 +518,7 @@ public class DefaultSummarySection implements HasSummarySection {
             if (unifiedPriceDisplay != null) {
                 totalAmountLabel.setText(unifiedPriceDisplay.formatPrice(totalAmount));
             } else {
-                totalAmountLabel.setText(one.modality.base.shared.entities.formatters.EventPriceFormatter.formatWithCurrency(totalAmount, event));
+                totalAmountLabel.setText(one.modality.base.shared.entities.formatters.PriceUtil.formatWithCurrency(totalAmount, event));
             }
             // Note: CSS class "bookingpage-text-primary" handles theme color
         }

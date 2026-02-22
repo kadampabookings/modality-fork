@@ -19,7 +19,7 @@ import javafx.scene.layout.*;
 import javafx.scene.shape.SVGPath;
 import one.modality.base.shared.entities.Document;
 import one.modality.base.shared.entities.Event;
-import one.modality.base.shared.entities.formatters.EventPriceFormatter;
+import one.modality.base.shared.entities.formatters.PriceUtil;
 import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.BookingPageCssSelectors;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
@@ -170,7 +170,7 @@ public class DefaultPaymentSection implements HasPaymentSection {
      */
     protected void updatePayButtonText() {
         int amount = getPaymentAmount();
-        String formattedAmount = EventPriceFormatter.formatWithCurrency(amount, workingBookingProperties != null ? workingBookingProperties.getEvent() : null);
+        String formattedAmount = PriceUtil.formatWithCurrency(amount, workingBookingProperties != null ? workingBookingProperties.getEvent() : null);
         I18n.bindI18nTextProperty(payButtonText, BookingPageI18nKeys.PayAmountNow, formattedAmount);
     }
 
@@ -209,7 +209,7 @@ public class DefaultPaymentSection implements HasPaymentSection {
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        totalAmountLabel = new Label(EventPriceFormatter.formatWithCurrency(totalAmount, workingBookingProperties.getEvent()));
+        totalAmountLabel = new Label(PriceUtil.formatWithCurrency(totalAmount, workingBookingProperties.getEvent()));
         totalAmountLabel.getStyleClass().addAll(bookingpage_text_2xl, bookingpage_font_bold, bookingpage_text_primary);
 
         totalRow.getChildren().addAll(totalTextLabel, spacer, totalAmountLabel);
@@ -257,7 +257,7 @@ public class DefaultPaymentSection implements HasPaymentSection {
      */
     protected void updatePaymentsMadeAmountLabel() {
         if (paymentsMadeAmountLabel != null) {
-            String formattedAmount = EventPriceFormatter.formatWithCurrency(paymentsMade,
+            String formattedAmount = PriceUtil.formatWithCurrency(paymentsMade,
                 workingBookingProperties != null ? workingBookingProperties.getEvent() : null);
             // Show as negative/deduction with "- " prefix
             paymentsMadeAmountLabel.setText("- " + formattedAmount);
@@ -307,7 +307,7 @@ public class DefaultPaymentSection implements HasPaymentSection {
         infoBox.getChildren().addAll(nameLabel, detailsLabel);
         HBox.setHgrow(infoBox, Priority.ALWAYS);
 
-        Label priceLabel = new Label(EventPriceFormatter.formatWithCurrency(item.getAmount(), workingBookingProperties != null && workingBookingProperties.getWorkingBooking() != null ? workingBookingProperties.getWorkingBooking().getEvent() : null));
+        Label priceLabel = new Label(PriceUtil.formatWithCurrency(item.getAmount(), workingBookingProperties != null && workingBookingProperties.getWorkingBooking() != null ? workingBookingProperties.getWorkingBooking().getEvent() : null));
         priceLabel.getStyleClass().addAll(bookingpage_text_xl, bookingpage_font_bold, bookingpage_text_primary);
         priceLabel.setMinWidth(60);  // Ensure price visible for up to 4 digits + currency
 
@@ -363,7 +363,7 @@ public class DefaultPaymentSection implements HasPaymentSection {
         HBox inputRow = new HBox(12);
         inputRow.setAlignment(Pos.CENTER_LEFT);
 
-        Label currencyLabel = new Label(EventPriceFormatter.getEventCurrencySymbol(workingBookingProperties != null ? workingBookingProperties.getEvent() : null));
+        Label currencyLabel = new Label(PriceUtil.getEventCurrencySymbol(workingBookingProperties != null ? workingBookingProperties.getEvent() : null));
         currencyLabel.getStyleClass().addAll(bookingpage_text_2xl, bookingpage_font_semibold, bookingpage_text_dark);
 
         customAmountTextField = new TextField();
@@ -397,8 +397,8 @@ public class DefaultPaymentSection implements HasPaymentSection {
         int minCustomAmount = getMinimumCustomAmount();
         customAmountRangeLabel = I18nControls.newLabel(BookingPageI18nKeys.CustomAmountRange);
         I18nControls.bindI18nProperties(customAmountRangeLabel, BookingPageI18nKeys.CustomAmountRange,
-            EventPriceFormatter.formatWithCurrency(minCustomAmount, workingBookingProperties != null && workingBookingProperties.getWorkingBooking() != null ? workingBookingProperties.getWorkingBooking().getEvent() : null),
-            EventPriceFormatter.formatWithCurrency(totalAmount, workingBookingProperties != null && workingBookingProperties.getWorkingBooking() != null ? workingBookingProperties.getWorkingBooking().getEvent() : null));
+            PriceUtil.formatWithCurrency(minCustomAmount, workingBookingProperties != null && workingBookingProperties.getWorkingBooking() != null ? workingBookingProperties.getWorkingBooking().getEvent() : null),
+            PriceUtil.formatWithCurrency(totalAmount, workingBookingProperties != null && workingBookingProperties.getWorkingBooking() != null ? workingBookingProperties.getWorkingBooking().getEvent() : null));
         customAmountRangeLabel.getStyleClass().addAll(bookingpage_text_xs, bookingpage_text_muted);
 
         // Slider - min is max((minDeposit - alreadyPaid), $1)
@@ -454,7 +454,7 @@ public class DefaultPaymentSection implements HasPaymentSection {
         Region footerSpacer = new Region();
         HBox.setHgrow(footerSpacer, Priority.ALWAYS);
 
-        allocationTotalLabel = new Label(EventPriceFormatter.formatWithCurrency(0, workingBookingProperties != null && workingBookingProperties.getWorkingBooking() != null ? workingBookingProperties.getWorkingBooking().getEvent() : null));
+        allocationTotalLabel = new Label(PriceUtil.formatWithCurrency(0, workingBookingProperties != null && workingBookingProperties.getWorkingBooking() != null ? workingBookingProperties.getWorkingBooking().getEvent() : null));
         allocationTotalLabel.getStyleClass().addAll(bookingpage_text_xl, bookingpage_font_bold, bookingpage_text_primary);
 
         footerRow.getChildren().addAll(allocatedTextLabel, footerSpacer, allocationTotalLabel);
@@ -489,7 +489,7 @@ public class DefaultPaymentSection implements HasPaymentSection {
         row.getStyleClass().addAll(bookingpage_bg_white, bookingpage_rounded);
 
         // Person name and total
-        Label nameLabel = new Label(index + ". " + item.getPersonName() + " (" + EventPriceFormatter.formatWithCurrency(item.getAmount(), workingBookingProperties != null && workingBookingProperties.getWorkingBooking() != null ? workingBookingProperties.getWorkingBooking().getEvent() : null) + ")");
+        Label nameLabel = new Label(index + ". " + item.getPersonName() + " (" + PriceUtil.formatWithCurrency(item.getAmount(), workingBookingProperties != null && workingBookingProperties.getWorkingBooking() != null ? workingBookingProperties.getWorkingBooking().getEvent() : null) + ")");
         nameLabel.getStyleClass().addAll(bookingpage_text_sm, bookingpage_font_medium, bookingpage_text_dark);
         nameLabel.setWrapText(true);  // Allow long names to wrap instead of overlapping
         HBox.setHgrow(nameLabel, Priority.ALWAYS);
@@ -499,7 +499,7 @@ public class DefaultPaymentSection implements HasPaymentSection {
         inputBox.setAlignment(Pos.CENTER_RIGHT);
         inputBox.setMinWidth(Region.USE_PREF_SIZE);  // Prevent input from being pushed off screen
 
-        Label currencyLabel = new Label(EventPriceFormatter.getEventCurrencySymbol(workingBookingProperties != null ? workingBookingProperties.getEvent() : null));
+        Label currencyLabel = new Label(PriceUtil.getEventCurrencySymbol(workingBookingProperties != null ? workingBookingProperties.getEvent() : null));
         currencyLabel.getStyleClass().addAll(bookingpage_text_base, bookingpage_font_semibold, bookingpage_text_muted);
 
         TextField allocationField = new TextField();
@@ -566,8 +566,8 @@ public class DefaultPaymentSection implements HasPaymentSection {
                     Event event = workingBookingProperties != null && workingBookingProperties.getWorkingBooking() != null
                         ? workingBookingProperties.getWorkingBooking().getEvent() : null;
                     I18nControls.bindI18nProperties(customAmountRangeLabel, BookingPageI18nKeys.CustomAmountRange,
-                        EventPriceFormatter.formatWithCurrency(minCustomAmount, event),
-                        EventPriceFormatter.formatWithCurrency(totalAmount, event));
+                        PriceUtil.formatWithCurrency(minCustomAmount, event),
+                        PriceUtil.formatWithCurrency(totalAmount, event));
                 }
             }
         }
@@ -720,7 +720,7 @@ public class DefaultPaymentSection implements HasPaymentSection {
             }
         }
 
-        allocationTotalLabel.setText(EventPriceFormatter.formatWithCurrency(allocatedTotal, workingBookingProperties != null && workingBookingProperties.getWorkingBooking() != null ? workingBookingProperties.getWorkingBooking().getEvent() : null));
+        allocationTotalLabel.setText(PriceUtil.formatWithCurrency(allocatedTotal, workingBookingProperties != null && workingBookingProperties.getWorkingBooking() != null ? workingBookingProperties.getWorkingBooking().getEvent() : null));
         // Update CSS classes for match/mismatch state
         allocationTotalLabel.getStyleClass().removeAll(bookingpage_text_primary, bookingpage_text_danger);
         allocationTotalLabel.getStyleClass().add((matches && !minDepositViolation) ? bookingpage_text_primary : bookingpage_text_danger);
@@ -737,7 +737,7 @@ public class DefaultPaymentSection implements HasPaymentSection {
             allocationWarningLabel.setManaged(true);
         } else if (!matches) {
             I18nControls.bindI18nProperties(allocationWarningLabel, BookingPageI18nKeys.AllocationMismatchWarning,
-                EventPriceFormatter.formatWithCurrency(paymentAmount, workingBookingProperties != null && workingBookingProperties.getWorkingBooking() != null ? workingBookingProperties.getWorkingBooking().getEvent() : null));
+                PriceUtil.formatWithCurrency(paymentAmount, workingBookingProperties != null && workingBookingProperties.getWorkingBooking() != null ? workingBookingProperties.getWorkingBooking().getEvent() : null));
             allocationWarningLabel.setVisible(true);
             allocationWarningLabel.setManaged(true);
         } else {
@@ -781,7 +781,7 @@ public class DefaultPaymentSection implements HasPaymentSection {
     protected VBox createPaymentOptionCard(PaymentOption option, Object titleKey, String description) {
         boolean selected = paymentOptionProperty.get() == option;
         double amount = getAmountForOption(option);
-        String amountText = EventPriceFormatter.formatWithCurrency((int) amount, workingBookingProperties != null && workingBookingProperties.getWorkingBooking() != null ? workingBookingProperties.getWorkingBooking().getEvent() : null);
+        String amountText = PriceUtil.formatWithCurrency((int) amount, workingBookingProperties != null && workingBookingProperties.getWorkingBooking() != null ? workingBookingProperties.getWorkingBooking().getEvent() : null);
 
         // Use helper to create the card (CSS-based styling)
         return BookingPageUIBuilder.createPaymentOptionCard(
@@ -909,7 +909,7 @@ public class DefaultPaymentSection implements HasPaymentSection {
 
     protected void updateTotalDisplay() {
         if (totalAmountLabel != null) {
-            totalAmountLabel.setText(EventPriceFormatter.formatWithCurrency(totalAmount, workingBookingProperties.getEvent()));
+            totalAmountLabel.setText(PriceUtil.formatWithCurrency(totalAmount, workingBookingProperties.getEvent()));
             // Note: Color is handled via CSS class "bookingpage-text-primary" set in buildBookingSummarySection
         }
     }

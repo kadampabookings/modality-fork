@@ -20,7 +20,7 @@ import javafx.scene.layout.*;
 import one.modality.base.shared.entities.Event;
 import one.modality.base.shared.entities.Rate;
 import one.modality.base.shared.entities.ScheduledItem;
-import one.modality.base.shared.entities.formatters.EventPriceFormatter;
+import one.modality.base.shared.entities.formatters.PriceUtil;
 import one.modality.booking.client.workingbooking.WorkingBooking;
 import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.BookingFormSection;
@@ -168,7 +168,7 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
             // Only show "Save" text if there's actually a discount
             String messageText = "✓ " + I18n.getI18nText(BookingPageI18nKeys.ClassSelectionAllSelected, availableItems.size());
             if (allClassesDiscount > 0) {
-                messageText += " — " + I18n.getI18nText(BookingPageI18nKeys.ClassSelectionSave, formatPrice(allClassesDiscount));
+                messageText += " — " + I18n.getI18nText(BookingPageI18nKeys.ClassSelectionSave, PriceUtil.formatWithCurrency(allClassesDiscount, event));
             }
             selectAllMessageLabel.setText(messageText);
             selectAllActionButton.setText(I18n.getI18nText(BookingPageI18nKeys.ClassSelectionClearAll));
@@ -183,10 +183,10 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
             // Only show discount info if there's actually a discount
             if (allClassesDiscount > 0) {
                 selectAllMessageLabel.setText(I18n.getI18nText(BookingPageI18nKeys.ClassSelectionSaveBySelectingAll,
-                        availableItems.size(), formatPrice(allClassesPrice), formatPrice(allClassesDiscount)));
+                        availableItems.size(), PriceUtil.formatWithCurrency(allClassesPrice, event), PriceUtil.formatWithCurrency(allClassesDiscount, event)));
             } else {
                 selectAllMessageLabel.setText(I18n.getI18nText(BookingPageI18nKeys.ClassSelectionSelectAllFor,
-                        availableItems.size(), formatPrice(allClassesPrice)));
+                        availableItems.size(), PriceUtil.formatWithCurrency(allClassesPrice, event)));
             }
             selectAllActionButton.setText(I18n.getI18nText(BookingPageI18nKeys.ClassSelectionSelectAll));
             // Switch to primary button style
@@ -489,14 +489,14 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
         } else if (hasExistingBooking && newlySelectedCount == 0) {
             subtotalLabel.setText(I18n.getI18nText(BookingPageI18nKeys.ClassSelectionNoNewClassesSelected));
         } else {
-            subtotalLabel.setText(I18n.getI18nText(BookingPageI18nKeys.ClassSelectionSingleClassPrice, selectedItems.size(), formatPrice(pricePerClass)));
+            subtotalLabel.setText(I18n.getI18nText(BookingPageI18nKeys.ClassSelectionSingleClassPrice, selectedItems.size(), PriceUtil.formatWithCurrency(pricePerClass, event)));
         }
         subtotalLabel.getStyleClass().addAll(bookingpage_text_base, bookingpage_text_muted);
 
         Region subtotalSpacer = new Region();
         HBox.setHgrow(subtotalSpacer, Priority.ALWAYS);
 
-        Label subtotalValue = new Label(formatPrice(subtotal));
+        Label subtotalValue = new Label(PriceUtil.formatWithCurrency(subtotal, event));
         subtotalValue.getStyleClass().addAll(bookingpage_text_base, bookingpage_text_muted);
 
         subtotalRow.getChildren().addAll(subtotalLabel, subtotalSpacer, subtotalValue);
@@ -515,7 +515,7 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
             Region discountSpacer = new Region();
             HBox.setHgrow(discountSpacer, Priority.ALWAYS);
 
-            Label discountValue = new Label("-" + formatPrice(discount));
+            Label discountValue = new Label("-" + PriceUtil.formatWithCurrency(discount, event));
             discountValue.getStyleClass().addAll(bookingpage_text_primary, bookingpage_font_semibold);
 
             discountRow.getChildren().addAll(discountLabel, discountSpacer, discountValue);
@@ -535,7 +535,7 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
             Region alreadyPaidSpacer = new Region();
             HBox.setHgrow(alreadyPaidSpacer, Priority.ALWAYS);
 
-            Label alreadyPaidValue = new Label("-" + formatPrice(deposit));
+            Label alreadyPaidValue = new Label("-" + PriceUtil.formatWithCurrency(deposit, event));
             alreadyPaidValue.getStyleClass().addAll(bookingpage_text_base, bookingpage_text_muted);
 
             alreadyPaidRow.getChildren().addAll(alreadyPaidLabel, alreadyPaidSpacer, alreadyPaidValue);
@@ -561,7 +561,7 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
         HBox.setHgrow(totalSpacer, Priority.ALWAYS);
 
         int displayTotal = deposit > 0 ? Math.max(0, total - deposit) : total;
-        Label totalValue = new Label(formatPrice(displayTotal));
+        Label totalValue = new Label(PriceUtil.formatWithCurrency(displayTotal, event));
         totalValue.getStyleClass().addAll(bookingpage_text_2xl, bookingpage_font_bold, bookingpage_text_primary);
 
         totalRow.getChildren().addAll(totalLabel, totalSpacer, totalValue);
@@ -585,10 +585,7 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
         }
     }
 
-    private String formatPrice(int priceInCents) {
-        Event event = getEvent();
-        return EventPriceFormatter.formatWithCurrency(priceInCents, event);
-    }
+
 
     private void loadData() {
         if (workingBookingProperties == null) return;

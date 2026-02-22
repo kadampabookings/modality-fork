@@ -27,7 +27,7 @@ import one.modality.base.client.i18n.BaseI18nKeys;
 import one.modality.base.client.mainframe.fx.FXMainFrameDialogArea;
 import one.modality.base.frontoffice.utility.browser.BrowserUtil;
 import one.modality.base.shared.entities.*;
-import one.modality.base.shared.entities.formatters.EventPriceFormatter;
+import one.modality.base.shared.entities.formatters.PriceUtil;
 import one.modality.booking.client.workingbooking.WorkingBooking;
 import one.modality.crm.shared.services.authn.fx.FXUserPerson;
 import one.modality.event.client.lifecycle.EventLifeCycle;
@@ -131,7 +131,7 @@ public final class OrderActions {
             int totalPriceNet = orderDocument.getPriceNet();
             int deposit = orderDocument.getPriceDeposit();
             int remainingAmount = totalPriceNet - deposit;
-            String formattedPrice = EventPriceFormatter.formatWithCurrency(remainingAmount, event);
+            String formattedPrice = PriceUtil.formatWithCurrency(remainingAmount, event);
             RefundDialog refundWindow = new RefundDialog(formattedPrice, String.valueOf(orderDocument.getRef()), event);
             refundWindow.buildUI();
             DialogCallback messageWindowCallback = DialogUtil.showModalNodeInGoldLayout(refundWindow.getContainer(), FXMainFrameDialogArea.getDialogArea());

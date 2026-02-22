@@ -27,7 +27,7 @@ import javafx.scene.paint.Color;
 import javafx.scene.shape.SVGPath;
 import one.modality.base.client.icons.SvgIcons;
 import one.modality.base.shared.entities.Event;
-import one.modality.base.shared.entities.formatters.EventPriceFormatter;
+import one.modality.base.shared.entities.formatters.PriceUtil;
 import one.modality.ecommerce.client.i18n.EcommerceI18nKeys;
 import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingelements.BookingElements;
@@ -126,9 +126,9 @@ public final class PaymentPage implements BookingFormPage {
         int maxAmount = Math.max(0, balance);
         int minAmount = Math.min(maxAmount, Math.max(100, minDeposit - deposit));
         int initialAmount = deposit < minDeposit ? minAmount : maxAmount;
-        String currencySymbol = EventPriceFormatter.getEventCurrencySymbol(event);
-        Function<Number, String> priceWithCurrencyFormatter = amount -> EventPriceFormatter.formatWithCurrency(amount, event);
-        Function<Number, String> priceWithoutCurrencyFormatter = EventPriceFormatter::formatWithoutCurrency;
+        String currencySymbol = PriceUtil.getEventCurrencySymbol(event);
+        Function<Number, String> priceWithCurrencyFormatter = amount -> PriceUtil.formatWithCurrency(amount, event);
+        Function<Number, String> priceWithoutCurrencyFormatter = PriceUtil::formatWithoutCurrency;
         gridPane.getChildren().clear();
         gridPane.add(BookingElements.createPricePromptLabel(EcommerceI18nKeys.Total, false), 0, 0);
         gridPane.add(BookingElements.createPricePromptLabel(EcommerceI18nKeys.MinDeposit, false), 0, 1);
@@ -220,7 +220,7 @@ public final class PaymentPage implements BookingFormPage {
             int amount = parseSelectedAmountValue();
             amount = ((amount + 99) / 100) * 100; // Rounding the amount
             amount += up ? 100 : -100; // Incrementing or decrementing the amount
-            selectedAmountValueTextField.setText(EventPriceFormatter.formatWithoutCurrency(amount));
+            selectedAmountValueTextField.setText(PriceUtil.formatWithoutCurrency(amount));
         } catch (NumberFormatException ignored) {
         }
     }

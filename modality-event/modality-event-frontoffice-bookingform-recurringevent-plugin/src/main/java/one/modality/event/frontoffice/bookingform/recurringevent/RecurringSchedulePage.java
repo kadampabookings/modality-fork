@@ -25,7 +25,7 @@ import javafx.scene.text.Text;
 import javafx.scene.text.TextAlignment;
 import one.modality.base.shared.entities.Event;
 import one.modality.base.shared.entities.ScheduledItem;
-import one.modality.base.shared.entities.formatters.EventPriceFormatter;
+import one.modality.base.shared.entities.formatters.PriceUtil;
 import one.modality.booking.client.workingbooking.WorkingBooking;
 import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingelements.BookingElements;
@@ -87,7 +87,7 @@ final class RecurringSchedulePage implements BookingFormPage {
         selectAllClassesHyperlink.setAlignment(Pos.CENTER);
 
         WorkingBooking workingBooking = activity.getWorkingBooking();
-        Text priceText = new Text(I18n.getI18nText(RecurringEventI18nKeys.PricePerClass0, EventPriceFormatter.formatWithCurrency(workingBooking.getDailyRatePrice(), event)));
+        Text priceText = new Text(I18n.getI18nText(RecurringEventI18nKeys.PricePerClass0, PriceUtil.formatWithCurrency(workingBooking.getDailyRatePrice(), event)));
         priceText.getStyleClass().add(subtitle_grey);
         VBox.setMargin(priceText, new Insets(20, 0, 0, 0));
 
@@ -121,10 +121,10 @@ final class RecurringSchedulePage implements BookingFormPage {
         if (allClassesPrice < allClassesNoDiscountPrice) {
             Text allClassesText = new Text(I18n.getI18nText(RecurringEventI18nKeys.AllClasses + ":"));
             allClassesText.getStyleClass().add(subtitle_grey);
-            Text noDiscountPriceText = new Text(EventPriceFormatter.formatWithCurrency(allClassesNoDiscountPrice, event));
+            Text noDiscountPriceText = new Text(PriceUtil.formatWithCurrency(allClassesNoDiscountPrice, event));
             noDiscountPriceText.setStrikethrough(true);
             noDiscountPriceText.getStyleClass().add(subtitle_grey);
-            Text discountPriceText = new Text(EventPriceFormatter.formatWithCurrency(allClassesPrice, event));
+            Text discountPriceText = new Text(PriceUtil.formatWithCurrency(allClassesPrice, event));
             discountPriceText.getStyleClass().add(subtitle_grey);
             HBox hBox = new HBox(5, allClassesText, noDiscountPriceText, discountPriceText);
             hBox.setAlignment(Pos.CENTER);

@@ -15,7 +15,7 @@ import javafx.scene.layout.VBox;
 import one.modality.base.client.i18n.I18nEntities;
 import one.modality.base.shared.entities.Document;
 import one.modality.base.shared.entities.DocumentLine;
-import one.modality.base.shared.entities.formatters.EventPriceFormatter;
+import one.modality.base.shared.entities.formatters.PriceUtil;
 import one.modality.base.shared.entities.markers.HasPersonalDetails;
 import one.modality.crm.client.i18n.CrmI18nKeys;
 import one.modality.booking.client.workingbooking.WorkingBooking;
@@ -87,7 +87,7 @@ public final class OrderDetails {
                             .mapToInt(dl -> dl.getPriceNet() != null ? dl.getPriceNet() : 0)
                             .sum();
                     }
-                    Label familyPriceLabel = BookingElements.createPriceLabel(EventPriceFormatter.formatWithCurrency(familyTotalPrice, document.getEvent()));
+                    Label familyPriceLabel = BookingElements.createPriceLabel(PriceUtil.formatWithCurrency(familyTotalPrice, document.getEvent()));
                     //familyPriceLabel.getStyleClass().add(OrderCssSelectors.detail_value);
 
                     HBox detailHeader = new HBox(familyLabel, Layouts.createHGrowable(), familyPriceLabel);
@@ -116,7 +116,7 @@ public final class OrderDetails {
                         } else {
                             price = documentLine.getPriceNet() != null ? documentLine.getPriceNet() : 0;;
                         }
-                        String formattedPrice = EventPriceFormatter.formatWithCurrency(price, document.getEvent());
+                        String formattedPrice = PriceUtil.formatWithCurrency(price, document.getEvent());
                         Label priceLabel = BookingElements.createSubPriceLabel(formattedPrice);
                         //priceLabel.getStyleClass().add("detail-subitem-value");
 

@@ -26,7 +26,7 @@ import one.modality.base.shared.entities.Event;
 import one.modality.base.shared.entities.History;
 import one.modality.base.shared.entities.Method;
 import one.modality.base.shared.entities.MoneyTransfer;
-import one.modality.base.shared.entities.formatters.EventPriceFormatter;
+import one.modality.base.shared.entities.formatters.PriceUtil;
 import one.modality.crm.shared.services.authn.fx.FXUserName;
 
 import javafx.application.Platform;
@@ -143,17 +143,17 @@ public class PaymentsTab {
         // Total price card
         Integer priceNet = document.getPriceNet();
         totalAmount = priceNet != null ? priceNet : 0;
-        VBox totalBox = createSummaryCard("Total Amount", formatPrice(totalAmount), CREAM, WARM_BROWN, CREAM_BORDER, null);
+        VBox totalBox = createSummaryCard("Total Amount", PriceUtil.formatWithCurrency(totalAmount, document.getEvent()), CREAM, WARM_BROWN, CREAM_BORDER, null);
 
         // Total paid card - store reference to label for updating
         Integer deposit = document.getPriceDeposit();
         int paid = deposit != null ? deposit : 0;
-        paidAmountLabel = new Label(formatPrice(paid));
+        paidAmountLabel = new Label(PriceUtil.formatWithCurrency(paid, document.getEvent()));
         VBox paidBox = createSummaryCard("Paid Amount", null, SUCCESS_BG, SUCCESS, SUCCESS_BORDER, paidAmountLabel);
 
         // Balance card - store reference to label and card for updating
         int balance = totalAmount - paid;
-        outstandingLabel = new Label(formatPrice(balance));
+        outstandingLabel = new Label(PriceUtil.formatWithCurrency(balance, document.getEvent()));
         javafx.scene.paint.Color balanceBg = balance > 0 ? RED_LIGHT : SUCCESS_BG;
         javafx.scene.paint.Color balanceColor = balance > 0 ? DANGER : SUCCESS;
         javafx.scene.paint.Color balanceBorder = balance > 0 ? DANGER_BORDER : SUCCESS_BORDER;
@@ -303,13 +303,13 @@ public class PaymentsTab {
 
         // Update paid amount label
         if (paidAmountLabel != null) {
-            paidAmountLabel.setText(formatPrice(paidAmount));
+            paidAmountLabel.setText(PriceUtil.formatWithCurrency(paidAmount, document.getEvent()));
         }
 
         // Update outstanding label and card styling
         int outstanding = totalAmount - paidAmount;
         if (outstandingLabel != null) {
-            outstandingLabel.setText(formatPrice(outstanding));
+            outstandingLabel.setText(PriceUtil.formatWithCurrency(outstanding, document.getEvent()));
         }
 
         // Update outstanding card background/border color based on balance
@@ -365,7 +365,7 @@ public class PaymentsTab {
 
         // Amount (large, green, bold)
         Integer amount = payment.getAmount();
-        String amountStr = formatPrice(amount != null ? amount : 0);
+        String amountStr = PriceUtil.formatWithCurrency(amount != null ? amount : 0, document.getEvent());
         Label amountLabel = new Label(amountStr);
         amountLabel.setFont(Font.font("System", FontWeight.BOLD, 20));
         amountLabel.setStyle("-fx-text-fill: #16a34a;"); // SUCCESS color
@@ -567,7 +567,7 @@ public class PaymentsTab {
             history.setDocument(document);
             history.setMoneyTransfer(payment);
             history.setUsername(FXUserName.getUserName());
-            history.setComment("Payment recorded: " + formatPrice((int)(amount * 100)) + " via " + methodName);
+            history.setComment("Payment recorded: " + PriceUtil.formatWithCurrency((int, document.getEvent())(amount * 100)) + " via " + methodName);
 
             // Submit changes to database
             paymentStore.submitChanges()
@@ -661,12 +661,7 @@ public class PaymentsTab {
     /**
      * Formats a price value (amount in cents) with 2 decimal places.
      */
-    private String formatPrice(int amountInCents) {
-        Event event = document.getEvent();
-        String currencySymbol = EventPriceFormatter.getEventCurrencySymbol(event);
-        // Use PriceFormatter with show00cents=true to always show 2 decimal places
-        return PriceFormatter.formatWithCurrency(amountInCents, currencySymbol, true);
-    }
+
 
     /**
      * Gets the selected payment method from the toggle group.

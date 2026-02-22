@@ -11,7 +11,7 @@ import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.SVGPath;
 import one.modality.base.shared.entities.Event;
-import one.modality.base.shared.entities.formatters.EventPriceFormatter;
+import one.modality.base.shared.entities.formatters.PriceUtil;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
 import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme;
 
@@ -180,7 +180,7 @@ public class StickyPriceHeader extends HBox {
 
     private void updatePriceLabel() {
         int price = totalPrice.get();
-        priceLabel.setText(EventPriceFormatter.formatWithCurrency(price, event));
+        priceLabel.setText(PriceUtil.formatWithCurrency(price, event));
         // Set price color from color scheme (CSS classes not reliable in web)
         BookingFormColorScheme scheme = colorScheme.get();
         if (scheme != null) {

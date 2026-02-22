@@ -20,7 +20,7 @@ import javafx.scene.layout.VBox;
 import one.modality.base.shared.entities.Event;
 import one.modality.base.shared.entities.Rate;
 import one.modality.base.shared.entities.ScheduledItem;
-import one.modality.base.shared.entities.formatters.EventPriceFormatter;
+import one.modality.base.shared.entities.formatters.PriceUtil;
 import one.modality.booking.client.workingbooking.WorkingBooking;
 import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.BookingFormSection;
@@ -224,19 +224,16 @@ public class GPClassRateTypeSection implements BookingFormSection, HasRateTypeSe
 
         // Update standard rate card price
         if (standardRateCard != null && standardRateCard.getUserData() instanceof Label priceLabel) {
-            priceLabel.setText(formatPrice(standardPrice) + " " + perClassText);
+            priceLabel.setText(PriceUtil.formatWithCurrency(standardPrice, event) + " " + perClassText);
         }
 
         // Update member rate card price
         if (memberRateCard != null && memberRateCard.getUserData() instanceof Label priceLabel) {
-            priceLabel.setText(formatPrice(memberPrice) + " " + perClassText);
+            priceLabel.setText(PriceUtil.formatWithCurrency(memberPrice, event) + " " + perClassText);
         }
     }
 
-    private String formatPrice(int priceInCents) {
-        Event event = getEvent();
-        return EventPriceFormatter.formatWithCurrency(priceInCents, event);
-    }
+
 
     private Event getEvent() {
         if (workingBookingProperties != null && workingBookingProperties.getWorkingBooking() != null) {

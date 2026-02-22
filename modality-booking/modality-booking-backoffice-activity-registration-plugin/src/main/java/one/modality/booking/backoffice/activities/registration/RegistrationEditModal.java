@@ -21,7 +21,7 @@ import one.modality.base.shared.domainmodel.formatters.PriceFormatter;
 import one.modality.base.shared.entities.Document;
 import one.modality.base.shared.entities.Event;
 import one.modality.base.shared.entities.History;
-import one.modality.base.shared.entities.formatters.EventPriceFormatter;
+import one.modality.base.shared.entities.formatters.PriceUtil;
 import one.modality.crm.shared.services.authn.fx.FXUserName;
 import one.modality.ecommerce.backoffice.operations.entities.document.registration.ToggleCancelDocumentRequest;
 
@@ -306,7 +306,7 @@ public class RegistrationEditModal {
         Label totalLabel = new Label("Total:");
         totalLabel.setFont(FONT_BODY);
         totalLabel.setTextFill(TEXT_MUTED);
-        Label totalValue = new Label(formatPrice(total));
+        Label totalValue = new Label(PriceUtil.formatWithCurrency(total, event));
         totalValue.setFont(FONT_SUBTITLE);
         totalValue.setTextFill(TEXT);
         totalRow.getChildren().addAll(totalLabel, totalValue);
@@ -317,7 +317,7 @@ public class RegistrationEditModal {
         Label balanceLabel = new Label("Balance:");
         balanceLabel.setFont(FONT_BODY);
         balanceLabel.setTextFill(TEXT_MUTED);
-        Label balanceValue = new Label(formatPrice(balance));
+        Label balanceValue = new Label(PriceUtil.formatWithCurrency(balance, event));
         balanceValue.setFont(FONT_SUBTITLE);
         balanceValue.setTextFill(balance > 0 ? WARNING : SUCCESS);
         balanceRow.getChildren().addAll(balanceLabel, balanceValue);
@@ -549,12 +549,7 @@ public class RegistrationEditModal {
     /**
      * Formats a price value with 2 decimal places.
      */
-    private String formatPrice(int amount) {
-        Event event = document.getEvent();
-        String currencySymbol = EventPriceFormatter.getEventCurrencySymbol(event);
-        // Use PriceFormatter with show00cents=true to always show 2 decimal places
-        return PriceFormatter.formatWithCurrency(amount, currencySymbol, true);
-    }
+
 
     /**
      * Shows an error dialog.

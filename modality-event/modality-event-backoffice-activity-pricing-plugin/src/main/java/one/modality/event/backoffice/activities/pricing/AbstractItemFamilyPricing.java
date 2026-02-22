@@ -35,7 +35,7 @@ import one.modality.base.shared.entities.Event;
 import one.modality.base.shared.entities.Rate;
 import one.modality.base.shared.entities.ScheduledItem;
 import one.modality.base.shared.entities.SiteItem;
-import one.modality.base.shared.entities.formatters.EventPriceFormatter;
+import one.modality.base.shared.entities.formatters.PriceUtil;
 import one.modality.base.shared.knownitems.KnownItemFamily;
 import one.modality.ecommerce.policy.service.PolicyAggregate;
 
@@ -177,7 +177,7 @@ abstract class AbstractItemFamilyPricing implements ItemFamilyPricing {
             Rate rate = referenceSiteItem == null ? null : referenceSiteItemModel.rates.get(i);
             rateField.setDisable(referenceSiteItemModel == null);
             if (rate != null)
-                rateField.setText(EventPriceFormatter.formatWithoutCurrency(rate.getPrice()));
+                rateField.setText(PriceUtil.formatWithoutCurrency(rate.getPrice()));
             CheckBox dateCheckBox = dateUI.dateCheckBox;
             ScheduledItem scheduledItem = referenceSiteItemModel == null ? null : referenceSiteItemModel.scheduledItems.get(i);
             dateCheckBox.setSelected(scheduledItem != null);
@@ -225,7 +225,7 @@ abstract class AbstractItemFamilyPricing implements ItemFamilyPricing {
                     scheduledItem.setItem(siteItem.getItem());
                     scheduledItem.setDate(date);
                 }
-                PriceFormatter priceFormatter = EventPriceFormatter.INSTANCE;
+                PriceFormatter priceFormatter = PriceUtil.INSTANCE;
                 Object price = priceFormatter.parseValue(rateField.getText());
                 if (ALLOWS_NULL_RATES && price == null)
                     continue;

@@ -17,7 +17,7 @@ import javafx.scene.text.TextAlignment;
 import one.modality.base.client.icons.SvgIcons;
 import one.modality.base.shared.domainmodel.formatters.PriceFormatter;
 import one.modality.base.shared.entities.Event;
-import one.modality.base.shared.entities.formatters.EventPriceFormatter;
+import one.modality.base.shared.entities.formatters.PriceUtil;
 import one.modality.ecommerce.frontoffice.order.OrderActions;
 
 import static one.modality.event.frontoffice.medias.MediasCssSelectors.*;
@@ -96,7 +96,7 @@ public class PaymentPendingView {
 
         Label balanceValue = Bootstrap.h3(new Label(
             PriceFormatter.formatWithCurrency(balance,
-                EventPriceFormatter.getEventCurrencySymbol(event))));
+                PriceUtil.getEventCurrencySymbol(event))));
 
         balanceBox.getChildren().addAll(balanceLabel, balanceValue);
         return balanceBox;

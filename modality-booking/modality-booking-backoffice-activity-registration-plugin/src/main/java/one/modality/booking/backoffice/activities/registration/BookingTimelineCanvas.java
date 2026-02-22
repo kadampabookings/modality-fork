@@ -19,7 +19,7 @@ import one.modality.base.shared.domainmodel.formatters.PriceFormatter;
 import one.modality.base.shared.entities.DocumentLine;
 import one.modality.base.shared.entities.Event;
 import one.modality.base.shared.entities.ItemFamily;
-import one.modality.base.shared.entities.formatters.EventPriceFormatter;
+import one.modality.base.shared.entities.formatters.PriceUtil;
 import one.modality.base.shared.knownitems.KnownItemFamily;
 
 import java.time.LocalDate;
@@ -1039,13 +1039,13 @@ public class BookingTimelineCanvas extends Region {
             // For cancelled items: show deposit as active price, original struck through
             if (deposit > 0) {
                 // Show deposit amount as the kept amount (active price)
-                String depositText = formatPrice(deposit);
+                String depositText = PriceUtil.formatWithCurrency(deposit, event);
                 gc.setFill(WARM_ORANGE); // Orange to indicate deposit/cancellation fee
                 gc.setFont(Font.font("System", FontWeight.SEMI_BOLD, 11));
                 gc.fillText(depositText, priceX, y + ROW_HEIGHT / 2.0 - 2);
 
                 // Show original price struck through below
-                String originalText = formatPrice(originalPrice != null ? originalPrice : 0);
+                String originalText = PriceUtil.formatWithCurrency(originalPrice != null ? originalPrice : 0, event);
                 gc.setFill(TEXT_MUTED);
                 gc.setFont(Font.font("System", FontWeight.NORMAL, 9));
                 double originalY = y + ROW_HEIGHT / 2.0 + 10;
@@ -1057,7 +1057,7 @@ public class BookingTimelineCanvas extends Region {
                 gc.strokeLine(priceX - textWidth, originalY - 3, priceX, originalY - 3);
             } else {
                 // No deposit - show original price struck through
-                String priceText = formatPrice(originalPrice != null ? originalPrice : 0);
+                String priceText = PriceUtil.formatWithCurrency(originalPrice != null ? originalPrice : 0, event);
                 gc.setFill(TEXT_MUTED);
                 gc.setFont(Font.font("System", FontWeight.SEMI_BOLD, 11));
                 gc.fillText(priceText, priceX, y + ROW_HEIGHT / 2.0 + 4);
@@ -1069,7 +1069,7 @@ public class BookingTimelineCanvas extends Region {
             }
         } else {
             // Normal price display
-            String priceText = originalPrice != null ? formatPrice(originalPrice) : "-";
+            String priceText = originalPrice != null ? PriceUtil.formatWithCurrency(originalPrice, event) : "-";
             gc.setFill(WARM_BROWN);
             gc.setFont(Font.font("System", FontWeight.SEMI_BOLD, 11));
             gc.fillText(priceText, priceX, y + ROW_HEIGHT / 2.0 + 4);
@@ -1403,15 +1403,10 @@ public class BookingTimelineCanvas extends Region {
     }
 
     /**
-     * Formats a price value using EventPriceFormatter (handles cents to currency conversion).
+     * Formats a price value using PriceUtil (handles cents to currency conversion).
      * Always shows two decimal places (e.g., £0.00, £48.00).
      */
-    private String formatPrice(int priceInCents) {
-        Event event = eventProperty.get();
-        String currencySymbol = EventPriceFormatter.getEventCurrencySymbol(event);
-        // Use PriceFormatter with show00cents=true to always show 2 decimal places
-        return PriceFormatter.formatWithCurrency(priceInCents, currencySymbol, true);
-    }
+
 
     /**
      * Draws an X icon for excluded days.

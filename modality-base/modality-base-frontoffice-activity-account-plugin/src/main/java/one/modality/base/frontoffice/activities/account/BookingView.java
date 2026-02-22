@@ -24,7 +24,7 @@ import one.modality.base.frontoffice.utility.tyler.StyleUtility;
 import one.modality.base.frontoffice.utility.tyler.TextUtility;
 import one.modality.base.shared.entities.Document;
 import one.modality.base.shared.entities.Event;
-import one.modality.base.shared.entities.formatters.EventPriceFormatter;
+import one.modality.base.shared.entities.formatters.PriceUtil;
 import one.modality.ecommerce.client.i18n.EcommerceI18nKeys;
 
 import java.util.ArrayList;
@@ -190,11 +190,11 @@ public final class BookingView {
         personLabel.setText(booking.getFullName());
         personLabel.setTextFill(Color.GRAY);
 
-        totalPriceValue.setText(EventPriceFormatter.formatWithCurrency(booking.getPriceNet(), event));
+        totalPriceValue.setText(PriceUtil.formatWithCurrency(booking.getPriceNet(), event));
         totalPriceValue.setFill(Color.GRAY);
-        remainingPriceValue.setText(EventPriceFormatter.formatWithCurrency(booking.getPriceNet() - booking.getPriceDeposit(), event));
+        remainingPriceValue.setText(PriceUtil.formatWithCurrency(booking.getPriceNet() - booking.getPriceDeposit(), event));
         remainingPriceValue.setFill(Color.GRAY);
-        paidPriceValue.setText(EventPriceFormatter.formatWithCurrency(booking.getPriceDeposit(), event));
+        paidPriceValue.setText(PriceUtil.formatWithCurrency(booking.getPriceDeposit(), event));
         paidPriceValue.setFill(Color.GRAY);
 
         /*if (bookingStatus == BookingStatus.INCOMPLETE) {
@@ -211,7 +211,7 @@ public final class BookingView {
     }
 
     private Button createPaymentButton() {
-        return Bootstrap.dangerButton(I18nControls.newButton(EcommerceI18nKeys.Pay, EventPriceFormatter.formatWithCurrency(booking.getPriceNet() - booking.getPriceDeposit(), booking.getEvent())));
+        return Bootstrap.dangerButton(I18nControls.newButton(EcommerceI18nKeys.Pay, PriceUtil.formatWithCurrency(booking.getPriceNet() - booking.getPriceDeposit(), booking.getEvent())));
     }
 
     public Node getView() {

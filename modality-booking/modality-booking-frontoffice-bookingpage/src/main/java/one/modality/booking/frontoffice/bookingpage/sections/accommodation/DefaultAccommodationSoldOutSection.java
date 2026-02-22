@@ -27,7 +27,7 @@ import one.modality.booking.frontoffice.bookingpage.components.StyledSectionHead
 import one.modality.booking.frontoffice.bookingpage.sections.roommate.DefaultRoommateInfoSection;
 import one.modality.booking.frontoffice.bookingpage.standard.BookingSelectionState;
 import one.modality.booking.frontoffice.bookingpage.standard.StandardBookingFormCallbacks;
-import one.modality.base.shared.entities.formatters.EventPriceFormatter;
+import one.modality.base.shared.entities.formatters.PriceUtil;
 
 import java.time.LocalDate;
 import java.util.Comparator;
@@ -532,7 +532,7 @@ public class DefaultAccommodationSoldOutSection implements HasAccommodationSoldO
 
         if (!option.isDayVisitor()) {
             // Per-night price with "/night" label
-            Label perNightLabel = new Label(I18n.getI18nText(BookingPageI18nKeys.PricePerNight, formatPrice(pricePerNight)));
+            Label perNightLabel = new Label(I18n.getI18nText(BookingPageI18nKeys.PricePerNight, PriceUtil.formatWithCurrency(pricePerNight, event)));
             perNightLabel.getStyleClass().addAll(bookingpage_text_lg, bookingpage_font_semibold);
             if (isDisabled) {
                 perNightLabel.getStyleClass().addAll(bookingpage_text_muted_light, bookingpage_text_strikethrough);
@@ -554,7 +554,7 @@ public class DefaultAccommodationSoldOutSection implements HasAccommodationSoldO
             if (totalForDuration > 0 && numberOfNights > 0) {
                 Object nightsKey = numberOfNights == 1 ? BookingPageI18nKeys.Night : BookingPageI18nKeys.Nights;
                 String nightsText = I18n.getI18nText(nightsKey);
-                Label totalLabel = new Label(I18n.getI18nText(BookingPageI18nKeys.TotalForNightsFormat, formatPrice(totalForDuration), numberOfNights, nightsText));
+                Label totalLabel = new Label(I18n.getI18nText(BookingPageI18nKeys.TotalForNightsFormat, PriceUtil.formatWithCurrency(totalForDuration, event), numberOfNights, nightsText));
                 totalLabel.getStyleClass().addAll(bookingpage_text_sm, bookingpage_text_muted);
                 if (isDisabled) {
                     totalLabel.getStyleClass().add(bookingpage_text_strikethrough);
@@ -569,7 +569,7 @@ public class DefaultAccommodationSoldOutSection implements HasAccommodationSoldO
             priceContainer.getChildren().add(pricingTypeLabel);
         } else {
             // Day visitor - just show "Free" or the price
-            Label priceLabel = new Label(pricePerNight == 0 ? I18n.getI18nText(BookingPageI18nKeys.Free) : formatPrice(pricePerNight));
+            Label priceLabel = new Label(pricePerNight == 0 ? I18n.getI18nText(BookingPageI18nKeys.Free) : PriceUtil.formatWithCurrency(pricePerNight, event));
             priceLabel.getStyleClass().addAll(bookingpage_text_lg, bookingpage_font_semibold);
             if (isDisabled) {
                 priceLabel.getStyleClass().addAll(bookingpage_text_muted_light, bookingpage_text_strikethrough);
@@ -818,9 +818,7 @@ public class DefaultAccommodationSoldOutSection implements HasAccommodationSoldO
         }
     }
 
-    private String formatPrice(int priceInCents) {
-        return EventPriceFormatter.formatWithCurrency(priceInCents, workingBookingProperties != null ? workingBookingProperties.getEvent() : null);
-    }
+
 
     // ========================================
     // RESPONSIVE DESIGN

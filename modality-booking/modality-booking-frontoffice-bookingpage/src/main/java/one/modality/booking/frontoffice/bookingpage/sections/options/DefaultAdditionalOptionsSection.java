@@ -24,7 +24,7 @@ import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
 import one.modality.booking.frontoffice.bookingpage.components.StyledSectionHeader;
-import one.modality.base.shared.entities.formatters.EventPriceFormatter;
+import one.modality.base.shared.entities.formatters.PriceUtil;
 
 import one.modality.ecommerce.policy.service.PolicyAggregate;
 
@@ -241,7 +241,7 @@ public class DefaultAdditionalOptionsSection implements HasAdditionalOptionsSect
             return "Free";
         }
 
-        String priceStr = EventPriceFormatter.formatWithCurrency(option.getPrice(), workingBookingProperties != null ? workingBookingProperties.getEvent() : null);
+        String priceStr = PriceUtil.formatWithCurrency(option.getPrice(), workingBookingProperties != null ? workingBookingProperties.getEvent() : null);
         if (option.isPerDay()) {
             priceStr += "/day";
         }

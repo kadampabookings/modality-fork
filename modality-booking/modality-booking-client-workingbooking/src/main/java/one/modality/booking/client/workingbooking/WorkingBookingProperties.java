@@ -8,7 +8,7 @@ import javafx.beans.binding.BooleanBinding;
 import javafx.beans.binding.BooleanExpression;
 import javafx.beans.property.*;
 import one.modality.base.shared.entities.Event;
-import one.modality.base.shared.entities.formatters.EventPriceFormatter;
+import one.modality.base.shared.entities.formatters.PriceUtil;
 import one.modality.ecommerce.document.service.DocumentAggregate;
 import one.modality.ecommerce.policy.service.PolicyAggregate;
 
@@ -116,8 +116,8 @@ public final class WorkingBookingProperties {
     private final IntegerProperty depositProperty = new SimpleIntegerProperty(-1) {
         @Override
         protected void invalidated() {
-            formattedDepositProperty.set(EventPriceFormatter.formatWithCurrency(get(), getEvent()));
-            formattedDepositWithoutCurrencyProperty.set(EventPriceFormatter.formatWithoutCurrency(get(), false));
+            formattedDepositProperty.set(PriceUtil.formatWithCurrency(get(), getEvent()));
+            formattedDepositWithoutCurrencyProperty.set(PriceUtil.formatWithoutCurrency(get(), false));
         }
     };
     public int getDeposit() { return depositProperty.get(); }
@@ -134,8 +134,8 @@ public final class WorkingBookingProperties {
     private final IntegerProperty totalProperty = new SimpleIntegerProperty(-1) {
         @Override
         protected void invalidated() {
-            formattedTotalProperty.set(EventPriceFormatter.formatWithCurrency(get(), getEvent()));
-            formattedTotalWithoutCurrencyProperty.set(EventPriceFormatter.formatWithoutCurrency(get(), false));
+            formattedTotalProperty.set(PriceUtil.formatWithCurrency(get(), getEvent()));
+            formattedTotalWithoutCurrencyProperty.set(PriceUtil.formatWithoutCurrency(get(), false));
         }
     };
     public int getTotal() { return totalProperty.get(); }
@@ -152,8 +152,8 @@ public final class WorkingBookingProperties {
     private final IntegerProperty minDepositProperty = new SimpleIntegerProperty(-1) {
         @Override
         protected void invalidated() {
-            formattedMinDepositProperty.set(EventPriceFormatter.formatWithCurrency(get(), getEvent()));
-            formattedMinDepositWithoutCurrencyProperty.set(EventPriceFormatter.formatWithoutCurrency(get(), false));
+            formattedMinDepositProperty.set(PriceUtil.formatWithCurrency(get(), getEvent()));
+            formattedMinDepositWithoutCurrencyProperty.set(PriceUtil.formatWithoutCurrency(get(), false));
         }
     };
     public int getMinDeposit() { return minDepositProperty.get(); }
@@ -170,8 +170,8 @@ public final class WorkingBookingProperties {
     private final IntegerProperty balanceProperty = new SimpleIntegerProperty(-1) {
         @Override
         protected void invalidated() {
-            formattedBalanceProperty.set(EventPriceFormatter.formatWithCurrency(get(), getEvent()));
-            formattedBalanceWithoutCurrencyProperty.set(EventPriceFormatter.formatWithoutCurrency(get(), false));
+            formattedBalanceProperty.set(PriceUtil.formatWithCurrency(get(), getEvent()));
+            formattedBalanceWithoutCurrencyProperty.set(PriceUtil.formatWithoutCurrency(get(), false));
         }
     };
     public int getBalance() { return balanceProperty.getValue(); }
@@ -187,7 +187,7 @@ public final class WorkingBookingProperties {
     private final IntegerProperty previousTotalProperty = new SimpleIntegerProperty(-1) {
         @Override
         protected void invalidated() {
-            formattedPreviousTotalProperty.set(EventPriceFormatter.formatWithCurrency(get(), getEvent()));
+            formattedPreviousTotalProperty.set(PriceUtil.formatWithCurrency(get(), getEvent()));
         }
     };
     public int getPreviousTotal() { return previousTotalProperty.get(); }
@@ -201,7 +201,7 @@ public final class WorkingBookingProperties {
     private final IntegerProperty previousBalanceProperty = new SimpleIntegerProperty(-1) {
         @Override
         protected void invalidated() {
-            formattedPreviousBalanceProperty.setValue(EventPriceFormatter.formatWithCurrency(previousBalanceProperty.get(), getEvent()));
+            formattedPreviousBalanceProperty.setValue(PriceUtil.formatWithCurrency(previousBalanceProperty.get(), getEvent()));
         }
     };
     public int getPreviousBalance() { return previousBalanceProperty.getValue(); }
@@ -230,8 +230,8 @@ public final class WorkingBookingProperties {
     private final IntegerProperty noDiscountTotalProperty = new SimpleIntegerProperty(-1) {
         @Override
         protected void invalidated() {
-            formattedNoDiscountTotalProperty.set(EventPriceFormatter.formatWithCurrency(get(), getEvent()));
-            formattedNoDiscountTotalWithoutCurrencyProperty.set(EventPriceFormatter.formatWithoutCurrency(get(), false));
+            formattedNoDiscountTotalProperty.set(PriceUtil.formatWithCurrency(get(), getEvent()));
+            formattedNoDiscountTotalWithoutCurrencyProperty.set(PriceUtil.formatWithoutCurrency(get(), false));
         }
     };
     public int getNoDiscountTotal() { return noDiscountTotalProperty.get(); }
