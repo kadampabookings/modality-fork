@@ -1,5 +1,6 @@
 {
   "AccountingAccount": {
+    "id": 32,
     "icon": {
       "expr": "image('images/16/account.png')"
     },
@@ -8,6 +9,7 @@
     "type": "AccountingAccountType"
   },
   "AccountingAccountType": {
+    "id": 33,
     "icon": {
       "expr": "image('images/16/accountType.png')"
     },
@@ -15,6 +17,7 @@
     "number": "integer"
   },
   "Activity": {
+    "id": 38,
     "icon": {
       "expr": "image('images/16/activity.png')"
     },
@@ -24,12 +27,14 @@
     "parent": "Activity"
   },
   "ActivityState": {
+    "id": 101,
     "name": "string",
     "owner": "Person",
     "parameters": "string",
     "route": "string"
   },
   "AllocationRule": {
+    "id": 78,
     "active": "boolean",
     "event": "Event",
     "ifCarer": "boolean",
@@ -53,6 +58,7 @@
     "triggerAllocate": "boolean"
   },
   "Attendance": {
+    "id": 48,
     "attended": "boolean",
     "charged": "boolean",
     "date": "date",
@@ -68,6 +74,7 @@
     "videoAccessEnabled": "boolean"
   },
   "AuthorizationAssignment": {
+    "id": 100,
     "active": "boolean",
     "activityState": "ActivityState",
     "management": "AuthorizationManagement",
@@ -77,15 +84,18 @@
     "scope": "AuthorizationScope"
   },
   "AuthorizationManagement": {
+    "id": 96,
     "active": "boolean",
     "manager": "Person",
     "user": "Person"
   },
   "AuthorizationOrganizationAdmin": {
+    "id": 134,
     "admin": "Person",
     "organization": "Organization"
   },
   "AuthorizationOrganizationUserAccess": {
+    "id": 136,
     "date": "date",
     "event": "Event",
     "organization": "Organization",
@@ -94,26 +104,32 @@
     "user": "Person"
   },
   "AuthorizationRole": {
+    "id": 97,
     "label": "Label",
     "name": "string"
   },
   "AuthorizationRoleOperation": {
+    "id": 135,
     "operation": "Operation",
     "operationGroup": "OperationGroup",
     "role": "AuthorizationRole"
   },
   "AuthorizationRule": {
+    "id": 98,
     "name": "string",
     "role": "AuthorizationRole",
     "rule": "string"
   },
   "AuthorizationScope": {
+    "id": 99,
     "name": "string"
   },
   "AuthorizationSuperAdmin": {
+    "id": 137,
     "superAdmin": "Person"
   },
   "Book": {
+    "id": 126,
     "description": "string",
     "freeUrl": "string",
     "imageUrl": "string",
@@ -124,6 +140,7 @@
     "title": "string"
   },
   "BookablePeriod": {
+    "id": 131,
     "endScheduledItem": "ScheduledItem",
     "event": "Event",
     "label": "Label",
@@ -131,6 +148,7 @@
     "startScheduledItem": "ScheduledItem"
   },
   "BookingFormLayout": {
+    "id": 87,
     "admin1": "boolean",
     "age": "boolean",
     "gender": "boolean",
@@ -141,6 +159,7 @@
     "street": "boolean"
   },
   "BracketPattern": {
+    "id": 75,
     "brackets": {
       "expr": "'[' + pattern + ']'"
     },
@@ -155,24 +174,29 @@
     "replacement": "string"
   },
   "Buddha": {
+    "id": 89,
     "image": "Image",
     "label": "Label",
     "name": "string",
     "whoLabel": "Label"
   },
   "Building": {
+    "id": 91,
     "name": "string",
     "site": "Site"
   },
   "BuildingZone": {
+    "id": 139,
     "building": "Building",
     "name": "string"
   },
   "Cart": {
+    "id": 68,
     "forwardToCart": "Cart",
     "uuid": "string"
   },
   "CartMessage": {
+    "id": 108,
     "documentCancelled": "boolean",
     "documentConfirmed": "boolean",
     "documentFullyPaid": "boolean",
@@ -185,6 +209,7 @@
     "showUntil": "date"
   },
   "CartMessageCondition": {
+    "id": 109,
     "booked": "boolean",
     "cartMessage": "CartMessage",
     "date": "date",
@@ -192,11 +217,13 @@
     "site": "Site"
   },
   "Channel": {
+    "id": 118,
     "fetchUrl": "string",
     "name": "string",
     "organisation": "Organization"
   },
   "Continent": {
+    "id": 27,
     "code": "string",
     "icon": {
       "expr": "image('images/16/continents/' + code + '.png')"
@@ -204,6 +231,7 @@
     "name": "string"
   },
   "Country": {
+    "id": 26,
     "code": {
       "expr": "iso_alpha2"
     },
@@ -229,6 +257,7 @@
     "west": "float"
   },
   "Currency": {
+    "id": 29,
     "code": "string",
     "icon": {
       "expr": "image('images/16/currencies/' + code + '.png')"
@@ -237,6 +266,7 @@
     "symbol": "string"
   },
   "DateInfo": {
+    "id": 77,
     "date": "date",
     "dateTimeRange": "string",
     "dev": "boolean",
@@ -252,11 +282,13 @@
     "option": "Option"
   },
   "DayTemplate": {
+    "id": 128,
     "dates": "string",
     "event": "Event",
     "name": "string"
   },
   "Document": {
+    "id": 46,
     "abandoned": "boolean",
     "absent": "boolean",
     "accountingDate": "date",
@@ -610,6 +642,7 @@
     "willPay": "boolean"
   },
   "DocumentLine": {
+    "id": 47,
     "abandoned": "boolean",
     "allocate": "boolean",
     "arrivalSite": "Site",
@@ -730,6 +763,7 @@
     "triggerDeferAllocate": "boolean"
   },
   "Error": {
+    "id": 132,
     "date": "date",
     "message": "string",
     "route": "string",
@@ -737,6 +771,7 @@
     "userPerson": "Person"
   },
   "Event": {
+    "id": 39,
     "active": "boolean",
     "activity": "Activity",
     "advertised": "boolean",
@@ -843,6 +878,7 @@
     "vodProcessingTimeMinutes": "integer"
   },
   "EventPart": {
+    "id": 145,
     "accommodationChangeAllowed": "boolean",
     "endBoundary": "ScheduledBoundary",
     "event": "Event",
@@ -851,6 +887,7 @@
     "startBoundary": "ScheduledBoundary"
   },
   "EventPhase": {
+    "id": 147,
     "endBoundary": "ScheduledBoundary",
     "event": "Event",
     "label": "Label",
@@ -858,6 +895,7 @@
     "startBoundary": "ScheduledBoundary"
   },
   "EventPhaseCoverage": {
+    "id": 148,
     "event": "Event",
     "label": "Label",
     "name": "string",
@@ -867,6 +905,7 @@
     "phase4": "EventPhase"
   },
   "EventSelection": {
+    "id": 146,
     "event": "Event",
     "inPerson": "boolean",
     "label": "Label",
@@ -877,6 +916,7 @@
     "part3": "EventPart"
   },
   "EventType": {
+    "id": 95,
     "background": "string",
     "deprecated": "boolean",
     "label": "Label",
@@ -886,6 +926,7 @@
     "recurringItem": "Item"
   },
   "Filter": {
+    "id": 110,
     "active": "boolean",
     "activityName": "string",
     "alias": "string",
@@ -908,6 +949,7 @@
     "whereClause": "string"
   },
   "Food": {
+    "id": 119,
     "description": "string",
     "fooddbId": "string",
     "imageUrl": "string",
@@ -917,10 +959,12 @@
     "wikipediaId": "string"
   },
   "FoodGroup": {
+    "id": 120,
     "name": "string",
     "parent": "FoodGroup"
   },
   "FrontendAccount": {
+    "id": 69,
     "admin": "boolean",
     "backoffice": "boolean",
     "corporation": "Organization",
@@ -939,6 +983,7 @@
     "username": "string"
   },
   "GatewayCompany": {
+    "id": 70,
     "alertBeforePaymentLabel": "Label",
     "callbackTransactionRef": "string",
     "callbackTransactionStatus": "string",
@@ -960,6 +1005,7 @@
     "successfulStatus": "string"
   },
   "GatewayParameter": {
+    "id": 72,
     "account": "MoneyAccount",
     "company": "GatewayCompany",
     "icon": {
@@ -972,6 +1018,7 @@
     "value": "string"
   },
   "History": {
+    "id": 73,
     "action": "string",
     "changes": "string",
     "comment": "string",
@@ -987,6 +1034,7 @@
     "username": "string"
   },
   "Image": {
+    "id": 88,
     "frontendStyle": "string",
     "medium_frontendStyle": "string",
     "medium_url": "string",
@@ -996,6 +1044,7 @@
     "url": "string"
   },
   "Invitation": {
+    "id": 138,
     "accepted": "boolean",
     "aliasFirstName": "string",
     "aliasLastName": "string",
@@ -1009,6 +1058,7 @@
     "usageDate": "date"
   },
   "Item": {
+    "id": 35,
     "capacity": "integer",
     "code": "string",
     "deprecated": "boolean",
@@ -1030,6 +1080,7 @@
     "temporal": "boolean"
   },
   "ItemFamily": {
+    "id": 36,
     "account": "AccountingAccount",
     "code": "string",
     "icon": {
@@ -1043,6 +1094,7 @@
     "summaryHidden": "boolean"
   },
   "ItemFamilyPolicy": {
+    "id": 149,
     "eventPhaseCoverage1": "EventPhaseCoverage",
     "eventPhaseCoverage2": "EventPhaseCoverage",
     "eventPhaseCoverage3": "EventPhaseCoverage",
@@ -1054,6 +1106,7 @@
     "scope": "PolicyScope"
   },
   "ItemPolicy": {
+    "id": 143,
     "default": "boolean",
     "descriptionLabel": "Label",
     "earlyAccommodationAllowed": "boolean",
@@ -1067,6 +1120,7 @@
     "scope": "PolicyScope"
   },
   "KdmCenter": {
+    "id": 121,
     "address": "string",
     "address2": "string",
     "address3": "string",
@@ -1085,6 +1139,7 @@
     "web": "string"
   },
   "Label": {
+    "id": 37,
     "alert": "boolean",
     "de": "string",
     "el": "string",
@@ -1106,6 +1161,7 @@
     "zht": "string"
   },
   "Language": {
+    "id": 28,
     "code": {
       "expr": "iso_639_1"
     },
@@ -1124,6 +1180,7 @@
     "useCountryIcon": "boolean"
   },
   "Letter": {
+    "id": 61,
     "account": "MailAccount",
     "active": "boolean",
     "automation": {
@@ -1156,6 +1213,7 @@
     "type": "LetterType"
   },
   "LetterType": {
+    "id": 60,
     "audio": "boolean",
     "cancellation": "boolean",
     "cart": "boolean",
@@ -1179,16 +1237,19 @@
     "terms": "boolean"
   },
   "LtTestEvent": {
+    "id": 94,
     "eventTime": "date",
     "ltTestSet": "LtTestEvent",
     "type": "integer",
     "value": "integer"
   },
   "LtTestSet": {
+    "id": 93,
     "comment": "string",
     "name": "string"
   },
   "MagicLink": {
+    "id": 124,
     "creationDate": "date",
     "email": "string",
     "lang": "string",
@@ -1202,6 +1263,7 @@
     "verificationCode": "string"
   },
   "Mail": {
+    "id": 64,
     "account": "MailAccount",
     "background": "boolean",
     "content": "HTML",
@@ -1227,6 +1289,7 @@
     "transmitted": "boolean"
   },
   "MailAccount": {
+    "id": 63,
     "default": "boolean",
     "email": "string",
     "event": "Event",
@@ -1239,6 +1302,7 @@
     "smtpAccount": "SmtpAccount"
   },
   "Media": {
+    "id": 127,
     "durationMillis": "long",
     "lang": "string",
     "multilang": "boolean",
@@ -1248,6 +1312,7 @@
     "url": "string"
   },
   "MediaConsumption": {
+    "id": 130,
     "action": {
       "expr": "played ? 'Played' : downloaded ? 'Downloaded' : livestreamed ? 'Livestreamed' : '???'"
     },
@@ -1264,6 +1329,7 @@
     "scheduledItem": "ScheduledItem"
   },
   "Method": {
+    "id": 52,
     "code": "string",
     "icon": {
       "expr": "image('images/16/methods/' + code + '.png')"
@@ -1272,12 +1338,14 @@
     "name": "string"
   },
   "MethodSupport": {
+    "id": 55,
     "in": "boolean",
     "method": "Method",
     "moneyAccountType": "MoneyAccountType",
     "out": "boolean"
   },
   "Metrics": {
+    "id": 92,
     "date": "date",
     "ltTestSetId": "LtTestSet",
     "memoryFree": "long",
@@ -1290,6 +1358,7 @@
     "systemLoadAverage": "long"
   },
   "MoneyAccount": {
+    "id": 53,
     "bankSystemAccount": "string",
     "closed": "boolean",
     "currency": "Currency",
@@ -1305,6 +1374,7 @@
     "type": "MoneyAccountType"
   },
   "MoneyAccountType": {
+    "id": 54,
     "code": "string",
     "customer": "boolean",
     "icon": {
@@ -1316,6 +1386,7 @@
     "supplier": "boolean"
   },
   "MoneyFlow": {
+    "id": 45,
     "autoTransferTime": "date",
     "fromMoneyAccount": "MoneyAccount",
     "icon": {
@@ -1328,11 +1399,13 @@
     "toMoneyAccount": "MoneyAccount"
   },
   "MoneyFlowPriority": {
+    "id": 80,
     "flow": "MoneyFlow",
     "ord": "integer",
     "username": "string"
   },
   "MoneyFlowType": {
+    "id": 56,
     "fromMoneyAccountType": "MoneyAccountType",
     "icon": {
       "expr": "image('images/16/moneyFlow.png')"
@@ -1340,6 +1413,7 @@
     "toMoneyAccountType": "MoneyAccountType"
   },
   "MoneyTransfer": {
+    "id": 57,
     "amount": "Price",
     "anotherEventDocument": {
       "expr": "document"
@@ -1401,11 +1475,13 @@
     "wireless": "boolean"
   },
   "MultipleBooking": {
+    "id": 74,
     "all": "integer",
     "event": "Event",
     "notCancelled": "integer"
   },
   "News": {
+    "id": 116,
     "channel": "Channel",
     "channelNewsId": "integer",
     "date": "date",
@@ -1420,6 +1496,7 @@
     "withVideos": "boolean"
   },
   "Operation": {
+    "id": 102,
     "backend": "boolean",
     "backoffice": {
       "expr": "backend"
@@ -1442,9 +1519,11 @@
     "readOnly": "boolean"
   },
   "OperationGroup": {
+    "id": 133,
     "name": "string"
   },
   "Option": {
+    "id": 40,
     "adultAllowed": "boolean",
     "ageErrorLabel": "Label",
     "allocate": "boolean",
@@ -1537,6 +1616,7 @@
     "visibleCondition": "string"
   },
   "OptionCondition": {
+    "id": 81,
     "anyDay": "boolean",
     "firstDay": "date",
     "ifItemFamily": "ItemFamily",
@@ -1552,6 +1632,7 @@
     "parent": "OptionCondition"
   },
   "Organization": {
+    "id": 30,
     "cityName": "string",
     "closed": "boolean",
     "country": "Country",
@@ -1584,6 +1665,7 @@
     "type": "OrganizationType"
   },
   "OrganizationType": {
+    "id": 31,
     "code": "string",
     "icon": {
       "expr": "image('images/16/organizations/' + (id=2? 'kmc' : id=3 ? 'kbc' : id=4 ? 'branch' : 'generic') + '.png')"
@@ -1591,16 +1673,19 @@
     "name": "string"
   },
   "Package": {
+    "id": 50,
     "icon": {
       "expr": "image('images/16/package.png')"
     },
     "name": "string"
   },
   "PackageItem": {
+    "id": 51,
     "item": "Item",
     "package": "Package"
   },
   "PassTemplate": {
+    "id": 150,
     "createdAt": "date",
     "createdBy": "Person",
     "design": "string",
@@ -1610,6 +1695,7 @@
     "removed": "boolean"
   },
   "Person": {
+    "id": 66,
     "abcNames": "string",
     "accountPerson": "Person",
     "admin1Name": "string",
@@ -1651,9 +1737,11 @@
     "street": "string"
   },
   "Playlist": {
+    "id": 125,
     "name": "string"
   },
   "Podcast": {
+    "id": 117,
     "audioUrl": "string",
     "channel": "Channel",
     "channelPodcastId": "integer",
@@ -1666,12 +1754,14 @@
     "wistiaVideoId": "string"
   },
   "PolicyScope": {
+    "id": 142,
     "event": "Event",
     "eventType": "EventType",
     "organization": "Organization",
     "site": "Site"
   },
   "Pool": {
+    "id": 140,
     "allowsPublic": "boolean",
     "bookable": "boolean",
     "description": "string",
@@ -1685,6 +1775,7 @@
     "webColor": "string"
   },
   "PoolAllocation": {
+    "id": 141,
     "event": "Event",
     "person": "Person",
     "pool": "Pool",
@@ -1693,6 +1784,7 @@
     "resource": "Resource"
   },
   "Rate": {
+    "id": 41,
     "age1_discount": "integer",
     "age1_max": "integer",
     "age1_price": "Price",
@@ -1764,6 +1856,7 @@
     "workingVisit_price": "Price"
   },
   "Recipient": {
+    "id": 65,
     "bcc": "boolean",
     "cc": "boolean",
     "email": "string",
@@ -1776,6 +1869,7 @@
     "to": "boolean"
   },
   "Resource": {
+    "id": 43,
     "building": "Building",
     "buildingZone": "BuildingZone",
     "cleaningState": "string",
@@ -1792,6 +1886,7 @@
     "triggerDuplicate": "integer"
   },
   "ResourceConfiguration": {
+    "id": 44,
     "allowsFemale": "boolean",
     "allowsGuest": "boolean",
     "allowsMale": "boolean",
@@ -1823,6 +1918,7 @@
     "startDate": "date"
   },
   "ScheduledBoundary": {
+    "id": 144,
     "atStartTime": "boolean",
     "date": "date",
     "event": "Event",
@@ -1830,6 +1926,7 @@
     "timeline": "Timeline"
   },
   "ScheduledItem": {
+    "id": 114,
     "available": "boolean",
     "bookableScheduledItem": "ScheduledItem",
     "cancelled": "boolean",
@@ -1853,6 +1950,7 @@
     "vodDelayed": "boolean"
   },
   "ScheduledResource": {
+    "id": 115,
     "available": "boolean",
     "configuration": "ResourceConfiguration",
     "date": "date",
@@ -1861,12 +1959,14 @@
     "scheduledItem": "ScheduledItem"
   },
   "Sector": {
+    "id": 34,
     "icon": {
       "expr": "image('images/16/sector.png')"
     },
     "name": "string"
   },
   "SessionAgent": {
+    "id": 103,
     "agentString": "string",
     "end": "date",
     "next": "SessionAgent",
@@ -1874,6 +1974,7 @@
     "start": "date"
   },
   "SessionApplication": {
+    "id": 104,
     "agent": "SessionAgent",
     "buildNumber": "integer",
     "buildNumberString": "string",
@@ -1888,6 +1989,7 @@
     "version": "string"
   },
   "SessionConnection": {
+    "id": 106,
     "end": "date",
     "next": "SessionConnection",
     "previous": "SessionConnection",
@@ -1895,6 +1997,7 @@
     "start": "date"
   },
   "SessionProcess": {
+    "id": 105,
     "application": "SessionApplication",
     "end": "date",
     "next": "SessionProcess",
@@ -1902,6 +2005,7 @@
     "start": "date"
   },
   "SessionUser": {
+    "id": 107,
     "end": "date",
     "next": "SessionUser",
     "previous": "SessionUser",
@@ -1910,6 +2014,7 @@
     "user": "Person"
   },
   "Site": {
+    "id": 42,
     "address": "string",
     "asksForPassport": "boolean",
     "code": "string",
@@ -1932,12 +2037,14 @@
     "topLabel": "Label"
   },
   "SiteItemFamily": {
+    "id": 62,
     "autoRelease": "boolean",
     "itemFamily": "ItemFamily",
     "scheduledEndDate": "date",
     "site": "Site"
   },
   "SmtpAccount": {
+    "id": 58,
     "host": "string",
     "icon": {
       "expr": "image('images/16/smtp.png')"
@@ -1950,12 +2057,14 @@
     "username": "string"
   },
   "SmtpQuota": {
+    "id": 59,
     "icon": {
       "expr": "image('images/16/smtpQuota.png')"
     },
     "name": "string"
   },
   "Tag": {
+    "id": 111,
     "classId": "string",
     "creationDate": "date",
     "icon": {
@@ -1964,10 +2073,12 @@
     "name": "string"
   },
   "Tagged": {
+    "id": 112,
     "objectId": "long",
     "tag": "Tag"
   },
   "TaskMetrics": {
+    "id": 129,
     "endTime": "date",
     "error": "string",
     "language": "string",
@@ -1986,6 +2097,7 @@
     "username": "string"
   },
   "Teacher": {
+    "id": 90,
     "hasPodcasts": "boolean",
     "hasVideos": "boolean",
     "image": "Image",
@@ -1996,6 +2108,7 @@
     "whoLabel": "Label"
   },
   "Timeline": {
+    "id": 113,
     "audioOffered": "boolean",
     "dayTemplate": "DayTemplate",
     "endTime": "date",
@@ -2010,6 +2123,7 @@
     "videoOffered": "boolean"
   },
   "Topic": {
+    "id": 122,
     "channelTopicId": "string",
     "label": "Label",
     "name": "string",
@@ -2017,6 +2131,7 @@
     "virtuous": "boolean"
   },
   "Video": {
+    "id": 123,
     "date": "date",
     "durationMillis": "long",
     "excerpt": "string",
