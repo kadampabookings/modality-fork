@@ -20,7 +20,6 @@ public interface Person extends Entity, EntityHasPersonalDetails, EntityHasEvent
     String language = "language";
     String carer1 = "carer1";
     String carer2 = "carer2";
-    String name = "name";
     String abcNames = "abc_names";
     String countryGeonameid = "countryGeonameid";
     String countryCode = "countryCode";
@@ -136,15 +135,6 @@ public interface Person extends Entity, EntityHasPersonalDetails, EntityHasEvent
 
     default Person getCarer2() {
         return getForeignEntity(carer2);
-    }
-
-    // Full name
-    default void setName(String value) {
-        setFieldValue(name, value);
-    }
-
-    default String getName() {
-        return getStringFieldValue(name);
     }
 
     // ABC names (for search)
