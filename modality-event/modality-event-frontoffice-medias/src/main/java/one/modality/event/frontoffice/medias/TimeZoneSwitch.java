@@ -9,8 +9,8 @@ import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.value.ObservableBooleanValue;
 import javafx.geometry.Pos;
-import javafx.scene.Node;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Region;
 
 import java.time.*;
 
@@ -55,7 +55,7 @@ public final class TimeZoneSwitch {
         eventZoneIdProperty.setValue(eventZoneId);
     }
 
-    public Node createTimezoneSwitchBox() {
+    public Region createTimezoneSwitchBox() {
         Switch timezoneSwitch = new Switch();
         timezoneSwitch.selectedProperty().bindBidirectional(eventLocalTimeSelectedProperty);
         HBox hBox = new HBox(10, I18n.newText(MediasI18nKeys.TimeZoneTime1, eventZoneIdProperty), timezoneSwitch);
