@@ -28,7 +28,7 @@ import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
 import one.modality.booking.frontoffice.bookingpage.components.StyledSectionHeader;
 import one.modality.booking.frontoffice.bookingpage.sections.childcarer.DefaultChildCarerSection;
-import one.modality.booking.frontoffice.bookingpage.sections.childcarer.HasChildCarerSection.HouseholdMember;
+import one.modality.booking.frontoffice.bookingpage.sections.childcarer.HasChildCarerSection.AccountMember;
 import one.modality.booking.frontoffice.bookingpage.standard.BookingSelectionState;
 
 
@@ -45,7 +45,7 @@ import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelecto
 
 /**
  * Default implementation of the member selection section.
- * Displays household members and allows selection of who to book for.
+ * Displays account members and allows selection of who to book for.
  *
  * <p>Uses CSS for styling - colors come from CSS variables that can be
  * overridden by theme classes (e.g., .theme-wisdom-blue) on a parent container.</p>
@@ -71,7 +71,7 @@ public class DefaultMemberSelectionSection implements HasMemberSelectionSection 
     protected final ObjectProperty<MemberInfo> selectedMemberProperty = new SimpleObjectProperty<>();
 
     // === MEMBERS LIST ===
-    protected final ObservableList<MemberInfo> householdMembers = FXCollections.observableArrayList();
+    protected final ObservableList<MemberInfo> accountMembers = FXCollections.observableArrayList();
     protected final Set<Object> alreadyBookedPersonIds = new HashSet<>();
     protected final Map<Object, Object> personDocumentMap = new HashMap<>(); // personId -> documentId mapping for existing bookings
     protected final BooleanProperty hasAvailableMembers = new SimpleBooleanProperty(false);
@@ -234,7 +234,7 @@ public class DefaultMemberSelectionSection implements HasMemberSelectionSection 
         });
 
         // Rebuild cards when list changes (ensure UI thread for async member loading)
-        householdMembers.addListener((ListChangeListener<MemberInfo>) change ->
+        accountMembers.addListener((ListChangeListener<MemberInfo>) change ->
             UiScheduler.runInUiThread(this::rebuildMemberCards));
     }
 
@@ -307,7 +307,7 @@ public class DefaultMemberSelectionSection implements HasMemberSelectionSection 
 
         MemberInfo matchingMember = null;
 
-        for (MemberInfo member : householdMembers) {
+        for (MemberInfo member : accountMembers) {
             boolean isSelected = selectedPersonId != null && selectedPersonId.equals(member.getPersonId());
             VBox card = createMemberCard(member, isSelected);
             memberGrid.getChildren().add(card);
@@ -543,7 +543,7 @@ public class DefaultMemberSelectionSection implements HasMemberSelectionSection 
     }
 
     /**
-     * This section is only applicable for new bookings where user needs to select a household member.
+     * This section is only applicable for new bookings where user needs to select an account member.
      * For existing bookings, the member selection is handled in the ExistingBookingSection.
      */
     @Override
@@ -583,13 +583,13 @@ public class DefaultMemberSelectionSection implements HasMemberSelectionSection 
 
     @Override
     public void addMember(MemberInfo member) {
-        householdMembers.add(member);
+        accountMembers.add(member);
         updateHasAvailableMembers();
     }
 
     @Override
     public void clearMembers() {
-        householdMembers.clear();
+        accountMembers.clear();
         updateHasAvailableMembers();
     }
 
@@ -644,7 +644,7 @@ public class DefaultMemberSelectionSection implements HasMemberSelectionSection 
      * Updates the hasAvailableMembers property based on current members and bookings.
      */
     protected void updateHasAvailableMembers() {
-        long availableCount = householdMembers.stream()
+        long availableCount = accountMembers.stream()
             .filter(m -> !isAlreadyBooked(m))
             .count();
         hasAvailableMembers.set(availableCount > 0);
@@ -764,8 +764,8 @@ public class DefaultMemberSelectionSection implements HasMemberSelectionSection 
         if (isChild) {
             childCarerSection.setChildAge(age);
             childCarerSection.setChildName(member.getName());
-            // Pass adult household members (excluding the selected child) as potential carers
-            childCarerSection.setHouseholdMembers(getAdultHouseholdMembers(member));
+            // Pass adult account members (excluding the selected child) as potential carers
+            childCarerSection.setAccountMembers(getAdultAccountMembers(member));
             childCarerSection.setVisible(true);
         } else {
             // Not a child - reset carer data in selection state
@@ -778,18 +778,18 @@ public class DefaultMemberSelectionSection implements HasMemberSelectionSection 
     }
 
     /**
-     * Converts adult household members to HouseholdMember objects for the child carer section.
+     * Converts adult account members to AccountMember objects for the child carer section.
      * Excludes the selected child and members under 18.
      * Includes documentId if the member has an existing booking for the event.
      *
      * @param selectedChild The currently selected child member (to exclude from the list)
-     * @return List of adult household members as HouseholdMember objects
+     * @return List of adult account members as AccountMember objects
      */
-    protected List<HouseholdMember> getAdultHouseholdMembers(MemberInfo selectedChild) {
-        List<HouseholdMember> adults = new ArrayList<>();
+    protected List<AccountMember> getAdultAccountMembers(MemberInfo selectedChild) {
+        List<AccountMember> adults = new ArrayList<>();
         Object selectedChildId = selectedChild != null ? selectedChild.getPersonId() : null;
 
-        for (MemberInfo member : householdMembers) {
+        for (MemberInfo member : accountMembers) {
             // Skip the selected child
             if (selectedChildId != null && selectedChildId.equals(member.getPersonId())) {
                 continue;
@@ -812,10 +812,10 @@ public class DefaultMemberSelectionSection implements HasMemberSelectionSection 
             // Get document ID if this person has an existing booking for the event
             Object documentId = personDocumentMap.get(member.getPersonId());
 
-            // Convert MemberInfo to HouseholdMember
+            // Convert MemberInfo to AccountMember
             // isSelf = true if this is the account owner (OWNER status)
             boolean isSelf = member.getStatus() == MemberStatus.OWNER;
-            adults.add(new HouseholdMember(
+            adults.add(new AccountMember(
                 member.getPersonId(),
                 member.getName(),
                 isSelf,
