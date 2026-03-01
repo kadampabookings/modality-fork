@@ -31,7 +31,7 @@ public final class AddAttendancesEventSerialCodec extends AbstractAttendancesEve
             decodeAttendancesPrimaryKeys(serial),
             decodeScheduledItemsPrimaryKeys(serial),
             decodeDates(serial),
-            decodeBoolean(serial, VIDEO_ACCESS_ENABLED_KEY)
+            decodeBooleanSafe(serial, VIDEO_ACCESS_ENABLED_KEY)
         ), serial);
     }
 }
