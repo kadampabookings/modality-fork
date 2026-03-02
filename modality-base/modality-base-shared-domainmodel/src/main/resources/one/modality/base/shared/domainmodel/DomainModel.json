@@ -2221,6 +2221,7 @@
     "referencePhone": "string",
     "referenceStatus": "string",
     "referenceVerificationDate": "date",
+    "removed": "boolean",
     "resource": "Resource",
     "room": "Resource",
     "shareCode": "string",
@@ -2270,7 +2271,23 @@
       "expr": "image('images/16/volunteer.png')"
     },
     "organization": "Organization",
+    "removed": "boolean",
     "startDate": "date"
+  },
+  "VolunteeringCommunication": {
+    "id": 156,
+    "application": "VolunteeringApplication",
+    "content": "HTML",
+    "date": "date",
+    "direction": "string",
+    "icon": {
+      "expr": "image('images/16/volunteer.png')"
+    },
+    "organization": "Organization",
+    "removed": "boolean",
+    "subject": "string",
+    "type": "string",
+    "user": "string"
   },
   "VolunteeringOrganizationConfig": {
     "id": 151,
@@ -2298,6 +2315,20 @@
     "volunteerEvent": "Event",
     "workOnArrivalDay": "boolean",
     "workOnDepartureDay": "boolean"
+  },
+  "VolunteeringSpecialNeeds": {
+    "id": 157,
+    "area": "VolunteeringArea",
+    "endDate": "date",
+    "extraCount": "integer",
+    "icon": {
+      "expr": "image('images/16/volunteer.png')"
+    },
+    "organization": "Organization",
+    "priority": "string",
+    "reason": "HTML",
+    "removed": "boolean",
+    "startDate": "date"
   },
   "VolunteeringTimeline": {
     "id": 155,
