@@ -1734,6 +1734,7 @@
     "phone": "string",
     "postCode": "string",
     "removed": "boolean",
+    "resident": "boolean",
     "street": "string"
   },
   "Playlist": {
@@ -2017,6 +2018,7 @@
     "id": 42,
     "address": "string",
     "asksForPassport": "boolean",
+    "branch": "boolean",
     "code": "string",
     "country": "Country",
     "event": "Event",
