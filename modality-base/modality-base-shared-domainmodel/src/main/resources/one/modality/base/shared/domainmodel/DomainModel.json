@@ -2297,13 +2297,13 @@
     "active": "boolean",
     "applicationFormIntro": "HTML",
     "breakfastItem": "Item",
-    "contactEmail": "string",
     "description": "HTML",
     "dietaryFamilyCode": "string",
     "dinnerItem": "Item",
     "icon": {
       "expr": "image('images/16/volunteer.png')"
     },
+    "kbsSmtpMailAccount": "MailAccount",
     "logoUrl": "string",
     "lunchItem": "Item",
     "name": "string",
@@ -2312,7 +2312,6 @@
     "publicApplicationsEnabled": "boolean",
     "reminderDaysBeforeArrival": "integer",
     "site": "Site",
-    "slug": "string",
     "timezone": "string",
     "volunteerEvent": "Event",
     "workOnArrivalDay": "boolean",
