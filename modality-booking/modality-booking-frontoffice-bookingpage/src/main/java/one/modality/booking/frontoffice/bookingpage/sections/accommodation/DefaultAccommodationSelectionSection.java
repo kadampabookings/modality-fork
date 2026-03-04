@@ -28,7 +28,6 @@ import one.modality.base.shared.entities.ScheduledItem;
 import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
-import one.modality.booking.frontoffice.bookingpage.components.StyledSectionHeader;
 import one.modality.base.shared.entities.formatters.EventPriceFormatter;
 import one.modality.ecommerce.policy.service.PolicyAggregate;
 

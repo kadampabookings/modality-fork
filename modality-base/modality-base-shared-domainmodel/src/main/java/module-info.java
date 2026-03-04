@@ -17,6 +17,7 @@ module modality.base.shared.domainmodel {
     requires webfx.stack.orm.datasourcemodel.service;
     requires webfx.stack.orm.domainmodel;
     requires webfx.stack.orm.domainmodel.service;
+    requires webfx.stack.orm.domainmodel.service.loader;
     requires webfx.stack.orm.dql;
     requires webfx.stack.orm.entity;
     requires webfx.stack.orm.expression;

@@ -13,7 +13,6 @@ import javafx.scene.control.Hyperlink;
 import javafx.scene.control.Label;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
-import javafx.scene.shape.Circle;
 import javafx.scene.shape.SVGPath;
 import one.modality.base.shared.entities.Event;
 import one.modality.base.shared.entities.formatters.EventPriceFormatter;
@@ -25,7 +24,6 @@ import one.modality.booking.frontoffice.bookingpage.theme.BookingFormColorScheme
 import java.time.LocalDate;
 
 import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelectors.*;
-import static one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder.*;
 
 /**
  * Default implementation of the Pending Payment section.

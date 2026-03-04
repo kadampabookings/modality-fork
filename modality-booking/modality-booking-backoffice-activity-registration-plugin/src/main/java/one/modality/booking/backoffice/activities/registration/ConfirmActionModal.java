@@ -73,9 +73,7 @@ public class ConfirmActionModal {
     /**
      * Formats a price (in cents) using the event's currency.
      */
-    private String formatPrice(int priceInCents) {
-        return EventPriceFormatter.formatWithCurrency(priceInCents, event);
-    }
+
 
     /**
      * Shows the confirmation modal.
@@ -263,8 +261,8 @@ public class ConfirmActionModal {
 
         Label desc;
         if (deposit > 0) {
-            desc = new Label(formatPrice(deposit) + " will be kept as minimum deposit\n" +
-                "Original: " + formatPrice(price));
+            desc = new Label(EventPriceFormatter.formatWithCurrency(deposit, event) + " will be kept as minimum deposit\n" +
+                             "Original: " + EventPriceFormatter.formatWithCurrency(price, event));
             desc.setStyle("-fx-strikethrough: false;");
         } else {
             desc = new Label("No deposit required – full refund");
@@ -339,9 +337,9 @@ public class ConfirmActionModal {
         boolean isCancelled = Boolean.TRUE.equals(line.isCancelled());
         String descText;
         if (isCancelled) {
-            descText = "The full price of " + formatPrice(price) + " will be charged again.";
+            descText = "The full price of " + EventPriceFormatter.formatWithCurrency(price, event) + " will be charged again.";
         } else {
-            descText = "This option will be visible again and charged at " + formatPrice(price) + ".";
+            descText = "This option will be visible again and charged at " + EventPriceFormatter.formatWithCurrency(price, event) + ".";
         }
 
         Label desc = new Label(descText);

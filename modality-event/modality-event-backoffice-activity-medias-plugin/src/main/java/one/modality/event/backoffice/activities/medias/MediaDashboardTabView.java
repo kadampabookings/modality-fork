@@ -783,8 +783,8 @@ final class MediaDashboardTabView {
                             } else if (lastName != null) {
                                 userName = lastName;
                             } else {
-                                // Fallback to person.name if firstName/lastName are null
-                                userName = person.getName();
+                                // Fallback to person.fullName if firstName/lastName are null
+                                userName = person.getFullName();
                             }
                             userEmail = person.getEmail();
                         }

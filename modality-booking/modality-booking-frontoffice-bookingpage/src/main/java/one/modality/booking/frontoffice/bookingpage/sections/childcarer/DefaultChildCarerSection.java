@@ -64,7 +64,7 @@ public class DefaultChildCarerSection implements HasChildCarerSection {
     protected String childName = "";
 
     // === HOUSEHOLD MEMBERS ===
-    protected final ObservableList<HouseholdMember> householdMembers = FXCollections.observableArrayList();
+    protected final ObservableList<AccountMember> accountMembers = FXCollections.observableArrayList();
 
     // === CARER 1 DATA ===
     protected final StringProperty carer1TypeProperty = new SimpleStringProperty();
@@ -221,7 +221,7 @@ public class DefaultChildCarerSection implements HasChildCarerSection {
         ObjectProperty<Object> personIdProperty = carerNumber == 1 ? carer1PersonIdProperty : carer2PersonIdProperty;
 
         // Household member cards (same as member selection - adults only)
-        for (HouseholdMember member : householdMembers) {
+        for (AccountMember member : accountMembers) {
             HBox memberCard = createCarerOptionCard(
                 member.getName(),
                 null,
@@ -318,7 +318,7 @@ public class DefaultChildCarerSection implements HasChildCarerSection {
                 // Household carer selected
                 typeProperty.set("household");
                 personIdProperty.set(personId);
-                HouseholdMember member = findMemberByPersonId(personId);
+                AccountMember member = findMemberByPersonId(personId);
                 if (selectionState != null) {
                     if (carerNumber == 1) {
                         selectionState.setChildCarer1Type("household");
@@ -590,7 +590,7 @@ public class DefaultChildCarerSection implements HasChildCarerSection {
         });
 
         // Rebuild cards when household members change
-        householdMembers.addListener((ListChangeListener<HouseholdMember>) change -> {
+        accountMembers.addListener((ListChangeListener<AccountMember>) change -> {
             if (visibleProperty.get()) {
                 rebuildCarerCards(1);
                 rebuildCarerCards(2);
@@ -682,11 +682,11 @@ public class DefaultChildCarerSection implements HasChildCarerSection {
     }
 
     /**
-     * Finds a HouseholdMember by personId.
+     * Finds a AccountMember by personId.
      */
-    protected HouseholdMember findMemberByPersonId(Object personId) {
+    protected AccountMember findMemberByPersonId(Object personId) {
         if (personId == null) return null;
-        for (HouseholdMember member : householdMembers) {
+        for (AccountMember member : accountMembers) {
             if (personId.equals(member.getPersonId())) {
                 return member;
             }
@@ -761,21 +761,21 @@ public class DefaultChildCarerSection implements HasChildCarerSection {
     }
 
     @Override
-    public ObservableList<HouseholdMember> getHouseholdMembers() {
-        return householdMembers;
+    public ObservableList<AccountMember> getAccountMembers() {
+        return accountMembers;
     }
 
     @Override
-    public void setHouseholdMembers(List<HouseholdMember> members) {
-        householdMembers.clear();
+    public void setAccountMembers(List<AccountMember> members) {
+        accountMembers.clear();
         if (members != null) {
-            householdMembers.addAll(members);
+            accountMembers.addAll(members);
         }
     }
 
     @Override
-    public void clearHouseholdMembers() {
-        householdMembers.clear();
+    public void clearAccountMembers() {
+        accountMembers.clear();
     }
 
     @Override

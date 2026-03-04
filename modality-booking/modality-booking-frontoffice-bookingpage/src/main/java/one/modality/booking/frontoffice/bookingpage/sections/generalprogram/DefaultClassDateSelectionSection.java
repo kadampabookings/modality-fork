@@ -1,4 +1,5 @@
 package one.modality.booking.frontoffice.bookingpage.sections.generalprogram;
+
 import one.modality.booking.frontoffice.bookingpage.BookingPageCssSelectors;
 
 import dev.webfx.extras.i18n.I18n;
@@ -43,17 +44,21 @@ import java.util.stream.Collectors;
 import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelectors.*;
 
 /**
- * Default implementation of a class date selection section for General Program booking forms.
+ * Default implementation of a class date selection section for General Program
+ * booking forms.
  * Displays a grid of date cards that users can select/deselect.
  * Shows total price with discount when all classes are selected.
  *
- * <p>Uses CSS-based theming. Styling is handled via CSS classes that inherit
- * theme colors from CSS variables set on the parent container.</p>
+ * <p>
+ * Uses CSS-based theming. Styling is handled via CSS classes that inherit
+ * theme colors from CSS variables set on the parent container.
+ * </p>
  *
  * @author Claude
  * @see HasClassDateSelectionSection
  */
-public class DefaultClassDateSelectionSection implements BookingFormSection, ResettableSection, HasClassDateSelectionSection {
+public class DefaultClassDateSelectionSection
+        implements BookingFormSection, ResettableSection, HasClassDateSelectionSection {
 
     // UI Components
     private final VBox container = new VBox(16);
@@ -61,7 +66,8 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
     private final HBox selectAllBar = new HBox(12);
     private final VBox priceSummaryBox = new VBox(12);
 
-    // Select All Bar components (need field references for updates after data loads)
+    // Select All Bar components (need field references for updates after data
+    // loads)
     private Label selectAllMessageLabel;
     private Button selectAllActionButton;
 
@@ -90,8 +96,7 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
         // Section header
         StyledSectionHeader header = new StyledSectionHeader(
                 BookingPageI18nKeys.ClassSelectionYourClasses,
-                StyledSectionHeader.ICON_CALENDAR
-        );
+                StyledSectionHeader.ICON_CALENDAR);
 
         // Date cards grid
         dateCardsContainer.setHgap(12);
@@ -105,7 +110,8 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
 
         // Price summary
         priceSummaryBox.setPadding(new Insets(24));
-        priceSummaryBox.getStyleClass().addAll(bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded, gpclass_price_summary);
+        priceSummaryBox.getStyleClass().addAll(bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded,
+                gpclass_price_summary);
         priceSummaryBox.setVisible(false);
         priceSummaryBox.setManaged(false);
 
@@ -166,9 +172,12 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
                 selectAllMessageLabel.getStyleClass().add(all_selected);
             }
             // Only show "Save" text if there's actually a discount
-            String messageText = "✓ " + I18n.getI18nText(BookingPageI18nKeys.ClassSelectionAllSelected, availableItems.size());
+            Event event = getEvent();
+            String messageText = "✓ "
+                    + I18n.getI18nText(BookingPageI18nKeys.ClassSelectionAllSelected, availableItems.size());
             if (allClassesDiscount > 0) {
-                messageText += " — " + I18n.getI18nText(BookingPageI18nKeys.ClassSelectionSave, formatPrice(allClassesDiscount));
+                messageText += " — " + I18n.getI18nText(BookingPageI18nKeys.ClassSelectionSave,
+                        EventPriceFormatter.formatWithCurrency(allClassesDiscount, event));
             }
             selectAllMessageLabel.setText(messageText);
             selectAllActionButton.setText(I18n.getI18nText(BookingPageI18nKeys.ClassSelectionClearAll));
@@ -179,14 +188,16 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
             }
         } else {
             // Not all selected state - muted message, primary button
+            Event event = getEvent();
             selectAllMessageLabel.getStyleClass().remove(all_selected);
             // Only show discount info if there's actually a discount
             if (allClassesDiscount > 0) {
                 selectAllMessageLabel.setText(I18n.getI18nText(BookingPageI18nKeys.ClassSelectionSaveBySelectingAll,
-                        availableItems.size(), formatPrice(allClassesPrice), formatPrice(allClassesDiscount)));
+                        availableItems.size(), EventPriceFormatter.formatWithCurrency(allClassesPrice, event),
+                        EventPriceFormatter.formatWithCurrency(allClassesDiscount, event)));
             } else {
                 selectAllMessageLabel.setText(I18n.getI18nText(BookingPageI18nKeys.ClassSelectionSelectAllFor,
-                        availableItems.size(), formatPrice(allClassesPrice)));
+                        availableItems.size(), EventPriceFormatter.formatWithCurrency(allClassesPrice, event)));
             }
             selectAllActionButton.setText(I18n.getI18nText(BookingPageI18nKeys.ClassSelectionSelectAll));
             // Switch to primary button style
@@ -205,16 +216,19 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
         // Update UI and working booking when selection changes
         selectedItems.addListener((ListChangeListener<ScheduledItem>) change -> {
             updateSelectAllBar();
-            updateWorkingBooking();     // Must run before updatePriceSummary so the price reflects the current selection
+            updateWorkingBooking(); // Must run before updatePriceSummary so the price reflects the current
+                                    // selection
             updatePriceSummary();
             updateValidityBinding();
         });
     }
 
     /**
-     * Updates the validity binding based on whether this is a modification or new booking.
+     * Updates the validity binding based on whether this is a modification or new
+     * booking.
      * For new bookings: valid when at least one date is selected.
-     * For modifications: valid when at least one NEW date is selected (beyond already-booked).
+     * For modifications: valid when at least one NEW date is selected (beyond
+     * already-booked).
      */
     private void updateValidityBinding() {
         boolean hasExistingBooking = !alreadyBookedItemIds.isEmpty();
@@ -222,9 +236,8 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
             // Unbind first, then rebind with new condition for modifications
             validProperty.unbind();
             validProperty.bind(Bindings.createBooleanBinding(
-                () -> getNewlySelectedCount() > 0,
-                selectedItems
-            ));
+                    () -> getNewlySelectedCount() > 0,
+                    selectedItems));
         }
         // For new bookings, keep the original binding (isNotEmpty)
     }
@@ -251,17 +264,19 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
      */
     private int getNewlySelectedCount() {
         return (int) selectedItems.stream()
-            .filter(item -> !isAlreadyBooked(item))
-            .count();
+                .filter(item -> !isAlreadyBooked(item))
+                .count();
     }
 
     /**
      * Checks if a scheduled item has passed and is no longer bookable.
-     * A class is considered past if current time is more than 1 hour after its start time.
+     * A class is considered past if current time is more than 1 hour after its
+     * start time.
      */
     private boolean isClassPast(ScheduledItem item) {
         LocalDate date = item.getDate();
-        if (date == null) return true;
+        if (date == null)
+            return true;
 
         LocalTime startTime = item.getStartTime();
         LocalDateTime now = LocalDateTime.now();
@@ -281,7 +296,8 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
      */
     private Node createDateCard(ScheduledItem item) {
         LocalDate date = item.getDate();
-        if (date == null) return null;
+        if (date == null)
+            return null;
 
         // Detect if this class has passed (1 hour after start time) - not selectable
         boolean isPastDate = isClassPast(item);
@@ -294,7 +310,8 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
         card.setMinWidth(180);
         card.setPrefWidth(180);
         card.setMaxWidth(200);
-        card.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded, gpclass_date_card);
+        card.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card,
+                bookingpage_rounded, gpclass_date_card);
 
         // Apply past date styling using CSS helper (grayed out, not clickable)
         BookingPageUIBuilder.applyPastDateStyle(card, isPastDate);
@@ -317,15 +334,18 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
             });
         }
 
-        // Empty circle indicator (top-right corner) - shown when NOT selected and not locked
+        // Empty circle indicator (top-right corner) - shown when NOT selected and not
+        // locked
         StackPane emptyCircle = BookingPageUIBuilder.createEmptyCircleIndicator(20);
         emptyCircle.setVisible(!isSelected.get() && !isPastDate && !isLocked);
 
-        // Selection checkmark (top-right corner) - shown when selected (including locked)
+        // Selection checkmark (top-right corner) - shown when selected (including
+        // locked)
         StackPane checkmark = BookingPageUIBuilder.createCheckmarkBadgeCss(20);
         checkmark.setVisible(isSelected.get());
 
-        // Update indicator visibility and card styling based on selection (only for non-locked)
+        // Update indicator visibility and card styling based on selection (only for
+        // non-locked)
         if (!isLocked) {
             isSelected.addListener((obs, old, selected) -> {
                 emptyCircle.setVisible(!selected && !isPastDate);
@@ -347,7 +367,7 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
         // Date info row
         HBox dateRow = new HBox(12);
         dateRow.setAlignment(Pos.CENTER_LEFT);
-        dateRow.setPadding(new Insets(14, 16, 14, 16));  // Padding on content, not card
+        dateRow.setPadding(new Insets(14, 16, 14, 16)); // Padding on content, not card
 
         // Date box (day number + month) - styling via CSS class
         VBox dateBox = new VBox(0);
@@ -372,8 +392,8 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
         dayNameLabel.getStyleClass().add(gpclass_date_dayname);
 
         // Get time from ScheduledItem if available
-        String timeText = item.getStartTime() != null ?
-                item.getStartTime().format(DateTimeFormatter.ofPattern("HH:mm")) : "";
+        String timeText = item.getStartTime() != null ? item.getStartTime().format(DateTimeFormatter.ofPattern("HH:mm"))
+                : "";
         Label timeLabel = new Label(timeText);
         timeLabel.getStyleClass().add(gpclass_date_time);
 
@@ -410,7 +430,8 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
             card.getChildren().add(badgeContainer);
         }
 
-        // Click handler and hover effects only for selectable (future, non-locked) dates
+        // Click handler and hover effects only for selectable (future, non-locked)
+        // dates
         if (!isPastDate && !isLocked) {
             card.setOnMouseClicked(e -> {
                 toggleDateSelection(item);
@@ -484,19 +505,22 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
         subtotalRow.setPadding(new Insets(0, 12, 0, 12));
 
         Label subtotalLabel = new Label();
+        Event event = getEvent();
         if (allSelected) {
-            subtotalLabel.setText(I18n.getI18nText(BookingPageI18nKeys.ClassSelectionFullTermPrice, availableItems.size()));
+            subtotalLabel
+                    .setText(I18n.getI18nText(BookingPageI18nKeys.ClassSelectionFullTermPrice, availableItems.size()));
         } else if (hasExistingBooking && newlySelectedCount == 0) {
             subtotalLabel.setText(I18n.getI18nText(BookingPageI18nKeys.ClassSelectionNoNewClassesSelected));
         } else {
-            subtotalLabel.setText(I18n.getI18nText(BookingPageI18nKeys.ClassSelectionSingleClassPrice, selectedItems.size(), formatPrice(pricePerClass)));
+            subtotalLabel.setText(I18n.getI18nText(BookingPageI18nKeys.ClassSelectionSingleClassPrice,
+                    selectedItems.size(), EventPriceFormatter.formatWithCurrency(pricePerClass, event)));
         }
         subtotalLabel.getStyleClass().addAll(bookingpage_text_base, bookingpage_text_muted);
 
         Region subtotalSpacer = new Region();
         HBox.setHgrow(subtotalSpacer, Priority.ALWAYS);
 
-        Label subtotalValue = new Label(formatPrice(subtotal));
+        Label subtotalValue = new Label(EventPriceFormatter.formatWithCurrency(subtotal, event));
         subtotalValue.getStyleClass().addAll(bookingpage_text_base, bookingpage_text_muted);
 
         subtotalRow.getChildren().addAll(subtotalLabel, subtotalSpacer, subtotalValue);
@@ -515,7 +539,7 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
             Region discountSpacer = new Region();
             HBox.setHgrow(discountSpacer, Priority.ALWAYS);
 
-            Label discountValue = new Label("-" + formatPrice(discount));
+            Label discountValue = new Label("-" + EventPriceFormatter.formatWithCurrency(discount, event));
             discountValue.getStyleClass().addAll(bookingpage_text_primary, bookingpage_font_semibold);
 
             discountRow.getChildren().addAll(discountLabel, discountSpacer, discountValue);
@@ -523,7 +547,8 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
         }
 
         // Already Paid row (for modifications with prior payments)
-        int deposit = hasExistingBooking && workingBookingProperties != null ? workingBookingProperties.getDeposit() : 0;
+        int deposit = hasExistingBooking && workingBookingProperties != null ? workingBookingProperties.getDeposit()
+                : 0;
         if (deposit > 0) {
             HBox alreadyPaidRow = new HBox();
             alreadyPaidRow.setAlignment(Pos.CENTER_LEFT);
@@ -535,7 +560,7 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
             Region alreadyPaidSpacer = new Region();
             HBox.setHgrow(alreadyPaidSpacer, Priority.ALWAYS);
 
-            Label alreadyPaidValue = new Label("-" + formatPrice(deposit));
+            Label alreadyPaidValue = new Label("-" + EventPriceFormatter.formatWithCurrency(deposit, event));
             alreadyPaidValue.getStyleClass().addAll(bookingpage_text_base, bookingpage_text_muted);
 
             alreadyPaidRow.getChildren().addAll(alreadyPaidLabel, alreadyPaidSpacer, alreadyPaidValue);
@@ -549,19 +574,21 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
         divider.getStyleClass().add(gpclass_price_summary_divider);
         VBox.setMargin(divider, new Insets(4, 0, 4, 0));
 
-        // Total row - show "Balance Due" for modifications with prior payments, "Total" otherwise
+        // Total row - show "Balance Due" for modifications with prior payments, "Total"
+        // otherwise
         HBox totalRow = new HBox();
         totalRow.setAlignment(Pos.CENTER_LEFT);
         totalRow.setPadding(new Insets(0, 12, 0, 12)); // Match subtotal row padding for value alignment
 
-        Label totalLabel = I18nControls.newLabel(deposit > 0 ? BookingPageI18nKeys.BalanceDue : BookingPageI18nKeys.Total);
+        Label totalLabel = I18nControls
+                .newLabel(deposit > 0 ? BookingPageI18nKeys.BalanceDue : BookingPageI18nKeys.Total);
         totalLabel.getStyleClass().addAll(bookingpage_text_xl, bookingpage_font_bold, bookingpage_text_dark);
 
         Region totalSpacer = new Region();
         HBox.setHgrow(totalSpacer, Priority.ALWAYS);
 
         int displayTotal = deposit > 0 ? Math.max(0, total - deposit) : total;
-        Label totalValue = new Label(formatPrice(displayTotal));
+        Label totalValue = new Label(EventPriceFormatter.formatWithCurrency(displayTotal, event));
         totalValue.getStyleClass().addAll(bookingpage_text_2xl, bookingpage_font_bold, bookingpage_text_primary);
 
         totalRow.getChildren().addAll(totalLabel, totalSpacer, totalValue);
@@ -570,10 +597,12 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
     }
 
     private void updateWorkingBooking() {
-        if (workingBookingProperties == null) return;
+        if (workingBookingProperties == null)
+            return;
 
         WorkingBooking workingBooking = workingBookingProperties.getWorkingBooking();
-        if (workingBooking == null) return;
+        if (workingBooking == null)
+            return;
 
         // Book selected items into WorkingBooking (replaces existing selections)
         List<ScheduledItem> itemsToBook = new ArrayList<>(selectedItems);
@@ -585,18 +614,15 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
         }
     }
 
-    private String formatPrice(int priceInCents) {
-        Event event = getEvent();
-        return EventPriceFormatter.formatWithCurrency(priceInCents, event);
-    }
-
     private void loadData() {
-        if (workingBookingProperties == null) return;
+        if (workingBookingProperties == null)
+            return;
 
         WorkingBooking workingBooking = workingBookingProperties.getWorkingBooking();
         PolicyAggregate policyAggregate = workingBooking.getPolicyAggregate();
 
-        if (policyAggregate == null) return;
+        if (policyAggregate == null)
+            return;
 
         // Load already booked items from existing booking (for modification flow)
         alreadyBookedItemIds.clear();
@@ -608,7 +634,8 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
         // Filter to only teaching-type scheduled items for class booking
         List<ScheduledItem> scheduledItems = policyAggregate.filterTeachingScheduledItems().stream()
                 .sorted((a, b) -> {
-                    if (a.getDate() == null || b.getDate() == null) return 0;
+                    if (a.getDate() == null || b.getDate() == null)
+                        return 0;
                     return a.getDate().compareTo(b.getDate());
                 })
                 .collect(Collectors.toList());
@@ -626,7 +653,8 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
             selectedItems.addAll(bookedItems);
         }
 
-        // Get pricing info - use the rate for the first scheduled item (more accurate than generic daily rate)
+        // Get pricing info - use the rate for the first scheduled item (more accurate
+        // than generic daily rate)
         if (!scheduledItems.isEmpty()) {
             Rate scheduledItemRate = policyAggregate.getScheduledItemDailyRate(scheduledItems.get(0));
             pricePerClass = scheduledItemRate != null ? scheduledItemRate.getPrice() : 0;
@@ -635,7 +663,8 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
         }
 
         // Calculate all classes price and discount using the pricing API
-        // The API applies fixed rate discounts from database if cheaper than daily rate total
+        // The API applies fixed rate discounts from database if cheaper than daily rate
+        // total
         int wholeEventPrice = workingBooking.getWholeEventPrice();
         int wholeEventNoDiscountPrice = workingBooking.getWholeEventNoDiscountPrice();
         allClassesDiscount = wholeEventNoDiscountPrice - wholeEventPrice;
@@ -732,7 +761,8 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
     }
 
     /**
-     * Returns the discount amount in cents (only applies when all classes selected).
+     * Returns the discount amount in cents (only applies when all classes
+     * selected).
      */
     @Override
     public int getDiscount() {
@@ -751,7 +781,8 @@ public class DefaultClassDateSelectionSection implements BookingFormSection, Res
     public void setRateType(HasRateTypeSection.RateType rateType) {
         // Indicating the working booking if it should apply the facility fee rate
         if (workingBookingProperties != null) {
-            workingBookingProperties.getWorkingBooking().applyFacilityFeeRate(rateType == HasRateTypeSection.RateType.MEMBER);
+            workingBookingProperties.getWorkingBooking()
+                    .applyFacilityFeeRate(rateType == HasRateTypeSection.RateType.MEMBER);
             updatePriceSummary();
         }
     }

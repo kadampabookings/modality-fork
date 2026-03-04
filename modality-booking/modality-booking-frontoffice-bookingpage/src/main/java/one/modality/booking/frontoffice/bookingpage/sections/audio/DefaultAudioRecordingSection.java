@@ -2,9 +2,7 @@ package one.modality.booking.frontoffice.bookingpage.sections.audio;
 import one.modality.booking.frontoffice.bookingpage.BookingPageCssSelectors;
 
 import dev.webfx.extras.i18n.controls.I18nControls;
-import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleBooleanProperty;
-import javafx.beans.property.SimpleObjectProperty;
 import javafx.beans.value.ObservableBooleanValue;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;

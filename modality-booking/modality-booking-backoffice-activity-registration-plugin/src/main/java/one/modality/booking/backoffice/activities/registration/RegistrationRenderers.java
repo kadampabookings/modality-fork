@@ -5,7 +5,6 @@ import dev.webfx.platform.util.Booleans;
 import dev.webfx.platform.util.Numbers;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
-import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.layout.*;
@@ -390,7 +389,7 @@ final class RegistrationRenderers {
                 badge = createBadge("Unpaid", DANGER, DANGER_LIGHT, 12);
             }
 
-            // Amount: 12px, color: textMuted - format using EventPriceFormatter (converts cents to currency)
+            // Amount: 12px, color: textMuted - format using PriceUtil (converts cents to currency)
             Event event = doc.getEvent();
             String paidFormatted = EventPriceFormatter.formatWithCurrency(paidAmount, event);
             String totalFormatted = EventPriceFormatter.formatWithCurrency(total, event);

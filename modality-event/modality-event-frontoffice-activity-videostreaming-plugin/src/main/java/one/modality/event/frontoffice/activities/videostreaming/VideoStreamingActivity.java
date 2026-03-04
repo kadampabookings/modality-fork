@@ -127,7 +127,7 @@ final class VideoStreamingActivity extends ViewDomainActivityBase {
                             // 2) today is within event
                             ", document.event.(CURRENT_DATE >= startDate and CURRENT_DATE <= endDate) desc" +
                             // 3) Not expired
-                            ", document.event.(vodExpirationDate = null or now() <= vodExpirationDate)" +
+                            ", document.event.(vodExpirationDate = null and CURRENT_DATE <= endDate or now() <= vodExpirationDate)" +
                             // 4) Smallest event (ex: favor Spring Festival over STTP)
                             ", document.event.(endDate - startDate)",
                             userAccountId, KnownItemFamily.VIDEO.getCode())

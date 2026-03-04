@@ -17,7 +17,6 @@ import javafx.scene.Node;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import one.modality.base.client.mainframe.fx.FXMainFrameDialogArea;
-import one.modality.base.shared.domainmodel.formatters.PriceFormatter;
 import one.modality.base.shared.entities.Document;
 import one.modality.base.shared.entities.Event;
 import one.modality.base.shared.entities.History;
@@ -32,10 +31,12 @@ import static one.modality.booking.backoffice.activities.registration.Registrati
  * <p>
  * Features:
  * - Header with guest name, nationality flag, and status badges
- * - TabPane with 6 tabs: Booking, Guest Details, Payments, Communications, Notes, History
+ * - TabPane with 6 tabs: Booking, Guest Details, Payments, Communications,
+ * Notes, History
  * - Footer with total price, balance, and Save/Cancel buttons
  * <p>
- * Based on RegistrationDashboardFull.jsx EditModal component (lines 8345-10078).
+ * Based on RegistrationDashboardFull.jsx EditModal component (lines
+ * 8345-10078).
  *
  * @author Claude Code
  */
@@ -120,10 +121,10 @@ public class RegistrationEditModal {
         header.setPadding(new Insets(20, 24, 16, 24));
         header.setBackground(createBackground(BG, 0));
         header.setBorder(new Border(new BorderStroke(
-            BORDER,
-            BorderStrokeStyle.SOLID,
-            CornerRadii.EMPTY,
-            new BorderWidths(0, 0, 1, 0) // bottom border only
+                BORDER,
+                BorderStrokeStyle.SOLID,
+                CornerRadii.EMPTY,
+                new BorderWidths(0, 0, 1, 0) // bottom border only
         )));
 
         // Title row with guest name
@@ -216,7 +217,8 @@ public class RegistrationEditModal {
         notesTab = new NotesTab(activity, pm, editableDocument, updateStore);
         historyTab = new HistoryTab(activity, pm, editableDocument);
 
-        // Create tabs - order matches JSX: Booking, Guest Details, Payments, Communications, Notes/Request, History
+        // Create tabs - order matches JSX: Booking, Guest Details, Payments,
+        // Communications, Notes/Request, History
         bookingTabRef = createTab("Booking", bookingTab.buildUi());
         guestDetailsTabRef = createTab("Guest", guestDetailsTab.buildUi());
         paymentsTabRef = createTab("Payments", paymentsTab.buildUi());
@@ -225,7 +227,8 @@ public class RegistrationEditModal {
         historyTabRef = createTab("History", historyTab.buildUi());
 
         // Create TabPane with all 6 tabs
-        tabPane = new TabPane(bookingTabRef, guestDetailsTabRef, paymentsTabRef, communicationsTabRef, notesTabRef, historyTabRef);
+        tabPane = new TabPane(bookingTabRef, guestDetailsTabRef, paymentsTabRef, communicationsTabRef, notesTabRef,
+                historyTabRef);
         tabPane.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
         tabPane.getStyleClass().add("registration-edit-tabs");
 
@@ -283,10 +286,10 @@ public class RegistrationEditModal {
         footer.setAlignment(Pos.CENTER_RIGHT);
         footer.setBackground(createBackground(BG, 0));
         footer.setBorder(new Border(new BorderStroke(
-            BORDER,
-            BorderStrokeStyle.SOLID,
-            CornerRadii.EMPTY,
-            new BorderWidths(1, 0, 0, 0) // top border only
+                BORDER,
+                BorderStrokeStyle.SOLID,
+                CornerRadii.EMPTY,
+                new BorderWidths(1, 0, 0, 0) // top border only
         )));
 
         // Price summary section
@@ -306,7 +309,8 @@ public class RegistrationEditModal {
         Label totalLabel = new Label("Total:");
         totalLabel.setFont(FONT_BODY);
         totalLabel.setTextFill(TEXT_MUTED);
-        Label totalValue = new Label(formatPrice(total));
+        Event event = document.getEvent();
+        Label totalValue = new Label(EventPriceFormatter.formatWithCurrency(total, event));
         totalValue.setFont(FONT_SUBTITLE);
         totalValue.setTextFill(TEXT);
         totalRow.getChildren().addAll(totalLabel, totalValue);
@@ -317,7 +321,7 @@ public class RegistrationEditModal {
         Label balanceLabel = new Label("Balance:");
         balanceLabel.setFont(FONT_BODY);
         balanceLabel.setTextFill(TEXT_MUTED);
-        Label balanceValue = new Label(formatPrice(balance));
+        Label balanceValue = new Label(EventPriceFormatter.formatWithCurrency(balance, event));
         balanceValue.setFont(FONT_SUBTITLE);
         balanceValue.setTextFill(balance > 0 ? WARNING : SUCCESS);
         balanceRow.getChildren().addAll(balanceLabel, balanceValue);
@@ -346,13 +350,13 @@ public class RegistrationEditModal {
         // Bind save button disabled state to: no changes OR currently saving
         // Combine UpdateStore changes with WorkingBooking changes
         javafx.beans.binding.BooleanBinding noChangesBinding = javafx.beans.binding.Bindings.createBooleanBinding(
-            () -> {
-                boolean hasUpdateStoreChanges = updateStore.hasChanges();
-                boolean hasWorkingBookingChanges = bookingTab != null && bookingTab.hasChanges();
-                return !hasUpdateStoreChanges && !hasWorkingBookingChanges;
-            },
-            EntityBindings.hasChangesProperty(updateStore),
-            bookingTab.hasChangesProperty()  // Listen to WorkingBooking changes via BookingTab
+                () -> {
+                    boolean hasUpdateStoreChanges = updateStore.hasChanges();
+                    boolean hasWorkingBookingChanges = bookingTab != null && bookingTab.hasChanges();
+                    return !hasUpdateStoreChanges && !hasWorkingBookingChanges;
+                },
+                EntityBindings.hasChangesProperty(updateStore),
+                bookingTab.hasChangesProperty() // Listen to WorkingBooking changes via BookingTab
         );
 
         // Disable when no changes OR when saving
@@ -368,14 +372,16 @@ public class RegistrationEditModal {
      * Handles the cancel/uncancel booking action.
      */
     private void handleCancelBooking() {
-        ToggleCancelDocumentRequest request = new ToggleCancelDocumentRequest(document, FXMainFrameDialogArea.getDialogArea());
+        ToggleCancelDocumentRequest request = new ToggleCancelDocumentRequest(document,
+                FXMainFrameDialogArea.getDialogArea());
         request.getOperationExecutor().apply(request)
-            .onSuccess(v -> javafx.application.Platform.runLater(this::closeDialog));
+                .onSuccess(v -> javafx.application.Platform.runLater(this::closeDialog));
     }
 
     /**
      * Handles the save action.
-     * Submits changes via both UpdateStore (guest details) and WorkingBooking (attendance, cancel/delete).
+     * Submits changes via both UpdateStore (guest details) and WorkingBooking
+     * (attendance, cancel/delete).
      */
     private void handleSave() {
         // Note: Cancel/delete operations now go through WorkingBooking API directly
@@ -408,9 +414,10 @@ public class RegistrationEditModal {
         String changeDescription = allChanges.toString();
 
         // Check if we have attendance changes to submit via WorkingBooking
-        // Note: Only check WorkingBooking changes, not pending statuses (those are now in UpdateStore)
+        // Note: Only check WorkingBooking changes, not pending statuses (those are now
+        // in UpdateStore)
         final boolean hasWorkingBookingChanges = bookingTab != null &&
-            bookingTab.getWorkingBooking() != null && bookingTab.getWorkingBooking().hasChanges();
+                bookingTab.getWorkingBooking() != null && bookingTab.getWorkingBooking().hasChanges();
         final boolean hasUpdateStoreChanges = updateStore.hasChanges();
         final String finalAttendanceChanges = attendanceChanges;
 
@@ -428,24 +435,24 @@ public class RegistrationEditModal {
             }
 
             updateStore.submitChanges()
-                .onSuccess(result -> {
-                    // UI updates must be on FX thread
-                    javafx.application.Platform.runLater(() -> {
-                        // Now submit WorkingBooking changes if any
-                        if (hasWorkingBookingChanges) {
-                            submitWorkingBookingChanges(finalAttendanceChanges);
-                        } else {
-                            onSaveComplete();
-                        }
+                    .onSuccess(result -> {
+                        // UI updates must be on FX thread
+                        javafx.application.Platform.runLater(() -> {
+                            // Now submit WorkingBooking changes if any
+                            if (hasWorkingBookingChanges) {
+                                submitWorkingBookingChanges(finalAttendanceChanges);
+                            } else {
+                                onSaveComplete();
+                            }
+                        });
+                    })
+                    .onFailure(error -> {
+                        // UI updates must be on FX thread
+                        javafx.application.Platform.runLater(() -> {
+                            stopSaving();
+                            showErrorDialog("Failed to save guest details: " + error.getMessage());
+                        });
                     });
-                })
-                .onFailure(error -> {
-                    // UI updates must be on FX thread
-                    javafx.application.Platform.runLater(() -> {
-                        stopSaving();
-                        showErrorDialog("Failed to save guest details: " + error.getMessage());
-                    });
-                });
         } else if (hasWorkingBookingChanges) {
             // Only WorkingBooking changes to submit
             submitWorkingBookingChanges(finalAttendanceChanges);
@@ -465,19 +472,20 @@ public class RegistrationEditModal {
             return;
         }
 
-        bookingTab.getWorkingBooking().submitChanges(historyComment != null ? historyComment : "Attendance changes", false)
-            .onSuccess(result -> {
-                System.out.println("WorkingBooking changes submitted successfully");
-                // UI updates must be on FX thread
-                javafx.application.Platform.runLater(this::onSaveComplete);
-            })
-            .onFailure(error -> {
-                // UI updates must be on FX thread
-                javafx.application.Platform.runLater(() -> {
-                    stopSaving();
-                    showErrorDialog("Failed to save attendance changes: " + error.getMessage());
+        bookingTab.getWorkingBooking()
+                .submitChanges(historyComment != null ? historyComment : "Attendance changes", false)
+                .onSuccess(result -> {
+                    System.out.println("WorkingBooking changes submitted successfully");
+                    // UI updates must be on FX thread
+                    javafx.application.Platform.runLater(this::onSaveComplete);
+                })
+                .onFailure(error -> {
+                    // UI updates must be on FX thread
+                    javafx.application.Platform.runLater(() -> {
+                        stopSaving();
+                        showErrorDialog("Failed to save attendance changes: " + error.getMessage());
+                    });
                 });
-            });
     }
 
     /**
@@ -549,12 +557,6 @@ public class RegistrationEditModal {
     /**
      * Formats a price value with 2 decimal places.
      */
-    private String formatPrice(int amount) {
-        Event event = document.getEvent();
-        String currencySymbol = EventPriceFormatter.getEventCurrencySymbol(event);
-        // Use PriceFormatter with show00cents=true to always show 2 decimal places
-        return PriceFormatter.formatWithCurrency(amount, currencySymbol, true);
-    }
 
     /**
      * Shows an error dialog.
@@ -587,7 +589,8 @@ public class RegistrationEditModal {
         dialogPane.setBackground(createBackground(BG_CARD, BORDER_RADIUS_LARGE));
         dialogPane.setBorder(createBorder(BORDER, BORDER_RADIUS_LARGE));
 
-        DialogCallback errorDialog = DialogUtil.showModalNodeInGoldLayout(dialogPane, FXMainFrameDialogArea.getDialogArea());
+        DialogCallback errorDialog = DialogUtil.showModalNodeInGoldLayout(dialogPane,
+                FXMainFrameDialogArea.getDialogArea());
         okBtn.setOnAction(e -> errorDialog.closeDialog());
     }
 }

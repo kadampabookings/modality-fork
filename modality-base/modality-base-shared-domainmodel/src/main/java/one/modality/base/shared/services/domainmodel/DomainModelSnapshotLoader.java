@@ -11,7 +11,7 @@ import dev.webfx.stack.com.serial.SerialCodecManager;
 import dev.webfx.stack.db.query.QueryResult;
 import dev.webfx.stack.orm.domainmodel.DomainModel;
 import dev.webfx.stack.orm.domainmodel.formatter.FormatterRegistry;
-import dev.webfx.stack.orm.domainmodel.service.spi.DomainModelLoader;
+import dev.webfx.stack.orm.domainmodel.service.loader.DomainModelLoader;
 import dev.webfx.stack.orm.entity.EntityFactoryRegistry;
 import dev.webfx.stack.orm.expression.terms.function.DomainClassType;
 import dev.webfx.stack.orm.expression.terms.function.Function;

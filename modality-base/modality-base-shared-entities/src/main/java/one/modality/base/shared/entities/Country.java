@@ -1,6 +1,7 @@
 package one.modality.base.shared.entities;
 
 import dev.webfx.stack.orm.entity.EntityId;
+import one.modality.base.shared.entities.markers.EntityHasCurrency;
 import one.modality.base.shared.entities.markers.EntityHasIcon;
 import one.modality.base.shared.entities.markers.EntityHasLabel;
 import one.modality.base.shared.entities.markers.EntityHasName;
@@ -11,7 +12,8 @@ import one.modality.base.shared.entities.markers.EntityHasName;
 public interface Country extends
     EntityHasName,
     EntityHasLabel,
-    EntityHasIcon {
+    EntityHasIcon,
+    EntityHasCurrency {
     String geonameid = "geonameid";
     String isoAlpha2 = "iso_alpha2";
     String fipsCode = "fipsCode";

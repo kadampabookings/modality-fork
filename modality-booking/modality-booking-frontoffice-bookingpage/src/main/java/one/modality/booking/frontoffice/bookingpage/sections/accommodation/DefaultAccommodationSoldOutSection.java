@@ -18,6 +18,7 @@ import javafx.scene.control.Label;
 import javafx.scene.layout.*;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.shape.SVGPath;
+import one.modality.base.shared.entities.Event;
 import one.modality.base.shared.entities.Item;
 import one.modality.base.shared.entities.ItemPolicy;
 import one.modality.booking.client.workingbooking.WorkingBookingProperties;
@@ -42,30 +43,37 @@ import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelecto
 /**
  * Default implementation of the accommodation sold out recovery section.
  *
- * <p>This section is displayed when the user's selected accommodation becomes
- * unavailable (sold out) during booking submission. It provides a warm, non-alarming
- * interface for selecting an alternative accommodation.</p>
+ * <p>
+ * This section is displayed when the user's selected accommodation becomes
+ * unavailable (sold out) during booking submission. It provides a warm,
+ * non-alarming
+ * interface for selecting an alternative accommodation.
+ * </p>
  *
- * <p>UI Structure (matching FestivalRegistrationV2.jsx mockup):</p>
+ * <p>
+ * UI Structure (matching FestivalRegistrationV2.jsx mockup):
+ * </p>
  * <ul>
- *   <li>Header: Orange circle (80x80) with exchange arrows icon</li>
- *   <li>Title: "Choose Another Option" (24px, semibold)</li>
- *   <li>Subtitle: "Your first choice is no longer available"</li>
- *   <li>Explanation Box: Orange background (#FFF3E0) containing:
- *     <ul>
- *       <li>Main text: "Due to high demand, [item name] is now fully booked."</li>
- *       <li>Sold out indicator: X icon + "[Item Name] — SOLD OUT"</li>
- *       <li>Reassurance: "Your other choices...are saved"</li>
- *     </ul>
- *   </li>
- *   <li>Section Header: "Available Options" with home icon</li>
- *   <li>Alternatives: List of available accommodation cards</li>
- *   <li>Buttons: "Continue with New Selection" and "Cancel Registration"</li>
+ * <li>Header: Orange circle (80x80) with exchange arrows icon</li>
+ * <li>Title: "Choose Another Option" (24px, semibold)</li>
+ * <li>Subtitle: "Your first choice is no longer available"</li>
+ * <li>Explanation Box: Orange background (#FFF3E0) containing:
+ * <ul>
+ * <li>Main text: "Due to high demand, [item name] is now fully booked."</li>
+ * <li>Sold out indicator: X icon + "[Item Name] — SOLD OUT"</li>
+ * <li>Reassurance: "Your other choices...are saved"</li>
+ * </ul>
+ * </li>
+ * <li>Section Header: "Available Options" with home icon</li>
+ * <li>Alternatives: List of available accommodation cards</li>
+ * <li>Buttons: "Continue with New Selection" and "Cancel Registration"</li>
  * </ul>
  *
- * <p>CSS classes used:</p>
+ * <p>
+ * CSS classes used:
+ * </p>
  * <ul>
- *   <li>{@code .bookingpage-selectable-card} - accommodation card</li>
+ * <li>{@code .bookingpage-selectable-card} - accommodation card</li>
  * </ul>
  *
  * @author Claude Code
@@ -74,7 +82,8 @@ import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelecto
 public class DefaultAccommodationSoldOutSection implements HasAccommodationSoldOutSection {
 
     // === SVG ICONS ===
-    // Exchange/switch arrows icon matching mockup (diagonal arrows indicating change)
+    // Exchange/switch arrows icon matching mockup (diagonal arrows indicating
+    // change)
     private static final String ICON_EXCHANGE = "M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5";
     // Circle with X icon for sold out indicator
     private static final String ICON_CIRCLE_X = "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2M15 9l-6 6M9 9l6 6";
@@ -87,13 +96,14 @@ public class DefaultAccommodationSoldOutSection implements HasAccommodationSoldO
     private final ObjectProperty<HasAccommodationSelectionSection.AccommodationOption> selectedOptionProperty = new SimpleObjectProperty<>();
 
     // === OPTIONS LIST ===
-    private final ObservableList<HasAccommodationSelectionSection.AccommodationOption> alternativeOptions = FXCollections.observableArrayList();
+    private final ObservableList<HasAccommodationSelectionSection.AccommodationOption> alternativeOptions = FXCollections
+            .observableArrayList();
 
     // === ORIGINAL SELECTION INFO ===
     private String originalItemName = "";
     private int originalPrice = 0;
     private String eventName = "";
-    private int numberOfNights = 0;  // For calculating total price from per-night rates
+    private int numberOfNights = 0; // For calculating total price from per-night rates
 
     // === SELECTION STATE (for checking date restrictions) ===
     private BookingSelectionState selectionState;
@@ -103,8 +113,8 @@ public class DefaultAccommodationSoldOutSection implements HasAccommodationSoldO
     // === UI COMPONENTS ===
     private final VBox container = new VBox();
     private VBox optionsContainer;
-    private Label originalNameLabel;  // Shows "[Item Name] — SOLD OUT" in the sold out indicator
-    private Label eventNameLabel;     // Shows "Due to high demand, [item] is now fully booked."
+    private Label originalNameLabel; // Shows "[Item Name] — SOLD OUT" in the sold out indicator
+    private Label eventNameLabel; // Shows "Due to high demand, [item] is now fully booked."
     private final Map<HasAccommodationSelectionSection.AccommodationOption, VBox> optionCardMap = new HashMap<>();
     private final Map<HasAccommodationSelectionSection.AccommodationOption, StackPane> checkmarkBadgeMap = new HashMap<>();
 
@@ -114,15 +124,18 @@ public class DefaultAccommodationSoldOutSection implements HasAccommodationSoldO
     // Track header components for responsive layout switching
     private final java.util.List<CardHeaderComponents> cardHeaderList = new java.util.ArrayList<>();
 
-    /** Holds references to card header components for responsive layout switching */
+    /**
+     * Holds references to card header components for responsive layout switching
+     */
     private static class CardHeaderComponents {
-        final VBox headerContainer;  // Container that holds either HBox or VBox layout
+        final VBox headerContainer; // Container that holds either HBox or VBox layout
         final Label nameLabel;
         final VBox priceContainer;
         final StackPane checkmarkBadge;
         final boolean isAvailable;
 
-        CardHeaderComponents(VBox headerContainer, Label nameLabel, VBox priceContainer, StackPane checkmarkBadge, boolean isAvailable) {
+        CardHeaderComponents(VBox headerContainer, Label nameLabel, VBox priceContainer, StackPane checkmarkBadge,
+                boolean isAvailable) {
             this.headerContainer = headerContainer;
             this.nameLabel = nameLabel;
             this.priceContainer = priceContainer;
@@ -140,7 +153,7 @@ public class DefaultAccommodationSoldOutSection implements HasAccommodationSoldO
     // === ROOMMATE SECTION ===
     private VBox roommateContainer;
     private DefaultRoommateInfoSection roommateSection;
-    private VBox body;  // Reference to add roommate section after options
+    private VBox body; // Reference to add roommate section after options
 
     public DefaultAccommodationSoldOutSection() {
         buildUI();
@@ -161,7 +174,8 @@ public class DefaultAccommodationSoldOutSection implements HasAccommodationSoldO
         body.setPadding(new Insets(24));
 
         // Section title for alternatives using StyledSectionHeader with home icon
-        HBox alternativesHeader = new StyledSectionHeader(BookingPageI18nKeys.AvailableOptions, StyledSectionHeader.ICON_HOME);
+        HBox alternativesHeader = new StyledSectionHeader(BookingPageI18nKeys.AvailableOptions,
+                StyledSectionHeader.ICON_HOME);
 
         // Options container for alternative accommodations
         optionsContainer = new VBox(12);
@@ -185,7 +199,8 @@ public class DefaultAccommodationSoldOutSection implements HasAccommodationSoldO
 
     /**
      * Creates a combined header section matching the mockup design.
-     * Features: orange theme, exchange arrows icon, explanation box with sold out indicator.
+     * Features: orange theme, exchange arrows icon, explanation box with sold out
+     * indicator.
      */
     private VBox createCombinedHeader() {
         VBox header = new VBox(32);
@@ -240,14 +255,16 @@ public class DefaultAccommodationSoldOutSection implements HasAccommodationSoldO
     }
 
     /**
-     * Creates the explanation box with orange background containing the sold out indicator.
+     * Creates the explanation box with orange background containing the sold out
+     * indicator.
      */
     private VBox createExplanationBox() {
         VBox box = new VBox(12);
         box.setPadding(new Insets(20));
         box.getStyleClass().add(bookingpage_soldout_explanation_box);
 
-        // Main explanation text - "Due to high demand, [item name] is now fully booked."
+        // Main explanation text - "Due to high demand, [item name] is now fully
+        // booked."
         eventNameLabel = new Label();
         eventNameLabel.getStyleClass().addAll(bookingpage_text_base, bookingpage_text_warning_dark);
         eventNameLabel.setWrapText(true);
@@ -289,7 +306,8 @@ public class DefaultAccommodationSoldOutSection implements HasAccommodationSoldO
 
         // Item name + " — SOLD OUT" text
         originalNameLabel = new Label();
-        originalNameLabel.getStyleClass().addAll(bookingpage_text_sm, bookingpage_font_medium, bookingpage_text_warning_dark);
+        originalNameLabel.getStyleClass().addAll(bookingpage_text_sm, bookingpage_font_medium,
+                bookingpage_text_warning_dark);
         updateSoldOutIndicatorText();
 
         indicator.getChildren().addAll(iconWrapper, originalNameLabel);
@@ -346,8 +364,9 @@ public class DefaultAccommodationSoldOutSection implements HasAccommodationSoldO
         roommateSection.validProperty().addListener((obs, oldVal, newVal) -> updateCombinedValidity());
 
         // Rebuild cards when list changes
-        alternativeOptions.addListener((ListChangeListener<HasAccommodationSelectionSection.AccommodationOption>) change ->
-            UiScheduler.runInUiThread(this::rebuildOptionCards));
+        alternativeOptions.addListener(
+                (ListChangeListener<HasAccommodationSelectionSection.AccommodationOption>) change -> UiScheduler
+                        .runInUiThread(this::rebuildOptionCards));
     }
 
     /**
@@ -380,10 +399,11 @@ public class DefaultAccommodationSoldOutSection implements HasAccommodationSoldO
                 roommateSection.setRoomCapacity(capacity);
                 // Get minOccupancy from ItemPolicy if available
                 ItemPolicy itemPolicy = workingBookingProperties != null
-                    ? workingBookingProperties.getPolicyAggregate().getItemPolicy(item)
-                    : null;
+                        ? workingBookingProperties.getPolicyAggregate().getItemPolicy(item)
+                        : null;
                 int minOccupancy = (itemPolicy != null && itemPolicy.getMinOccupancy() != null)
-                    ? itemPolicy.getMinOccupancy() : capacity;
+                        ? itemPolicy.getMinOccupancy()
+                        : capacity;
                 roommateSection.setMinOccupancy(minOccupancy);
                 roommateSection.setIsRoomBooker(true);
                 roommateSection.setVisible(true);
@@ -406,7 +426,8 @@ public class DefaultAccommodationSoldOutSection implements HasAccommodationSoldO
     }
 
     /**
-     * Updates the combined validity based on accommodation selection and roommate section.
+     * Updates the combined validity based on accommodation selection and roommate
+     * section.
      */
     private void updateCombinedValidity() {
         HasAccommodationSelectionSection.AccommodationOption selected = selectedOptionProperty.get();
@@ -426,22 +447,23 @@ public class DefaultAccommodationSoldOutSection implements HasAccommodationSoldO
 
         HasAccommodationSelectionSection.AccommodationOption matchingOption = null;
 
-        // Separate options into accommodation and day visitor groups, sorted by Item.ord
+        // Separate options into accommodation and day visitor groups, sorted by
+        // Item.ord
         Comparator<HasAccommodationSelectionSection.AccommodationOption> byOrd = Comparator.comparing(
-            option -> {
-                Item item = option.getItemEntity();
-                return item != null && item.getOrd() != null ? item.getOrd() : Integer.MAX_VALUE;
-            });
+                option -> {
+                    Item item = option.getItemEntity();
+                    return item != null && item.getOrd() != null ? item.getOrd() : Integer.MAX_VALUE;
+                });
 
         List<HasAccommodationSelectionSection.AccommodationOption> accommodationOpts = alternativeOptions.stream()
-            .filter(opt -> !opt.isDayVisitor())
-            .sorted(byOrd)
-            .collect(Collectors.toList());
+                .filter(opt -> !opt.isDayVisitor())
+                .sorted(byOrd)
+                .collect(Collectors.toList());
 
         List<HasAccommodationSelectionSection.AccommodationOption> dayVisitorOpts = alternativeOptions.stream()
-            .filter(HasAccommodationSelectionSection.AccommodationOption::isDayVisitor)
-            .sorted(byOrd)
-            .collect(Collectors.toList());
+                .filter(HasAccommodationSelectionSection.AccommodationOption::isDayVisitor)
+                .sorted(byOrd)
+                .collect(Collectors.toList());
 
         // Add accommodation cards first
         for (HasAccommodationSelectionSection.AccommodationOption option : accommodationOpts) {
@@ -483,14 +505,19 @@ public class DefaultAccommodationSoldOutSection implements HasAccommodationSoldO
     }
 
     /**
-     * Creates an accommodation option card using the same pattern as DefaultAccommodationSelectionSection.
-     * Uses a responsive header that switches between horizontal and vertical layouts.
-     * If user's current dates violate the option's restrictions, the card is non-selectable.
+     * Creates an accommodation option card using the same pattern as
+     * DefaultAccommodationSelectionSection.
+     * Uses a responsive header that switches between horizontal and vertical
+     * layouts.
+     * If user's current dates violate the option's restrictions, the card is
+     * non-selectable.
      */
     private VBox createOptionCard(HasAccommodationSelectionSection.AccommodationOption option, boolean isSelected) {
+        Event event = getEvent();
         boolean isSoldOut = option.getAvailability() == HasAccommodationSelectionSection.AvailabilityStatus.SOLD_OUT;
         boolean datesViolate = datesViolateRestrictions(option);
-        // On sold-out page: card is NOT selectable if sold out OR if dates violate restrictions
+        // On sold-out page: card is NOT selectable if sold out OR if dates violate
+        // restrictions
         boolean isSelectable = option.isAvailable() && !datesViolate;
         boolean isDisabled = isSoldOut || datesViolate;
 
@@ -499,7 +526,8 @@ public class DefaultAccommodationSoldOutSection implements HasAccommodationSoldO
         if (!isDisabled) {
             card.setPadding(new Insets(20));
         }
-        card.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded_lg, bookingpage_selectable_card);
+        card.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card,
+                bookingpage_rounded_lg, bookingpage_selectable_card);
 
         if (isDisabled) {
             card.getStyleClass().addAll(soldout, disabled);
@@ -532,7 +560,8 @@ public class DefaultAccommodationSoldOutSection implements HasAccommodationSoldO
 
         if (!option.isDayVisitor()) {
             // Per-night price with "/night" label
-            Label perNightLabel = new Label(I18n.getI18nText(BookingPageI18nKeys.PricePerNight, formatPrice(pricePerNight)));
+            Label perNightLabel = new Label(I18n.getI18nText(BookingPageI18nKeys.PricePerNight,
+                    EventPriceFormatter.formatWithCurrency(pricePerNight, event)));
             perNightLabel.getStyleClass().addAll(bookingpage_text_lg, bookingpage_font_semibold);
             if (isDisabled) {
                 perNightLabel.getStyleClass().addAll(bookingpage_text_muted_light, bookingpage_text_strikethrough);
@@ -554,7 +583,8 @@ public class DefaultAccommodationSoldOutSection implements HasAccommodationSoldO
             if (totalForDuration > 0 && numberOfNights > 0) {
                 Object nightsKey = numberOfNights == 1 ? BookingPageI18nKeys.Night : BookingPageI18nKeys.Nights;
                 String nightsText = I18n.getI18nText(nightsKey);
-                Label totalLabel = new Label(I18n.getI18nText(BookingPageI18nKeys.TotalForNightsFormat, formatPrice(totalForDuration), numberOfNights, nightsText));
+                Label totalLabel = new Label(I18n.getI18nText(BookingPageI18nKeys.TotalForNightsFormat,
+                        EventPriceFormatter.formatWithCurrency(totalForDuration, event), numberOfNights, nightsText));
                 totalLabel.getStyleClass().addAll(bookingpage_text_sm, bookingpage_text_muted);
                 if (isDisabled) {
                     totalLabel.getStyleClass().add(bookingpage_text_strikethrough);
@@ -569,7 +599,8 @@ public class DefaultAccommodationSoldOutSection implements HasAccommodationSoldO
             priceContainer.getChildren().add(pricingTypeLabel);
         } else {
             // Day visitor - just show "Free" or the price
-            Label priceLabel = new Label(pricePerNight == 0 ? I18n.getI18nText(BookingPageI18nKeys.Free) : formatPrice(pricePerNight));
+            Label priceLabel = new Label(pricePerNight == 0 ? I18n.getI18nText(BookingPageI18nKeys.Free)
+                    : EventPriceFormatter.formatWithCurrency(pricePerNight, event));
             priceLabel.getStyleClass().addAll(bookingpage_text_lg, bookingpage_font_semibold);
             if (isDisabled) {
                 priceLabel.getStyleClass().addAll(bookingpage_text_muted_light, bookingpage_text_strikethrough);
@@ -588,7 +619,8 @@ public class DefaultAccommodationSoldOutSection implements HasAccommodationSoldO
         }
 
         // Track header components for responsive layout switching
-        cardHeaderList.add(new CardHeaderComponents(headerContainer, nameLabel, priceContainer, checkmarkBadge, isSelectable));
+        cardHeaderList.add(
+                new CardHeaderComponents(headerContainer, nameLabel, priceContainer, checkmarkBadge, isSelectable));
 
         contentBox.getChildren().add(headerContainer);
 
@@ -710,7 +742,8 @@ public class DefaultAccommodationSoldOutSection implements HasAccommodationSoldO
     }
 
     /**
-     * Creates a constraint badge for the accommodation option (e.g., "Minimum 2 nights").
+     * Creates a constraint badge for the accommodation option (e.g., "Minimum 2
+     * nights").
      * Copied from DefaultAccommodationSelectionSection to maintain consistency.
      */
     private HBox createConstraintBadge(HasAccommodationSelectionSection.AccommodationOption option, boolean isSoldOut) {
@@ -735,9 +768,10 @@ public class DefaultAccommodationSoldOutSection implements HasAccommodationSoldO
         // Text
         String constraintText = option.getConstraintLabel();
         if (constraintText == null) {
-            constraintText = option.getConstraintType() == HasAccommodationSelectionSection.ConstraintType.FULL_EVENT_ONLY
-                ? I18n.getI18nText(BookingPageI18nKeys.FullFestivalOnly)
-                : I18n.getI18nText(BookingPageI18nKeys.MinNights, option.getMinNights());
+            constraintText = option
+                    .getConstraintType() == HasAccommodationSelectionSection.ConstraintType.FULL_EVENT_ONLY
+                            ? I18n.getI18nText(BookingPageI18nKeys.FullFestivalOnly)
+                            : I18n.getI18nText(BookingPageI18nKeys.MinNights, option.getMinNights());
         }
         Label textLabel = new Label(constraintText);
         textLabel.getStyleClass().add(bookingpage_badge_constraint_text);
@@ -747,10 +781,11 @@ public class DefaultAccommodationSoldOutSection implements HasAccommodationSoldO
     }
 
     /**
-     * Creates a date restriction badge (e.g., "No Early Arrival", "No Late Departure").
+     * Creates a date restriction badge (e.g., "No Early Arrival", "No Late
+     * Departure").
      * Same visual style as constraint badges.
      *
-     * @param i18nKey the i18n key for the badge text
+     * @param i18nKey    the i18n key for the badge text
      * @param isDisabled whether the card is disabled (affects styling)
      * @return an HBox containing the badge
      */
@@ -781,8 +816,10 @@ public class DefaultAccommodationSoldOutSection implements HasAccommodationSoldO
     }
 
     /**
-     * Checks if the user's current dates violate an accommodation option's restrictions.
-     * On the sold-out page, if dates violate restrictions, the card becomes non-selectable.
+     * Checks if the user's current dates violate an accommodation option's
+     * restrictions.
+     * On the sold-out page, if dates violate restrictions, the card becomes
+     * non-selectable.
      *
      * @param option the accommodation option to check
      * @return true if dates violate restrictions, false otherwise
@@ -797,13 +834,13 @@ public class DefaultAccommodationSoldOutSection implements HasAccommodationSoldO
 
         // Check early arrival restriction
         if (!option.isEarlyArrivalAllowed() && arrivalDate != null &&
-            mainEventStartDate != null && arrivalDate.isBefore(mainEventStartDate)) {
+                mainEventStartDate != null && arrivalDate.isBefore(mainEventStartDate)) {
             return true;
         }
 
         // Check late departure restriction
         if (!option.isLateDepartureAllowed() && departureDate != null &&
-            mainEventEndDate != null && departureDate.isAfter(mainEventEndDate)) {
+                mainEventEndDate != null && departureDate.isAfter(mainEventEndDate)) {
             return true;
         }
 
@@ -818,37 +855,32 @@ public class DefaultAccommodationSoldOutSection implements HasAccommodationSoldO
         }
     }
 
-    private String formatPrice(int priceInCents) {
-        return EventPriceFormatter.formatWithCurrency(priceInCents, workingBookingProperties != null ? workingBookingProperties.getEvent() : null);
-    }
-
     // ========================================
     // RESPONSIVE DESIGN
     // ========================================
 
     /**
-     * Sets up responsive design to switch card header layouts based on container width.
+     * Sets up responsive design to switch card header layouts based on container
+     * width.
      */
     private void setupResponsiveDesign() {
         responsiveDesign = new ResponsiveDesign(container);
 
         // Desktop layout (width >= 450): horizontal name + price layout
         responsiveDesign.addResponsiveLayout(
-            width -> width >= 450,
-            () -> {
-                isMobileLayout = false;
-                applyCardLayout(false);
-            }
-        );
+                width -> width >= 450,
+                () -> {
+                    isMobileLayout = false;
+                    applyCardLayout(false);
+                });
 
         // Mobile layout (width < 450): vertical stacked layout
         responsiveDesign.addResponsiveLayout(
-            width -> width < 450,
-            () -> {
-                isMobileLayout = true;
-                applyCardLayout(true);
-            }
-        );
+                width -> width < 450,
+                () -> {
+                    isMobileLayout = true;
+                    applyCardLayout(true);
+                });
 
         responsiveDesign.start();
     }
@@ -856,7 +888,8 @@ public class DefaultAccommodationSoldOutSection implements HasAccommodationSoldO
     /**
      * Applies the card header layout (horizontal or vertical) to all option cards.
      *
-     * @param mobile true for vertical mobile layout, false for horizontal desktop layout
+     * @param mobile true for vertical mobile layout, false for horizontal desktop
+     *               layout
      */
     private void applyCardLayout(boolean mobile) {
         for (CardHeaderComponents header : cardHeaderList) {
@@ -913,6 +946,13 @@ public class DefaultAccommodationSoldOutSection implements HasAccommodationSoldO
     @Override
     public ObservableBooleanValue validProperty() {
         return validProperty;
+    }
+
+    private Event getEvent() {
+        if (workingBookingProperties != null && workingBookingProperties.getWorkingBooking() != null) {
+            return workingBookingProperties.getWorkingBooking().getEvent();
+        }
+        return null;
     }
 
     // ========================================

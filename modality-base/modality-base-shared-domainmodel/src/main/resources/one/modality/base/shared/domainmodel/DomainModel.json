@@ -1,0 +1,2346 @@
+{
+  "AccountingAccount": {
+    "id": 32,
+    "icon": {
+      "expr": "image('images/16/account.png')"
+    },
+    "name": "string",
+    "number": "integer",
+    "type": "AccountingAccountType"
+  },
+  "AccountingAccountType": {
+    "id": 33,
+    "icon": {
+      "expr": "image('images/16/accountType.png')"
+    },
+    "name": "string",
+    "number": "integer"
+  },
+  "Activity": {
+    "id": 38,
+    "icon": {
+      "expr": "image('images/16/activity.png')"
+    },
+    "label": "Label",
+    "name": "string",
+    "organization": "Organization",
+    "parent": "Activity"
+  },
+  "ActivityState": {
+    "id": 101,
+    "name": "string",
+    "owner": "Person",
+    "parameters": "string",
+    "route": "string"
+  },
+  "AllocationRule": {
+    "id": 78,
+    "active": "boolean",
+    "event": "Event",
+    "ifCarer": "boolean",
+    "ifChild": "boolean",
+    "ifCountry": "Country",
+    "ifItem": "Item",
+    "ifLanguage": "Language",
+    "ifLay": "boolean",
+    "ifOrdained": "boolean",
+    "ifOrganization": "Organization",
+    "ifPartialEvent": "boolean",
+    "ifRefMax": "integer",
+    "ifRefMin": "integer",
+    "ifResourceConfiguration": "ResourceConfiguration",
+    "ifSite": "Site",
+    "ifWholeEvent": "boolean",
+    "itemFamily": "ItemFamily",
+    "ord": "integer",
+    "resource": "Resource",
+    "resourceConfiguration": "ResourceConfiguration",
+    "triggerAllocate": "boolean"
+  },
+  "Attendance": {
+    "id": 48,
+    "attended": "boolean",
+    "charged": "boolean",
+    "date": "date",
+    "documentLine": "DocumentLine",
+    "icon": {
+      "expr": "image('images/16/attendance.png')"
+    },
+    "present": "boolean",
+    "rate": "Rate",
+    "scheduledItem": "ScheduledItem",
+    "scheduledResource": "ScheduledResource",
+    "time": "date",
+    "videoAccessEnabled": "boolean"
+  },
+  "AuthorizationAssignment": {
+    "id": 100,
+    "active": "boolean",
+    "activityState": "ActivityState",
+    "management": "AuthorizationManagement",
+    "operation": "Operation",
+    "role": "AuthorizationRole",
+    "rule": "AuthorizationRule",
+    "scope": "AuthorizationScope"
+  },
+  "AuthorizationManagement": {
+    "id": 96,
+    "active": "boolean",
+    "manager": "Person",
+    "user": "Person"
+  },
+  "AuthorizationOrganizationAdmin": {
+    "id": 134,
+    "admin": "Person",
+    "organization": "Organization"
+  },
+  "AuthorizationOrganizationUserAccess": {
+    "id": 136,
+    "date": "date",
+    "event": "Event",
+    "organization": "Organization",
+    "readOnly": "boolean",
+    "role": "AuthorizationRole",
+    "user": "Person"
+  },
+  "AuthorizationRole": {
+    "id": 97,
+    "label": "Label",
+    "name": "string"
+  },
+  "AuthorizationRoleOperation": {
+    "id": 135,
+    "operation": "Operation",
+    "operationGroup": "OperationGroup",
+    "role": "AuthorizationRole"
+  },
+  "AuthorizationRule": {
+    "id": 98,
+    "name": "string",
+    "role": "AuthorizationRole",
+    "rule": "string"
+  },
+  "AuthorizationScope": {
+    "id": 99,
+    "name": "string"
+  },
+  "AuthorizationSuperAdmin": {
+    "id": 137,
+    "superAdmin": "Person"
+  },
+  "Book": {
+    "id": 126,
+    "description": "string",
+    "freeUrl": "string",
+    "imageUrl": "string",
+    "lang": "string",
+    "ord": "integer",
+    "orderUrl": "string",
+    "publishDate": "date",
+    "title": "string"
+  },
+  "BookablePeriod": {
+    "id": 131,
+    "endScheduledItem": "ScheduledItem",
+    "event": "Event",
+    "label": "Label",
+    "name": "string",
+    "startScheduledItem": "ScheduledItem"
+  },
+  "BookingFormLayout": {
+    "id": 87,
+    "admin1": "boolean",
+    "age": "boolean",
+    "gender": "boolean",
+    "name": "string",
+    "organizationPromptLabel": "Label",
+    "postCode": "boolean",
+    "practitioner": "boolean",
+    "street": "boolean"
+  },
+  "BracketPattern": {
+    "id": 75,
+    "brackets": {
+      "expr": "'[' + pattern + ']'"
+    },
+    "condition": "string",
+    "description": "string",
+    "lang": "string",
+    "langIcon": {
+      "expr": "image('images/16/system/lang_' + lang + '.png')"
+    },
+    "ord": "integer",
+    "pattern": "string",
+    "replacement": "string"
+  },
+  "Buddha": {
+    "id": 89,
+    "image": "Image",
+    "label": "Label",
+    "name": "string",
+    "whoLabel": "Label"
+  },
+  "Building": {
+    "id": 91,
+    "name": "string",
+    "site": "Site"
+  },
+  "BuildingZone": {
+    "id": 139,
+    "building": "Building",
+    "name": "string"
+  },
+  "Cart": {
+    "id": 68,
+    "forwardToCart": "Cart",
+    "uuid": "string"
+  },
+  "CartMessage": {
+    "id": 108,
+    "documentCancelled": "boolean",
+    "documentConfirmed": "boolean",
+    "documentFullyPaid": "boolean",
+    "event": "Event",
+    "grp": "integer",
+    "label": "Label",
+    "ord": "integer",
+    "priority": "integer",
+    "showFrom": "date",
+    "showUntil": "date"
+  },
+  "CartMessageCondition": {
+    "id": 109,
+    "booked": "boolean",
+    "cartMessage": "CartMessage",
+    "date": "date",
+    "item": "Item",
+    "site": "Site"
+  },
+  "Channel": {
+    "id": 118,
+    "fetchUrl": "string",
+    "name": "string",
+    "organisation": "Organization"
+  },
+  "Continent": {
+    "id": 27,
+    "code": "string",
+    "icon": {
+      "expr": "image('images/16/continents/' + code + '.png')"
+    },
+    "name": "string"
+  },
+  "Country": {
+    "id": 26,
+    "code": {
+      "expr": "iso_alpha2"
+    },
+    "continent": "Continent",
+    "currency": "Currency",
+    "east": "float",
+    "fipsCode": "string",
+    "geonameid": "integer",
+    "icon": {
+      "expr": "image('images/16/countries/' + iso_alpha2 + '.png')"
+    },
+    "iso_alpha2": "string",
+    "iso_alpha3": "string",
+    "label": "Label",
+    "latitude": "float",
+    "longitude": "float",
+    "mainLanguage": "Language",
+    "name": "string",
+    "north": "float",
+    "requirePostcode": "boolean",
+    "requireState": "boolean",
+    "south": "float",
+    "west": "float"
+  },
+  "Currency": {
+    "id": 29,
+    "code": "string",
+    "icon": {
+      "expr": "image('images/16/currencies/' + code + '.png')"
+    },
+    "name": "string",
+    "symbol": "string"
+  },
+  "DateInfo": {
+    "id": 77,
+    "date": "date",
+    "dateTimeRange": "string",
+    "dev": "boolean",
+    "endDate": "date",
+    "event": "Event",
+    "exclude": "boolean",
+    "feesBottomLabel": "Label",
+    "feesPopupLabel": "Label",
+    "forceSoldout": "boolean",
+    "label": "Label",
+    "maxDateTimeRange": "string",
+    "minDateTimeRange": "string",
+    "option": "Option"
+  },
+  "DayTemplate": {
+    "id": 128,
+    "dates": "string",
+    "event": "Event",
+    "name": "string"
+  },
+  "Document": {
+    "id": 46,
+    "abandoned": "boolean",
+    "absent": "boolean",
+    "accountingDate": "date",
+    "activity": "Activity",
+    "arrived": "boolean",
+    "attendedEvents": {
+      "expr": "interpret_brackets('[attendedEvents]',id,'en')"
+    },
+    "cancellationDate": "date",
+    "cancelled": "boolean",
+    "cart": "Cart",
+    "cartUrl": {
+      "expr": "event.frontendUrl + (event.frontendIsAngular ? person_lang + '/cart/' : '?cartuuid=') + cart.uuid"
+    },
+    "changed": "boolean",
+    "checkedOut": "boolean",
+    "comment": "string",
+    "confirmed": "boolean",
+    "countryOrLangIcon": {
+      "expr": "coalesce(person_country.icon, langIcon)"
+    },
+    "creationDate": "date",
+    "dates": "string",
+    "event": "Event",
+    "eventInfo": {
+      "expr": "event.<ident>"
+    },
+    "expenditure": "boolean",
+    "flagged": "boolean",
+    "genderIcon": {
+      "expr": "image('images/16/' + (person_ordained ? (person_male ? 'monk' : 'nun') : (person_male == null ? 'noGender' : person_male? 'male' : 'female')) + '.png')"
+    },
+    "genderName": {
+      "expr": "person_ordained ? (person_male ? 'Monk' : 'Nun') : (person_male ? 'Male' : 'Female')"
+    },
+    "groupDocument": "Document",
+    "icon": {
+      "expr": "image('images/16/document.png')"
+    },
+    "inPerson": "boolean",
+    "langIcon": {
+      "expr": "image('images/16/system/lang_' + person_lang + '.png')"
+    },
+    "langName": {
+      "expr": "person_lang='en' ? 'English' : person_lang='de' ? 'German' : person_lang='fr' ? 'French' : person_lang='es' ? 'Spanish' : person_lang='pt' ? 'Portugese' : '?'"
+    },
+    "listing_FMPDates": {
+      "expr": "(exists(select DocumentLine dl where document=d and !cancelled and item.code='FMP' and exists(select dates from DocumentLine where document=d and !cancelled and item.code='FES' and dates=dl.dates)) ? '(Same)' : (select dates from DocumentLine where document=d and !cancelled and item.code='FMP' limit 1)) as FMPDates"
+    },
+    "listing_FMT": {
+      "expr": "(select item.code from DocumentLine where document=d and !cancelled and item.code='FMT' limit 1) as FMT"
+    },
+    "listing_L01": {
+      "expr": "(select 'L01' from Attendance where date='2024-11-01' and documentLine.(document=d and !cancelled and item.code='LUN') limit 1) as L01"
+    },
+    "listing_L24": {
+      "expr": "(select 'L24' from Attendance where date='2024-10-24' and documentLine.(document=d and !cancelled and item.code='LUN') limit 1) as L24"
+    },
+    "listing_L25": {
+      "expr": "(select 'L25' from Attendance where date='2024-10-25' and documentLine.(document=d and !cancelled and item.code='LUN') limit 1) as L25"
+    },
+    "listing_VL": {
+      "expr": "(select 'VL' from DocumentLine where document=d and !cancelled and item.code='VL') as VL"
+    },
+    "listing_acco": {
+      "expr": "(select min(item.code) from DocumentLine where document=d and cancelled=false and item.family.code='acco' and not site.name like '%Early%' group by item order by item.ord limit 1) as Acco"
+    },
+    "listing_accoBOS": {
+      "expr": "(select resourceConfiguration.name from DocumentLine where document=d and !cancelled and item.family.code='acco' and site.name='Constitution Inn' and dates!=null limit 1) as accoBOS"
+    },
+    "listing_accoDates": {
+      "expr": "compute_dates(array((select date from Attendance where documentLine.(document=d and !cancelled and item.family.code='acco' and site.name not like '%Early%') group by date order by date))) as AccoDates"
+    },
+    "listing_accoNYC": {
+      "expr": "(select site.name from DocumentLine dl where document=d and !cancelled and item.family.code='acco' and site.name in ('KMCNY', 'Days Inn') and exists(select Attendance where documentLine=dl and date>='2014-11-02') limit 1) as accoNYC"
+    },
+    "listing_accoName": {
+      "expr": "(select min(item.name) from DocumentLine where document=d and cancelled=false and item.family.code='acco' and not site.name like '%Early%' group by item order by item.ord limit 1) as Acco"
+    },
+    "listing_accoOrTeachDates": {
+      "expr": "coalesce(nullif(compute_dates(array((select date from Attendance where documentLine.(document=d and !cancelled and item.family.code='acco' and site.name not like '%Early%') group by date order by date))), ''), compute_dates(array((select date from Attendance where documentLine.(document=d and !cancelled and item.family.code='teach') group by date order by date)))) as AccoOrTeachDates"
+    },
+    "listing_accoPRI": {
+      "expr": "(select site.name from DocumentLine dl where document=d and !cancelled and item.family.code='acco' and site.name in ('KMCNY', 'Days Inn') and exists(select Attendance where documentLine=dl and date='2014-10-28') limit 1) as accoPRI"
+    },
+    "listing_ageOrCarer": {
+      "expr": "(exists(select Document where event=d.event and !cancelled and (person_carer1Document=d or person_carer2Document=d)) ? 'C' : '' + person_age) as Age"
+    },
+    "listing_asian_room": {
+      "expr": "(select min(resourceConfiguration.resource.(site.name like '%Solar%' ? 'SO - ' + name : site.name like '%Kadoorie%' ? 'KA - ' + name : '')) from DocumentLine where document=d and !cancelled and item.family.code='acco' and not site.name like '%Early%' group by item order by item.ord limit 1) as Room"
+    },
+    "listing_breakfast": {
+      "expr": "(select item.code from DocumentLine where document=d and !cancelled and item.code in ('BKF', 'CBKF') limit 1) as Breakfast"
+    },
+    "listing_breakfastDates": {
+      "expr": "(select dates from DocumentLine where document=d and !cancelled and item.code in ('BKF', 'CBKF') limit 1) as Breakfast"
+    },
+    "listing_building": {
+      "expr": "(select min(resourceConfiguration.resource.building.name) from DocumentLine where document=d and !cancelled and item.family.code='acco' and not site.name like '%Early%' group by item order by item.ord limit 1) as Building"
+    },
+    "listing_carer": {
+      "expr": "(select 'C' from Document where event=d.event and !cancelled and (person_carer1Document=d or person_carer2Document=d) limit 1) as Carer"
+    },
+    "listing_dailyShuttle": {
+      "expr": "(select site.code + '  ' + dates from DocumentLine where document=d and !cancelled and item.(family.code='transp' and code='DS') limit 1) as DS"
+    },
+    "listing_dates": {
+      "expr": "dates as Dates"
+    },
+    "listing_diet": {
+      "expr": "(select min(item.code) from DocumentLine where document=d and !cancelled and item.family.code='diet' group by item order by item.ord limit 1) as Diet"
+    },
+    "listing_dietNoV": {
+      "expr": "(select min(item.code == 'V' ? '' : item.code) from DocumentLine where document=d and !cancelled and item.family.code='diet' group by item order by item.ord limit 1) as Diet"
+    },
+    "listing_dietOrNO": {
+      "expr": "coalesce((select min(item.code) from DocumentLine where document=d and !cancelled and item.family.code='diet' group by item order by item.ord limit 1), 'NO') as Diet"
+    },
+    "listing_dinner": {
+      "expr": "(select 'DIN' from DocumentLine where document=d and !cancelled and item.code='SUP' limit 1) as Dinner"
+    },
+    "listing_dinnerDates": {
+      "expr": "(select dates from DocumentLine where document=d and !cancelled and item.code='SUP' limit 1) as Dinner"
+    },
+    "listing_earlyAcco": {
+      "expr": "(select min(resourceConfiguration != null ? resourceConfiguration..resource..name : item.name) from DocumentLine dl where document=d and !cancelled and item.family.code='acco' and dates!=null and exists(select Attendance where documentLine=dl and date<documentLine.document.event.startDate) group by item order by item.ord limit 1) as EarlyAcco"
+    },
+    "listing_earlyAccoDates": {
+      "expr": "compute_dates(array((select date from Attendance where documentLine.(document=d and !cancelled and item.family.code='acco' and site.name like '%Early%') group by date order by date))) as EarlyAccoDates"
+    },
+    "listing_earlyLateAcco": {
+      "expr": "(select min(resourceConfiguration != null ? resourceConfiguration..resource..name : item.name) from DocumentLine where document=d and !cancelled and item.family.code='acco' and site.name like '%Early%' and dates!=null group by item order by item.ord limit 1) as EarlyLateAcco"
+    },
+    "listing_earlyLateAccoDates": {
+      "expr": "compute_dates(array((select date from Attendance where documentLine.(document=d and !cancelled and item.family.code='acco' and site.name like '%Early%') group by date order by date))) as EarlyLateAccoDates"
+    },
+    "listing_earlyLateMealsDates": {
+      "expr": "(select dates from DocumentLine where document=d and !cancelled and item.code='ELM' limit 1) as ELMDates"
+    },
+    "listing_entrance": {
+      "expr": "coalesce((select 'RED' from DocumentLine where document=d and cancelled=false and item.family.code='transl' group by item order by item.ord limit 1), person_ordained ? 'YLW' : '') as Entrance"
+    },
+    "listing_gompa": {
+      "expr": "(select min(resourceConfiguration.resource.name) from DocumentLine where document=d and cancelled=false and item.family.code='teach' and item.name='Transmission' group by item order by item.ord limit 1) as Gompa"
+    },
+    "listing_hotel": {
+      "expr": "(select min(site.name) from DocumentLine where document=d and cancelled=false and item.family.code='acco' and not site.name like '%Early%' group by item order by item.ord limit 1) as Hotel"
+    },
+    "listing_hotelShuttle": {
+      "expr": "(select coalesce(site.groupName, item.code) from DocumentLine where document=d and !cancelled and item.family.code='transp' and item.(code='HS' or lower(name) like '%shuttle' and lower(name) not like '%airport%') limit 1) as HS"
+    },
+    "listing_hotelShuttleWithDiscrepancyMark": {
+      "expr": "(select coalesce(site.groupName, item.code) + (exists(select Attendance a where documentLine.(document=d and !cancelled and item.code='TOC') and exists(select DocumentLine dl where !cancelled and document=d and item.family.code='transp' and item.code in ('HS', 'OS') and !exists(select Attendance where date=a.date and documentLine.(document=d and !cancelled and (item.code in ('HS', 'OS') or item.family.code='park'))))) ? ' *' : '') from DocumentLine where document=d and !cancelled and item.family.code='transp' and item.(code='HS' or lower(name) like '%shuttle' and lower(name) not like '%airport%') limit 1) as HS"
+    },
+    "listing_inwardAirportShuttle": {
+      "expr": "(select item.code from DocumentLine where document=d and !cancelled and item.family.code='transp' and (item.name like '%=>%KMC%' or item.name like '%=>%Festival%') limit 1) as IAS"
+    },
+    "listing_inwardTrip": {
+      "expr": "(select site.code + '  ' + dates from DocumentLine where document=d and !cancelled and item.(family.code='transp' and code='IT') limit 1) as IT"
+    },
+    "listing_lateAcco": {
+      "expr": "(select min(resourceConfiguration != null ? resourceConfiguration..resource..name : item.name) from DocumentLine dl where document=d and !cancelled and item.family.code='acco' and dates!=null and exists(select Attendance where documentLine=dl and date>=documentLine.document.event.endDate) group by item order by item.ord limit 1) as LateAcco"
+    },
+    "listing_lateAccoDates": {
+      "expr": "compute_dates(array((select date from Attendance where documentLine.(document=d and !cancelled and item.family.code='acco') and date>=documentLine.document.event.endDate group by date order by date))) as LateAccoDates"
+    },
+    "listing_lunch": {
+      "expr": "(select item.code from DocumentLine where document=d and !cancelled and item.code='LUN' limit 1) as Lunch"
+    },
+    "listing_lunchDates": {
+      "expr": "(select dates from DocumentLine where document=d and !cancelled and item.code='LUN' limit 1) as Lunch"
+    },
+    "listing_meals": {
+      "expr": "(select min(item.code) from DocumentLine where document=d and !cancelled and item.family.code='meals' and not site.name like '%Early%' group by item order by item.ord limit 1) as Meals"
+    },
+    "listing_mealsDates": {
+      "expr": "compute_dates(array((select date from Attendance where documentLine.(!cancelled and document=d and (site.name not like '%Early%' and item.family.code='meals' or site.name like '%Early%' and item.family.code='acco')) group by date order by date))) as MDates"
+    },
+    "listing_mealsDatesOrSame": {
+      "expr": "listing_mealsDates = listing_teachAccoOrdiDates ? '(same)' : listing_mealsDates"
+    },
+    "listing_mealsGroup": {
+      "expr": "(select min(substring(resourceConfiguration.resource.name, 7, 2)) from DocumentLine where document=d and !cancelled and item.family.code='meals' and resourceConfiguration.name like 'Group%' and site.name not like '%Early%' group by item order by (item.code='LUN' ? 0 : item.code='DIN' ? 1 : 2) limit 1) as Group"
+    },
+    "listing_method": {
+      "expr": "price_balance<0 ? 'D   R' : price_balance=0 ? '' : 'CASH   CC   CHQ'"
+    },
+    "listing_ordinationLunch": {
+      "expr": "(select item.code from DocumentLine where document=d and !cancelled and item.code='OLU' limit 1) as OLU"
+    },
+    "listing_parking": {
+      "expr": "(select item.code from DocumentLine where document=d and !cancelled and item.family.code='park' order by site.main desc, item.ord limit 1) as Parking"
+    },
+    "listing_parkingWithDiscrepancyMark": {
+      "expr": "(array_to_string(array(select (site.main ? 'ON ' : 'OFF ') + item.code from DocumentLine where document=d and !cancelled and item.family.code='park' order by item.ord), ' ') + (exists(select Attendance a where documentLine.(document=d and !cancelled and item.code='TOC') and exists(select DocumentLine dl where !cancelled and document=d and item.family.code='park' and !exists(select Attendance where date=a.date and documentLine.(document=d and !cancelled and item.family.code='park')))) ? ' *' : '') ) as Parking"
+    },
+    "listing_returnAirportShuttle": {
+      "expr": "(select item.code from DocumentLine where document=d and !cancelled and item.family.code='transp' and item.name like '%KMC%=>%' limit 1) as RAS"
+    },
+    "listing_returnTrip": {
+      "expr": "(select site.code + '  ' + dates from DocumentLine where document=d and !cancelled and item.(family.code='transp' and code='RT') limit 1) as RT"
+    },
+    "listing_room": {
+      "expr": "(select min(resourceConfiguration.resource.site.main=false ? resourceConfiguration.resource.site.name + ' - ' + resourceConfiguration.resource.name : coalesce(resourceConfiguration.resource.name, item.name)) from DocumentLine where document=d and !cancelled and item.family.code='acco' and not site.name like '%Early%' group by item order by item.ord limit 1) as Room"
+    },
+    "listing_room1": {
+      "expr": "(select min((site.main ? '' : site.name + ' - ') + (resourceConfiguration != null ? resourceConfiguration.resource.name : item.name)) from DocumentLine dl where document=d and !cancelled and item.family.code='acco' and (site.name like '%1' or site.name not like '%2' and site.name not like '%Early%' and exists(select DateInfo di where label.en='Whole part 1' and exists(select Attendance a where a.documentLine=dl and a.date>=di.date and a.date<=di.endDate))) group by item order by item.ord limit 1) as Room1"
+    },
+    "listing_room2": {
+      "expr": "(select min((site.main ? '' : site.name + ' - ') + (resourceConfiguration != null ? resourceConfiguration.resource.name : item.name)) from DocumentLine dl where document=d and !cancelled and item.family.code='acco' and (site.name like '%2' or site.name not like '%1' and site.name not like '%Early%' and exists(select DateInfo di where label.en='Whole part 2' and exists(select Attendance a where a.documentLine=dl and a.date>=di.date and a.date<=di.endDate))) group by item order by item.ord limit 1) as Room2"
+    },
+    "listing_roomOrCamping": {
+      "expr": "(select min(resourceConfiguration.resource.site.main=false ? resourceConfiguration.resource.site.name + ' - ' + resourceConfiguration.resource.name : coalesce(resourceConfiguration.resource.name, item.name in ('Camping','Sharing parents tent') ? item.name : null)) from DocumentLine where document=d and !cancelled and item.family.code='acco' and not site.name like '%Early%' group by item order by item.ord limit 1) as Room"
+    },
+    "listing_roomOrCampingToday": {
+      "expr": "(select min(resourceConfiguration.resource.site.main=false ? resourceConfiguration.resource.site.name + ' - ' + resourceConfiguration.resource.name : coalesce(resourceConfiguration.resource.name, item.name in ('Camping','Sharing parents tent') ? item.name : null)) from DocumentLine dl where document=d and !cancelled and item.family.code='acco' and not site.name like '%Early%' and exists(select Attendance a where a.documentLine=dl and a.date=current_date()) group by item order by item.ord limit 1) as Room"
+    },
+    "listing_roomOrCampingWithDiscrepancyMark": {
+      "expr": "((select min(!resourceConfiguration.resource.site.main ? resourceConfiguration.resource.site.name + ' - ' + resourceConfiguration.resource.name : coalesce(resourceConfiguration.resource.name, item.name in ('Camping','Sharing parents tent') ? item.name : null)) from DocumentLine where document=d and !cancelled and item.family.code='acco' and not site.name like '%Early%' group by item order by item.ord limit 1) + (exists(select Attendance a where documentLine.(document=d and !cancelled and item.code='TOC') and exists(select DocumentLine dl where !cancelled and document=d and item.family.code='acco' and !exists(select Attendance where date=a.date and documentLine=dl))) ? ' *' : '') ) as Room"
+    },
+    "listing_shuttle": {
+      "expr": "(select site.code + ' ' + item.code + '  ' + dates from DocumentLine where document=d and !cancelled and item.(family.code='transp' and lower(name) like '%shuttle%' and lower(name) not like '%airport%') limit 1) as Shuttle"
+    },
+    "listing_sitting": {
+      "expr": "(select min(substring(resourceConfiguration.resource.name, 1, 2)) from DocumentLine where document=d and !cancelled and item.family.code='meals' and resourceConfiguration.name like 'S%' and site.name not like '%Early%' group by item order by (item.code='LUN' ? 0 : item.code='DIN' ? 1 : 2) limit 1) as Sitting"
+    },
+    "listing_sittingFMT": {
+      "expr": "(select min(resourceConfiguration.resource.name) from DocumentLine where document=d and !cancelled and item.code='FMT' and resourceConfiguration!=null and site.name not like '%Early%' group by item order by item.ord limit 1) as Sitting"
+    },
+    "listing_sittingLunchOrDinner": {
+      "expr": "(select min(resourceConfiguration.resource.name) from DocumentLine where document=d and !cancelled and item.family.code='meals' and item.code in ('LUN','SUP') and resourceConfiguration!=null and site.name not like '%Early%' group by item order by item.ord limit 1) as Sitting"
+    },
+    "listing_specialNeeds": {
+      "expr": "specialNeeds!=null ? 'AN' : null"
+    },
+    "listing_teachAccoOrdiDates": {
+      "expr": "compute_dates(array((select date from Attendance where documentLine.(document=d and !cancelled and item.family.code in ('teach', 'acco', 'cerem')) group by date order by date))) as Dates"
+    },
+    "listing_teachingDates": {
+      "expr": "compute_dates(array((select date from Attendance where !documentLine.cancelled and documentLine.(document=d and item.family.code='teach') group by date order by date))) as Teaching"
+    },
+    "listing_transBIR": {
+      "expr": "(select 'ISC' from DocumentLine where document=d and !cancelled and item.family.code='transp' and site.name='Birmingham' and item.(code=null or code!='OWNT') limit 1) as transBIR"
+    },
+    "listing_transBOS": {
+      "expr": "(select 'ISC' from DocumentLine where document=d and !cancelled and item.family.code='transp' and site.name='Boston' and item.(code=null or code!='OWNT') limit 1) as transBOS"
+    },
+    "listing_transNYC": {
+      "expr": "(select 'ISC' from DocumentLine where document=d and !cancelled and item.family.code='transp' and site.name='New York' and item.(code=null or code!='OWNT') limit 1) as transNYC"
+    },
+    "listing_translation": {
+      "expr": "(select min(item.code) from DocumentLine where document=d and cancelled=false and item.family.code='transl' group by item order by item.ord limit 1) as Translation"
+    },
+    "listing_transport": {
+      "expr": "(select min(item.code) from DocumentLine where document=d and cancelled=false and item.family.code='transp' group by item order by item.ord limit 1) as Transport"
+    },
+    "multipleBooking": "MultipleBooking",
+    "multipleBookingIcon": {
+      "expr": "image(multipleBooking == null ? null : multipleBooking.notCancelled=0 || multipleBooking==notMultipleBooking ? 'images/16/multipleBookings/grayCross.png' : multipleBooking.notCancelled = 1 ? 'images/16/multipleBookings/blueCross.png' : 'images/16/multipleBookings/redCross.png')"
+    },
+    "notMultipleBooking": "MultipleBooking",
+    "noteIcon": {
+      "expr": "image(isSet(specialNeeds) ? 'images/16/note-special-needs.png' : isSet(comment) ? 'images/16/note-comment.png' : isSet(request) ? 'images/16/note.png' : null)"
+    },
+    "onlineIcon": {
+      "expr": "!inPerson ? image('images/16/online.png') : null"
+    },
+    "organization": "Organization",
+    "paper": "boolean",
+    "passReady": "boolean",
+    "passToMake": "boolean",
+    "person": "Person",
+    "person_abcNames": "string",
+    "person_admin1Code": "string",
+    "person_admin1Geonameid": "integer",
+    "person_admin1Name": "string",
+    "person_admin2Code": "string",
+    "person_admin2Geonameid": "integer",
+    "person_admin2Name": "string",
+    "person_age": "integer",
+    "person_carer1Document": "Document",
+    "person_carer1Name": "string",
+    "person_carer2Document": "Document",
+    "person_carer2Name": "string",
+    "person_cityGeonameid": "integer",
+    "person_cityLatitude": "float",
+    "person_cityLongitude": "float",
+    "person_cityName": "string",
+    "person_country": "Country",
+    "person_countryCode": "string",
+    "person_countryGeonameid": "integer",
+    "person_countryName": "string",
+    "person_discovery": "boolean",
+    "person_discoveryReduced": "boolean",
+    "person_email": "string",
+    "person_facilityFee": "boolean",
+    "person_firstName": "string",
+    "person_guest": "boolean",
+    "person_isChild": {
+      "expr": "person_age!=null"
+    },
+    "person_known": "boolean",
+    "person_lang": "string",
+    "person_lastName": "string",
+    "person_latitude": "float",
+    "person_layName": "string",
+    "person_longitude": "float",
+    "person_male": "boolean",
+    "person_name": {
+      "expr": "person_firstName + ' ' + person_lastName"
+    },
+    "person_nationality": "string",
+    "person_ordained": "boolean",
+    "person_organization": "Organization",
+    "person_organizationName": "string",
+    "person_passport": "string",
+    "person_phone": "string",
+    "person_photoReceived": "boolean",
+    "person_postCode": "string",
+    "person_resident": "boolean",
+    "person_resident2": "boolean",
+    "person_street": "string",
+    "person_unemployed": "boolean",
+    "person_unknown": "boolean",
+    "person_verified": "boolean",
+    "person_workingVisit": "boolean",
+    "plainOptions": {
+      "expr": "interpret_brackets('[plainOptions]',id,'en')"
+    },
+    "price_balance": {
+      "expr": "price_net-price_deposit"
+    },
+    "price_deposit": "Price",
+    "price_minDeposit": "Price",
+    "price_net": "Price",
+    "price_nonRefundable": "Price",
+    "read": "boolean",
+    "ref": "integer",
+    "request": "string",
+    "securityIcon": {
+      "expr": "image('images/16/security/' + (person_unknown ? 'unknown' : person_known and person_verified ? 'verified' : person_known and !person_verified ? 'known' : 'unchecked') + '.png')"
+    },
+    "securityName": {
+      "expr": "person_unknown ? 'Unknown' : person_known and person_verified ? 'Verified' : person_known and !person_verified ? 'Known' : 'Unchecked'"
+    },
+    "specialNeeds": "string",
+    "triggerCancelOtherMultipleBookings": "boolean",
+    "triggerMergeFromOtherMultipleBookings": "boolean",
+    "triggerSendLetter": "Letter",
+    "triggerTransferFromOtherMultipleBookings": "boolean",
+    "willPay": "boolean"
+  },
+  "DocumentLine": {
+    "id": 47,
+    "abandoned": "boolean",
+    "allocate": "boolean",
+    "arrivalSite": "Site",
+    "backend_released": "boolean",
+    "cancellationDate": "date",
+    "cancelled": "boolean",
+    "cleaned": "boolean",
+    "comment": "string",
+    "creationDate": "date",
+    "dates": "string",
+    "document": "Document",
+    "endDate": "date",
+    "familyOrd": {
+      "expr": "coalesce(groupFamily..ord,groupItem..family..ord,item.family.ord)"
+    },
+    "frontend_released": "boolean",
+    "groupFamily": "ItemFamily",
+    "groupItem": "Item",
+    "groupLabel": "Label",
+    "groupOrd": {
+      "expr": "(groupLabel!=null || groupItem!=null) ? 1 : 0"
+    },
+    "groupSite": "Site",
+    "hasAttendanceGap": "boolean",
+    "icon": {
+      "expr": "image('images/16/documentLine.png')"
+    },
+    "item": "Item",
+    "itemOrd": {
+      "expr": "groupLabel..id!=null ? 0 : groupItem..id!=null ? groupItem..ord : item.ord"
+    },
+    "listing_accoDates": {
+      "expr": "compute_dates(array((select date from Attendance where !documentLine.cancelled and documentLine.(document=dl.document and item.family.code='acco') group by date order by date))) as AccoDates"
+    },
+    "listing_accoName": {
+      "expr": "(select min(item.name) from DocumentLine where document=dl.document and cancelled=false and item.family.code='acco' and not site.name like '%Early%' group by item order by item.ord limit 1) as Acco"
+    },
+    "listing_dinner": {
+      "expr": "(select 'DIN' from DocumentLine where !cancelled and site=dl.site and document=dl.document and item.family.code='meals' and item.code='SUP' group by item order by item.ord limit 1) as Dinner"
+    },
+    "listing_earlyAcco": {
+      "expr": "(select min(resourceConfiguration != null ? resourceConfiguration..resource..name : item.name) from DocumentLine dla where document=dl.document and !cancelled and item.family.code='acco' and dates!=null and exists(select Attendance where documentLine=dla and date<documentLine.document.event.startDate) group by item order by item.ord limit 1) as EarlyAcco"
+    },
+    "listing_entrance": {
+      "expr": "coalesce((select 'RED' from DocumentLine where document=dl.document and cancelled=false and item.family.code='transl' group by item order by item.ord limit 1), (select 'YLW' from Document where id=dl.document.id and person_ordained)) as Entrance"
+    },
+    "listing_inwardAirport": {
+      "expr": "(select item.name from DocumentLine where document=dl.document and !cancelled and item.family.code='transp' and item.name like '% => KMC%' limit 1) as IA"
+    },
+    "listing_inwardTrip": {
+      "expr": "(select 'IT' from DocumentLine where document=dl.document and !cancelled and item.family.code='transp' and item.name='Inward Trip' limit 1) as IT"
+    },
+    "listing_returnAirport": {
+      "expr": "(select item.name from DocumentLine where document=dl.document and !cancelled and item.family.code='transp' and item.name like '%KMC => %' limit 1) as RA"
+    },
+    "listing_returnTrip": {
+      "expr": "(select 'RT' from DocumentLine where document=dl.document and !cancelled and item.family.code='transp' and item.name='Return Trip' limit 1) as RT"
+    },
+    "listing_room": {
+      "expr": "(select min(resourceConfiguration.resource.site.main=false ? resourceConfiguration.resource.site.name + ' - ' + resourceConfiguration.resource.name : coalesce(resourceConfiguration.resource.name, item.name)) from DocumentLine where document=dl.document and !cancelled and item.family.code='acco' and not site.name like '%Early%' group by item order by item.ord limit 1) as Room"
+    },
+    "listing_teachingDates": {
+      "expr": "compute_dates(array((select date from Attendance where !documentLine.cancelled and documentLine.(document=dl.document and item.family.code='teach') group by date order by date))) as Teaching"
+    },
+    "listing_translation": {
+      "expr": "(select min(item.code) from DocumentLine where document=dl.document and cancelled=false and item.family.code='transl' group by item order by item.ord limit 1) as Translation"
+    },
+    "lockAllocation": "boolean",
+    "option": "Option",
+    "pool": "Pool",
+    "price": "Price",
+    "price_balance": {
+      "expr": "price_net-price_deposit"
+    },
+    "price_custom": "Price",
+    "price_deposit": "Price",
+    "price_discount": "integer",
+    "price_isCustom": "boolean",
+    "price_minDeposit": "Price",
+    "price_net": "Price",
+    "price_netCustom": {
+      "expr": "price_isCustom"
+    },
+    "price_nonRefundable": "Price",
+    "private": "boolean",
+    "quantity": "integer",
+    "rate": "Rate",
+    "read": "boolean",
+    "resource": "Resource",
+    "resourceConfiguration": "ResourceConfiguration",
+    "share_mate": "boolean",
+    "share_mate_charged": "boolean",
+    "share_mate_ownerDocumentLine": "DocumentLine",
+    "share_mate_ownerName": "string",
+    "share_mate_ownerPerson": "Person",
+    "share_owner": "boolean",
+    "share_owner_mate1Name": "string",
+    "share_owner_mate2Name": "string",
+    "share_owner_mate3Name": "string",
+    "share_owner_mate4Name": "string",
+    "share_owner_mate5Name": "string",
+    "share_owner_mate6Name": "string",
+    "share_owner_mate7Name": "string",
+    "share_owner_numberOfApplicableMatesSpecified": {
+      "expr": "oneOrZero(isSet(share_owner_mate1Name) and not share_owner_mate1Name in ('NONE', '0')) + oneOrZero(isSet(share_owner_mate2Name) and not share_owner_mate2Name in ('NONE', '0')) + oneOrZero(isSet(share_owner_mate3Name) and not share_owner_mate3Name in ('NONE', '0')) + oneOrZero(isSet(share_owner_mate4Name) and not share_owner_mate4Name in ('NONE', '0')) + oneOrZero(isSet(share_owner_mate5Name) and not share_owner_mate5Name in ('NONE', '0')) + oneOrZero(isSet(share_owner_mate6Name) and not share_owner_mate6Name in ('NONE', '0'))"
+    },
+    "share_owner_numberOfMatesSpecified": {
+      "expr": "oneOrZero(isSet(share_owner_mate1Name)) + oneOrZero(isSet(share_owner_mate2Name)) + oneOrZero(isSet(share_owner_mate3Name)) + oneOrZero(isSet(share_owner_mate4Name)) + oneOrZero(isSet(share_owner_mate5Name)) + oneOrZero(isSet(share_owner_mate6Name))"
+    },
+    "share_owner_quantity": "integer",
+    "site": "Site",
+    "siteOrd": {
+      "expr": "groupSite..id!=null ? groupSite..ord : site..ord"
+    },
+    "startDate": "date",
+    "systemAllocated": "boolean",
+    "timeline": "Timeline",
+    "triggerDeferAllocate": "boolean"
+  },
+  "Error": {
+    "id": 132,
+    "date": "date",
+    "message": "string",
+    "route": "string",
+    "userAgent": "string",
+    "userPerson": "Person"
+  },
+  "Event": {
+    "id": 39,
+    "active": "boolean",
+    "activity": "Activity",
+    "advertised": "boolean",
+    "arrivalDepartureFromDatesSections": "boolean",
+    "audioClosingDate": "date",
+    "audioExpirationDate": "date",
+    "audioRecordingsDayTicket": "boolean",
+    "bookingClosed": "boolean",
+    "bookingClosingDate": "date",
+    "bookingFormLayout": "BookingFormLayout",
+    "bookingFormUrl": {
+      "expr": "frontendUrl + (frontendIsAngular ? 'en/event/' + id + '/fees' : '?eventid=' + id)"
+    },
+    "bookingProcessStart": "date",
+    "bookingSuccessMessage": "Label",
+    "bookingsAutoConfirm": "boolean",
+    "bookingsAutoConfirmEvent1": "Event",
+    "bookingsAutoConfirmEvent2": "Event",
+    "bookingsAutoConfirmEvent3": "Event",
+    "bookingsAutoConfirmEvent4": "Event",
+    "bookingsAutoConfirmLetter": "Letter",
+    "buddha": "Buddha",
+    "cartMessage": "Label",
+    "corporation": "Organization",
+    "cssClass": "string",
+    "currency": "Currency",
+    "dateTimeRange": "string",
+    "description": "string",
+    "endDate": "date",
+    "externalLink": "string",
+    "facebook_conversionPixelId": "string",
+    "feesBottomLabel": "Label",
+    "frontend": "string",
+    "frontendHost": {
+      "expr": "host != null ? host : organization.id=2 ? 'inscriptions.kadampafrance.org' : organization.id=151 ? 'bookings.manjushri.org' : '{host}'"
+    },
+    "frontendIsAngular": {
+      "expr": "frontend='KMC'"
+    },
+    "frontendIsHttps": {
+      "expr": "true"
+    },
+    "frontendUrl": {
+      "expr": "(frontendIsHttps ? 'https://' : 'http://') + frontendHost + (frontendIsHttps ? '' : ':{webPort}') + (uri != null ? ('/' + uri +'/') : (frontendIsAngular ? '/#/' : '/frontend/'))"
+    },
+    "host": "string",
+    "icon": {
+      "expr": "image('images/16/event/' + (!active ? 'event-black.png' : bookingClosed ? 'event-red.png' : live ? 'liveEvent.png' : 'event.png'))"
+    },
+    "image": "Image",
+    "inPersonAllowed": "boolean",
+    "kbs3": "boolean",
+    "label": "Label",
+    "live": "boolean",
+    "livestreamMessageLabel": "Label",
+    "livestreamUrl": "string",
+    "longDescriptionLabel": "Label",
+    "maxDateTimeRange": "string",
+    "minDateTimeRange": "string",
+    "name": "string",
+    "noAccountBooking": "boolean",
+    "notificationCartConfirmedLabel": "Label",
+    "notificationCartDefaultLabel": "Label",
+    "notificationCartPayedConfirmedLabel": "Label",
+    "notificationCartPayedLabel": "Label",
+    "onlineAllowed": "boolean",
+    "openingDate": "date",
+    "optionRoundingFactor": "integer",
+    "optionsHideDaysOutsideEvent": "boolean",
+    "optionsTopLabel": "Label",
+    "organization": "Organization",
+    "passControl": "boolean",
+    "passControlDateTimeRange": "string",
+    "paymentClosingDate": "date",
+    "postDate": "date",
+    "preDate": "date",
+    "privacyNoticeLabel": "Label",
+    "recurringWithAudio": "boolean",
+    "recurringWithVideo": "boolean",
+    "repeatAudio": "boolean",
+    "repeatVideo": "boolean",
+    "repeatable": "boolean",
+    "repeatedEvent": "Event",
+    "sendHistoryEmails": "boolean",
+    "shortDescription": "string",
+    "shortDescriptionLabel": "Label",
+    "showSites": "boolean",
+    "startDate": "date",
+    "state": "string",
+    "supportNoticeLabel": "Label",
+    "teacher": "Teacher",
+    "teachingsDayTicket": "boolean",
+    "termsUrlDe": "string",
+    "termsUrlEn": "string",
+    "termsUrlEs": "string",
+    "termsUrlFr": "string",
+    "termsUrlPt": "string",
+    "timezone": "string",
+    "type": "EventType",
+    "uri": "string",
+    "venue": "Site",
+    "vodEnabled": "boolean",
+    "vodExpirationDate": "date",
+    "vodProcessingTimeMinutes": "integer"
+  },
+  "EventPart": {
+    "id": 145,
+    "accommodationChangeAllowed": "boolean",
+    "endBoundary": "ScheduledBoundary",
+    "event": "Event",
+    "label": "Label",
+    "name": "string",
+    "startBoundary": "ScheduledBoundary"
+  },
+  "EventPhase": {
+    "id": 147,
+    "endBoundary": "ScheduledBoundary",
+    "event": "Event",
+    "label": "Label",
+    "name": "string",
+    "startBoundary": "ScheduledBoundary"
+  },
+  "EventPhaseCoverage": {
+    "id": 148,
+    "event": "Event",
+    "label": "Label",
+    "name": "string",
+    "phase1": "EventPhase",
+    "phase2": "EventPhase",
+    "phase3": "EventPhase",
+    "phase4": "EventPhase"
+  },
+  "EventSelection": {
+    "id": 146,
+    "event": "Event",
+    "inPerson": "boolean",
+    "label": "Label",
+    "name": "string",
+    "online": "boolean",
+    "part1": "EventPart",
+    "part2": "EventPart",
+    "part3": "EventPart"
+  },
+  "EventType": {
+    "id": 95,
+    "background": "string",
+    "deprecated": "boolean",
+    "label": "Label",
+    "name": "string",
+    "ord": "integer",
+    "organization": "Organization",
+    "recurringItem": "Item"
+  },
+  "Filter": {
+    "id": 110,
+    "active": "boolean",
+    "activityName": "string",
+    "alias": "string",
+    "class": "string",
+    "columns": "string",
+    "description": "string",
+    "fields": "string",
+    "groupByClause": "string",
+    "havingClause": "string",
+    "icon": {
+      "expr": "image('images/s16/system/' + (isCondition ? 'condition.png' : isGroup ? 'groups.png' : whereClause = null ? 'columns.png' : 'filterColumns.gif'))"
+    },
+    "isColumns": "boolean",
+    "isCondition": "boolean",
+    "isGroup": "boolean",
+    "limitClause": "string",
+    "name": "string",
+    "ord": "integer",
+    "orderByClause": "string",
+    "whereClause": "string"
+  },
+  "Food": {
+    "id": 119,
+    "description": "string",
+    "fooddbId": "string",
+    "imageUrl": "string",
+    "name": "string",
+    "scientificName": "string",
+    "subFoodGroup": "FoodGroup",
+    "wikipediaId": "string"
+  },
+  "FoodGroup": {
+    "id": 120,
+    "name": "string",
+    "parent": "FoodGroup"
+  },
+  "FrontendAccount": {
+    "id": 69,
+    "admin": "boolean",
+    "backoffice": "boolean",
+    "corporation": "Organization",
+    "developer": "boolean",
+    "disabled": "boolean",
+    "lang": "string",
+    "password": "string",
+    "pwdresetExpires": "date",
+    "pwdresetToken": "string",
+    "salt": "string",
+    "security": "boolean",
+    "tester": "boolean",
+    "translator": "boolean",
+    "triggerSendPassword": "boolean",
+    "triggerSendPasswordEvent": "Event",
+    "username": "string"
+  },
+  "GatewayCompany": {
+    "id": 70,
+    "alertBeforePaymentLabel": "Label",
+    "callbackTransactionRef": "string",
+    "callbackTransactionStatus": "string",
+    "failedStatus": "string",
+    "generatePaymentUrl": "boolean",
+    "generatePaymentUrlAccesscode": "string",
+    "icon": {
+      "expr": "image('images/16/gateway.png')"
+    },
+    "json": "boolean",
+    "name": "string",
+    "notificationCancelCartRedirection": "boolean",
+    "notificationCancelResponse": "string",
+    "notificationSuccessCartRedirection": "boolean",
+    "notificationSuccessResponse": "string",
+    "notificationTimeout": "integer",
+    "post": "boolean",
+    "requestResult": "boolean",
+    "successfulStatus": "string"
+  },
+  "GatewayParameter": {
+    "id": 72,
+    "account": "MoneyAccount",
+    "company": "GatewayCompany",
+    "icon": {
+      "expr": "image('images/16/gateway.png')"
+    },
+    "live": "boolean",
+    "name": "string",
+    "secret": "boolean",
+    "test": "boolean",
+    "value": "string"
+  },
+  "History": {
+    "id": 73,
+    "action": "string",
+    "changes": "string",
+    "comment": "string",
+    "date": "date",
+    "document": "Document",
+    "mail": "Mail",
+    "moneyTransfer": "MoneyTransfer",
+    "request": "string",
+    "userDisplay": {
+      "expr": "coalesce(userPerson.fullName, username)"
+    },
+    "userPerson": "Person",
+    "username": "string"
+  },
+  "Image": {
+    "id": 88,
+    "frontendStyle": "string",
+    "medium_frontendStyle": "string",
+    "medium_url": "string",
+    "name": "string",
+    "small_frontendStyle": "string",
+    "small_url": "string",
+    "url": "string"
+  },
+  "Invitation": {
+    "id": 138,
+    "accepted": "boolean",
+    "aliasFirstName": "string",
+    "aliasLastName": "string",
+    "createdAliasPerson": "Person",
+    "creationDate": "date",
+    "invitee": "Person",
+    "inviter": "Person",
+    "inviterPayer": "boolean",
+    "pending": "boolean",
+    "token": "string",
+    "usageDate": "date"
+  },
+  "Item": {
+    "id": 35,
+    "capacity": "integer",
+    "code": "string",
+    "deprecated": "boolean",
+    "family": "ItemFamily",
+    "icon": {
+      "expr": "family.icon"
+    },
+    "imageUrl": "string",
+    "indoor": "boolean",
+    "label": "Label",
+    "language": "Language",
+    "name": "string",
+    "ord": "integer",
+    "organization": "Organization",
+    "package": "boolean",
+    "perResourceLabel": "Label",
+    "rateAliasItem": "Item",
+    "share_mate": "boolean",
+    "temporal": "boolean"
+  },
+  "ItemFamily": {
+    "id": 36,
+    "account": "AccountingAccount",
+    "code": "string",
+    "icon": {
+      "expr": "image('images/16/itemFamilies/' + (code != null ? code : 'generic') + '.png')"
+    },
+    "label": "Label",
+    "name": "string",
+    "ord": "integer",
+    "perResourceLabel": "Label",
+    "sector": "Sector",
+    "summaryHidden": "boolean"
+  },
+  "ItemFamilyPolicy": {
+    "id": 149,
+    "eventPhaseCoverage1": "EventPhaseCoverage",
+    "eventPhaseCoverage2": "EventPhaseCoverage",
+    "eventPhaseCoverage3": "EventPhaseCoverage",
+    "eventPhaseCoverage4": "EventPhaseCoverage",
+    "itemFamily": "ItemFamily",
+    "noticeLabel": "Label",
+    "prerequisiteConfirmationLabel": "Label",
+    "prerequisiteDescriptionLabel": "Label",
+    "scope": "PolicyScope"
+  },
+  "ItemPolicy": {
+    "id": 143,
+    "default": "boolean",
+    "descriptionLabel": "Label",
+    "earlyAccommodationAllowed": "boolean",
+    "forceSoldOut": "boolean",
+    "genderInfoRequired": "boolean",
+    "item": "Item",
+    "lateAccommodationAllowed": "boolean",
+    "minDay": "integer",
+    "minOccupancy": "integer",
+    "noticeLabel": "Label",
+    "scope": "PolicyScope"
+  },
+  "KdmCenter": {
+    "id": 121,
+    "address": "string",
+    "address2": "string",
+    "address3": "string",
+    "city": "string",
+    "email": "string",
+    "kdmId": "integer",
+    "lat": "float",
+    "lng": "float",
+    "mothercenter": "boolean",
+    "name": "string",
+    "phone": "string",
+    "photo": "string",
+    "postal": "string",
+    "state": "string",
+    "type": "string",
+    "web": "string"
+  },
+  "Label": {
+    "id": 37,
+    "alert": "boolean",
+    "de": "string",
+    "el": "string",
+    "en": "string",
+    "es": "string",
+    "fr": "string",
+    "icon": {
+      "expr": "image('images/16/label.png')"
+    },
+    "livestreamMessage": "boolean",
+    "organization": "Organization",
+    "pt": "string",
+    "ref": "string",
+    "text": {
+      "expr": "?lang='de' ? de : ?lang='en' ? en : ?lang='es' ? es : ?lang='fr' ? fr : ?lang='pt' ? pt : ?lang='zhs' ? zhs : ?lang='zht' ? zht : ?lang='vi' ? vi : en"
+    },
+    "vi": "string",
+    "zhs": "string",
+    "zht": "string"
+  },
+  "Language": {
+    "id": 28,
+    "code": {
+      "expr": "iso_639_1"
+    },
+    "icon": {
+      "expr": "image('images/16/system/lang_' + iso_639_1 + '.png')"
+    },
+    "icon2": {
+      "expr": "useCountryIcon == true ? mainCountry.icon : image('images/16/languages/' + code + '.png')"
+    },
+    "iso_639_1": "string",
+    "iso_639_2": "string",
+    "iso_639_3": "string",
+    "mainCountry": "Country",
+    "name": "string",
+    "supported": "boolean",
+    "useCountryIcon": "boolean"
+  },
+  "Letter": {
+    "id": 61,
+    "account": "MailAccount",
+    "active": "boolean",
+    "automation": {
+      "expr": "documentCondition"
+    },
+    "automationEnabled": "boolean",
+    "content": "HTML",
+    "content_html": {
+      "expr": "content"
+    },
+    "de": "HTML",
+    "documentCondition": "string",
+    "en": "HTML",
+    "es": "HTML",
+    "event": "Event",
+    "fr": "HTML",
+    "icon": {
+      "expr": "image('images/16/letter.png')"
+    },
+    "name": "string",
+    "onHold": "boolean",
+    "organization": "Organization",
+    "pt": "HTML",
+    "subject": "string",
+    "subject_de": "string",
+    "subject_en": "string",
+    "subject_es": "string",
+    "subject_fr": "string",
+    "subject_pt": "string",
+    "type": "LetterType"
+  },
+  "LetterType": {
+    "id": 60,
+    "audio": "boolean",
+    "cancellation": "boolean",
+    "cart": "boolean",
+    "confirmation": "boolean",
+    "delayMinutes": "integer",
+    "documentCondition": "string",
+    "event": "boolean",
+    "icon": {
+      "expr": "image('images/16/letterType.png')"
+    },
+    "magicLink": "boolean",
+    "name": "string",
+    "news": "boolean",
+    "noDeposit1": "boolean",
+    "noDeposit2": "boolean",
+    "noDeposit3": "boolean",
+    "noShuttleTime": "boolean",
+    "ord": "integer",
+    "order": "boolean",
+    "sendPassword": "boolean",
+    "terms": "boolean"
+  },
+  "LtTestEvent": {
+    "id": 94,
+    "eventTime": "date",
+    "ltTestSet": "LtTestEvent",
+    "type": "integer",
+    "value": "integer"
+  },
+  "LtTestSet": {
+    "id": 93,
+    "comment": "string",
+    "name": "string"
+  },
+  "MagicLink": {
+    "id": 124,
+    "creationDate": "date",
+    "email": "string",
+    "lang": "string",
+    "link": "string",
+    "loginRunId": "string",
+    "oldEmail": "string",
+    "requestedPath": "string",
+    "token": "string",
+    "usageDate": "date",
+    "usageRunId": "string",
+    "verificationCode": "string"
+  },
+  "Mail": {
+    "id": 64,
+    "account": "MailAccount",
+    "background": "boolean",
+    "content": "HTML",
+    "content_html": {
+      "expr": "content"
+    },
+    "date": "date",
+    "document": "Document",
+    "error": "string",
+    "fromEmail": "string",
+    "fromName": "string",
+    "letter": "Letter",
+    "magicLink": "MagicLink",
+    "organization": "Organization",
+    "out": "boolean",
+    "read": "boolean",
+    "scheduledItem": "ScheduledItem",
+    "subject": "string",
+    "successful": {
+      "expr": "transmitted and error=null"
+    },
+    "transmissionDate": "date",
+    "transmitted": "boolean"
+  },
+  "MailAccount": {
+    "id": 63,
+    "default": "boolean",
+    "email": "string",
+    "event": "Event",
+    "icon": {
+      "expr": "image('images/16/mailbox.png')"
+    },
+    "name": "string",
+    "organization": "Organization",
+    "signatureLabel": "Label",
+    "smtpAccount": "SmtpAccount"
+  },
+  "Media": {
+    "id": 127,
+    "durationMillis": "long",
+    "lang": "string",
+    "multilang": "boolean",
+    "ord": "integer",
+    "scheduledItem": "ScheduledItem",
+    "type": "string",
+    "url": "string"
+  },
+  "MediaConsumption": {
+    "id": 130,
+    "action": {
+      "expr": "played ? 'Played' : downloaded ? 'Downloaded' : livestreamed ? 'Livestreamed' : '???'"
+    },
+    "attendance": "Attendance",
+    "date": "date",
+    "downloaded": "boolean",
+    "durationMillis": "long",
+    "livestreamed": "boolean",
+    "media": "Media",
+    "mediaInfo": {
+      "expr": "scheduledItem.item.icon,'' + scheduledItem.date + ' - ' + scheduledItem.name"
+    },
+    "played": "boolean",
+    "scheduledItem": "ScheduledItem"
+  },
+  "Method": {
+    "id": 52,
+    "code": "string",
+    "icon": {
+      "expr": "image('images/16/methods/' + code + '.png')"
+    },
+    "label": "Label",
+    "name": "string"
+  },
+  "MethodSupport": {
+    "id": 55,
+    "in": "boolean",
+    "method": "Method",
+    "moneyAccountType": "MoneyAccountType",
+    "out": "boolean"
+  },
+  "Metrics": {
+    "id": 92,
+    "date": "date",
+    "ltTestSetId": "LtTestSet",
+    "memoryFree": "long",
+    "memoryMax": "long",
+    "memoryTotal": "long",
+    "memoryUsed": {
+      "expr": "memoryTotal - memoryFree"
+    },
+    "processCpuLoad": "long",
+    "systemLoadAverage": "long"
+  },
+  "MoneyAccount": {
+    "id": 53,
+    "bankSystemAccount": "string",
+    "closed": "boolean",
+    "currency": "Currency",
+    "event": "Event",
+    "gatewayCompany": "GatewayCompany",
+    "icon": {
+      "expr": "type.icon"
+    },
+    "label": "Label",
+    "name": "string",
+    "organization": "Organization",
+    "thirdParty": "string",
+    "type": "MoneyAccountType"
+  },
+  "MoneyAccountType": {
+    "id": 54,
+    "code": "string",
+    "customer": "boolean",
+    "icon": {
+      "expr": "image('images/16/moneyAccountTypes/' + code + '.png')"
+    },
+    "internal": "boolean",
+    "label": "Label",
+    "name": "string",
+    "supplier": "boolean"
+  },
+  "MoneyFlow": {
+    "id": 45,
+    "autoTransferTime": "date",
+    "fromMoneyAccount": "MoneyAccount",
+    "icon": {
+      "expr": "image('images/16/moneyFlow.png')"
+    },
+    "method": "Method",
+    "negativeAmounts": "boolean",
+    "organization": "Organization",
+    "positiveAmounts": "boolean",
+    "toMoneyAccount": "MoneyAccount"
+  },
+  "MoneyFlowPriority": {
+    "id": 80,
+    "flow": "MoneyFlow",
+    "ord": "integer",
+    "username": "string"
+  },
+  "MoneyFlowType": {
+    "id": 56,
+    "fromMoneyAccountType": "MoneyAccountType",
+    "icon": {
+      "expr": "image('images/16/moneyFlow.png')"
+    },
+    "toMoneyAccountType": "MoneyAccountType"
+  },
+  "MoneyTransfer": {
+    "id": 57,
+    "amount": "Price",
+    "anotherEventDocument": {
+      "expr": "document"
+    },
+    "balance": {
+      "expr": "(toMoneyAccount=?selectedMoneyAccount) ? toMoneyAccountBalance : fromMoneyAccountBalance"
+    },
+    "comment": "string",
+    "currency": {
+      "expr": "parent != null ? parent.fromMoneyAccount.currency : fromMoneyAccount.currency"
+    },
+    "date": "date",
+    "document": "Document",
+    "error": {
+      "expr": "expectedAmount!=null ? amount-expectedAmount : null"
+    },
+    "expectedAmount": "Price",
+    "fromMoneyAccount": "MoneyAccount",
+    "fromMoneyAccountBalance": "Price",
+    "gatewayAccesscode": "string",
+    "gatewayGeneratePaymentUrlResponse": "string",
+    "gatewayResponse": "string",
+    "icon": {
+      "expr": "method.icon"
+    },
+    "method": "Method",
+    "methodIcon": {
+      "expr": "method.icon"
+    },
+    "methodNotCircled": "boolean",
+    "parent": "MoneyTransfer",
+    "parentFromMoneyAccount": {
+      "expr": "parent.fromMoneyAccount"
+    },
+    "parentMethod": {
+      "expr": "parent.method"
+    },
+    "parentToMoneyAccount": {
+      "expr": "parent.toMoneyAccount"
+    },
+    "payment": "boolean",
+    "pending": "boolean",
+    "read": "boolean",
+    "receiptsTransfer": "boolean",
+    "refund": "boolean",
+    "sessionid": "string",
+    "spread": "boolean",
+    "status": "string",
+    "successful": "boolean",
+    "toMoneyAccount": "MoneyAccount",
+    "toMoneyAccountBalance": "Price",
+    "transactionRef": "string",
+    "transfer": "MoneyTransfer",
+    "validAmount": {
+      "expr": "successful ? amount : 0"
+    },
+    "verified": "boolean",
+    "verifier": "string",
+    "wireless": "boolean"
+  },
+  "MultipleBooking": {
+    "id": 74,
+    "all": "integer",
+    "event": "Event",
+    "notCancelled": "integer"
+  },
+  "News": {
+    "id": 116,
+    "channel": "Channel",
+    "channelNewsId": "integer",
+    "date": "date",
+    "excerpt": "string",
+    "imageUrl": "string",
+    "lang": "string",
+    "linkUrl": "string",
+    "teacher": "Teacher",
+    "teachingTopic": "Topic",
+    "title": "string",
+    "topic": "Topic",
+    "withVideos": "boolean"
+  },
+  "Operation": {
+    "id": 102,
+    "backend": "boolean",
+    "backoffice": {
+      "expr": "backend"
+    },
+    "code": {
+      "expr": "operationCode"
+    },
+    "frontend": "boolean",
+    "frontoffice": {
+      "expr": "frontend"
+    },
+    "grantRoute": "string",
+    "group": "OperationGroup",
+    "guest": "boolean",
+    "i18nCode": "string",
+    "label": "Label",
+    "name": "string",
+    "operationCode": "string",
+    "public": "boolean",
+    "readOnly": "boolean"
+  },
+  "OperationGroup": {
+    "id": 133,
+    "name": "string"
+  },
+  "Option": {
+    "id": 40,
+    "adultAllowed": "boolean",
+    "ageErrorLabel": "Label",
+    "allocate": "boolean",
+    "arrivalSite": "Site",
+    "attendanceDatesShift": "integer",
+    "attendanceDocument": "boolean",
+    "attendanceOption": "Option",
+    "bottomLabel": "Label",
+    "cartGroupFamily": "ItemFamily",
+    "cartGroupItem": "Item",
+    "cartGroupLabel": "Label",
+    "cartGroupSite": "Site",
+    "childAllowed": "boolean",
+    "childrenDynamic": "boolean",
+    "childrenPromptLabel": "Label",
+    "childrenRadio": "boolean",
+    "commentLabel": "Label",
+    "dateTimeRange": "string",
+    "dev": "boolean",
+    "documentLineComment": "string",
+    "event": "Event",
+    "femaleAllowed": "boolean",
+    "firstDay": "date",
+    "firstExcludedDay": "date",
+    "firstPass": "boolean",
+    "firstPassOff": "date",
+    "firstPassOn": "date",
+    "floating": "boolean",
+    "folder": "boolean",
+    "footerLabel": "Label",
+    "forceSoldout": "boolean",
+    "forceSoldoutOff": "date",
+    "forceSoldoutOn": "date",
+    "frame": "boolean",
+    "hide": "boolean",
+    "hideDays": "boolean",
+    "hidePerPerson": "boolean",
+    "icon": {
+      "expr": "image('images/16/' + (folder ? 'folder' : 'options') + '.png')"
+    },
+    "invalid": "boolean",
+    "item": "Item",
+    "itemFamily": "ItemFamily",
+    "itemFamilyIcon": {
+      "expr": "coalesce(item.family.icon,itemFamily.icon)"
+    },
+    "label": "Label",
+    "lastDay": "date",
+    "lastExcludedDay": "date",
+    "layAllowed": "boolean",
+    "layout": "string",
+    "maleAllowed": "boolean",
+    "matesOptional": "boolean",
+    "maxAge": "integer",
+    "maxDay": "integer",
+    "minAge": "integer",
+    "minDay": "integer",
+    "name": "string",
+    "obligatory": "boolean",
+    "obligatoryAgreement": "boolean",
+    "online": "boolean",
+    "onlineOff": "date",
+    "onlineOn": "date",
+    "ord": "integer",
+    "ordainedAllowed": "boolean",
+    "parent": "Option",
+    "partialEnabled": "boolean",
+    "perDayAvailability": "boolean",
+    "popupLabel": "Label",
+    "price_custom": "Price",
+    "promptLabel": "Label",
+    "propagateFieldsFromParent": "boolean",
+    "quantityLabel": "Label",
+    "quantityMax": "integer",
+    "radioTraversal": "boolean",
+    "rate": "Rate",
+    "secondPass": "boolean",
+    "secondPassOff": "date",
+    "secondPassOn": "date",
+    "selected": "boolean",
+    "sharingItem": "Item",
+    "site": "Site",
+    "splitWholePartial": "boolean",
+    "template": "boolean",
+    "text": {
+      "expr": "coalesce(name,'') + ' ' + coalesce(site.name,'') + ' ' + coalesce(item.name,'')"
+    },
+    "timeRange": "string",
+    "topLabel": "Label",
+    "visibleCondition": "string"
+  },
+  "OptionCondition": {
+    "id": 81,
+    "anyDay": "boolean",
+    "firstDay": "date",
+    "ifItemFamily": "ItemFamily",
+    "ifMainSite": "boolean",
+    "ifNotMainSite": "boolean",
+    "ifOption": "Option",
+    "ifSite": "Site",
+    "isGroup": "boolean",
+    "isGroupOr": "boolean",
+    "isNot": "boolean",
+    "lastDay": "date",
+    "option": "Option",
+    "parent": "OptionCondition"
+  },
+  "Organization": {
+    "id": 30,
+    "cityName": "string",
+    "closed": "boolean",
+    "country": "Country",
+    "currency": "Currency",
+    "domainName": "string",
+    "email": "string",
+    "ga_trackingId": "string",
+    "globalSite": "Site",
+    "icon": {
+      "expr": "id=1 ? image('images/16/organizations/nkt.png') : id=263 ? image('images/16/organizations/isc.png') : type.icon"
+    },
+    "importIssue": "string",
+    "kdmCenter": "KdmCenter",
+    "language": "Language",
+    "latitude": "float",
+    "longitude": "float",
+    "name": "string",
+    "phone": "string",
+    "postCode": "string",
+    "privacyUrlLabel": "Label",
+    "street": "string",
+    "teachingsDayTicketItem": "Item",
+    "termsUrlDe": "string",
+    "termsUrlEn": "string",
+    "termsUrlEs": "string",
+    "termsUrlFr": "string",
+    "termsUrlLabel": "Label",
+    "termsUrlPt": "string",
+    "timezone": "string",
+    "type": "OrganizationType"
+  },
+  "OrganizationType": {
+    "id": 31,
+    "code": "string",
+    "icon": {
+      "expr": "image('images/16/organizations/' + (id=2? 'kmc' : id=3 ? 'kbc' : id=4 ? 'branch' : 'generic') + '.png')"
+    },
+    "name": "string"
+  },
+  "Package": {
+    "id": 50,
+    "icon": {
+      "expr": "image('images/16/package.png')"
+    },
+    "name": "string"
+  },
+  "PackageItem": {
+    "id": 51,
+    "item": "Item",
+    "package": "Package"
+  },
+  "PassTemplate": {
+    "id": 150,
+    "createdAt": "date",
+    "createdBy": "Person",
+    "design": "string",
+    "modifiedAt": "date",
+    "name": "string",
+    "organization": "Organization",
+    "removed": "boolean"
+  },
+  "Person": {
+    "id": 66,
+    "abcNames": "string",
+    "accountPerson": "Person",
+    "admin1Name": "string",
+    "admin2Name": "string",
+    "birthdate": "date",
+    "cityGeonameid": "integer",
+    "cityLatitude": "float",
+    "cityLongitude": "float",
+    "cityName": "string",
+    "country": "Country",
+    "countryCode": "string",
+    "countryName": "string",
+    "email": "string",
+    "emailingList": "boolean",
+    "firstName": "string",
+    "frontendAccount": "FrontendAccount",
+    "fullName": {
+      "expr": "firstName + ' ' + lastName"
+    },
+    "genderIcon": {
+      "expr": "image('images/16/' + (ordained ? (male ? 'monk' : 'nun') : (male ? 'male' : 'female')) + '.png')"
+    },
+    "lastName": "string",
+    "layName": "string",
+    "male": "boolean",
+    "name": {
+      "expr": "firstName + ' ' + lastName"
+    },
+    "nationality": "string",
+    "neverBooked": "boolean",
+    "ordained": "boolean",
+    "organization": "Organization",
+    "organizationName": "string",
+    "owner": "boolean",
+    "passport": "string",
+    "phone": "string",
+    "postCode": "string",
+    "removed": "boolean",
+    "resident": "boolean",
+    "street": "string"
+  },
+  "Playlist": {
+    "id": 125,
+    "name": "string"
+  },
+  "Podcast": {
+    "id": 117,
+    "audioUrl": "string",
+    "channel": "Channel",
+    "channelPodcastId": "integer",
+    "date": "date",
+    "durationMillis": "long",
+    "excerpt": "string",
+    "imageUrl": "string",
+    "teacher": "Teacher",
+    "title": "string",
+    "wistiaVideoId": "string"
+  },
+  "PolicyScope": {
+    "id": 142,
+    "event": "Event",
+    "eventType": "EventType",
+    "organization": "Organization",
+    "site": "Site"
+  },
+  "Pool": {
+    "id": 140,
+    "allowsPublic": "boolean",
+    "bookable": "boolean",
+    "description": "string",
+    "descriptionLabel": "Label",
+    "eventPool": "boolean",
+    "eventType": "EventType",
+    "graphic": "string",
+    "label": "Label",
+    "name": "string",
+    "ord": "integer",
+    "webColor": "string"
+  },
+  "PoolAllocation": {
+    "id": 141,
+    "event": "Event",
+    "person": "Person",
+    "pool": "Pool",
+    "publicBookingEnabled": "boolean",
+    "quantity": "integer",
+    "resource": "Resource"
+  },
+  "Rate": {
+    "id": 41,
+    "age1_discount": "integer",
+    "age1_max": "integer",
+    "age1_price": "Price",
+    "age2_discount": "integer",
+    "age2_max": "integer",
+    "age2_price": "Price",
+    "age3_discount": "integer",
+    "age3_max": "integer",
+    "age3_price": "Price",
+    "applicableToInPerson": "boolean",
+    "applicableToOnline": "boolean",
+    "arrivalSite": "Site",
+    "arrivingOrLeaving": "boolean",
+    "comment": "string",
+    "commentLabel": "Label",
+    "currency": "Currency",
+    "cutoffDate": "date",
+    "cutoffDate2": "date",
+    "cutoffDate3": "date",
+    "cutoffDate4": "date",
+    "cutoffDate5": "date",
+    "discoveryReduced_discount": "integer",
+    "discoveryReduced_price": "Price",
+    "discovery_discount": "integer",
+    "discovery_price": "Price",
+    "endDate": "date",
+    "facilityFee_discount": "integer",
+    "facilityFee_price": "Price",
+    "guest_discount": "integer",
+    "guest_price": "Price",
+    "icon": {
+      "expr": "image('images/16/rate.png')"
+    },
+    "item": "Item",
+    "maxAge": "integer",
+    "maxDay": "integer",
+    "minAge": "integer",
+    "minDay": "integer",
+    "minDayCeiling": "boolean",
+    "minDeposit": "integer",
+    "minDeposit2": "integer",
+    "minDeposit3": "integer",
+    "minDeposit4": "integer",
+    "minDeposit5": "integer",
+    "minDeposit6": "integer",
+    "nonRefundable": "integer",
+    "nonRefundable2": "integer",
+    "nonRefundable3": "integer",
+    "nonRefundable4": "integer",
+    "nonRefundable5": "integer",
+    "nonRefundable6": "integer",
+    "offDate": "date",
+    "onDate": "date",
+    "organization": "Organization",
+    "package": "Package",
+    "perDay": "boolean",
+    "perPerson": "boolean",
+    "price": "Price",
+    "resident2_discount": "integer",
+    "resident2_price": "Price",
+    "resident_discount": "integer",
+    "resident_price": "Price",
+    "sale": "boolean",
+    "site": "Site",
+    "startDate": "date",
+    "unemployed_discount": "integer",
+    "unemployed_price": "Price",
+    "workingVisit_discount": "integer",
+    "workingVisit_price": "Price"
+  },
+  "Recipient": {
+    "id": 65,
+    "bcc": "boolean",
+    "cc": "boolean",
+    "email": "string",
+    "mail": "Mail",
+    "name": "string",
+    "ok": "boolean",
+    "permanentError": "boolean",
+    "person": "Person",
+    "temporaryError": "boolean",
+    "to": "boolean"
+  },
+  "Resource": {
+    "id": 43,
+    "building": "Building",
+    "buildingZone": "BuildingZone",
+    "cleaningState": "string",
+    "icon": {
+      "expr": "siteItemFamily.itemFamily.icon"
+    },
+    "kbs2ToKbs3GlobalResource": "Resource",
+    "lastCleaningDate": "date",
+    "lastInspectionDate": "date",
+    "name": "string",
+    "site": "Site",
+    "siteItemFamily": "SiteItemFamily",
+    "siteItemFamilyCode": "string",
+    "triggerDuplicate": "integer"
+  },
+  "ResourceConfiguration": {
+    "id": 44,
+    "allowsFemale": "boolean",
+    "allowsGuest": "boolean",
+    "allowsMale": "boolean",
+    "allowsResident": "boolean",
+    "allowsResidentFamily": "boolean",
+    "allowsSpecialGuest": "boolean",
+    "allowsVolunteer": "boolean",
+    "building": {
+      "expr": "resource.building"
+    },
+    "comment": "string",
+    "endDate": "date",
+    "event": "Event",
+    "icon": {
+      "expr": "resource.icon"
+    },
+    "item": "Item",
+    "max": "integer",
+    "max_online": {
+      "expr": "max - max_paper - max_private"
+    },
+    "max_paper": "integer",
+    "max_private": "integer",
+    "name": {
+      "expr": "resource.name"
+    },
+    "online": "boolean",
+    "resource": "Resource",
+    "startDate": "date"
+  },
+  "ScheduledBoundary": {
+    "id": 144,
+    "atStartTime": "boolean",
+    "date": "date",
+    "event": "Event",
+    "scheduledItem": "ScheduledItem",
+    "timeline": "Timeline"
+  },
+  "ScheduledItem": {
+    "id": 114,
+    "available": "boolean",
+    "bookableScheduledItem": "ScheduledItem",
+    "cancelled": "boolean",
+    "comment": "string",
+    "commentLabel": "Label",
+    "date": "date",
+    "endTime": "date",
+    "event": "Event",
+    "expirationDate": "date",
+    "item": "Item",
+    "label": "Label",
+    "name": "string",
+    "online": "boolean",
+    "programScheduledItem": "ScheduledItem",
+    "published": "boolean",
+    "resource": "boolean",
+    "site": "Site",
+    "startTime": "date",
+    "teacher": "Teacher",
+    "timeline": "Timeline",
+    "vodDelayed": "boolean"
+  },
+  "ScheduledResource": {
+    "id": 115,
+    "available": "boolean",
+    "configuration": "ResourceConfiguration",
+    "date": "date",
+    "max": "integer",
+    "online": "boolean",
+    "scheduledItem": "ScheduledItem"
+  },
+  "Sector": {
+    "id": 34,
+    "icon": {
+      "expr": "image('images/16/sector.png')"
+    },
+    "name": "string"
+  },
+  "SessionAgent": {
+    "id": 103,
+    "agentString": "string",
+    "end": "date",
+    "next": "SessionAgent",
+    "previous": "SessionAgent",
+    "start": "date"
+  },
+  "SessionApplication": {
+    "id": 104,
+    "agent": "SessionAgent",
+    "buildNumber": "integer",
+    "buildNumberString": "string",
+    "buildTimestamp": "date",
+    "buildTimestampString": "string",
+    "buildTool": "string",
+    "end": "date",
+    "name": "string",
+    "next": "SessionApplication",
+    "previous": "SessionApplication",
+    "start": "date",
+    "version": "string"
+  },
+  "SessionConnection": {
+    "id": 106,
+    "end": "date",
+    "next": "SessionConnection",
+    "previous": "SessionConnection",
+    "process": "SessionProcess",
+    "start": "date"
+  },
+  "SessionProcess": {
+    "id": 105,
+    "application": "SessionApplication",
+    "end": "date",
+    "next": "SessionProcess",
+    "previous": "SessionProcess",
+    "start": "date"
+  },
+  "SessionUser": {
+    "id": 107,
+    "end": "date",
+    "next": "SessionUser",
+    "previous": "SessionUser",
+    "process": "SessionProcess",
+    "start": "date",
+    "user": "Person"
+  },
+  "Site": {
+    "id": 42,
+    "address": "string",
+    "asksForPassport": "boolean",
+    "branch": "boolean",
+    "code": "string",
+    "country": "Country",
+    "event": "Event",
+    "forceSoldout": "boolean",
+    "groupName": "string",
+    "hideDates": "boolean",
+    "icon": {
+      "expr": "image('images/16/site.png')"
+    },
+    "imageUrl": "string",
+    "itemFamily": "ItemFamily",
+    "label": "Label",
+    "main": "boolean",
+    "name": "string",
+    "online": "boolean",
+    "ord": "integer",
+    "organization": "Organization",
+    "topLabel": "Label"
+  },
+  "SiteItemFamily": {
+    "id": 62,
+    "autoRelease": "boolean",
+    "itemFamily": "ItemFamily",
+    "scheduledEndDate": "date",
+    "site": "Site"
+  },
+  "SmtpAccount": {
+    "id": 58,
+    "host": "string",
+    "icon": {
+      "expr": "image('images/16/smtp.png')"
+    },
+    "organization": "Organization",
+    "password": "string",
+    "port": "integer",
+    "quota": "SmtpQuota",
+    "ssl": "boolean",
+    "username": "string"
+  },
+  "SmtpQuota": {
+    "id": 59,
+    "icon": {
+      "expr": "image('images/16/smtpQuota.png')"
+    },
+    "name": "string"
+  },
+  "Tag": {
+    "id": 111,
+    "classId": "string",
+    "creationDate": "date",
+    "icon": {
+      "expr": "image('images/16/tag')"
+    },
+    "name": "string"
+  },
+  "Tagged": {
+    "id": 112,
+    "objectId": "long",
+    "tag": "Tag"
+  },
+  "TaskMetrics": {
+    "id": 129,
+    "endTime": "date",
+    "error": "string",
+    "language": "string",
+    "name": "string",
+    "parameters": "string",
+    "parent": "TaskMetrics",
+    "result": "string",
+    "serverIP": "string",
+    "serverSoftware": "string",
+    "sessionId": "string",
+    "startTime": "date",
+    "statement": "string",
+    "userAgent": "string",
+    "userIP": "string",
+    "userSoftware": "string",
+    "username": "string"
+  },
+  "Teacher": {
+    "id": 90,
+    "hasPodcasts": "boolean",
+    "hasVideos": "boolean",
+    "image": "Image",
+    "label": "Label",
+    "name": "string",
+    "organization": "Organization",
+    "person": "Person",
+    "whoLabel": "Label"
+  },
+  "Timeline": {
+    "id": 113,
+    "audioOffered": "boolean",
+    "dayTemplate": "DayTemplate",
+    "endTime": "date",
+    "event": "Event",
+    "eventTimeline": "Timeline",
+    "item": "Item",
+    "itemFamily": "ItemFamily",
+    "label": "Label",
+    "name": "string",
+    "site": "Site",
+    "startTime": "date",
+    "videoOffered": "boolean"
+  },
+  "Topic": {
+    "id": 122,
+    "channelTopicId": "string",
+    "label": "Label",
+    "name": "string",
+    "teaching": "boolean",
+    "virtuous": "boolean"
+  },
+  "Video": {
+    "id": 123,
+    "date": "date",
+    "durationMillis": "long",
+    "excerpt": "string",
+    "height": "integer",
+    "imageUrl": "string",
+    "lang": "string",
+    "mediaId": "string",
+    "news": "News",
+    "ord": "integer",
+    "playlist": "Playlist",
+    "public": "boolean",
+    "teacher": "Teacher",
+    "title": "string",
+    "width": "integer",
+    "wistiaVideoId": "string",
+    "youtubeVideoId": "string"
+  },
+  "VolunteeringApplication": {
+    "id": 153,
+    "additionalInfo": "HTML",
+    "arrivalConfirmationToken": "string",
+    "arrivalReminderSentAt": "date",
+    "arrivalTokenExpiresAt": "date",
+    "arrivalTokenUsedAt": "date",
+    "communityLifeAccepted": "boolean",
+    "communityLifeDate": "date",
+    "country": "Country",
+    "countryName": "string",
+    "criminalConvictions": "HTML",
+    "dateFlexibility": "string",
+    "dateNotes": "HTML",
+    "dateOfBirth": "date",
+    "datesConfirmed": "boolean",
+    "datesNotes": "HTML",
+    "datesStatus": "string",
+    "diet": "string",
+    "dietItem": "Item",
+    "document": "Document",
+    "earliestStartDate": "date",
+    "email": "string",
+    "emergencyContactName": "string",
+    "emergencyContactPhone": "string",
+    "emergencyContactRelationship": "string",
+    "emergencyDataConsent": "boolean",
+    "endDate": "date",
+    "endTime": "string",
+    "englishLevel": "integer",
+    "firstName": "string",
+    "fitnessLevel": "string",
+    "formType": "string",
+    "gender": "string",
+    "hasCriminalConvictions": "boolean",
+    "hasMedicalInsurance": "boolean",
+    "healthInfo": "HTML",
+    "howHeardAboutUs": "string",
+    "icon": {
+      "expr": "image('images/16/volunteer.png')"
+    },
+    "immigrationStatus": "string",
+    "immigrationStatusOther": "HTML",
+    "lastName": "string",
+    "latestEndDate": "date",
+    "notes": "HTML",
+    "occupation": "string",
+    "ordainedName": "string",
+    "organization": "Organization",
+    "originalEndDate": "date",
+    "originalStartDate": "date",
+    "passportCountry": "string",
+    "passportType": "string",
+    "person": "Person",
+    "phone": "string",
+    "photo": "string",
+    "preferredAreas": "string",
+    "prerequisiteStatus": "string",
+    "previousExperience": "HTML",
+    "previousNktDetails": "HTML",
+    "previousNktVolunteering": "boolean",
+    "priorVolunteerDays": "integer",
+    "priorVolunteeredElsewhere": "boolean",
+    "privacyNoticeAccepted": "boolean",
+    "refereeDataConsent": "boolean",
+    "referenceEmail": "string",
+    "referenceJobTitle": "string",
+    "referenceName": "string",
+    "referenceNotes": "HTML",
+    "referencePhone": "string",
+    "referenceStatus": "string",
+    "referenceVerificationDate": "date",
+    "removed": "boolean",
+    "resource": "Resource",
+    "room": "Resource",
+    "shareCode": "string",
+    "skills": "string",
+    "springFestivalAttending": "boolean",
+    "startDate": "date",
+    "startTime": "string",
+    "status": "string",
+    "summerFestivalAttending": "boolean",
+    "termsAccepted": "boolean",
+    "termsDate": "date",
+    "ukEntryDate": "date",
+    "ukPassportHolder": "boolean",
+    "visaAppliedDate": "date",
+    "visaApprovedDate": "date",
+    "visaNotes": "HTML",
+    "visaStatus": "string",
+    "visaType": "string",
+    "visitReason": "string",
+    "visitReasonOther": "HTML",
+    "volunteer30dayConfirmed": "boolean",
+    "whyVolunteer": "HTML",
+    "workOnArrivalDay": "boolean",
+    "workOnDepartureDay": "boolean"
+  },
+  "VolunteeringArea": {
+    "id": 152,
+    "active": "boolean",
+    "baselineWeekday": "integer",
+    "baselineWeekend": "integer",
+    "color": "string",
+    "icon": "string",
+    "managerEmail": "string",
+    "managerName": "string",
+    "managerPhone": "string",
+    "name": "string",
+    "organization": "Organization",
+    "slug": "string",
+    "workDaysPerWeek": "integer"
+  },
+  "VolunteeringAssignment": {
+    "id": 154,
+    "application": "VolunteeringApplication",
+    "area": "VolunteeringArea",
+    "endDate": "date",
+    "icon": {
+      "expr": "image('images/16/volunteer.png')"
+    },
+    "organization": "Organization",
+    "removed": "boolean",
+    "startDate": "date"
+  },
+  "VolunteeringCommunication": {
+    "id": 156,
+    "application": "VolunteeringApplication",
+    "content": "HTML",
+    "date": "date",
+    "direction": "string",
+    "icon": {
+      "expr": "image('images/16/volunteer.png')"
+    },
+    "organization": "Organization",
+    "removed": "boolean",
+    "subject": "string",
+    "type": "string",
+    "user": "string"
+  },
+  "VolunteeringOrganizationConfig": {
+    "id": 151,
+    "accommodationItem": "Item",
+    "active": "boolean",
+    "applicationFormIntro": "HTML",
+    "breakfastItem": "Item",
+    "description": "HTML",
+    "dietaryFamilyCode": "string",
+    "dinnerItem": "Item",
+    "icon": {
+      "expr": "image('images/16/volunteer.png')"
+    },
+    "kbsSmtpMailAccount": "MailAccount",
+    "logoUrl": "string",
+    "lunchItem": "Item",
+    "name": "string",
+    "organization": "Organization",
+    "primaryColor": "string",
+    "publicApplicationsEnabled": "boolean",
+    "reminderDaysBeforeArrival": "integer",
+    "site": "Site",
+    "timezone": "string",
+    "volunteerEvent": "Event",
+    "workOnArrivalDay": "boolean",
+    "workOnDepartureDay": "boolean"
+  },
+  "VolunteeringSpecialNeeds": {
+    "id": 157,
+    "area": "VolunteeringArea",
+    "endDate": "date",
+    "extraCount": "integer",
+    "icon": {
+      "expr": "image('images/16/volunteer.png')"
+    },
+    "organization": "Organization",
+    "priority": "string",
+    "reason": "HTML",
+    "removed": "boolean",
+    "startDate": "date"
+  },
+  "VolunteeringTimeline": {
+    "id": 155,
+    "application": "VolunteeringApplication",
+    "date": "date",
+    "event": "string",
+    "icon": {
+      "expr": "image('images/16/volunteer.png')"
+    },
+    "organization": "Organization",
+    "status": "string",
+    "user": "string"
+  }
+}

@@ -24,7 +24,6 @@ import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
-import one.modality.base.shared.domainmodel.formatters.PriceFormatter;
 import one.modality.base.shared.entities.*;
 import one.modality.base.shared.entities.formatters.EventPriceFormatter;
 import one.modality.base.shared.knownitems.KnownItemFamily;
@@ -42,7 +41,8 @@ import static one.modality.booking.backoffice.activities.registration.Registrati
 /**
  * Booking tab for the Registration Edit Modal.
  * <p>
- * New layout based on RegistrationDashboardFull.jsx TimelineOptionsEditor (lines 3873-7248):
+ * New layout based on RegistrationDashboardFull.jsx TimelineOptionsEditor
+ * (lines 3873-7248):
  * - Header with accommodation status, date steppers, notes button, total price
  * - Timeline canvas showing booking options over event period
  * - Line item rows with category colors
@@ -63,13 +63,15 @@ public class BookingTab {
     // WorkingBooking manages the booking state using event sourcing
     private WorkingBooking workingBooking;
 
-    // Observable property to track WorkingBooking changes (bound when workingBooking is loaded)
+    // Observable property to track WorkingBooking changes (bound when
+    // workingBooking is loaded)
     private final BooleanProperty hasChangesProperty = new SimpleBooleanProperty(false);
 
     // Document lines from WorkingBooking (kept in sync for UI binding)
     private final ObservableList<DocumentLine> loadedLines = FXCollections.observableArrayList();
 
-    // Attendance dates grouped by DocumentLine ID for quick lookup (built from WorkingBooking)
+    // Attendance dates grouped by DocumentLine ID for quick lookup (built from
+    // WorkingBooking)
     private Map<Object, Set<LocalDate>> attendanceDatesByLineId = new HashMap<>();
 
     // UI Components
@@ -90,7 +92,8 @@ public class BookingTab {
     // Loading state
     private boolean isLoading = false;
 
-    public BookingTab(ViewDomainActivityBase activity, RegistrationPresentationModel pm, Document document, UpdateStore updateStore) {
+    public BookingTab(ViewDomainActivityBase activity, RegistrationPresentationModel pm, Document document,
+            UpdateStore updateStore) {
         this.activity = activity;
         this.pm = pm;
         this.document = document;
@@ -242,7 +245,8 @@ public class BookingTab {
         group.setAlignment(Pos.CENTER);
 
         // Arrival stepper (green theme)
-        Node arrivalStepper = createDateStepper("Arrival", arrivalDateProperty, ARRIVAL_BG, ARRIVAL_TEXT, ARRIVAL_BORDER, true);
+        Node arrivalStepper = createDateStepper("Arrival", arrivalDateProperty, ARRIVAL_BG, ARRIVAL_TEXT,
+                ARRIVAL_BORDER, true);
 
         // Duration badge
         Label durationBadge = new Label("- nights");
@@ -264,7 +268,8 @@ public class BookingTab {
         }, arrivalDateProperty, departureDateProperty);
 
         // Departure stepper (red theme)
-        Node departureStepper = createDateStepper("Departure", departureDateProperty, DEPARTURE_BG, DEPARTURE_TEXT, DEPARTURE_BORDER, false);
+        Node departureStepper = createDateStepper("Departure", departureDateProperty, DEPARTURE_BG, DEPARTURE_TEXT,
+                DEPARTURE_BORDER, false);
 
         group.getChildren().addAll(arrivalStepper, durationBadge, departureStepper);
         return group;
@@ -273,7 +278,8 @@ public class BookingTab {
     /**
      * Creates a date stepper control.
      */
-    private Node createDateStepper(String label, ObjectProperty<LocalDate> dateProperty, Color bg, Color text, Color border, boolean isArrival) {
+    private Node createDateStepper(String label, ObjectProperty<LocalDate> dateProperty, Color bg, Color text,
+            Color border, boolean isArrival) {
         HBox stepper = new HBox(2);
         stepper.setAlignment(Pos.CENTER);
         stepper.setPadding(new Insets(4, 8, 4, 8));
@@ -378,7 +384,8 @@ public class BookingTab {
         labelText.setFont(Font.font("System", 9));
         labelText.setTextFill(TEXT_MUTED);
 
-        Label priceText = new Label(formatPrice(document.getPriceNet() != null ? document.getPriceNet() : 0));
+        Label priceText = new Label(EventPriceFormatter
+                .formatWithCurrency(document.getPriceNet() != null ? document.getPriceNet() : 0, document.getEvent()));
         priceText.setFont(Font.font("System", FontWeight.BOLD, 16));
         priceText.setTextFill(WARM_BROWN);
 
@@ -462,7 +469,8 @@ public class BookingTab {
         boolean hasAttendance = currentAttendanceDates.contains(date);
 
         System.out.println("=== DEBUG: handleDayToggled ===");
-        System.out.println("  Line ID: " + lineId + " (type: " + (lineId != null ? lineId.getClass().getSimpleName() : "null") + ")");
+        System.out.println("  Line ID: " + lineId + " (type: "
+                + (lineId != null ? lineId.getClass().getSimpleName() : "null") + ")");
         System.out.println("  Date: " + date);
         System.out.println("  Map keys: " + attendanceDatesByLineId.keySet());
         System.out.println("  Currently has attendance: " + hasAttendance);
@@ -479,22 +487,27 @@ public class BookingTab {
         String itemName = line.getItem() != null ? line.getItem().getName() : "Option";
         String siteName = line.getSite() != null ? line.getSite().getName() : null;
         String optionDescription = siteName != null ? itemName + " (" + siteName + ")" : itemName;
-        String formattedDate = date.getDayOfMonth() + " " + date.getMonth().toString().substring(0, 3) + " " + date.getYear();
-        trackAttendanceChange((hasAttendance ? "Removed" : "Added") + " date " + formattedDate + " for " + optionDescription);
+        String formattedDate = date.getDayOfMonth() + " " + date.getMonth().toString().substring(0, 3) + " "
+                + date.getYear();
+        trackAttendanceChange(
+                (hasAttendance ? "Removed" : "Added") + " date " + formattedDate + " for " + optionDescription);
     }
 
     /**
-     * Adds an attendance record for the specified line and date using WorkingBooking.bookScheduledItems().
+     * Adds an attendance record for the specified line and date using
+     * WorkingBooking.bookScheduledItems().
      */
     private void addAttendance(DocumentLine line, LocalDate date) {
-        if (workingBooking == null) return;
+        if (workingBooking == null)
+            return;
 
         Object lineId = Entities.getPrimaryKey(line);
 
         // Find the ScheduledItem matching this date and item from PolicyAggregate
         ScheduledItem scheduledItem = findScheduledItemForDateAndItem(date, line);
         if (scheduledItem == null) {
-            System.err.println("  Cannot add attendance: No ScheduledItem found for date " + date + " and item " + line.getItem());
+            System.err.println(
+                    "  Cannot add attendance: No ScheduledItem found for date " + date + " and item " + line.getItem());
             return;
         }
 
@@ -506,9 +519,11 @@ public class BookingTab {
         hasChangesProperty.unbind();
         hasChangesProperty.set(true);
 
-        System.out.println("  Added attendance via WorkingBooking.bookScheduledItems for date: " + date + " with ScheduledItem: " + scheduledItem.getId());
+        System.out.println("  Added attendance via WorkingBooking.bookScheduledItems for date: " + date
+                + " with ScheduledItem: " + scheduledItem.getId());
 
-        // Update local map for immediate UI feedback - find matching key using Entities.samePrimaryKey
+        // Update local map for immediate UI feedback - find matching key using
+        // Entities.samePrimaryKey
         if (lineId != null) {
             Object matchingKey = null;
             for (Object key : attendanceDatesByLineId.keySet()) {
@@ -532,17 +547,20 @@ public class BookingTab {
     }
 
     /**
-     * Removes an attendance record for the specified line and date using WorkingBooking.unbookScheduledItems().
+     * Removes an attendance record for the specified line and date using
+     * WorkingBooking.unbookScheduledItems().
      */
     private void removeAttendance(DocumentLine line, LocalDate date) {
-        if (workingBooking == null) return;
+        if (workingBooking == null)
+            return;
 
         Object lineId = Entities.getPrimaryKey(line);
 
         // Find the ScheduledItem matching this date and item from PolicyAggregate
         ScheduledItem scheduledItem = findScheduledItemForDateAndItem(date, line);
         if (scheduledItem == null) {
-            System.err.println("  Cannot remove attendance: No ScheduledItem found for date " + date + " and item " + line.getItem());
+            System.err.println("  Cannot remove attendance: No ScheduledItem found for date " + date + " and item "
+                    + line.getItem());
             return;
         }
 
@@ -556,7 +574,8 @@ public class BookingTab {
 
         System.out.println("  Removed attendance via WorkingBooking.unbookScheduledItems for date: " + date);
 
-        // Update local map for immediate UI feedback - find matching key using Entities.samePrimaryKey
+        // Update local map for immediate UI feedback - find matching key using
+        // Entities.samePrimaryKey
         if (lineId != null) {
             for (Map.Entry<Object, Set<LocalDate>> entry : attendanceDatesByLineId.entrySet()) {
                 if (Entities.samePrimaryKey(entry.getKey(), lineId)) {
@@ -581,7 +600,7 @@ public class BookingTab {
         if (workingBooking == null) {
             return null;
         }
-        return null;//workingBooking.findScheduledItem(date, line.getItem(), line.getSite());
+        return null;// workingBooking.findScheduledItem(date, line.getItem(), line.getSite());
     }
 
     /**
@@ -650,10 +669,10 @@ public class BookingTab {
 
         // Get daily rates for this site/item combination
         return policyAggregate.filterDailyRatesStreamOfSiteAndItem(site, item)
-            .filter(rate -> isRateApplicableForDate(rate, date))
-            .mapToInt(rate -> rate.getPrice() != null ? rate.getPrice() : 0)
-            .min()
-            .orElse(0);
+                .filter(rate -> isRateApplicableForDate(rate, date))
+                .mapToInt(rate -> rate.getPrice() != null ? rate.getPrice() : 0)
+                .min()
+                .orElse(0);
     }
 
     /**
@@ -693,7 +712,8 @@ public class BookingTab {
      */
     private void buildNonTemporalItemsSection() {
         // This will be called to refresh prices in the ONE-TIME OPTIONS section
-        // The actual rebuild happens in refreshLineItems() which is called when loadedLines changes
+        // The actual rebuild happens in refreshLineItems() which is called when
+        // loadedLines changes
     }
 
     // Track attendance changes for History record
@@ -755,19 +775,18 @@ public class BookingTab {
 
         // Create the EditLineModal with WorkingBooking support
         EditLineModal modal = new EditLineModal(
-            line,
-            workingBooking,
-            event,
-            () -> {
-                // On save - refresh UI from WorkingBooking
-                updateFromWorkingBooking();
-                hasChangesProperty.unbind();
-                hasChangesProperty.set(true);
-            },
-            () -> {
-                // On cancel - no action needed
-            }
-        );
+                line,
+                workingBooking,
+                event,
+                () -> {
+                    // On save - refresh UI from WorkingBooking
+                    updateFromWorkingBooking();
+                    hasChangesProperty.unbind();
+                    hasChangesProperty.set(true);
+                },
+                () -> {
+                    // On cancel - no action needed
+                });
         modal.show();
     }
 
@@ -780,7 +799,7 @@ public class BookingTab {
         ConfirmActionModal.showCancelConfirmation(line, comment -> {
             // Call WorkingBooking API to cancel the line
             if (workingBooking != null) {
-                //workingBooking.cancelDocumentLine(line);
+                // workingBooking.cancelDocumentLine(line);
             }
 
             // Set visual pending status on canvas
@@ -812,7 +831,7 @@ public class BookingTab {
         ConfirmActionModal.showDeleteConfirmation(line, comment -> {
             // Call WorkingBooking API to remove the line (hard delete)
             if (workingBooking != null) {
-                //workingBooking.removeDocumentLine(line);
+                // workingBooking.removeDocumentLine(line);
             }
 
             // Set visual pending status on canvas
@@ -837,10 +856,12 @@ public class BookingTab {
     /**
      * Handles when the restore button is clicked on a line with pending status.
      * For cancelled lines: uncancels via WorkingBooking API.
-     * For deleted lines: cannot be restored (deletion is permanent in current session).
+     * For deleted lines: cannot be restored (deletion is permanent in current
+     * session).
      */
     private void handleRestoreClicked(DocumentLine line) {
-        if (timelineCanvas == null) return;
+        if (timelineCanvas == null)
+            return;
 
         // Get the current pending status
         String pendingStatus = timelineCanvas.getPendingStatus(line);
@@ -851,7 +872,7 @@ public class BookingTab {
             ConfirmActionModal.showRestoreConfirmation(line, comment -> {
                 // Uncancel via WorkingBooking API
                 if (workingBooking != null) {
-                    //workingBooking.uncancelDocumentLine(line);
+                    // workingBooking.uncancelDocumentLine(line);
                 }
                 timelineCanvas.setPendingStatus(line, null);
 
@@ -863,8 +884,8 @@ public class BookingTab {
 
                 // Check if there are still changes
                 boolean stillHasChanges = !timelineCanvas.getPendingStatuses().isEmpty() ||
-                    (workingBooking != null && workingBooking.hasChanges()) ||
-                    !pendingAttendanceChanges.isEmpty();
+                        (workingBooking != null && workingBooking.hasChanges()) ||
+                        !pendingAttendanceChanges.isEmpty();
                 hasChangesProperty.set(stillHasChanges);
             });
         } else if ("deleted".equals(pendingStatus)) {
@@ -884,7 +905,8 @@ public class BookingTab {
     }
 
     /**
-     * Checks if there are any unsaved changes in the WorkingBooking or pending cancel/delete statuses.
+     * Checks if there are any unsaved changes in the WorkingBooking or pending
+     * cancel/delete statuses.
      */
     public boolean hasChanges() {
         // Check WorkingBooking changes
@@ -904,7 +926,8 @@ public class BookingTab {
 
     /**
      * Returns an observable property indicating if there are unsaved changes.
-     * This property is bound to WorkingBooking's hasChangesProperty when it's loaded.
+     * This property is bound to WorkingBooking's hasChangesProperty when it's
+     * loaded.
      */
     public javafx.beans.value.ObservableValue<Boolean> hasChangesProperty() {
         return hasChangesProperty;
@@ -913,6 +936,7 @@ public class BookingTab {
     /**
      * Applies pending cancel/delete statuses to the given UpdateStore.
      * This should be called before saving to persist the visual pending states.
+     * 
      * @param updateStore the UpdateStore to apply changes to
      * @return true if any changes were applied
      */
@@ -931,10 +955,12 @@ public class BookingTab {
         // Find the DocumentLines and apply the pending statuses
         for (DocumentLine line : loadedLines) {
             Object lineId = dev.webfx.stack.orm.entity.Entities.getPrimaryKey(line);
-            if (lineId == null) continue;
+            if (lineId == null)
+                continue;
 
             String status = pendingStatuses.get(lineId);
-            if (status == null) continue;
+            if (status == null)
+                continue;
 
             // Get an editable version of the line from the UpdateStore
             DocumentLine editableLine = updateStore.updateEntity(line);
@@ -970,8 +996,10 @@ public class BookingTab {
         LocalDate lineStart = line.getStartDate();
         LocalDate lineEnd = line.getEndDate();
 
-        if (lineStart == null) lineStart = arrivalDateProperty.get();
-        if (lineEnd == null) lineEnd = departureDateProperty.get();
+        if (lineStart == null)
+            lineStart = arrivalDateProperty.get();
+        if (lineEnd == null)
+            lineEnd = departureDateProperty.get();
         if (lineStart == null || lineEnd == null || attendanceDates.isEmpty()) {
             return excludedDays;
         }
@@ -994,9 +1022,12 @@ public class BookingTab {
         LocalDate lineStart = line.getStartDate();
         LocalDate lineEnd = line.getEndDate();
 
-        if (lineStart == null) lineStart = arrivalDateProperty.get();
-        if (lineEnd == null) lineEnd = departureDateProperty.get();
-        if (lineStart == null || lineEnd == null) return;
+        if (lineStart == null)
+            lineStart = arrivalDateProperty.get();
+        if (lineEnd == null)
+            lineEnd = departureDateProperty.get();
+        if (lineStart == null || lineEnd == null)
+            return;
 
         // Count included days
         int includedDays = 0;
@@ -1022,18 +1053,22 @@ public class BookingTab {
 
     /**
      * Adjusts all temporal line dates when arrival/departure changes.
-     * @param arrivalDelta Days to add to arrival (-1 for earlier, +1 for later)
+     * 
+     * @param arrivalDelta   Days to add to arrival (-1 for earlier, +1 for later)
      * @param departureDelta Days to add to departure (-1 for earlier, +1 for later)
      */
     private void adjustAllLineDates(int arrivalDelta, int departureDelta) {
         for (DocumentLine line : loadedLines) {
             // Skip removed/cancelled lines
-            if (Boolean.TRUE.equals(line.getFieldValue("removed"))) continue;
-            if (Boolean.TRUE.equals(line.isCancelled())) continue;
+            if (Boolean.TRUE.equals(line.getFieldValue("removed")))
+                continue;
+            if (Boolean.TRUE.equals(line.isCancelled()))
+                continue;
 
             // Check if this is a temporal option
             String category = getCategoryFromLine(line);
-            if (!isTemporalCategory(category)) continue;
+            if (!isTemporalCategory(category))
+                continue;
 
             DocumentLine editableLine = updateStore.updateEntity(line);
 
@@ -1048,9 +1083,12 @@ public class BookingTab {
                 editableLine.setEndDate(currentEnd.plusDays(departureDelta));
             }
 
-            // Recalculate price based on attendance (excluded days = days in range but not in attendance)
+            // Recalculate price based on attendance (excluded days = days in range but not
+            // in attendance)
             Object lineId = line.getId() != null ? line.getId().getPrimaryKey() : null;
-            Set<LocalDate> attendanceDates = lineId != null ? attendanceDatesByLineId.getOrDefault(lineId, Collections.emptySet()) : Collections.emptySet();
+            Set<LocalDate> attendanceDates = lineId != null
+                    ? attendanceDatesByLineId.getOrDefault(lineId, Collections.emptySet())
+                    : Collections.emptySet();
             Set<LocalDate> excludedDays = calculateExcludedDays(editableLine, attendanceDates);
             recalculateLinePrice(editableLine, excludedDays);
         }
@@ -1064,21 +1102,24 @@ public class BookingTab {
 
     /**
      * Checks if a category is temporal (date-based, shown in canvas).
-     * Temporal items: accommodation, meals, diet, program, and unknown items with dates.
+     * Temporal items: accommodation, meals, diet, program, and unknown items with
+     * dates.
      * Non-temporal items are shown in the list section below the canvas.
      */
     private boolean isTemporalCategory(String category) {
         return "accommodation".equals(category) ||
-               "meals".equals(category) ||
-               "diet".equals(category) ||
-               "program".equals(category) ||
-               "other_temporal".equals(category);
+                "meals".equals(category) ||
+                "diet".equals(category) ||
+                "program".equals(category) ||
+                "other_temporal".equals(category);
     }
 
     /**
      * Creates the line items section for non-temporal items only.
-     * Temporal items (accommodation, meals, diet, program) are shown in the canvas above.
-     * Non-temporal items (course fees, transport, services) are shown here in a compact list.
+     * Temporal items (accommodation, meals, diet, program) are shown in the canvas
+     * above.
+     * Non-temporal items (course fees, transport, services) are shown here in a
+     * compact list.
      */
     private Node createLineItemsSection() {
         VBox section = new VBox(8);
@@ -1105,8 +1146,8 @@ public class BookingTab {
         section.managedProperty().bind(section.visibleProperty());
         ObservableLists.runNowAndOnListChange(change -> {
             boolean hasNonTemporalItems = loadedLines.stream()
-                .filter(line -> !Boolean.TRUE.equals(line.getFieldValue("removed")))
-                .anyMatch(line -> !isTemporalCategory(getCategoryFromLine(line)));
+                    .filter(line -> !Boolean.TRUE.equals(line.getFieldValue("removed")))
+                    .anyMatch(line -> !isTemporalCategory(getCategoryFromLine(line)));
             section.setVisible(hasNonTemporalItems);
         }, loadedLines);
 
@@ -1115,11 +1156,13 @@ public class BookingTab {
 
     /**
      * Refreshes the line items list from loaded data.
-     * Note: Temporal items (accommodation, meals, diet, program) are shown in the canvas only,
+     * Note: Temporal items (accommodation, meals, diet, program) are shown in the
+     * canvas only,
      * not repeated in the line items list below.
      */
     private void refreshLineItems() {
-        if (lineItemsList == null) return;
+        if (lineItemsList == null)
+            return;
 
         // DEBUG: Log loaded lines
         System.out.println("=== DEBUG: refreshLineItems() called ===");
@@ -1127,15 +1170,16 @@ public class BookingTab {
         for (DocumentLine line : loadedLines) {
             String itemName = line.getItem() != null ? line.getItem().getName() : "null";
             String familyName = (line.getItem() != null && line.getItem().getFamily() != null)
-                ? line.getItem().getFamily().getName() : "null";
+                    ? line.getItem().getFamily().getName()
+                    : "null";
             String category = getCategoryFromLine(line);
             System.out.println("  - Line: " + itemName +
-                " | Family: " + familyName +
-                " | Category: " + category +
-                " | StartDate: " + line.getStartDate() +
-                " | EndDate: " + line.getEndDate() +
-                " | Cancelled: " + line.isCancelled() +
-                " | Removed: " + line.getFieldValue("removed"));
+                    " | Family: " + familyName +
+                    " | Category: " + category +
+                    " | StartDate: " + line.getStartDate() +
+                    " | EndDate: " + line.getEndDate() +
+                    " | Cancelled: " + line.isCancelled() +
+                    " | Removed: " + line.getFieldValue("removed"));
         }
         System.out.println("========================================");
 
@@ -1143,17 +1187,20 @@ public class BookingTab {
 
         for (DocumentLine line : loadedLines) {
             // Skip removed lines
-            if (Boolean.TRUE.equals(line.getFieldValue("removed"))) continue;
+            if (Boolean.TRUE.equals(line.getFieldValue("removed")))
+                continue;
 
             // Skip temporal items - they're shown in the canvas, not the list below
             String category = getCategoryFromLine(line);
-            if (isTemporalCategory(category)) continue;
+            if (isTemporalCategory(category))
+                continue;
 
             Node card = createLineItemCard(line);
             lineItemsList.getChildren().add(card);
         }
 
-        // Update timeline canvas with ONLY temporal lines (non-temporal items shown in list below)
+        // Update timeline canvas with ONLY temporal lines (non-temporal items shown in
+        // list below)
         if (timelineCanvas != null) {
             List<DocumentLine> temporalLines = new ArrayList<>();
             for (DocumentLine line : loadedLines) {
@@ -1225,7 +1272,7 @@ public class BookingTab {
 
         // Price - right-aligned, bold
         Integer price = line.getPriceNet();
-        Label priceLabel = new Label(formatPrice(price != null ? price : 0));
+        Label priceLabel = new Label(EventPriceFormatter.formatWithCurrency(price != null ? price : 0, document.getEvent()));
         priceLabel.setFont(Font.font("System", FontWeight.BOLD, 12));
         priceLabel.setTextFill(isInactive ? TEXT_MUTED : WARM_BROWN);
         priceLabel.setMinWidth(60);
@@ -1294,18 +1341,29 @@ public class BookingTab {
     private Color getCategoryColor(String category) {
         switch (category) {
             // Temporal categories
-            case "accommodation": return Color.web("#059669"); // Green
-            case "meals": return Color.web("#d97706"); // Orange
-            case "diet": return Color.web("#7c3aed"); // Purple
-            case "program": return Color.web("#be185d"); // Pink
+            case "accommodation":
+                return Color.web("#059669"); // Green
+            case "meals":
+                return Color.web("#d97706"); // Orange
+            case "diet":
+                return Color.web("#7c3aed"); // Purple
+            case "program":
+                return Color.web("#be185d"); // Pink
             // Non-temporal categories
-            case "transport": return Color.web("#0284c7"); // Blue
-            case "parking": return Color.web("#64748b"); // Slate
-            case "tax": return Color.web("#dc2626"); // Red
-            case "services": return Color.web("#0891b2"); // Cyan
-            case "recording": return Color.web("#4f46e5"); // Indigo
-            case "course": return Color.web("#16a34a"); // Green
-            default: return Color.web("#6b7280"); // Gray
+            case "transport":
+                return Color.web("#0284c7"); // Blue
+            case "parking":
+                return Color.web("#64748b"); // Slate
+            case "tax":
+                return Color.web("#dc2626"); // Red
+            case "services":
+                return Color.web("#0891b2"); // Cyan
+            case "recording":
+                return Color.web("#4f46e5"); // Indigo
+            case "course":
+                return Color.web("#16a34a"); // Green
+            default:
+                return Color.web("#6b7280"); // Gray
         }
     }
 
@@ -1315,18 +1373,29 @@ public class BookingTab {
     private String getCategoryIconChar(String category) {
         switch (category) {
             // Temporal categories
-            case "accommodation": return "\u2302"; // ⌂ House
-            case "meals": return "\u2615"; // ☕ Hot beverage
-            case "diet": return "\u2618"; // ☘ Shamrock (plant-based)
-            case "program": return "\u2605"; // ★ Star
+            case "accommodation":
+                return "\u2302"; // ⌂ House
+            case "meals":
+                return "\u2615"; // ☕ Hot beverage
+            case "diet":
+                return "\u2618"; // ☘ Shamrock (plant-based)
+            case "program":
+                return "\u2605"; // ★ Star
             // Non-temporal categories
-            case "transport": return "\u2708"; // ✈ Airplane
-            case "parking": return "\u24C5"; // Ⓟ Parking
-            case "tax": return "\u00A3"; // £ Pound sign
-            case "services": return "\u2606"; // ☆ White star
-            case "recording": return "\u266A"; // ♪ Music note
-            case "course": return "\u2709"; // ✉ Envelope (for course materials)
-            default: return "\u25CF"; // ● Circle
+            case "transport":
+                return "\u2708"; // ✈ Airplane
+            case "parking":
+                return "\u24C5"; // Ⓟ Parking
+            case "tax":
+                return "\u00A3"; // £ Pound sign
+            case "services":
+                return "\u2606"; // ☆ White star
+            case "recording":
+                return "\u266A"; // ♪ Music note
+            case "course":
+                return "\u2709"; // ✉ Envelope (for course materials)
+            default:
+                return "\u25CF"; // ● Circle
         }
     }
 
@@ -1405,7 +1474,8 @@ public class BookingTab {
      * Called after options are added/removed or prices change.
      */
     private void refreshPriceSummary() {
-        if (subtotalAmountLabel == null) return;
+        if (subtotalAmountLabel == null)
+            return;
 
         int subtotal;
         int paid;
@@ -1429,9 +1499,9 @@ public class BookingTab {
 
         int balance = subtotal - paid;
 
-        subtotalAmountLabel.setText(formatPrice(subtotal));
-        paidAmountLabel.setText(formatPrice(paid));
-        balanceAmountLabel.setText(formatPrice(balance));
+        subtotalAmountLabel.setText(EventPriceFormatter.formatWithCurrency(subtotal, document.getEvent()));
+        paidAmountLabel.setText(EventPriceFormatter.formatWithCurrency(paid, document.getEvent()));
+        balanceAmountLabel.setText(EventPriceFormatter.formatWithCurrency(balance, document.getEvent()));
 
         // Update balance box colors
         Color balanceColor = balance > 0 ? DANGER : SUCCESS;
@@ -1451,16 +1521,15 @@ public class BookingTab {
         DocumentLine editableLine = updateStore.updateEntity(line);
 
         EditLineModal modal = new EditLineModal(
-            editableLine,
-            updateStore,
-            () -> {
-                // On save - refresh line items display
-                refreshLineItems();
-            },
-            () -> {
-                // On cancel - no action needed
-            }
-        );
+                editableLine,
+                updateStore,
+                () -> {
+                    // On save - refresh line items display
+                    refreshLineItems();
+                },
+                () -> {
+                    // On cancel - no action needed
+                });
         modal.show();
     }
 
@@ -1477,12 +1546,13 @@ public class BookingTab {
             History history = updateStore.insertEntity(History.class);
             history.setDocument(document);
             history.setUsername(FXUserName.getUserName());
-            history.setComment("Option cancelled: " + optionName + (comment != null && !comment.isEmpty() ? " - " + comment : ""));
+            history.setComment(
+                    "Option cancelled: " + optionName + (comment != null && !comment.isEmpty() ? " - " + comment : ""));
 
             // Submit changes
             updateStore.submitChanges()
-                .onSuccess(result -> refreshLineItems())
-                .onFailure(error -> System.err.println("Failed to cancel line: " + error.getMessage()));
+                    .onSuccess(result -> refreshLineItems())
+                    .onFailure(error -> System.err.println("Failed to cancel line: " + error.getMessage()));
         });
     }
 
@@ -1499,12 +1569,13 @@ public class BookingTab {
             History history = updateStore.insertEntity(History.class);
             history.setDocument(document);
             history.setUsername(FXUserName.getUserName());
-            history.setComment("Option deleted: " + optionName + (comment != null && !comment.isEmpty() ? " - " + comment : ""));
+            history.setComment(
+                    "Option deleted: " + optionName + (comment != null && !comment.isEmpty() ? " - " + comment : ""));
 
             // Submit changes
             updateStore.submitChanges()
-                .onSuccess(result -> refreshLineItems())
-                .onFailure(error -> System.err.println("Failed to delete line: " + error.getMessage()));
+                    .onSuccess(result -> refreshLineItems())
+                    .onFailure(error -> System.err.println("Failed to delete line: " + error.getMessage()));
         });
     }
 
@@ -1520,12 +1591,13 @@ public class BookingTab {
             History history = updateStore.insertEntity(History.class);
             history.setDocument(document);
             history.setUsername(FXUserName.getUserName());
-            history.setComment("Option restored: " + optionName + (comment != null && !comment.isEmpty() ? " - " + comment : ""));
+            history.setComment(
+                    "Option restored: " + optionName + (comment != null && !comment.isEmpty() ? " - " + comment : ""));
 
             // Submit changes
             updateStore.submitChanges()
-                .onSuccess(result -> refreshLineItems())
-                .onFailure(error -> System.err.println("Failed to restore line: " + error.getMessage()));
+                    .onSuccess(result -> refreshLineItems())
+                    .onFailure(error -> System.err.println("Failed to restore line: " + error.getMessage()));
         });
     }
 
@@ -1542,9 +1614,11 @@ public class BookingTab {
     }
 
     /**
-     * Gets the category string for a DocumentLine based on its Item's KnownItemFamily.
+     * Gets the category string for a DocumentLine based on its Item's
+     * KnownItemFamily.
      * Uses the proper KnownItemFamily enum instead of string matching.
-     * Unknown items are always displayed with a generic "other" category (non-temporal)
+     * Unknown items are always displayed with a generic "other" category
+     * (non-temporal)
      * to ensure all items are visible in the list below the canvas.
      */
     private String getCategoryFromLine(DocumentLine line) {
@@ -1597,22 +1671,19 @@ public class BookingTab {
     }
 
     private String formatDateRange(LocalDate start, LocalDate end) {
-        if (start == null && end == null) return "No dates";
-        if (start == null) return "Until " + formatDate(end);
-        if (end == null) return "From " + formatDate(start);
+        if (start == null && end == null)
+            return "No dates";
+        if (start == null)
+            return "Until " + formatDate(end);
+        if (end == null)
+            return "From " + formatDate(start);
         return formatDate(start) + " - " + formatDate(end);
     }
 
     private String formatDate(LocalDate date) {
-        if (date == null) return "-";
+        if (date == null)
+            return "-";
         return date.getDayOfMonth() + " " + date.getMonth().toString().substring(0, 3);
-    }
-
-    private String formatPrice(int amount) {
-        Event event = document.getEvent();
-        String currencySymbol = EventPriceFormatter.getEventCurrencySymbol(event);
-        // Use PriceFormatter with show00cents=true to always show 2 decimal places
-        return PriceFormatter.formatWithCurrency(amount, currencySymbol, true);
     }
 
     // Note: Timeline canvas updates automatically via property binding
@@ -1632,44 +1703,49 @@ public class BookingTab {
         System.out.println("=== Loading WorkingBooking for document: " + document.getPrimaryKey() + " ===");
 
         WorkingBooking.loadWorkingBooking(document)
-            .onSuccess(wb -> {
-                this.workingBooking = wb;
-                isLoading = false;
+                .onSuccess(wb -> {
+                    this.workingBooking = wb;
+                    isLoading = false;
 
-                // Initialize hasChangesProperty to false (no changes yet)
-                // Note: We manage this property manually at the UX level instead of binding
-                // because WorkingBooking uses a deferred property that may not update immediately
-                hasChangesProperty.set(false);
+                    // Initialize hasChangesProperty to false (no changes yet)
+                    // Note: We manage this property manually at the UX level instead of binding
+                    // because WorkingBooking uses a deferred property that may not update
+                    // immediately
+                    hasChangesProperty.set(false);
 
-                // Pass WorkingBooking to AddOptionPanel for loading items from PolicyAggregate
-                if (addOptionPanel != null) {
-                    addOptionPanel.setWorkingBooking(wb);
-                }
+                    // Pass WorkingBooking to AddOptionPanel for loading items from PolicyAggregate
+                    if (addOptionPanel != null) {
+                        addOptionPanel.setWorkingBooking(wb);
+                    }
 
-                // Update UI on FX thread
-                javafx.application.Platform.runLater(() -> {
-                    updateFromWorkingBooking();
+                    // Update UI on FX thread
+                    javafx.application.Platform.runLater(() -> {
+                        updateFromWorkingBooking();
+                    });
+                })
+                .onFailure(error -> {
+                    isLoading = false;
+                    System.err.println("Failed to load WorkingBooking: " + error.getMessage());
+                    error.printStackTrace();
                 });
-            })
-            .onFailure(error -> {
-                isLoading = false;
-                System.err.println("Failed to load WorkingBooking: " + error.getMessage());
-                error.printStackTrace();
-            });
     }
 
     /**
      * Updates the UI from the loaded WorkingBooking data.
-     * Also loads any additional document lines that may have been filtered out by the server
+     * Also loads any additional document lines that may have been filtered out by
+     * the server
      * (e.g., rounding lines with site=null).
      */
     private void updateFromWorkingBooking() {
-        if (workingBooking == null) return;
+        if (workingBooking == null)
+            return;
 
-        // Set up the cancellation checker to use WorkingBooking's proper cancellation detection
-        // This ensures cancelled lines are properly identified using the event-based API
+        // Set up the cancellation checker to use WorkingBooking's proper cancellation
+        // detection
+        // This ensures cancelled lines are properly identified using the event-based
+        // API
         if (timelineCanvas != null) {
-            //timelineCanvas.setCancellationChecker(workingBooking::isDocumentLineCancelled);
+            // timelineCanvas.setCancellationChecker(workingBooking::isDocumentLineCancelled);
         }
 
         DocumentAggregate aggregate = workingBooking.getLastestDocumentAggregate();
@@ -1680,14 +1756,18 @@ public class BookingTab {
         System.out.println("=== DEBUG: updateFromWorkingBooking() ===");
         System.out.println("Loaded " + lines.size() + " document lines from WorkingBooking");
 
-        // Load additional document lines that may have been filtered out (e.g., rounding with site=null)
-        // The server-side query filters site!=null, but we need all lines for the backoffice view
+        // Load additional document lines that may have been filtered out (e.g.,
+        // rounding with site=null)
+        // The server-side query filters site!=null, but we need all lines for the
+        // backoffice view
         loadAdditionalDocumentLines(lines);
     }
 
     /**
-     * Loads document lines that may have been filtered out by the server-side query.
-     * Specifically loads lines with site=null (like rounding) and merges them with existing lines.
+     * Loads document lines that may have been filtered out by the server-side
+     * query.
+     * Specifically loads lines with site=null (like rounding) and merges them with
+     * existing lines.
      */
     private void loadAdditionalDocumentLines(List<DocumentLine> existingLines) {
         if (document == null) {
@@ -1712,50 +1792,51 @@ public class BookingTab {
         // These include rounding and other system-generated lines
         Object docPk = document.getPrimaryKey();
         EntityStore.create(DataSourceModelService.getDefaultDataSourceModel())
-            .<DocumentLine>executeQuery(
-                "select document,item,item.family,price_net,price_minDeposit,price_custom,price_discount " +
-                "from DocumentLine where document=$1 and site=null order by id",
-                docPk)
-            .onSuccess(additionalLines -> {
-                javafx.application.Platform.runLater(() -> {
-                    // Merge additional lines with existing ones (avoid duplicates)
-                    List<DocumentLine> mergedLines = new ArrayList<>(existingLines);
-                    int addedCount = 0;
-                    for (DocumentLine line : additionalLines) {
-                        Object pk = Entities.getPrimaryKey(line);
-                        if (pk != null && !existingLineIds.contains(pk)) {
-                            mergedLines.add(line);
-                            existingLineIds.add(pk);
-                            addedCount++;
-                            System.out.println("  Added additional line: " +
-                                (line.getItem() != null ? line.getItem().getName() : "unknown") +
-                                " (site=null, pk=" + pk + ")");
+                .<DocumentLine>executeQuery(
+                        "select document,item,item.family,price_net,price_minDeposit,price_custom,price_discount " +
+                                "from DocumentLine where document=$1 and site=null order by id",
+                        docPk)
+                .onSuccess(additionalLines -> {
+                    javafx.application.Platform.runLater(() -> {
+                        // Merge additional lines with existing ones (avoid duplicates)
+                        List<DocumentLine> mergedLines = new ArrayList<>(existingLines);
+                        int addedCount = 0;
+                        for (DocumentLine line : additionalLines) {
+                            Object pk = Entities.getPrimaryKey(line);
+                            if (pk != null && !existingLineIds.contains(pk)) {
+                                mergedLines.add(line);
+                                existingLineIds.add(pk);
+                                addedCount++;
+                                System.out.println("  Added additional line: " +
+                                        (line.getItem() != null ? line.getItem().getName() : "unknown") +
+                                        " (site=null, pk=" + pk + ")");
+                            }
                         }
-                    }
-                    System.out.println("Added " + addedCount + " additional document lines (site=null)");
+                        System.out.println("Added " + addedCount + " additional document lines (site=null)");
 
-                    loadedLines.setAll(mergedLines);
-                    updateAttendanceDatesMap();
-                    refreshLineItems();
-                    recalculateLinePrices();
+                        loadedLines.setAll(mergedLines);
+                        updateAttendanceDatesMap();
+                        refreshLineItems();
+                        recalculateLinePrices();
+                    });
+                })
+                .onFailure(error -> {
+                    System.err.println("Failed to load additional document lines: " + error.getMessage());
+                    // Still update with existing lines on failure
+                    javafx.application.Platform.runLater(() -> {
+                        loadedLines.setAll(existingLines);
+                        updateAttendanceDatesMap();
+                        refreshLineItems();
+                        recalculateLinePrices();
+                    });
                 });
-            })
-            .onFailure(error -> {
-                System.err.println("Failed to load additional document lines: " + error.getMessage());
-                // Still update with existing lines on failure
-                javafx.application.Platform.runLater(() -> {
-                    loadedLines.setAll(existingLines);
-                    updateAttendanceDatesMap();
-                    refreshLineItems();
-                    recalculateLinePrices();
-                });
-            });
     }
 
     /**
      * Updates the attendance dates map from WorkingBooking data.
      * Groups attendance dates by DocumentLine ID for quick lookup.
-     * Only displays what is actually loaded from database - no fallback/pre-population.
+     * Only displays what is actually loaded from database - no
+     * fallback/pre-population.
      */
     private void updateAttendanceDatesMap() {
         attendanceDatesByLineId.clear();
@@ -1776,14 +1857,15 @@ public class BookingTab {
         for (Attendance att : bookedAttendances) {
             if (debugCount++ < 3) {
                 System.out.println("  RAW[" + debugCount + "]: att.getId()=" + att.getId()
-                    + ", att.getDocumentLine()=" + att.getDocumentLine()
-                    + ", att.getScheduledItem()=" + att.getScheduledItem()
-                    + ", scheduledItem.getDate()=" + (att.getScheduledItem() != null ? att.getScheduledItem().getDate() : null));
+                        + ", att.getDocumentLine()=" + att.getDocumentLine()
+                        + ", att.getScheduledItem()=" + att.getScheduledItem()
+                        + ", scheduledItem.getDate()="
+                        + (att.getScheduledItem() != null ? att.getScheduledItem().getDate() : null));
                 if (att.getDocumentLine() != null) {
                     DocumentLine dl = att.getDocumentLine();
                     System.out.println("    DocumentLine: dl.getId()=" + dl.getId()
-                        + ", getPrimaryKey=" + Entities.getPrimaryKey(dl)
-                        + ", dl.getItem()=" + (dl.getItem() != null ? dl.getItem().getName() : "null"));
+                            + ", getPrimaryKey=" + Entities.getPrimaryKey(dl)
+                            + ", dl.getItem()=" + (dl.getItem() != null ? dl.getItem().getName() : "null"));
                 }
             }
         }
@@ -1804,7 +1886,8 @@ public class BookingTab {
 
             Object lineId = Entities.getPrimaryKey(docLine);
             if (lineId == null) {
-                System.out.println("  SKIP: Attendance " + att.getId() + " - DocumentLine has no primary key (docLine.getId()=" + docLine.getId() + ")");
+                System.out.println("  SKIP: Attendance " + att.getId()
+                        + " - DocumentLine has no primary key (docLine.getId()=" + docLine.getId() + ")");
                 skippedNoLine++;
                 continue;
             }
@@ -1816,11 +1899,12 @@ public class BookingTab {
             }
 
             attendanceDatesByLineId
-                .computeIfAbsent(lineId, k -> new HashSet<>())
-                .add(date);
+                    .computeIfAbsent(lineId, k -> new HashSet<>())
+                    .add(date);
             added++;
         }
-        System.out.println("Summary: added=" + added + ", skippedNoLine=" + skippedNoLine + ", skippedNoDate=" + skippedNoDate);
+        System.out.println(
+                "Summary: added=" + added + ", skippedNoLine=" + skippedNoLine + ", skippedNoDate=" + skippedNoDate);
 
         for (Map.Entry<Object, Set<LocalDate>> entry : attendanceDatesByLineId.entrySet()) {
             System.out.println("  LineId " + entry.getKey() + ": " + entry.getValue().size() + " dates");
@@ -1829,8 +1913,10 @@ public class BookingTab {
 
         // Update canvas with attendance dates
         if (timelineCanvas != null) {
-            // Set original attendance dates first (from database) - used to distinguish gaps from pending removals
-            // A cross (X) is only shown when a date was originally included but is now being removed
+            // Set original attendance dates first (from database) - used to distinguish
+            // gaps from pending removals
+            // A cross (X) is only shown when a date was originally included but is now
+            // being removed
             timelineCanvas.setOriginalAttendanceDates(attendanceDatesByLineId);
             // Then set current attendance dates (same as original on initial load)
             timelineCanvas.setAttendanceDates(attendanceDatesByLineId);
@@ -1916,7 +2002,8 @@ public class BookingTab {
         if (anchor.getScene() != null && anchor.getScene().getRoot() instanceof Pane) {
             Pane root = (Pane) anchor.getScene().getRoot();
 
-            // Calculate position relative to anchor button (GWT-compatible: use Point2D not Bounds)
+            // Calculate position relative to anchor button (GWT-compatible: use Point2D not
+            // Bounds)
             javafx.geometry.Point2D pos = anchor.localToScene(0, 0);
             menuContent.setTranslateX(pos.getX());
             menuContent.setTranslateY(pos.getY() + anchor.getHeight() + 4);

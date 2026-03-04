@@ -1,4 +1,5 @@
 package one.modality.booking.frontoffice.bookingpage.sections.options;
+
 import one.modality.booking.frontoffice.bookingpage.BookingPageCssSelectors;
 
 import dev.webfx.extras.i18n.I18n;
@@ -37,10 +38,14 @@ import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelecto
 
 /**
  * Rate selection section for General Program (GP) class booking forms.
- * Allows users to choose between Standard Rate and Member Rate with per-class pricing.
+ * Allows users to choose between Standard Rate and Member Rate with per-class
+ * pricing.
  *
- * <p>This section is specifically designed for GP Class bookings where pricing is per class.
- * For online event forms, use {@link DefaultRateTypeSection} instead.</p>
+ * <p>
+ * This section is specifically designed for GP Class bookings where pricing is
+ * per class.
+ * For online event forms, use {@link DefaultRateTypeSection} instead.
+ * </p>
  *
  * @author Claude
  */
@@ -72,8 +77,7 @@ public class GPClassRateTypeSection implements BookingFormSection, HasRateTypeSe
         // Section header
         StyledSectionHeader header = new StyledSectionHeader(
                 BookingPageI18nKeys.YourPricingTier,
-                StyledSectionHeader.ICON_TAG
-        );
+                StyledSectionHeader.ICON_TAG);
 
         // Rate cards container (FlowPane for responsive wrapping on mobile)
         FlowPane cardsContainer = new FlowPane();
@@ -84,14 +88,12 @@ public class GPClassRateTypeSection implements BookingFormSection, HasRateTypeSe
         // Standard Rate card
         standardRateCard = createRateCard(
                 BookingPageI18nKeys.StandardRate,
-                RateType.STANDARD
-        );
+                RateType.STANDARD);
 
         // Member Rate card
         memberRateCard = createRateCard(
                 BookingPageI18nKeys.MemberRate,
-                RateType.MEMBER
-        );
+                RateType.MEMBER);
 
         cardsContainer.getChildren().addAll(standardRateCard, memberRateCard);
 
@@ -106,7 +108,8 @@ public class GPClassRateTypeSection implements BookingFormSection, HasRateTypeSe
         card.setMinWidth(160);
         card.setPrefWidth(180);
         card.setMaxWidth(220);
-        card.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card, bookingpage_rounded, default_rate_card);
+        card.getStyleClass().addAll(bookingpage_selectable, bookingpage_bg_white, bookingpage_border_card,
+                bookingpage_rounded, default_rate_card);
         card.setCursor(Cursor.HAND);
 
         // Track selection state for this card
@@ -165,8 +168,10 @@ public class GPClassRateTypeSection implements BookingFormSection, HasRateTypeSe
             e.consume();
         });
 
-        // Hover/selected effects are handled via CSS (.bookingpage-card:hover, .bookingpage-card.selected)
-        // using color scheme variables (--booking-form-hover-border, --booking-form-primary)
+        // Hover/selected effects are handled via CSS (.bookingpage-card:hover,
+        // .bookingpage-card.selected)
+        // using color scheme variables (--booking-form-hover-border,
+        // --booking-form-primary)
 
         // Store price label reference for updates
         card.setUserData(priceLabel);
@@ -175,14 +180,17 @@ public class GPClassRateTypeSection implements BookingFormSection, HasRateTypeSe
     }
 
     private void loadData() {
-        if (workingBookingProperties == null) return;
+        if (workingBookingProperties == null)
+            return;
 
         WorkingBooking workingBooking = workingBookingProperties.getWorkingBooking();
         PolicyAggregate policyAggregate = workingBooking.getPolicyAggregate();
 
-        if (policyAggregate == null) return;
+        if (policyAggregate == null)
+            return;
 
-        // Try to get rate from first teaching scheduled item (more accurate for GP classes)
+        // Try to get rate from first teaching scheduled item (more accurate for GP
+        // classes)
         Rate rate = null;
         List<ScheduledItem> teachingItems = policyAggregate.filterTeachingScheduledItems();
         if (!teachingItems.isEmpty()) {
@@ -200,7 +208,8 @@ public class GPClassRateTypeSection implements BookingFormSection, HasRateTypeSe
                 standardPrice = rate.getPrice();
             }
 
-            // Member price from getFacilityFeePrice() (facility fee = member price in context)
+            // Member price from getFacilityFeePrice() (facility fee = member price in
+            // context)
             if (rate.getFacilityFeePrice() != null) {
                 memberPrice = rate.getFacilityFeePrice();
             } else {
@@ -222,20 +231,17 @@ public class GPClassRateTypeSection implements BookingFormSection, HasRateTypeSe
         // Get the localized "per class" text
         String perClassText = I18n.getI18nText(BookingPageI18nKeys.PerClass);
 
+        Event event = getEvent();
+
         // Update standard rate card price
         if (standardRateCard != null && standardRateCard.getUserData() instanceof Label priceLabel) {
-            priceLabel.setText(formatPrice(standardPrice) + " " + perClassText);
+            priceLabel.setText(EventPriceFormatter.formatWithCurrency(standardPrice, event) + " " + perClassText);
         }
 
         // Update member rate card price
         if (memberRateCard != null && memberRateCard.getUserData() instanceof Label priceLabel) {
-            priceLabel.setText(formatPrice(memberPrice) + " " + perClassText);
+            priceLabel.setText(EventPriceFormatter.formatWithCurrency(memberPrice, event) + " " + perClassText);
         }
-    }
-
-    private String formatPrice(int priceInCents) {
-        Event event = getEvent();
-        return EventPriceFormatter.formatWithCurrency(priceInCents, event);
     }
 
     private Event getEvent() {

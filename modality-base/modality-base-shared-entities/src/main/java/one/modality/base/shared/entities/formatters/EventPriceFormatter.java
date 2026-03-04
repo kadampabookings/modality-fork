@@ -1,51 +1,45 @@
 package one.modality.base.shared.entities.formatters;
 
-import dev.webfx.platform.util.Numbers;
-import dev.webfx.stack.orm.entity.Entities;
 import one.modality.base.shared.domainmodel.formatters.PriceFormatter;
+import one.modality.base.shared.entities.Country;
+import one.modality.base.shared.entities.Currency;
 import one.modality.base.shared.entities.Event;
+import one.modality.base.shared.entities.Organization;
 
 /**
  * @author Bruno Salmon
  */
-public class EventPriceFormatter extends PriceFormatter {
+public final class EventPriceFormatter extends PriceFormatter {
 
     public EventPriceFormatter(Event event) {
         super(getEventCurrencySymbol(event));
     }
 
-    public static String getEventCurrencyCode(Event event) {
-        // Handle null event - default to GBP
-        if (event == null)
-            return "GBP";
+    public static Currency getEventCurrency(Event event) {
+        if (event == null) return null;
 
-        Object organizationPk = Entities.getPrimaryKey(event.getOrganizationId());
-        if (organizationPk != null) {
-            int orgId = Numbers.toInteger(organizationPk);
-            // KMCF (organization 2) uses EUR
-            if (orgId == 2) {
-                return "EUR";
-            }
-            // KMCNY (organization 187) uses USD
-            if (orgId == 187) {
-                return "USD";
+        // Apply fallback logic similar to PolicyAggregate
+        Currency currency = event.getCurrency();
+        if (currency == null) {
+
+            Organization organization = event.getOrganization();
+            if (organization != null) {
+                currency = organization.getCurrency();
+                if (currency == null) {
+                    Country country = organization.getCountry();
+                    if (country != null) {
+                        currency = country.getCurrency();
+                    }
+                }
             }
         }
 
-        // Default to GBP (UK)
-        return "GBP";
+        return currency;
     }
 
     public static String getEventCurrencySymbol(Event event) {
-        String currencyCode = getEventCurrencyCode(event);
-        switch (currencyCode) {
-            case "USD":
-                return "$ ";
-            case "EUR":
-                return " €";
-            default:
-                return "£ ";
-        }
+        Currency eventCurrency = getEventCurrency(event);
+        return eventCurrency != null ? eventCurrency.getSymbol() : null;
     }
 
     public static String formatWithCurrency(Object value, Event event) {

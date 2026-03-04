@@ -22,20 +22,24 @@ import java.util.stream.Collectors;
 public final class WorkingBookingHistoryHelper {
 
     public static String generateHistoryComment(WorkingBooking workingBooking) {
+        return generateHistoryComment(workingBooking, true);
+    }
+
+    public static String generateHistoryComment(WorkingBooking workingBooking, boolean fromChangesOnly) {
         StringBuilder sb = new StringBuilder();
-        boolean addedSection = appendHistoryCommentFromAttendances(workingBooking.getAttendancesAdded(true), true, sb, workingBooking);
-        boolean removedSection = appendHistoryCommentFromAttendances(workingBooking.getAttendancesRemoved(true), false, sb, workingBooking);
-        boolean addedSection2 = appendHistoryCommentFromDocumentLines(workingBooking.getNonTemporalDocumentLinesAdded(true), !addedSection || removedSection, true, sb, workingBooking);
-        appendHistoryCommentFromDocumentLines(workingBooking.getNonTemporalDocumentLinesRemoved(true), addedSection2 || !removedSection, false, sb, workingBooking);
-        EditShareMateInfoDocumentLineEvent editShareMateInfoDocumentLineEvent = workingBooking.findEditShareMateInfoDocumentLineEvent(true);
+        boolean addedSection = appendHistoryCommentFromAttendances(workingBooking.getAttendancesAdded(fromChangesOnly), true, sb, workingBooking);
+        boolean removedSection = appendHistoryCommentFromAttendances(workingBooking.getAttendancesRemoved(fromChangesOnly), false, sb, workingBooking);
+        boolean addedSection2 = appendHistoryCommentFromDocumentLines(workingBooking.getNonTemporalDocumentLinesAdded(fromChangesOnly), !addedSection || removedSection, true, sb, workingBooking);
+        appendHistoryCommentFromDocumentLines(workingBooking.getNonTemporalDocumentLinesRemoved(fromChangesOnly), addedSection2 || !removedSection, false, sb, workingBooking);
+        EditShareMateInfoDocumentLineEvent editShareMateInfoDocumentLineEvent = workingBooking.findEditShareMateInfoDocumentLineEvent(fromChangesOnly);
         if (editShareMateInfoDocumentLineEvent != null) {
             newSection(sb).append("Room owner: ").append(editShareMateInfoDocumentLineEvent.getOwnerName());
         }
-        EditShareOwnerInfoDocumentLineEvent editShareOwnerInfoDocumentLineEvent = workingBooking.findEditShareOwnerInfoDocumentLineEvent(true);
+        EditShareOwnerInfoDocumentLineEvent editShareOwnerInfoDocumentLineEvent = workingBooking.findEditShareOwnerInfoDocumentLineEvent(fromChangesOnly);
         if (editShareOwnerInfoDocumentLineEvent != null) {
             newSection(sb).append("Room mate(s): ").append(String.join(", ", editShareOwnerInfoDocumentLineEvent.getMatesNames()));
         }
-        EditCarersInfoEvent editCarersInfoEvent = workingBooking.findEditCarersInfoEvent(true);
+        EditCarersInfoEvent editCarersInfoEvent = workingBooking.findEditCarersInfoEvent(fromChangesOnly);
         if (editCarersInfoEvent != null) {
             newSection(sb).append("Carer(s): ");
             if (editCarersInfoEvent.getCarer1Name() != null) {
@@ -51,17 +55,17 @@ public final class WorkingBookingHistoryHelper {
             }
         }
         // "Selected member rate" if the user selected the member rate
-        ApplyFacilityFeeEvent applyFacilityFeeEvent = workingBooking.findApplyFacilityFeeEvent(true);
+        ApplyFacilityFeeEvent applyFacilityFeeEvent = workingBooking.findApplyFacilityFeeEvent(fromChangesOnly);
         if (applyFacilityFeeEvent != null) {
             newSection(sb).append(applyFacilityFeeEvent.isApply() ? "Selected member rate" : "Unselected member rate");
         }
         // "Wrote a request" if the user wrote a request
-        AddRequestEvent addRequestEvent = workingBooking.findAddRequestEvent(true);
+        AddRequestEvent addRequestEvent = workingBooking.findAddRequestEvent(fromChangesOnly);
         if (addRequestEvent != null) {
             newSection(sb).append("Wrote a request"); // No need to say more, as the request itself will be copied in
             // the history (request) on the server side (see HistoryRecorder).
         }
-        PriceDocumentLineEvent priceDocumentLineEvent = workingBooking.findPriceDocumentLineEvent(true);
+        PriceDocumentLineEvent priceDocumentLineEvent = workingBooking.findPriceDocumentLineEvent(fromChangesOnly);
         if (priceDocumentLineEvent != null) {
             Integer priceDiscount = priceDocumentLineEvent.getPrice_discount();
             if (priceDiscount != null) {

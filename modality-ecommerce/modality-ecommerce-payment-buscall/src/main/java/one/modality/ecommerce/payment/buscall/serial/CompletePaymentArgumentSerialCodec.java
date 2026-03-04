@@ -33,7 +33,7 @@ public final class CompletePaymentArgumentSerialCodec extends SerialCodecBase<Co
     public CompletePaymentArgument decode(ReadOnlyAstObject serial) {
         return new CompletePaymentArgument(
                 decodeObject( serial, PAYMENT_PRIMARY_KEY_KEY),
-                decodeBoolean(serial, LIVE_KEY),
+                decodeBooleanSafe(serial, LIVE_KEY),
                 decodeString( serial, GATEWAY_NAME_KEY),
                 decodeString( serial, GATEWAY_PAYLOAD_KEY)
         );

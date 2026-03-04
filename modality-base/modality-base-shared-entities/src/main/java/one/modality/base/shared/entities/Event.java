@@ -14,11 +14,12 @@ import java.time.ZoneId;
  * @author Bruno Salmon
  */
 public interface Event extends Entity,
-    EntityHasName,
-    EntityHasLabel,
-    EntityHasIcon,
-    EntityHasOrganization,
-    EntityHasCorporation {
+        EntityHasName,
+        EntityHasLabel,
+        EntityHasIcon,
+        EntityHasOrganization,
+        EntityHasCorporation,
+        EntityHasCurrency {
 
     String state = "state";
     String advertised = "advertised";
@@ -58,11 +59,16 @@ public interface Event extends Entity,
     String onlineAllowed = "onlineAllowed";
     String vodEnabled = "vodEnabled";
 
-    // Virtual dynamic fields (not persisted in the database) available in PolicyAggregate - loaded/computed by ServerPolicyServiceProvider
+    // Virtual dynamic fields (not persisted in the database) available in
+    // PolicyAggregate - loaded/computed by ServerPolicyServiceProvider
     String secondsToOpeningDateAtLoadingTime = "secondsToOpeningDateAtLoadingTime";
     String secondsToBookingProcessStartAtLoadingTime = "secondsToBookingProcessStartAtLoadingTime";
 
-    // Virtual dynamic field (not persisted in the database) used for messaging purpose only
+    // Virtual dynamic field for currency, populated from PolicyAggregate
+    String eventCurrency = "eventCurrency";
+
+    // Virtual dynamic field (not persisted in the database) used for messaging
+    // purpose only
     String queueProgress = "queueProgress";
 
     default void setState(Object value) {
@@ -81,7 +87,6 @@ public interface Event extends Entity,
         return getBooleanFieldValue(advertised);
     }
 
-
     default void setType(Object value) {
         setForeignField(type, value);
     }
@@ -93,7 +98,6 @@ public interface Event extends Entity,
     default EventType getType() {
         return getForeignEntity(type);
     }
-
 
     default void setStartDate(LocalDate value) {
         setFieldValue(startDate, value);
@@ -136,7 +140,7 @@ public interface Event extends Entity,
     }
 
     default void setVodProcessingTimeMinutes(Integer value) {
-        setFieldValue(vodProcessingTimeMinutes,value);
+        setFieldValue(vodProcessingTimeMinutes, value);
     }
 
     default LocalDateTime getVodExpirationDate() {

@@ -13,6 +13,7 @@ import javafx.scene.control.Label;
 import javafx.scene.layout.*;
 import javafx.scene.shape.SVGPath;
 import one.modality.base.shared.entities.Event;
+import one.modality.base.shared.entities.formatters.EventPriceFormatter;
 import one.modality.booking.client.workingbooking.WorkingBookingProperties;
 import one.modality.booking.frontoffice.bookingpage.BookingPageI18nKeys;
 import one.modality.booking.frontoffice.bookingpage.components.BookingPageUIBuilder;
@@ -138,14 +139,14 @@ public class DefaultConfirmationSection implements HasConfirmationSection {
             // PAY_BOOKING entry point - simplified message without email receipt mention
             String formattedAmount = unifiedPriceDisplay != null
                     ? unifiedPriceDisplay.formatPrice(paidAmount)
-                    : one.modality.base.shared.entities.formatters.EventPriceFormatter.formatWithCurrency(paidAmount, event);
+                    : EventPriceFormatter.formatWithCurrency(paidAmount, event);
             I18nControls.bindI18nProperties(subtitleLabel, BookingPageI18nKeys.PaymentOnlyConfirmedMessage, formattedAmount);
         } else {
             // New booking with payment - show full message with amount and email
             String email = confirmedBookings.isEmpty() ? "" : confirmedBookings.get(0).getEmail();
             String formattedAmount = unifiedPriceDisplay != null
                     ? unifiedPriceDisplay.formatPrice(paidAmount)
-                    : one.modality.base.shared.entities.formatters.EventPriceFormatter.formatWithCurrency(paidAmount, event);
+                    : EventPriceFormatter.formatWithCurrency(paidAmount, event);
             I18nControls.bindI18nProperties(subtitleLabel, BookingPageI18nKeys.PaymentConfirmedMessage, formattedAmount, email);
         }
         subtitleLabel.getStyleClass().addAll(bookingpage_text_md, bookingpage_text_muted);
@@ -309,7 +310,7 @@ public class DefaultConfirmationSection implements HasConfirmationSection {
         // Total Amount row
         String formattedTotal = unifiedPriceDisplay != null
                 ? unifiedPriceDisplay.formatPrice(totalAmount)
-                : one.modality.base.shared.entities.formatters.EventPriceFormatter.formatWithCurrency(totalAmount, event);
+                : EventPriceFormatter.formatWithCurrency(totalAmount, event);
         HBox totalRow = createPaymentRow(BookingPageI18nKeys.TotalAmount, formattedTotal, false);
 
         content.getChildren().add(totalRow);
@@ -318,7 +319,7 @@ public class DefaultConfirmationSection implements HasConfirmationSection {
         if (previouslyPaidAmount > 0) {
             String formattedPreviouslyPaid = unifiedPriceDisplay != null
                     ? unifiedPriceDisplay.formatPrice(previouslyPaidAmount)
-                    : one.modality.base.shared.entities.formatters.EventPriceFormatter.formatWithCurrency(previouslyPaidAmount, event);
+                    : EventPriceFormatter.formatWithCurrency(previouslyPaidAmount, event);
             HBox alreadyPaidRow = createPaymentRow(BookingPageI18nKeys.AlreadyPaid, formattedPreviouslyPaid, false);
             content.getChildren().add(alreadyPaidRow);
         }
@@ -326,7 +327,7 @@ public class DefaultConfirmationSection implements HasConfirmationSection {
         // Paid Today row
         String formattedPaid = unifiedPriceDisplay != null
                 ? unifiedPriceDisplay.formatPrice(paidAmount)
-                : one.modality.base.shared.entities.formatters.EventPriceFormatter.formatWithCurrency(paidAmount, event);
+                : EventPriceFormatter.formatWithCurrency(paidAmount, event);
         HBox paidRow = createPaymentRow(BookingPageI18nKeys.PaidToday, formattedPaid, false);
 
         content.getChildren().add(paidRow);
@@ -342,7 +343,7 @@ public class DefaultConfirmationSection implements HasConfirmationSection {
             // Balance row
             String formattedBalance = unifiedPriceDisplay != null
                     ? unifiedPriceDisplay.formatPrice(balanceDue)
-                    : one.modality.base.shared.entities.formatters.EventPriceFormatter.formatWithCurrency(balanceDue, event);
+                    : EventPriceFormatter.formatWithCurrency(balanceDue, event);
             HBox balanceRow = createPaymentRow(BookingPageI18nKeys.BalanceRemaining, formattedBalance, true);
 
             // Info note
@@ -353,7 +354,7 @@ public class DefaultConfirmationSection implements HasConfirmationSection {
 
             String formattedBalanceNote = unifiedPriceDisplay != null
                     ? unifiedPriceDisplay.formatPrice(balanceDue)
-                    : one.modality.base.shared.entities.formatters.EventPriceFormatter.formatWithCurrency(balanceDue, event);
+                    : EventPriceFormatter.formatWithCurrency(balanceDue, event);
             Label noteLabel = new Label();
             I18nControls.bindI18nProperties(noteLabel, BookingPageI18nKeys.BalanceRemainingNote, formattedBalanceNote);
             noteLabel.getStyleClass().addAll(bookingpage_text_sm, bookingpage_text_secondary);
@@ -431,7 +432,7 @@ public class DefaultConfirmationSection implements HasConfirmationSection {
         if (balanceDue > 0) {
             String formattedBalanceStep = unifiedPriceDisplay != null
                     ? unifiedPriceDisplay.formatPrice(balanceDue)
-                    : one.modality.base.shared.entities.formatters.EventPriceFormatter.formatWithCurrency(balanceDue, event);
+                    : EventPriceFormatter.formatWithCurrency(balanceDue, event);
             HBox balanceStep = createWhatsNextStep(
                     createThemedIcon(ICON_CREDIT_CARD, 0.6),
                     BookingPageI18nKeys.PayBalanceTitle,

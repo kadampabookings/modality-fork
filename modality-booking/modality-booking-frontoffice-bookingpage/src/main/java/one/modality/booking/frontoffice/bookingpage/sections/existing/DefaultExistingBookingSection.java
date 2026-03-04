@@ -53,7 +53,7 @@ import static one.modality.booking.frontoffice.bookingpage.BookingPageCssSelecto
  * Default section for handling existing booking choice flow.
  * Displays existing bookings for modification or allows creating new bookings for other members.
  *
- * <p>This section is shown when a user has household members with existing bookings for the event.
+ * <p>This section is shown when a user has account members with existing bookings for the event.
  * It allows them to:</p>
  * <ul>
  *   <li>Select an existing booking to modify</li>
@@ -765,10 +765,10 @@ public class DefaultExistingBookingSection implements BookingFormSection, HasExi
         loadingProperty.set(true);
 
         // Start async loading
-        loadHouseholdMembersAndBookings(userPerson, event, accountId, ownerEmail);
+        loadAccountMembersAndBookings(userPerson, event, accountId, ownerEmail);
     }
 
-    private void loadHouseholdMembersAndBookings(Person userPerson, Event event, Object accountId, String ownerEmail) {
+    private void loadAccountMembersAndBookings(Person userPerson, Event event, Object accountId, String ownerEmail) {
         EntityStore entityStore = EntityStore.create(DataSourceModelService.getDefaultDataSourceModel());
         Object personId = userPerson.getPrimaryKey();
 
@@ -794,7 +794,7 @@ public class DefaultExistingBookingSection implements BookingFormSection, HasExi
                 buildMemberAndBookingLists(context, allDocuments, userPerson, ownerEmail);
             })
             .onFailure(error -> {
-                Console.log("Error loading household members: " + error);
+                Console.log("Error loading account members: " + error);
                 loadingProperty.set(false);
             });
     }
