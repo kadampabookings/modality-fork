@@ -24,7 +24,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * Utility class for loading household members from the database.
+ * Utility class for loading account members from the database.
  * Handles the complex async queries needed to populate the member selection section.
  *
  * <p>This class queries for:</p>
@@ -37,14 +37,14 @@ import java.util.stream.Collectors;
  *
  * @author Bruno Salmon
  */
-public final class HouseholdMemberLoader {
+public final class AccountMemberLoader {
 
-    private HouseholdMemberLoader() {
+    private AccountMemberLoader() {
         // Utility class - no instantiation
     }
 
     /**
-     * Loads household members for the logged-in person and populates the member selection section.
+     * Loads account members for the logged-in person and populates the member selection section.
      *
      * @param userPerson The logged-in person
      * @param memberSection The member selection section to populate
@@ -103,7 +103,7 @@ public final class HouseholdMemberLoader {
                 loadExistingBookings(entityStore, event, accountId, memberSection))
             .onSuccess(v -> promise.complete())
             .onFailure(error -> {
-                Console.log("Error loading household members: " + error);
+                Console.log("Error loading account members: " + error);
                 UiScheduler.runInUiThread(promise::complete);
             });
 

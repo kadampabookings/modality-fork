@@ -35,7 +35,7 @@ public final class AddDocumentLineEventSerialCodec extends AbstractDocumentLineE
                 decodeDocumentLinePrimaryKey(serial),
                 decodeObject(serial, SITE_PRIMARY_KEY),
                 decodeObject(serial, ITEM_PRIMARY_KEY),
-                decodeBoolean(serial, ALLOCATE_KEY)
+                decodeBooleanSafe(serial, ALLOCATE_KEY)
         ), serial);
     }
 }

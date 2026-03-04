@@ -77,7 +77,7 @@ import java.util.stream.IntStream;
  * <p>This form manages:</p>
  * <ul>
  *   <li>State via {@link BookingFormState} (logged-in person, selected member, etc.)</li>
- *   <li>Household member loading via {@link HouseholdMemberLoader}</li>
+ *   <li>Account member loading via {@link AccountMemberLoader}</li>
  *   <li>Navigation between all steps</li>
  *   <li>Generic callback wiring between sections</li>
  * </ul>
@@ -94,7 +94,7 @@ import java.util.stream.IntStream;
  * @author Bruno Salmon
  * @see StandardBookingFormBuilder
  * @see BookingFormState
- * @see HouseholdMemberLoader
+ * @see AccountMemberLoader
  */
 public class StandardBookingForm extends MultiPageBookingForm
     implements BookingFormPaymentHandler.PaymentFormCallback,
@@ -1327,7 +1327,7 @@ public class StandardBookingForm extends MultiPageBookingForm
 
     /**
      * Handles login success asynchronously, returning a Future that completes when
-     * household members are loaded and navigation is ready.
+     * account members are loaded and navigation is ready.
      */
     private Future<?> handleLoginSuccessAsync(Person person) {
         // Update state
@@ -1338,10 +1338,10 @@ public class StandardBookingForm extends MultiPageBookingForm
             callbacks.onAfterLogin();
         }
 
-        // Load household members and navigate
+        // Load account members and navigate
         Event event = getEvent();
         if (defaultMemberSelectionSection != null) {
-            return HouseholdMemberLoader.loadMembersAsync(person, defaultMemberSelectionSection, event)
+            return AccountMemberLoader.loadMembersAsync(person, defaultMemberSelectionSection, event)
                 .onSuccess(v -> UiScheduler.runInUiThread(this::navigateToMemberSelection));
         } else {
             // Skip member selection if section is not configured
@@ -1364,7 +1364,7 @@ public class StandardBookingForm extends MultiPageBookingForm
 
         // For new users (both guests and those creating accounts), skip member selection
         // and go directly to summary. The account doesn't exist yet, so there are no
-        // household members to select. Account creation email will be sent after booking.
+        // account members to select. Account creation email will be sent after booking.
         updateSummaryWithAttendee();
         navigateToSummary();
     }
@@ -2056,8 +2056,8 @@ public class StandardBookingForm extends MultiPageBookingForm
             }
             Event event = getEvent();
             if (defaultMemberSelectionSection != null) {
-                // Pre-load household members, then navigate to next applicable page
-                return HouseholdMemberLoader.loadMembersAsync(userPerson, defaultMemberSelectionSection, event)
+                // Pre-load account members, then navigate to next applicable page
+                return AccountMemberLoader.loadMembersAsync(userPerson, defaultMemberSelectionSection, event)
                     .onSuccess(v -> UiScheduler.runInUiThread(this::navigateToNextPage));
             }
         }

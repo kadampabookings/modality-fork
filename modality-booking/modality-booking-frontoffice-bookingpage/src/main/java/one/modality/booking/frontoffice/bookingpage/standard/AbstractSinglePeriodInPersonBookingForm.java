@@ -894,7 +894,7 @@ public abstract class AbstractSinglePeriodInPersonBookingForm implements Standar
     protected void loadMembersIfLoggedIn() {
         Person person = FXUserPerson.getUserPerson();
         if (person != null && memberSelectionSection != null) {
-            HouseholdMemberLoader.loadMembersAsync(person, memberSelectionSection, settings.event());
+            AccountMemberLoader.loadMembersAsync(person, memberSelectionSection, settings.event());
         }
     }
 
@@ -2791,7 +2791,7 @@ public abstract class AbstractSinglePeriodInPersonBookingForm implements Standar
     public void onAfterLogin() {
         Person person = FXUserPerson.getUserPerson();
         if (person != null && memberSelectionSection != null) {
-            HouseholdMemberLoader.loadMembersAsync(person, memberSelectionSection, settings.event());
+            AccountMemberLoader.loadMembersAsync(person, memberSelectionSection, settings.event());
         }
     }
 

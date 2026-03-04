@@ -21,14 +21,14 @@ import one.modality.booking.frontoffice.bookingpage.standard.BookingSelectionSta
  *
  * <p>For each carer slot, users can:</p>
  * <ul>
- *   <li>Select from household members (self or other adults on the account)</li>
+ *   <li>Select from account members (self or other adults on the account)</li>
  *   <li>Enter "Someone else" with name and optional booking reference</li>
  * </ul>
  *
  * <p>Features:</p>
  * <ul>
  *   <li>Dynamic carer slots based on child's age</li>
- *   <li>Household member selection</li>
+ *   <li>Account member selection</li>
  *   <li>External carer entry with booking reference</li>
  *   <li>Child safety policy acceptance</li>
  *   <li>Validation requiring all carers + policy acceptance</li>
@@ -47,20 +47,20 @@ import one.modality.booking.frontoffice.bookingpage.standard.BookingSelectionSta
 public interface HasChildCarerSection extends BookingFormSection, ResettableSection {
 
     /**
-     * Data class representing a household member who can be selected as a carer.
+     * Data class representing an account member who can be selected as a carer.
      */
-    class HouseholdMember {
+    class AccountMember {
         private final Object personId;
         private final String name;
         private final boolean isSelf;
         private final boolean isAdult;
         private final Object documentId; // Document ID if this person has an existing booking for the event
 
-        public HouseholdMember(Object personId, String name, boolean isSelf, boolean isAdult) {
+        public AccountMember(Object personId, String name, boolean isSelf, boolean isAdult) {
             this(personId, name, isSelf, isAdult, null);
         }
 
-        public HouseholdMember(Object personId, String name, boolean isSelf, boolean isAdult, Object documentId) {
+        public AccountMember(Object personId, String name, boolean isSelf, boolean isAdult, Object documentId) {
             this.personId = personId;
             this.name = name;
             this.isSelf = isSelf;
@@ -128,22 +128,22 @@ public interface HasChildCarerSection extends BookingFormSection, ResettableSect
      */
     String getChildName();
 
-    // === Household Members ===
+    // === Account Members ===
 
     /**
-     * Returns the list of household members available for selection as carers.
+     * Returns the list of account members available for selection as carers.
      */
-    ObservableList<HouseholdMember> getHouseholdMembers();
+    ObservableList<AccountMember> getAccountMembers();
 
     /**
-     * Sets the available household members.
+     * Sets the available account members.
      */
-    void setHouseholdMembers(java.util.List<HouseholdMember> members);
+    void setAccountMembers(java.util.List<AccountMember> members);
 
     /**
-     * Clears the household members list.
+     * Clears the account members list.
      */
-    void clearHouseholdMembers();
+    void clearAccountMembers();
 
     // === Carer 1 Selection ===
 
@@ -153,7 +153,7 @@ public interface HasChildCarerSection extends BookingFormSection, ResettableSect
     StringProperty carer1TypeProperty();
 
     /**
-     * Property for carer 1 person ID (when household member selected).
+     * Property for carer 1 person ID (when account member selected).
      */
     ObjectProperty<Object> carer1PersonIdProperty();
 
@@ -189,7 +189,7 @@ public interface HasChildCarerSection extends BookingFormSection, ResettableSect
     StringProperty carer2TypeProperty();
 
     /**
-     * Property for carer 2 person ID (when household member selected).
+     * Property for carer 2 person ID (when account member selected).
      */
     ObjectProperty<Object> carer2PersonIdProperty();
 

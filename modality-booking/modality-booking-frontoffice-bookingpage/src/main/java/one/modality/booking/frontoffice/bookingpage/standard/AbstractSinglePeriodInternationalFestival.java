@@ -765,7 +765,7 @@ public abstract class AbstractSinglePeriodInternationalFestival implements Stand
     protected void loadMembersIfLoggedIn() {
         Person person = FXUserPerson.getUserPerson();
         if (person != null && memberSelectionSection != null) {
-            HouseholdMemberLoader.loadMembersAsync(person, memberSelectionSection, settings.event());
+            AccountMemberLoader.loadMembersAsync(person, memberSelectionSection, settings.event());
         }
     }
 
@@ -1297,7 +1297,7 @@ public abstract class AbstractSinglePeriodInternationalFestival implements Stand
         // Reload members after login
         Person person = FXUserPerson.getUserPerson();
         if (person != null && memberSelectionSection != null) {
-            HouseholdMemberLoader.loadMembersAsync(person, memberSelectionSection, settings.event());
+            AccountMemberLoader.loadMembersAsync(person, memberSelectionSection, settings.event());
         }
     }
 
