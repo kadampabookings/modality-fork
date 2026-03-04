@@ -11,7 +11,7 @@ import java.util.function.Consumer;
 
 /**
  * Interface for the "Member Selection" section of a booking form.
- * This section displays household members and allows selection of who to book for.
+ * This section displays account members and allows selection of who to book for.
  *
  * @author Bruno Salmon
  * @see BookingFormSection
@@ -33,7 +33,7 @@ public interface HasMemberSelectionSection extends BookingFormSection {
     }
 
     /**
-     * Data class representing a household member.
+     * Data class representing an account member.
      */
     class MemberInfo {
         private final Object personId;
@@ -107,7 +107,7 @@ public interface HasMemberSelectionSection extends BookingFormSection {
 
     /**
      * Returns an observable property indicating if there are members available to book.
-     * Returns true if householdMembers contains at least one member not in alreadyBookedPersonIds.
+     * Returns true if accountMembers contains at least one member not in alreadyBookedPersonIds.
      */
     ObservableBooleanValue hasAvailableMembersProperty();
 
