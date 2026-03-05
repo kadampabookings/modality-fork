@@ -1913,6 +1913,7 @@
     "accommodationItem": "Item",
     "active": "boolean",
     "applicationFormIntro": "HTML",
+    "availableSkills": "string",
     "breakfastItem": "Item",
     "description": "HTML",
     "dietaryFamilyCode": "string",
