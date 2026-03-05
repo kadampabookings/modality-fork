@@ -17,6 +17,8 @@ import one.modality.base.shared.entities.triggers.Triggers;
 import one.modality.ecommerce.document.service.*;
 import one.modality.ecommerce.document.service.events.AbstractDocumentEvent;
 import one.modality.ecommerce.document.service.events.book.*;
+import one.modality.ecommerce.document.service.events.registration.MarkDocumentAsArrivedEvent;
+import one.modality.ecommerce.document.service.events.registration.MarkDocumentAsCheckedOutEvent;
 import one.modality.ecommerce.document.service.events.registration.documentline.AllocateDocumentLineEvent;
 import one.modality.ecommerce.document.service.events.registration.documentline.LinkMateToOwnerDocumentLineEvent;
 import one.modality.ecommerce.document.service.events.registration.documentline.PriceDocumentLineEvent;
@@ -57,7 +59,7 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
         Object docPk = argument.documentPrimaryKey();
         EntityStoreQuery[] queries = {
             // 0 - Loading document
-            new EntityStoreQuery("select event,person,ref,inPerson,person_lang,person_firstName,person_lastName,person_email,person_facilityFee,request,person_carer1Name, person_carer1Document, person_carer2Name, person_carer2Document from Document where id=$1 order by id", docPk),
+            new EntityStoreQuery("select event,person,ref,inPerson,person_lang,person_firstName,person_lastName,person_email,person_facilityFee,request,person_carer1Name, person_carer1Document, person_carer2Name, person_carer2Document, arrived, checkedOut from Document where id=$1 order by id", docPk),
             // 1 - Loading document lines
             new EntityStoreQuery("select document,site,item,price_net,price_minDeposit,price_custom,price_discount" +
                                  ",share_owner,share_owner_mate1Name,share_owner_mate2Name,share_owner_mate3Name,share_owner_mate4Name,share_owner_mate5Name,share_owner_mate6Name,share_owner_mate7Name" +
@@ -99,6 +101,10 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
                         documentEvents.add(new AddRequestEvent(document, document.getRequest()));
                     if (!Strings.isBlank(document.getCarer1Name()) || !Strings.isBlank(document.getCarer2Name()) || document.getCarer1Document() != null || document.getCarer2Document() != null)
                         documentEvents.add(new EditCarersInfoEvent(document, document.getCarer1Name(), document.getCarer1Document(), document.getCarer2Name(), document.getCarer2Document()));
+                    if (document.isArrived())
+                        documentEvents.add(new MarkDocumentAsArrivedEvent(document, true));
+                    if (document.isCheckedOut())
+                        documentEvents.add(new MarkDocumentAsCheckedOutEvent(document, true));
                 });
                 // Aggregating document lines by adding AddDocumentLineEvent and PriceDocumentLineEvent for each document
                 ((List<DocumentLine>) entityLists[1]).forEach(documentLine -> {

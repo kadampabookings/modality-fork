@@ -7,6 +7,8 @@ import one.modality.base.shared.entities.DocumentLine;
 import one.modality.base.shared.entities.Item;
 import one.modality.base.shared.entities.util.Attendances;
 import one.modality.ecommerce.document.service.events.book.*;
+import one.modality.ecommerce.document.service.events.registration.MarkDocumentAsArrivedEvent;
+import one.modality.ecommerce.document.service.events.registration.MarkDocumentAsCheckedOutEvent;
 import one.modality.ecommerce.document.service.events.registration.documentline.PriceDocumentLineEvent;
 
 import java.time.LocalDate;
@@ -64,6 +66,16 @@ public final class WorkingBookingHistoryHelper {
         if (addRequestEvent != null) {
             newSection(sb).append("Wrote a request"); // No need to say more, as the request itself will be copied in
             // the history (request) on the server side (see HistoryRecorder).
+        }
+        // Marked as arrived
+        MarkDocumentAsArrivedEvent markAsArrivedDocumentEvent = workingBooking.findMarkAsArrivedDocumentEvent(fromChangesOnly);
+        if (markAsArrivedDocumentEvent != null) {
+            newSection(sb).append(markAsArrivedDocumentEvent.isArrived() ? "Marked as arrived" : "Unmarked as arrived");
+        }
+        // Marked as checked out
+        MarkDocumentAsCheckedOutEvent markAsCheckedOutDocumentEvent = workingBooking.findMarkAsCheckedOutDocumentEvent(fromChangesOnly);
+        if (markAsCheckedOutDocumentEvent != null) {
+            newSection(sb).append(markAsCheckedOutDocumentEvent.isCheckedOut() ? "Marked as checked out" : "Unmarked as checked out");
         }
         PriceDocumentLineEvent priceDocumentLineEvent = workingBooking.findPriceDocumentLineEvent(fromChangesOnly);
         if (priceDocumentLineEvent != null) {
