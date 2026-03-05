@@ -2,11 +2,11 @@ package one.modality.ecommerce.payment.server.gateway.impl.util;
 
 import dev.webfx.platform.console.Console;
 
-import java.io.BufferedWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -31,11 +31,8 @@ public final class RestApiOneTimeHtmlResponsesCache {
         Console.log("[PAYMENT] Cache set with key: " + key);
         ONE_TIME_HTML_RESPONSES.put(key, value);
         try {
-            Path paymentCacheFile = Files.createFile(getPaymentCacheFilePath(key));
-            BufferedWriter writer = Files.newBufferedWriter(paymentCacheFile, StandardCharsets.UTF_8);
-            writer.write(value);
-            writer.flush();
-            writer.close();
+            Files.writeString(getPaymentCacheFilePath(key), value, StandardCharsets.UTF_8,
+                StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
         } catch (Exception e) {
             Console.log("[PAYMENT] Error while writing cache key: " + key + ": " + e.getMessage());
         }
@@ -47,7 +44,7 @@ public final class RestApiOneTimeHtmlResponsesCache {
             Path paymentCacheFile = getPaymentCacheFilePath(key);
             if (result == null)
                 result = new String(Files.readAllBytes(paymentCacheFile));
-            Files.delete(paymentCacheFile);
+            Files.deleteIfExists(paymentCacheFile);
         } catch (Exception e) {
             Console.log("[PAYMENT] Error while reading cache key: " + key + ": " + e.getMessage());
         }
