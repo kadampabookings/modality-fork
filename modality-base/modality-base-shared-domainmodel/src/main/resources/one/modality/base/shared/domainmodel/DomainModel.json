@@ -1,62 +1,4 @@
 {
-  "AccountingAccount": {
-    "id": 32,
-    "icon": {
-      "expr": "image('images/16/account.png')"
-    },
-    "name": "string",
-    "number": "integer",
-    "type": "AccountingAccountType"
-  },
-  "AccountingAccountType": {
-    "id": 33,
-    "icon": {
-      "expr": "image('images/16/accountType.png')"
-    },
-    "name": "string",
-    "number": "integer"
-  },
-  "Activity": {
-    "id": 38,
-    "icon": {
-      "expr": "image('images/16/activity.png')"
-    },
-    "label": "Label",
-    "name": "string",
-    "organization": "Organization",
-    "parent": "Activity"
-  },
-  "ActivityState": {
-    "id": 101,
-    "name": "string",
-    "owner": "Person",
-    "parameters": "string",
-    "route": "string"
-  },
-  "AllocationRule": {
-    "id": 78,
-    "active": "boolean",
-    "event": "Event",
-    "ifCarer": "boolean",
-    "ifChild": "boolean",
-    "ifCountry": "Country",
-    "ifItem": "Item",
-    "ifLanguage": "Language",
-    "ifLay": "boolean",
-    "ifOrdained": "boolean",
-    "ifOrganization": "Organization",
-    "ifPartialEvent": "boolean",
-    "ifRefMax": "integer",
-    "ifRefMin": "integer",
-    "ifResourceConfiguration": "ResourceConfiguration",
-    "ifSite": "Site",
-    "ifWholeEvent": "boolean",
-    "itemFamily": "ItemFamily",
-    "ord": "integer",
-    "resource": "Resource",
-    "resourceConfiguration": "ResourceConfiguration",
-    "triggerAllocate": "boolean"
-  },
   "Attendance": {
     "id": 48,
     "attended": "boolean",
@@ -72,22 +14,6 @@
     "scheduledResource": "ScheduledResource",
     "time": "date",
     "videoAccessEnabled": "boolean"
-  },
-  "AuthorizationAssignment": {
-    "id": 100,
-    "active": "boolean",
-    "activityState": "ActivityState",
-    "management": "AuthorizationManagement",
-    "operation": "Operation",
-    "role": "AuthorizationRole",
-    "rule": "AuthorizationRule",
-    "scope": "AuthorizationScope"
-  },
-  "AuthorizationManagement": {
-    "id": 96,
-    "active": "boolean",
-    "manager": "Person",
-    "user": "Person"
   },
   "AuthorizationOrganizationAdmin": {
     "id": 134,
@@ -120,10 +46,6 @@
     "role": "AuthorizationRole",
     "rule": "string"
   },
-  "AuthorizationScope": {
-    "id": 99,
-    "name": "string"
-  },
   "AuthorizationSuperAdmin": {
     "id": 137,
     "superAdmin": "Person"
@@ -138,25 +60,6 @@
     "orderUrl": "string",
     "publishDate": "date",
     "title": "string"
-  },
-  "BookablePeriod": {
-    "id": 131,
-    "endScheduledItem": "ScheduledItem",
-    "event": "Event",
-    "label": "Label",
-    "name": "string",
-    "startScheduledItem": "ScheduledItem"
-  },
-  "BookingFormLayout": {
-    "id": 87,
-    "admin1": "boolean",
-    "age": "boolean",
-    "gender": "boolean",
-    "name": "string",
-    "organizationPromptLabel": "Label",
-    "postCode": "boolean",
-    "practitioner": "boolean",
-    "street": "boolean"
   },
   "BracketPattern": {
     "id": 75,
@@ -194,27 +97,6 @@
     "id": 68,
     "forwardToCart": "Cart",
     "uuid": "string"
-  },
-  "CartMessage": {
-    "id": 108,
-    "documentCancelled": "boolean",
-    "documentConfirmed": "boolean",
-    "documentFullyPaid": "boolean",
-    "event": "Event",
-    "grp": "integer",
-    "label": "Label",
-    "ord": "integer",
-    "priority": "integer",
-    "showFrom": "date",
-    "showUntil": "date"
-  },
-  "CartMessageCondition": {
-    "id": 109,
-    "booked": "boolean",
-    "cartMessage": "CartMessage",
-    "date": "date",
-    "item": "Item",
-    "site": "Site"
   },
   "Channel": {
     "id": 118,
@@ -264,22 +146,6 @@
     },
     "name": "string",
     "symbol": "string"
-  },
-  "DateInfo": {
-    "id": 77,
-    "date": "date",
-    "dateTimeRange": "string",
-    "dev": "boolean",
-    "endDate": "date",
-    "event": "Event",
-    "exclude": "boolean",
-    "feesBottomLabel": "Label",
-    "feesPopupLabel": "Label",
-    "forceSoldout": "boolean",
-    "label": "Label",
-    "maxDateTimeRange": "string",
-    "minDateTimeRange": "string",
-    "option": "Option"
   },
   "DayTemplate": {
     "id": 128,
@@ -773,7 +639,6 @@
   "Event": {
     "id": 39,
     "active": "boolean",
-    "activity": "Activity",
     "advertised": "boolean",
     "arrivalDepartureFromDatesSections": "boolean",
     "audioClosingDate": "date",
@@ -947,21 +812,6 @@
     "ord": "integer",
     "orderByClause": "string",
     "whereClause": "string"
-  },
-  "Food": {
-    "id": 119,
-    "description": "string",
-    "fooddbId": "string",
-    "imageUrl": "string",
-    "name": "string",
-    "scientificName": "string",
-    "subFoodGroup": "FoodGroup",
-    "wikipediaId": "string"
-  },
-  "FoodGroup": {
-    "id": 120,
-    "name": "string",
-    "parent": "FoodGroup"
   },
   "FrontendAccount": {
     "id": 69,
@@ -1236,18 +1086,6 @@
     "sendPassword": "boolean",
     "terms": "boolean"
   },
-  "LtTestEvent": {
-    "id": 94,
-    "eventTime": "date",
-    "ltTestSet": "LtTestEvent",
-    "type": "integer",
-    "value": "integer"
-  },
-  "LtTestSet": {
-    "id": 93,
-    "comment": "string",
-    "name": "string"
-  },
   "MagicLink": {
     "id": 124,
     "creationDate": "date",
@@ -1343,19 +1181,6 @@
     "method": "Method",
     "moneyAccountType": "MoneyAccountType",
     "out": "boolean"
-  },
-  "Metrics": {
-    "id": 92,
-    "date": "date",
-    "ltTestSetId": "LtTestSet",
-    "memoryFree": "long",
-    "memoryMax": "long",
-    "memoryTotal": "long",
-    "memoryUsed": {
-      "expr": "memoryTotal - memoryFree"
-    },
-    "processCpuLoad": "long",
-    "systemLoadAverage": "long"
   },
   "MoneyAccount": {
     "id": 53,
@@ -1522,115 +1347,6 @@
     "id": 133,
     "name": "string"
   },
-  "Option": {
-    "id": 40,
-    "adultAllowed": "boolean",
-    "ageErrorLabel": "Label",
-    "allocate": "boolean",
-    "arrivalSite": "Site",
-    "attendanceDatesShift": "integer",
-    "attendanceDocument": "boolean",
-    "attendanceOption": "Option",
-    "bottomLabel": "Label",
-    "cartGroupFamily": "ItemFamily",
-    "cartGroupItem": "Item",
-    "cartGroupLabel": "Label",
-    "cartGroupSite": "Site",
-    "childAllowed": "boolean",
-    "childrenDynamic": "boolean",
-    "childrenPromptLabel": "Label",
-    "childrenRadio": "boolean",
-    "commentLabel": "Label",
-    "dateTimeRange": "string",
-    "dev": "boolean",
-    "documentLineComment": "string",
-    "event": "Event",
-    "femaleAllowed": "boolean",
-    "firstDay": "date",
-    "firstExcludedDay": "date",
-    "firstPass": "boolean",
-    "firstPassOff": "date",
-    "firstPassOn": "date",
-    "floating": "boolean",
-    "folder": "boolean",
-    "footerLabel": "Label",
-    "forceSoldout": "boolean",
-    "forceSoldoutOff": "date",
-    "forceSoldoutOn": "date",
-    "frame": "boolean",
-    "hide": "boolean",
-    "hideDays": "boolean",
-    "hidePerPerson": "boolean",
-    "icon": {
-      "expr": "image('images/16/' + (folder ? 'folder' : 'options') + '.png')"
-    },
-    "invalid": "boolean",
-    "item": "Item",
-    "itemFamily": "ItemFamily",
-    "itemFamilyIcon": {
-      "expr": "coalesce(item.family.icon,itemFamily.icon)"
-    },
-    "label": "Label",
-    "lastDay": "date",
-    "lastExcludedDay": "date",
-    "layAllowed": "boolean",
-    "layout": "string",
-    "maleAllowed": "boolean",
-    "matesOptional": "boolean",
-    "maxAge": "integer",
-    "maxDay": "integer",
-    "minAge": "integer",
-    "minDay": "integer",
-    "name": "string",
-    "obligatory": "boolean",
-    "obligatoryAgreement": "boolean",
-    "online": "boolean",
-    "onlineOff": "date",
-    "onlineOn": "date",
-    "ord": "integer",
-    "ordainedAllowed": "boolean",
-    "parent": "Option",
-    "partialEnabled": "boolean",
-    "perDayAvailability": "boolean",
-    "popupLabel": "Label",
-    "price_custom": "Price",
-    "promptLabel": "Label",
-    "propagateFieldsFromParent": "boolean",
-    "quantityLabel": "Label",
-    "quantityMax": "integer",
-    "radioTraversal": "boolean",
-    "rate": "Rate",
-    "secondPass": "boolean",
-    "secondPassOff": "date",
-    "secondPassOn": "date",
-    "selected": "boolean",
-    "sharingItem": "Item",
-    "site": "Site",
-    "splitWholePartial": "boolean",
-    "template": "boolean",
-    "text": {
-      "expr": "coalesce(name,'') + ' ' + coalesce(site.name,'') + ' ' + coalesce(item.name,'')"
-    },
-    "timeRange": "string",
-    "topLabel": "Label",
-    "visibleCondition": "string"
-  },
-  "OptionCondition": {
-    "id": 81,
-    "anyDay": "boolean",
-    "firstDay": "date",
-    "ifItemFamily": "ItemFamily",
-    "ifMainSite": "boolean",
-    "ifNotMainSite": "boolean",
-    "ifOption": "Option",
-    "ifSite": "Site",
-    "isGroup": "boolean",
-    "isGroupOr": "boolean",
-    "isNot": "boolean",
-    "lastDay": "date",
-    "option": "Option",
-    "parent": "OptionCondition"
-  },
   "Organization": {
     "id": 30,
     "cityName": "string",
@@ -1655,12 +1371,7 @@
     "privacyUrlLabel": "Label",
     "street": "string",
     "teachingsDayTicketItem": "Item",
-    "termsUrlDe": "string",
-    "termsUrlEn": "string",
-    "termsUrlEs": "string",
-    "termsUrlFr": "string",
     "termsUrlLabel": "Label",
-    "termsUrlPt": "string",
     "timezone": "string",
     "type": "OrganizationType"
   },
@@ -1671,18 +1382,6 @@
       "expr": "image('images/16/organizations/' + (id=2? 'kmc' : id=3 ? 'kbc' : id=4 ? 'branch' : 'generic') + '.png')"
     },
     "name": "string"
-  },
-  "Package": {
-    "id": 50,
-    "icon": {
-      "expr": "image('images/16/package.png')"
-    },
-    "name": "string"
-  },
-  "PackageItem": {
-    "id": 51,
-    "item": "Item",
-    "package": "Package"
   },
   "PassTemplate": {
     "id": 150,
@@ -1735,6 +1434,11 @@
     "postCode": "string",
     "removed": "boolean",
     "resident": "boolean",
+    "residentBooksBreakfast": "boolean",
+    "residentBooksDinner": "boolean",
+    "residentBooksLunch": "boolean",
+    "residentRoom": "Resource",
+    "residentRoomMonthlyRent": "Price",
     "street": "string"
   },
   "Playlist": {
@@ -1889,12 +1593,7 @@
   "ResourceConfiguration": {
     "id": 44,
     "allowsFemale": "boolean",
-    "allowsGuest": "boolean",
     "allowsMale": "boolean",
-    "allowsResident": "boolean",
-    "allowsResidentFamily": "boolean",
-    "allowsSpecialGuest": "boolean",
-    "allowsVolunteer": "boolean",
     "building": {
       "expr": "resource.building"
     },
@@ -1906,15 +1605,9 @@
     },
     "item": "Item",
     "max": "integer",
-    "max_online": {
-      "expr": "max - max_paper - max_private"
-    },
-    "max_paper": "integer",
-    "max_private": "integer",
     "name": {
       "expr": "resource.name"
     },
-    "online": "boolean",
     "resource": "Resource",
     "startDate": "date"
   },
@@ -1959,61 +1652,6 @@
     "online": "boolean",
     "scheduledItem": "ScheduledItem"
   },
-  "Sector": {
-    "id": 34,
-    "icon": {
-      "expr": "image('images/16/sector.png')"
-    },
-    "name": "string"
-  },
-  "SessionAgent": {
-    "id": 103,
-    "agentString": "string",
-    "end": "date",
-    "next": "SessionAgent",
-    "previous": "SessionAgent",
-    "start": "date"
-  },
-  "SessionApplication": {
-    "id": 104,
-    "agent": "SessionAgent",
-    "buildNumber": "integer",
-    "buildNumberString": "string",
-    "buildTimestamp": "date",
-    "buildTimestampString": "string",
-    "buildTool": "string",
-    "end": "date",
-    "name": "string",
-    "next": "SessionApplication",
-    "previous": "SessionApplication",
-    "start": "date",
-    "version": "string"
-  },
-  "SessionConnection": {
-    "id": 106,
-    "end": "date",
-    "next": "SessionConnection",
-    "previous": "SessionConnection",
-    "process": "SessionProcess",
-    "start": "date"
-  },
-  "SessionProcess": {
-    "id": 105,
-    "application": "SessionApplication",
-    "end": "date",
-    "next": "SessionProcess",
-    "previous": "SessionProcess",
-    "start": "date"
-  },
-  "SessionUser": {
-    "id": 107,
-    "end": "date",
-    "next": "SessionUser",
-    "previous": "SessionUser",
-    "process": "SessionProcess",
-    "start": "date",
-    "user": "Person"
-  },
   "Site": {
     "id": 42,
     "address": "string",
@@ -2057,27 +1695,6 @@
     "quota": "SmtpQuota",
     "ssl": "boolean",
     "username": "string"
-  },
-  "SmtpQuota": {
-    "id": 59,
-    "icon": {
-      "expr": "image('images/16/smtpQuota.png')"
-    },
-    "name": "string"
-  },
-  "Tag": {
-    "id": 111,
-    "classId": "string",
-    "creationDate": "date",
-    "icon": {
-      "expr": "image('images/16/tag')"
-    },
-    "name": "string"
-  },
-  "Tagged": {
-    "id": 112,
-    "objectId": "long",
-    "tag": "Tag"
   },
   "TaskMetrics": {
     "id": 129,
