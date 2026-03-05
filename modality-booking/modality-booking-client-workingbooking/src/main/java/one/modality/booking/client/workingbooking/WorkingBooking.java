@@ -25,6 +25,8 @@ import one.modality.ecommerce.document.service.*;
 import one.modality.ecommerce.document.service.events.AbstractDocumentEvent;
 import one.modality.ecommerce.document.service.events.AbstractDocumentLineEvent;
 import one.modality.ecommerce.document.service.events.book.*;
+import one.modality.ecommerce.document.service.events.registration.MarkDocumentAsArrivedEvent;
+import one.modality.ecommerce.document.service.events.registration.MarkDocumentAsCheckedOutEvent;
 import one.modality.ecommerce.document.service.events.registration.documentline.*;
 import one.modality.ecommerce.document.service.util.DocumentEvents;
 import one.modality.ecommerce.policy.service.PolicyAggregate;
@@ -450,6 +452,30 @@ public final class WorkingBooking {
         integrateNewDocumentEvent(new AddRequestEvent(document, request), true);
     }
 
+    public void markAsArrived() {
+        markAsArrived(true);
+    }
+
+    public void unmarkAsArrived() {
+        markAsArrived(false);
+    }
+
+    public void markAsArrived(boolean arrived) {
+        integrateNewDocumentEvent(new MarkDocumentAsArrivedEvent(document, arrived), true);
+    }
+
+    public void markAsCheckedOut() {
+        markAsCheckedOut(true);
+    }
+
+    public void unmarkAsCheckedOut() {
+        markAsCheckedOut(false);
+    }
+
+    public void markAsCheckedOut(boolean checkedOut) {
+        integrateNewDocumentEvent(new MarkDocumentAsCheckedOutEvent(document, checkedOut), true);
+    }
+
     private void integrateNewDocumentEvent(AbstractDocumentEvent e, boolean applyImmediatelyToDocument) {
         if (applyImmediatelyToDocument) {
             e.replayEventOnDocument();
@@ -697,6 +723,15 @@ public final class WorkingBooking {
     public PriceDocumentLineEvent findPriceDocumentLineEvent(boolean fromChangesOnly) {
         return getLastestDocumentAggregate().findPriceDocumentLineEvent(fromChangesOnly);
     }
+
+    public MarkDocumentAsArrivedEvent findMarkAsArrivedDocumentEvent(boolean fromChangesOnly) {
+        return getLastestDocumentAggregate().findMarkAsArrivedDocumentEvent(fromChangesOnly);
+    }
+
+    public MarkDocumentAsCheckedOutEvent findMarkAsCheckedOutDocumentEvent(boolean fromChangesOnly) {
+        return getLastestDocumentAggregate().findMarkAsCheckedOutDocumentEvent(fromChangesOnly);
+    }
+
 
     // Static factory and loading methods
 

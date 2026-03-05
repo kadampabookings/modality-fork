@@ -5,6 +5,8 @@ import dev.webfx.stack.orm.entity.EntityStore;
 import one.modality.base.shared.entities.*;
 import one.modality.ecommerce.document.service.events.AbstractDocumentEvent;
 import one.modality.ecommerce.document.service.events.book.*;
+import one.modality.ecommerce.document.service.events.registration.MarkDocumentAsArrivedEvent;
+import one.modality.ecommerce.document.service.events.registration.MarkDocumentAsCheckedOutEvent;
 import one.modality.ecommerce.document.service.events.registration.documentline.PriceDocumentLineEvent;
 import one.modality.ecommerce.document.service.events.registration.documentline.RemoveDocumentLineEvent;
 import one.modality.ecommerce.document.service.events.registration.moneytransfer.RemoveMoneyTransferEvent;
@@ -259,6 +261,20 @@ public final class DocumentAggregate {
         return getNewDocumentEventsStream(excludePreviousVersionEvents)
             .filter(e -> e instanceof EditShareOwnerInfoDocumentLineEvent)
             .map(e -> (EditShareOwnerInfoDocumentLineEvent) e)
+            .findFirst().orElse(null);
+    }
+
+    public MarkDocumentAsArrivedEvent findMarkAsArrivedDocumentEvent(boolean excludePreviousVersionEvents) {
+        return getNewDocumentEventsStream(excludePreviousVersionEvents)
+            .filter(e -> e instanceof MarkDocumentAsArrivedEvent)
+            .map(e -> (MarkDocumentAsArrivedEvent) e)
+            .findFirst().orElse(null);
+    }
+
+    public MarkDocumentAsCheckedOutEvent findMarkAsCheckedOutDocumentEvent(boolean excludePreviousVersionEvents) {
+        return getNewDocumentEventsStream(excludePreviousVersionEvents)
+            .filter(e -> e instanceof MarkDocumentAsCheckedOutEvent)
+            .map(e -> (MarkDocumentAsCheckedOutEvent) e)
             .findFirst().orElse(null);
     }
 

@@ -159,7 +159,7 @@ public interface Document extends
         setFieldValue(dates, value);
     }
 
-    default Boolean getCheckedOut() {
+    default Boolean isCheckedOut() {
         return getBooleanFieldValue(checkedOut);
     }
 

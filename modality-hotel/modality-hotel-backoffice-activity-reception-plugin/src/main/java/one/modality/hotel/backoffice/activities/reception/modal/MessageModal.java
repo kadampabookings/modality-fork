@@ -4,7 +4,6 @@ import dev.webfx.extras.i18n.controls.I18nControls;
 import dev.webfx.extras.util.dialog.DialogCallback;
 import dev.webfx.platform.console.Console;
 import dev.webfx.stack.orm.domainmodel.DataSourceModel;
-import dev.webfx.stack.orm.entity.EntityStore;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.collections.FXCollections;
@@ -27,7 +26,6 @@ import one.modality.hotel.backoffice.activities.reception.util.ReceptionColors;
 import one.modality.hotel.backoffice.activities.reception.util.ReceptionStyles;
 
 import java.util.List;
-import java.util.Objects;
 
 /**
  * Modal dialog for sending messages to departments.
@@ -96,7 +94,7 @@ public class MessageModal implements ReceptionDialogManager.ManagedDialog {
         if (allGuests != null) {
             allGuests.stream()
                 .filter(doc -> doc.isArrived() != null && doc.isArrived() &&
-                              (doc.getCheckedOut() == null || !doc.getCheckedOut()))
+                              (doc.isCheckedOut() == null || !doc.isCheckedOut()))
                 .forEach(inHouseGuests::add);
         }
     }
