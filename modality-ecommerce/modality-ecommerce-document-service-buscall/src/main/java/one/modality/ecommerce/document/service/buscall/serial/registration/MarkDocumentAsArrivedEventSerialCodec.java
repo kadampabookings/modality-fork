@@ -30,8 +30,8 @@ public final class MarkDocumentAsArrivedEventSerialCodec extends AbstractDocumen
     public MarkDocumentAsArrivedEvent decode(ReadOnlyAstObject serial) {
         return postDecode(new MarkDocumentAsArrivedEvent(
             decodeDocumentPrimaryKey(serial),
-            decodeBoolean(serial, ARRIVED_KEY),
-            decodeBoolean(serial, READ_KEY)
+            decodeBooleanSafe(serial, ARRIVED_KEY),
+            decodeBooleanSafe(serial, READ_KEY)
         ), serial);
     }
 }

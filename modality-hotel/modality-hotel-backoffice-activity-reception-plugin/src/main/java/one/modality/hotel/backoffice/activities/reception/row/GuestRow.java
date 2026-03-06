@@ -76,7 +76,7 @@ public class GuestRow {
         LocalDate today = pm.getCurrentDate();
 
         isCancelled = document.isCancelled() != null && document.isCancelled();
-        isCheckedOut = document.getCheckedOut() != null && document.getCheckedOut();
+        isCheckedOut = document.isCheckedOut() != null && document.isCheckedOut();
         isCheckedIn = document.isArrived() != null && document.isArrived();
 
         // Get expected date from document or document lines

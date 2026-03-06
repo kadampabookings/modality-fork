@@ -20,9 +20,10 @@ one.modality.ecommerce.document.service.buscall.serial.registration.documentline
 one.modality.ecommerce.document.service.buscall.serial.registration.documentline.PriceDocumentLineEventSerialCodec
 one.modality.ecommerce.document.service.buscall.serial.registration.documentline.RemoveDocumentLineEventSerialCodec
 one.modality.ecommerce.document.service.buscall.serial.registration.moneytransfer.RemoveMoneyTransferEventSerialCodec
+one.modality.ecommerce.document.service.buscall.serial.registration.ConfirmDocumentEventSerialCodec
 one.modality.ecommerce.document.service.buscall.serial.registration.FlagDocumentEventSerialCodec
 one.modality.ecommerce.document.service.buscall.serial.registration.MarkDocumentAsArrivedEventSerialCodec
-one.modality.ecommerce.document.service.buscall.serial.registration.ConfirmDocumentEventSerialCodec
+one.modality.ecommerce.document.service.buscall.serial.registration.MarkDocumentAsCheckedOutEventSerialCodec
 one.modality.ecommerce.document.service.buscall.serial.registration.MarkDocumentAsReadEventSerialCodec
 one.modality.ecommerce.document.service.buscall.serial.registration.MarkDocumentAsWillPayEventSerialCodec
 one.modality.ecommerce.document.service.buscall.serial.registration.MarkDocumentPassAsReadyEventSerialCodec

@@ -143,7 +143,7 @@ public final class ReceptionDataLoader {
         }
 
         // Check if guest has checked out (using the checkedOut field)
-        if (Boolean.TRUE.equals(doc.getCheckedOut())) {
+        if (Boolean.TRUE.equals(doc.isCheckedOut())) {
             return "checked-out";
         }
 
