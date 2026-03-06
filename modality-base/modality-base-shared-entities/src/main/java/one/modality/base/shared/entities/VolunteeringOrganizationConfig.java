@@ -10,18 +10,17 @@ import one.modality.base.shared.entities.markers.EntityHasOrganization;
 public interface VolunteeringOrganizationConfig extends Entity, EntityHasOrganization {
 
     String name = "name";
-    String slug = "slug";
     String description = "description";
     String logoUrl = "logoUrl";
     String primaryColor = "primaryColor";
     String timezone = "timezone";
-    String contactEmail = "contactEmail";
     String publicApplicationsEnabled = "publicApplicationsEnabled";
     String reminderDaysBeforeArrival = "reminderDaysBeforeArrival";
     String workOnArrivalDay = "workOnArrivalDay";
     String workOnDepartureDay = "workOnDepartureDay";
     String applicationFormIntro = "applicationFormIntro";
     String formConfig = "formConfig";
+    String availableSkills = "availableSkills";
     String kbsVolunteerEvent = "kbsVolunteerEvent";
     String kbsSite = "kbsSite";
     String kbsAccommodationItem = "kbsAccommodationItem";
@@ -29,15 +28,13 @@ public interface VolunteeringOrganizationConfig extends Entity, EntityHasOrganiz
     String kbsLunchItem = "kbsLunchItem";
     String kbsDinnerItem = "kbsDinnerItem";
     String kbsDietaryFamilyCode = "kbsDietaryFamilyCode";
+    String kbsSmtpMailAccount = "kbsSmtpMailAccount";
     String active = "active";
 
     // --- Simple fields ---
 
     default void setName(String value) { setFieldValue(name, value); }
     default String getName() { return getStringFieldValue(name); }
-
-    default void setSlug(String value) { setFieldValue(slug, value); }
-    default String getSlug() { return getStringFieldValue(slug); }
 
     default void setDescription(String value) { setFieldValue(description, value); }
     default String getDescription() { return getStringFieldValue(description); }
@@ -50,9 +47,6 @@ public interface VolunteeringOrganizationConfig extends Entity, EntityHasOrganiz
 
     default void setTimezone(String value) { setFieldValue(timezone, value); }
     default String getTimezone() { return getStringFieldValue(timezone); }
-
-    default void setContactEmail(String value) { setFieldValue(contactEmail, value); }
-    default String getContactEmail() { return getStringFieldValue(contactEmail); }
 
     default void setPublicApplicationsEnabled(Boolean value) { setFieldValue(publicApplicationsEnabled, value); }
     default Boolean isPublicApplicationsEnabled() { return getBooleanFieldValue(publicApplicationsEnabled); }
@@ -71,6 +65,9 @@ public interface VolunteeringOrganizationConfig extends Entity, EntityHasOrganiz
 
     default void setFormConfig(String value) { setFieldValue(formConfig, value); }
     default String getFormConfig() { return getStringFieldValue(formConfig); }
+
+    default void setAvailableSkills(String value) { setFieldValue(availableSkills, value); }
+    default String getAvailableSkills() { return getStringFieldValue(availableSkills); }
 
     default void setKbsDietaryFamilyCode(String value) { setFieldValue(kbsDietaryFamilyCode, value); }
     default String getKbsDietaryFamilyCode() { return getStringFieldValue(kbsDietaryFamilyCode); }
@@ -103,4 +100,8 @@ public interface VolunteeringOrganizationConfig extends Entity, EntityHasOrganiz
     default void setKbsDinnerItem(Object value) { setForeignField(kbsDinnerItem, value); }
     default EntityId getKbsDinnerItemId() { return getForeignEntityId(kbsDinnerItem); }
     default Item getKbsDinnerItem() { return getForeignEntity(kbsDinnerItem); }
+
+    default void setKbsSmtpMailAccount(Object value) { setForeignField(kbsSmtpMailAccount, value); }
+    default EntityId getKbsSmtpMailAccountId() { return getForeignEntityId(kbsSmtpMailAccount); }
+    default MailAccount getKbsSmtpMailAccount() { return getForeignEntity(kbsSmtpMailAccount); }
 }

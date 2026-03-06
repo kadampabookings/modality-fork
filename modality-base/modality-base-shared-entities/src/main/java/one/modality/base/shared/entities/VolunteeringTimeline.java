@@ -4,7 +4,7 @@ import dev.webfx.stack.orm.entity.Entity;
 import dev.webfx.stack.orm.entity.EntityId;
 import one.modality.base.shared.entities.markers.EntityHasOrganization;
 
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 /**
  * Activity event log entry for a volunteer application.
@@ -22,8 +22,8 @@ public interface VolunteeringTimeline extends Entity, EntityHasOrganization {
     default EntityId getApplicationId() { return getForeignEntityId(application); }
     default VolunteeringApplication getApplication() { return getForeignEntity(application); }
 
-    default void setDate(LocalDate value) { setFieldValue(date, value); }
-    default LocalDate getDate() { return getLocalDateFieldValue(date); }
+    default void setDate(LocalDateTime value) { setFieldValue(date, value); }
+    default LocalDateTime getDate() { return getLocalDateTimeFieldValue(date); }
 
     default void setEvent(String value) { setFieldValue(event, value); }
     default String getEvent() { return getStringFieldValue(event); }

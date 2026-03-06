@@ -15,6 +15,7 @@ public final class LoadPolicyArgumentSerialCodec extends SerialCodecBase<LoadPol
     private static final String EVENT_PK_KEY = "eventPk";
     private static final String START_DATE_KEY = "startDate";
     private static final String END_DATE_KEY = "endDate";
+    private static final String ACCOMMODATION_ITEM_PK_KEY = "accommodationItemPk";
 
     public LoadPolicyArgumentSerialCodec() {
         super(LoadPolicyArgument.class, CODEC_ID);
@@ -22,10 +23,11 @@ public final class LoadPolicyArgumentSerialCodec extends SerialCodecBase<LoadPol
 
     @Override
     public void encode(LoadPolicyArgument o, AstObject serial) {
-        encodeObject(   serial, ORGANIZATION_PK_KEY, o.getOrganizationPk());
-        encodeObject(   serial, EVENT_PK_KEY,        o.getEventPk());
-        encodeLocalDate(serial, START_DATE_KEY,      o.getStartDate());
-        encodeLocalDate(serial, END_DATE_KEY,        o.getEndDate());
+        encodeObject(   serial, ORGANIZATION_PK_KEY,       o.getOrganizationPk());
+        encodeObject(   serial, EVENT_PK_KEY,              o.getEventPk());
+        encodeLocalDate(serial, START_DATE_KEY,            o.getStartDate());
+        encodeLocalDate(serial, END_DATE_KEY,              o.getEndDate());
+        encodeObject(   serial, ACCOMMODATION_ITEM_PK_KEY, o.getAccommodationItemPk());
     }
 
     @Override
@@ -34,7 +36,8 @@ public final class LoadPolicyArgumentSerialCodec extends SerialCodecBase<LoadPol
                 decodeObject(   serial, ORGANIZATION_PK_KEY),
                 decodeObject(   serial, EVENT_PK_KEY),
                 decodeLocalDate(serial, START_DATE_KEY),
-                decodeLocalDate(serial, END_DATE_KEY)
+                decodeLocalDate(serial, END_DATE_KEY),
+                decodeObject(   serial, ACCOMMODATION_ITEM_PK_KEY)
         );
     }
 

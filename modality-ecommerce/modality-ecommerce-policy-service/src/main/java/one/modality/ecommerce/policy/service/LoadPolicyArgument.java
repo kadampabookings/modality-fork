@@ -14,13 +14,14 @@ public final class LoadPolicyArgument { // Note: converting it to a record is ca
     private final Object eventPk;
     private final LocalDate startDate;
     private final LocalDate endDate;
+    private final Object accommodationItemPk;
 
     public LoadPolicyArgument(Event event) {
         this(event.getPrimaryKey());
     }
 
     public LoadPolicyArgument(Object eventPk) {
-        this(null, eventPk, null, null);
+        this(null, eventPk, null, null, null);
     }
 
     public LoadPolicyArgument(Organization organization, LocalDate startDate, LocalDate endDate) {
@@ -28,14 +29,19 @@ public final class LoadPolicyArgument { // Note: converting it to a record is ca
     }
 
     public LoadPolicyArgument(Object organizationPk, LocalDate startDate, LocalDate endDate) {
-        this(organizationPk, null, startDate, endDate);
+        this(organizationPk, null, startDate, endDate, null);
     }
 
     public LoadPolicyArgument(Object organizationPk, Object eventPk, LocalDate startDate, LocalDate endDate) {
+        this(organizationPk, eventPk, startDate, endDate, null);
+    }
+
+    public LoadPolicyArgument(Object organizationPk, Object eventPk, LocalDate startDate, LocalDate endDate, Object accommodationItemPk) {
         this.endDate = endDate;
         this.eventPk = eventPk;
         this.organizationPk = organizationPk;
         this.startDate = startDate;
+        this.accommodationItemPk = accommodationItemPk;
     }
 
     public Object getOrganizationPk() {
@@ -52,5 +58,9 @@ public final class LoadPolicyArgument { // Note: converting it to a record is ca
 
     public LocalDate getStartDate() {
         return startDate;
+    }
+
+    public Object getAccommodationItemPk() {
+        return accommodationItemPk;
     }
 }

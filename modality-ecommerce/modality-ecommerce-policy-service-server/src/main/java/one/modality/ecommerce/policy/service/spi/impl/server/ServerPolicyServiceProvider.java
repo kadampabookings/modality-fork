@@ -22,6 +22,9 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
     public Future<PolicyAggregate> loadPolicy(LoadPolicyArgument argument) {
         // Managing the case of recurring event only for now
         Number eventPk = Numbers.toShortestNumber(argument.getEventPk());
+        java.time.LocalDate startDate = argument.getStartDate();
+        java.time.LocalDate endDate = argument.getEndDate();
+        Object accoPk = Numbers.toShortestNumber(argument.getAccommodationItemPk());
         return QueryService.executeQueryBatch(
                 new Batch<>(new QueryArgument[]{
                     // 0 - Loading event
@@ -31,6 +34,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                         ", date_part('epoch', coalesce(bookingProcessStart, openingDate) - now()) as " + Event.secondsToBookingProcessStartAtLoadingTime +
                         " from Event" + " where id=$1", eventPk),
                     // 1 - Loading scheduled items (of this event or of the repeated event if set)
+                    // $1=eventPk, $2=startDate (null → no date filter), $3=endDate, $4=accommodationItemPk (null → pool allocation check)
                     DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
                         "select name,label,comment,site.name,item.(name,label,code,temporal,family.(code,name,label,ord),capacity,share_mate,ord),date,startTime,timeline.(site,item,startTime,endTime),cancelled,resource" +
                         // We also compute the remaining available space for guests
@@ -56,9 +60,11 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                         " and (select si.event = coalesce(e.repeatedEvent, e) " +
                         // or not bound to an event but happening in the event venue with over the period of the event
                         "      or si.event=null and si.site = e.venue and (si.date >= e.startDate and si.date <= e.endDate or exists(select EventPart ep where ep.event=e and si.date>=coalesce(ep.startBoundary.date, ep.startBoundary.scheduledItem.date) and si.date<=coalesce(ep.endBoundary.date, ep.endBoundary.scheduledItem.date))) from Event e where id=$1)" +
-                        // excluding accommodation items with no resource allocated to the general guest pool for this event
-                        " and (si.item.family.code!='acco' or exists(select ScheduledResource sr where scheduledItem=si and exists(select PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and event=$1)))" +
-                        " order by site?.ord,item?.ord,date", eventPk)
+                        // Accommodation filter: when $4 provided use the specific item, else fall back to pool allocation check
+                        " and (si.item.family.code!='acco' or ($4=null ? exists(select ScheduledResource sr where scheduledItem=si and exists(select PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and event=$1)) : si.item=$4))" +
+                        // Date range filter: limit to volunteer's stay dates when $2/$3 provided
+                        " and ($2=null or (si.date>=$2 and si.date<=$3))" +
+                        " order by site?.ord,item?.ord,date", eventPk, startDate, endDate, accoPk)
                     // 2 - Loading scheduled boundaries (of this event or of the repeated event if set)
                     , DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
                     "select event,scheduledItem,timeline.(startTime,endTime),atStartTime,date" +

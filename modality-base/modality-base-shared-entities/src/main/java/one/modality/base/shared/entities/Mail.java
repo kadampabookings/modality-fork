@@ -77,9 +77,8 @@ public interface Mail extends Entity, EntityHasDocument, EntityHasOrganization {
         return getForeignEntityId(account);
     }
 
-    /* MailAccount entity is not yet declared
     default MailAccount getAccount() {
         return getForeignEntity(account);
-    }*/
+    }
 
 }

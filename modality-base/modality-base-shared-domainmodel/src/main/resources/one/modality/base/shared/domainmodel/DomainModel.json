@@ -1981,5 +1981,26 @@
     "organization": "Organization",
     "status": "string",
     "user": "string"
+  },
+  "VolunteeringDateProposal": {
+    "id": 158,
+    "application": "VolunteeringApplication",
+    "proposedStartDate": "date",
+    "proposedEndDate": "date",
+    "proposedStartTime": "string",
+    "proposedEndTime": "string",
+    "proposedBy": "string",
+    "reason": "string",
+    "status": "string",
+    "responseDate": "date",
+    "responseNotes": "string",
+    "version": "integer",
+    "parentProposal": "VolunteeringDateProposal",
+    "actionToken": "string",
+    "actionTokenExpiresAt": "date",
+    "actionTokenUsedAt": "date",
+    "icon": {
+      "expr": "image('images/16/volunteer.png')"
+    }
   }
 }
