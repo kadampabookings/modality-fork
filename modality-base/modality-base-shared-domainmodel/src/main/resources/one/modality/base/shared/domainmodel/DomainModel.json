@@ -1439,6 +1439,7 @@
     "residentBooksLunch": "boolean",
     "residentRoom": "Resource",
     "residentRoomMonthlyRent": "Price",
+    "sponsored": "boolean",
     "street": "string"
   },
   "Playlist": {
