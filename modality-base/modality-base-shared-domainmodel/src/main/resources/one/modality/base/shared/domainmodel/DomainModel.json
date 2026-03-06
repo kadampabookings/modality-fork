@@ -1439,6 +1439,7 @@
     "residentBooksLunch": "boolean",
     "residentRoom": "Resource",
     "residentRoomMonthlyRent": "Price",
+    "sponsored": "boolean",
     "street": "string"
   },
   "Playlist": {
@@ -1907,6 +1908,26 @@
     "subject": "string",
     "type": "string",
     "user": "string"
+  },
+  "VolunteeringDateProposal": {
+    "id": 158,
+    "actionToken": "string",
+    "actionTokenExpiresAt": "date",
+    "actionTokenUsedAt": "date",
+    "application": "VolunteeringApplication",
+    "icon": {
+      "expr": "image('images/16/volunteer.png')"
+    },
+    "proposedBy": "string",
+    "proposedEndDate": "date",
+    "proposedEndTime": "string",
+    "proposedStartDate": "date",
+    "proposedStartTime": "string",
+    "reason": "HTML",
+    "responseDate": "date",
+    "responseNotes": "string",
+    "status": "string",
+    "version": "integer"
   },
   "VolunteeringOrganizationConfig": {
     "id": 151,
