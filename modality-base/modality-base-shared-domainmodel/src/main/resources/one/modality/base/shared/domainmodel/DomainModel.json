@@ -629,6 +629,13 @@
     "timeline": "Timeline",
     "triggerDeferAllocate": "boolean"
   },
+  "Driver": {
+    "id": 159,
+    "isActive": "boolean",
+    "isManager": "boolean",
+    "person": "Person",
+    "wantsShuttleNotice": "boolean"
+  },
   "Error": {
     "id": 132,
     "created": "Temporal.Instant",
