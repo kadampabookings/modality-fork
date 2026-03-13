@@ -108,7 +108,7 @@ final class Timetable {
             // 1. Table layout (for desktops)
             .addResponsiveLayout(/* applicability test: */ width -> {
                     //If the grid skin is a table, we're in the desktop mode, otherwise we're in the mobile mode
-                    return VisualGrid.isTableLayout(videoGrid);
+                    return true; //VisualGrid.isTableLayout(videoGrid);
                 }, /* apply method: */ () -> responsiveDaySelectionMonoPane.setContent(daySwitcher.getDesktopView()),
                 /* test dependencies: */ videoGrid.skinProperty())
             // 2. Vertical layout (for mobiles)
@@ -132,6 +132,7 @@ final class Timetable {
         VBox.setMargin(festivalShopText, new Insets(80, 0, 0, 0));
 
         return new VBox(
+            Layouts.setPadding(TimeZoneSwitch.getGlobal().createTimezoneSwitchBox(), 20, 0, 30, 0),
             responsiveDaySelectionMonoPane,
             videoGrid, // contains the videos for the selected day (or all days)
             festivalShopText

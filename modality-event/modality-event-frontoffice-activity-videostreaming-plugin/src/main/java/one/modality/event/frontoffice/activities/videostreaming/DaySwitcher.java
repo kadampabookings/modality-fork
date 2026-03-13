@@ -77,7 +77,6 @@ public class DaySwitcher {
             desktopViewContainer.getChildren().add(titleLabel);
         }
         desktopViewContainer.getChildren().addAll(
-            TimeZoneSwitch.getGlobal().createTimezoneSwitchBox(),
             I18nControls.newLabel(VideoStreamingI18nKeys.SelectTheDayBelow),
             dayButtonsColumnsPane);
         desktopViewContainer.setAlignment(Pos.TOP_CENTER);
@@ -109,8 +108,7 @@ public class DaySwitcher {
 
         mobileViewContainer.getChildren().setAll(
             daySelectorPane,
-            selectAllDaysLink,
-            TimeZoneSwitch.getGlobal().createTimezoneSwitchBox()
+            selectAllDaysLink
         );
         mobileViewContainer.setAlignment(Pos.CENTER);
     }

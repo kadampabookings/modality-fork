@@ -1879,6 +1879,7 @@
   "VolunteeringArea": {
     "id": 152,
     "active": "boolean",
+    "applicationSource": "string",
     "baselineWeekday": "integer",
     "baselineWeekend": "integer",
     "color": "string",
@@ -1889,7 +1890,9 @@
     "name": "string",
     "organization": "Organization",
     "slug": "string",
-    "workDaysPerWeek": "integer"
+    "workDaysPerWeek": "integer",
+    "workawayEligible": "boolean",
+    "worldpackersEligible": "boolean"
   },
   "VolunteeringAssignment": {
     "id": 154,
@@ -1942,6 +1945,8 @@
     "id": 151,
     "accommodationItem": "Item",
     "active": "boolean",
+    "allowedArrivalDays": "string",
+    "allowedDepartureDays": "string",
     "applicationFormIntro": "HTML",
     "availableSkills": "string",
     "breakfastItem": "Item",
