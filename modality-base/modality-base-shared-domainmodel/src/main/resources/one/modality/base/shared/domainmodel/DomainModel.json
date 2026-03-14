@@ -1094,6 +1094,22 @@
     "sendPassword": "boolean",
     "terms": "boolean"
   },
+  "List": {
+    "id": 160,
+    "createdAt": "Temporal.Instant",
+    "createdBy": "Person",
+    "documentList": "boolean",
+    "name": "string",
+    "organization": "Organization",
+    "personList": "boolean",
+    "public": "boolean"
+  },
+  "ListItem": {
+    "id": 161,
+    "document": "Document",
+    "list": "List",
+    "person": "Person"
+  },
   "MagicLink": {
     "id": 124,
     "creationDate": "Temporal.Instant",
