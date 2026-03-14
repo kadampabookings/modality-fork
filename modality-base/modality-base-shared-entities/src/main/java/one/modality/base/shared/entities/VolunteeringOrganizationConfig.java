@@ -30,6 +30,10 @@ public interface VolunteeringOrganizationConfig extends Entity, EntityHasOrganiz
     String kbsDietaryFamilyCode = "kbsDietaryFamilyCode";
     String kbsSmtpMailAccount = "kbsSmtpMailAccount";
     String active = "active";
+    /** Comma-separated ISO weekday numbers (1=Mon … 7=Sun) for allowed volunteer arrival days. NULL = unrestricted. */
+    String allowedArrivalDays   = "allowedArrivalDays";
+    /** Comma-separated ISO weekday numbers (1=Mon … 7=Sun) for allowed volunteer departure days. NULL = unrestricted. */
+    String allowedDepartureDays = "allowedDepartureDays";
 
     // --- Simple fields ---
 
@@ -74,6 +78,12 @@ public interface VolunteeringOrganizationConfig extends Entity, EntityHasOrganiz
 
     default void setActive(Boolean value) { setFieldValue(active, value); }
     default Boolean isActive() { return getBooleanFieldValue(active); }
+
+    default void setAllowedArrivalDays(String value) { setFieldValue(allowedArrivalDays, value); }
+    default String getAllowedArrivalDays() { return getStringFieldValue(allowedArrivalDays); }
+
+    default void setAllowedDepartureDays(String value) { setFieldValue(allowedDepartureDays, value); }
+    default String getAllowedDepartureDays() { return getStringFieldValue(allowedDepartureDays); }
 
     // --- Foreign key fields ---
 
