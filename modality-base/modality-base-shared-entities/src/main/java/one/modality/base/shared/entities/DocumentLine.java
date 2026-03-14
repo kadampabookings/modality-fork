@@ -40,6 +40,7 @@ public interface DocumentLine extends
     String allocate = "allocate";
     String cleaned = "cleaned";
     String bedNumber = "bedNumber";
+    String pool = "pool";
 
     default void setStartDate(LocalDate value) {
         setFieldValue(startDate, value);
@@ -248,6 +249,18 @@ public interface DocumentLine extends
 
     default void setBedNumber(Integer value) {
         setFieldValue(bedNumber, value);
+    }
+
+    default void setPool(Object value) {
+        setForeignField(pool, value);
+    }
+
+    default EntityId getPoolId() {
+        return getForeignEntityId(pool);
+    }
+
+    default Timeline getPool() {
+        return getForeignEntity(pool);
     }
 
 }

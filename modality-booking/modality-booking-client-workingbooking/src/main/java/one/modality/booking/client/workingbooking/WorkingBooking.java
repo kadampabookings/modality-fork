@@ -228,12 +228,17 @@ public final class WorkingBooking {
     }
 
     public DocumentLine bookItem(Site site, Item item, boolean allocate) {
+        return bookItem(site, item, null, allocate);
+    }
+
+    public DocumentLine bookItem(Site site, Item item, Pool pool, boolean allocate) {
         DocumentLine documentLine = getLastestDocumentAggregate().getFirstSiteItemDocumentLine(site, item);
         if (documentLine == null) {
             documentLine = getEntityStore().createEntity(DocumentLine.class);
             documentLine.setDocument(document);
             documentLine.setSite(site);
             documentLine.setItem(item);
+            documentLine.setPool(pool);
             integrateNewDocumentEvent(new AddDocumentLineEvent(documentLine, allocate), false);
         }
         return documentLine;
@@ -248,10 +253,14 @@ public final class WorkingBooking {
     }
 
     public DocumentLine bookTemporalButNonScheduledItem(Site site, Item item, List<LocalDate> dates, boolean replaceExistingDates) {
-        return bookDatesOrScheduledItems(site, item, dates, replaceExistingDates);
+        return bookDatesOrScheduledItems(site, item, dates, null, replaceExistingDates);
     }
 
     public void bookScheduledItems(List<ScheduledItem> scheduledItems, boolean replaceExistingDates) {
+        bookScheduledItems(scheduledItems, null, replaceExistingDates);
+    }
+
+    public void bookScheduledItems(List<ScheduledItem> scheduledItems, Pool pool, boolean replaceExistingDates) {
         if (scheduledItems.isEmpty())
             return;
         // Group scheduled items by (site, item) and process each group separately.
@@ -262,7 +271,7 @@ public final class WorkingBooking {
         for (List<ScheduledItem> group : groupedBySiteItem.values()) {
             if (!group.isEmpty()) {
                 ScheduledItem sample = group.get(0);
-                bookDatesOrScheduledItems(sample.getSite(), sample.getItem(), group, replaceExistingDates);
+                bookDatesOrScheduledItems(sample.getSite(), sample.getItem(), group, pool, replaceExistingDates);
             }
         }
     }
@@ -273,12 +282,12 @@ public final class WorkingBooking {
         return siteKey + ":" + itemKey;
     }
 
-    private DocumentLine bookDatesOrScheduledItems(Site site, Item item, List<?> datesOrScheduledItems, boolean replaceExistingDates) {
+    private DocumentLine bookDatesOrScheduledItems(Site site, Item item, List<?> datesOrScheduledItems, Pool pool, boolean replaceExistingDates) {
         if (datesOrScheduledItems.isEmpty())
             return null;
         boolean allocate = Collections.first(datesOrScheduledItems) instanceof ScheduledItem &&
                            ScheduledItems.hasResourceManagement((List<ScheduledItem>) datesOrScheduledItems);
-        DocumentLine documentLine = bookItem(site, item, allocate);
+        DocumentLine documentLine = bookItem(site, item, pool, allocate);
         List<Attendance> existingAttendances = getLastestDocumentAggregate().getLineAttendances(documentLine);
         Attendance[] newAttendances = datesOrScheduledItems.stream().map(dateOrScheduledItem -> {
             // Checking that the scheduledItem is not already in the existing attendances
