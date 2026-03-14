@@ -421,6 +421,12 @@ public interface VolunteeringApplication extends Entity,
     default void setReferenceNotes(String value) { setFieldValue(referenceNotes, value); }
     default String getReferenceNotes() { return getStringFieldValue(referenceNotes); }
 
+    // --- Application source ---
+    String applicationSource = "applicationSource";
+
+    default void setApplicationSource(String value) { setFieldValue(applicationSource, value); }
+    default String getApplicationSource() { return getStringFieldValue(applicationSource); }
+
     // --- Soft delete ---
     String removed = "removed";
     default void setRemoved(Boolean value) { setFieldValue(removed, value); }

@@ -19,6 +19,8 @@ public interface VolunteeringArea extends Entity, EntityHasOrganization {
     String baselineWeekend = "baselineWeekend";
     String workDaysPerWeek = "workDaysPerWeek";
     String active = "active";
+    String workawayEligible = "workawayEligible";
+    String worldpackersEligible = "worldpackersEligible";
 
     default void setName(String value) { setFieldValue(name, value); }
     default String getName() { return getStringFieldValue(name); }
@@ -52,4 +54,10 @@ public interface VolunteeringArea extends Entity, EntityHasOrganization {
 
     default void setActive(Boolean value) { setFieldValue(active, value); }
     default Boolean isActive() { return getBooleanFieldValue(active); }
+
+    default void setWorkawayEligible(boolean value) { setFieldValue(workawayEligible, value); }
+    default boolean isWorkawayEligible() { return Boolean.TRUE.equals(getBooleanFieldValue(workawayEligible)); }
+
+    default void setWorldpackersEligible(boolean value) { setFieldValue(worldpackersEligible, value); }
+    default boolean isWorldpackersEligible() { return Boolean.TRUE.equals(getBooleanFieldValue(worldpackersEligible)); }
 }
