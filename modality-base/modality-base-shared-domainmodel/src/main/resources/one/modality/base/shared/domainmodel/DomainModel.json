@@ -1098,11 +1098,12 @@
     "id": 160,
     "createdAt": "Temporal.Instant",
     "createdBy": "Person",
+    "description": "string",
     "documentList": "boolean",
     "name": "string",
     "organization": "Organization",
     "personList": "boolean",
-    "public": "boolean"
+    "shared": "boolean"
   },
   "ListItem": {
     "id": 161,
