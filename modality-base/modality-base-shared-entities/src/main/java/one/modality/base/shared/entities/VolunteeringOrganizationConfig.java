@@ -21,6 +21,7 @@ public interface VolunteeringOrganizationConfig extends Entity, EntityHasOrganiz
     String applicationFormIntro = "applicationFormIntro";
     String formConfig = "formConfig";
     String availableSkills = "availableSkills";
+    String availableReferralSources = "availableReferralSources";
     String kbsVolunteerEvent = "kbsVolunteerEvent";
     String kbsSite = "kbsSite";
     String kbsAccommodationItem = "kbsAccommodationItem";
@@ -29,6 +30,12 @@ public interface VolunteeringOrganizationConfig extends Entity, EntityHasOrganiz
     String kbsDinnerItem = "kbsDinnerItem";
     String kbsDietaryFamilyCode = "kbsDietaryFamilyCode";
     String kbsSmtpMailAccount = "kbsSmtpMailAccount";
+    String referenceRequestLetter = "referenceRequestLetter";
+    String preConfirmationLetter = "preConfirmationLetter";
+    String datesConfirmedLetter = "datesConfirmedLetter";
+    String arrivalReminderLetter = "arrivalReminderLetter";
+    String applicationReceivedLetter = "applicationReceivedLetter";
+    String newApplicationCoordinatorLetter = "newApplicationCoordinatorLetter";
     String active = "active";
     /** Comma-separated ISO weekday numbers (1=Mon … 7=Sun) for allowed volunteer arrival days. NULL = unrestricted. */
     String allowedArrivalDays   = "allowedArrivalDays";
@@ -73,6 +80,9 @@ public interface VolunteeringOrganizationConfig extends Entity, EntityHasOrganiz
     default void setAvailableSkills(String value) { setFieldValue(availableSkills, value); }
     default String getAvailableSkills() { return getStringFieldValue(availableSkills); }
 
+    default void setAvailableReferralSources(String value) { setFieldValue(availableReferralSources, value); }
+    default String getAvailableReferralSources() { return getStringFieldValue(availableReferralSources); }
+
     default void setKbsDietaryFamilyCode(String value) { setFieldValue(kbsDietaryFamilyCode, value); }
     default String getKbsDietaryFamilyCode() { return getStringFieldValue(kbsDietaryFamilyCode); }
 
@@ -114,4 +124,28 @@ public interface VolunteeringOrganizationConfig extends Entity, EntityHasOrganiz
     default void setKbsSmtpMailAccount(Object value) { setForeignField(kbsSmtpMailAccount, value); }
     default EntityId getKbsSmtpMailAccountId() { return getForeignEntityId(kbsSmtpMailAccount); }
     default MailAccount getKbsSmtpMailAccount() { return getForeignEntity(kbsSmtpMailAccount); }
+
+    default void setReferenceRequestLetter(Object value) { setForeignField(referenceRequestLetter, value); }
+    default EntityId getReferenceRequestLetterId() { return getForeignEntityId(referenceRequestLetter); }
+    default Letter getReferenceRequestLetter() { return getForeignEntity(referenceRequestLetter); }
+
+    default void setPreConfirmationLetter(Object value) { setForeignField(preConfirmationLetter, value); }
+    default EntityId getPreConfirmationLetterId() { return getForeignEntityId(preConfirmationLetter); }
+    default Letter getPreConfirmationLetter() { return getForeignEntity(preConfirmationLetter); }
+
+    default void setDatesConfirmedLetter(Object value) { setForeignField(datesConfirmedLetter, value); }
+    default EntityId getDatesConfirmedLetterId() { return getForeignEntityId(datesConfirmedLetter); }
+    default Letter getDatesConfirmedLetter() { return getForeignEntity(datesConfirmedLetter); }
+
+    default void setArrivalReminderLetter(Object value) { setForeignField(arrivalReminderLetter, value); }
+    default EntityId getArrivalReminderLetterId() { return getForeignEntityId(arrivalReminderLetter); }
+    default Letter getArrivalReminderLetter() { return getForeignEntity(arrivalReminderLetter); }
+
+    default void setApplicationReceivedLetter(Object value) { setForeignField(applicationReceivedLetter, value); }
+    default EntityId getApplicationReceivedLetterId() { return getForeignEntityId(applicationReceivedLetter); }
+    default Letter getApplicationReceivedLetter() { return getForeignEntity(applicationReceivedLetter); }
+
+    default void setNewApplicationCoordinatorLetter(Object value) { setForeignField(newApplicationCoordinatorLetter, value); }
+    default EntityId getNewApplicationCoordinatorLetterId() { return getForeignEntityId(newApplicationCoordinatorLetter); }
+    default Letter getNewApplicationCoordinatorLetter() { return getForeignEntity(newApplicationCoordinatorLetter); }
 }

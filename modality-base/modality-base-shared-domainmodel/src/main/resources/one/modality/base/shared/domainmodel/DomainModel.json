@@ -1971,6 +1971,7 @@
     "arrivalReminderLetter": "Letter",
     "availableReferralSources": "string",
     "availableSkills": "string",
+    "availableReferralSources": "string",
     "breakfastItem": "Item",
     "datesConfirmedLetter": "Letter",
     "description": "HTML",
@@ -1994,7 +1995,13 @@
     "timezone": "string",
     "volunteerEvent": "Event",
     "workOnArrivalDay": "boolean",
-    "workOnDepartureDay": "boolean"
+    "workOnDepartureDay": "boolean",
+    "referenceRequestLetter": "Letter",
+    "preConfirmationLetter": "Letter",
+    "datesConfirmedLetter": "Letter",
+    "arrivalReminderLetter": "Letter",
+    "applicationReceivedLetter": "Letter",
+    "newApplicationCoordinatorLetter": "Letter"
   },
   "VolunteeringSpecialNeeds": {
     "id": 157,
