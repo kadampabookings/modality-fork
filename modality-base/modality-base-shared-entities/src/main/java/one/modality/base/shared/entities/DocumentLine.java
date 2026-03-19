@@ -259,7 +259,7 @@ public interface DocumentLine extends
         return getForeignEntityId(pool);
     }
 
-    default Timeline getPool() {
+    default Pool getPool() {
         return getForeignEntity(pool);
     }
 
