@@ -119,11 +119,15 @@ public class ScheduledItemGenerationView {
         HBox statusRow = new HBox(15, statusLabel, viewDetailsButton);
         statusRow.setAlignment(Pos.CENTER_LEFT);
 
-        VBox topContainer = new VBox(10, organizationNameLabel, dangerMessageBox, timelinesGrid, resourcesDisplayBox, controls, progressBar, statusRow);
-        topContainer.setPadding(new Insets(10));
+        VBox allContent = new VBox(10, organizationNameLabel, dangerMessageBox, timelinesGrid, resourcesDisplayBox, controls, progressBar, statusRow, statusPane);
+        allContent.setPadding(new Insets(10));
 
-        container.setTop(topContainer);
-        container.setCenter(new ScrollPane(statusPane));
+        ScrollPane scrollPane = new ScrollPane(allContent);
+        scrollPane.setFitToWidth(true);
+        scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scrollPane.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
+
+        container.setCenter(scrollPane);
     }
 
     private void loadOrganizationInfo() {
