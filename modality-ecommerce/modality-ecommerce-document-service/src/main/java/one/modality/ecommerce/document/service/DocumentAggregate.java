@@ -229,10 +229,11 @@ public final class DocumentAggregate {
             .orElse(null);
     }
 
-    public PriceDocumentLineEvent findPriceDocumentLineEvent(boolean excludePreviousVersionEvents) {
+    public PriceDocumentLineEvent findPriceDocumentLineEvent(DocumentLine documentLine, boolean excludePreviousVersionEvents) {
         return getNewDocumentEventsStream(excludePreviousVersionEvents)
             .filter(e -> e instanceof PriceDocumentLineEvent)
             .map(e -> (PriceDocumentLineEvent) e)
+            .filter(e -> documentLine == null || e.getDocumentLine().equals(documentLine))
             .findFirst().orElse(null);
     }
 

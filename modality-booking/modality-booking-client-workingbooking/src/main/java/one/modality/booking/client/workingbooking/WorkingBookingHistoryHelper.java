@@ -77,7 +77,7 @@ public final class WorkingBookingHistoryHelper {
         if (markAsCheckedOutDocumentEvent != null) {
             newSection(sb).append(markAsCheckedOutDocumentEvent.isCheckedOut() ? "Marked as checked out" : "Unmarked as checked out");
         }
-        PriceDocumentLineEvent priceDocumentLineEvent = workingBooking.findPriceDocumentLineEvent(fromChangesOnly);
+        PriceDocumentLineEvent priceDocumentLineEvent = workingBooking.findPriceDocumentLineEvent(null, fromChangesOnly);
         if (priceDocumentLineEvent != null) {
             Integer priceDiscount = priceDocumentLineEvent.getPrice_discount();
             if (priceDiscount != null) {

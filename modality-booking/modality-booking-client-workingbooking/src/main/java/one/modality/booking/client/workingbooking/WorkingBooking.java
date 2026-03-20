@@ -729,8 +729,8 @@ public final class WorkingBooking {
         return getLastestDocumentAggregate().findEditCarersInfoEvent(fromChangesOnly);
     }
 
-    public PriceDocumentLineEvent findPriceDocumentLineEvent(boolean fromChangesOnly) {
-        return getLastestDocumentAggregate().findPriceDocumentLineEvent(fromChangesOnly);
+    public PriceDocumentLineEvent findPriceDocumentLineEvent(DocumentLine documentLine, boolean fromChangesOnly) {
+        return getLastestDocumentAggregate().findPriceDocumentLineEvent(documentLine, fromChangesOnly);
     }
 
     public MarkDocumentAsArrivedEvent findMarkAsArrivedDocumentEvent(boolean fromChangesOnly) {
