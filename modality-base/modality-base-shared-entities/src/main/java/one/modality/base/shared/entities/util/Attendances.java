@@ -51,9 +51,9 @@ public final class Attendances {
 
     public static boolean attendanceMatchesDateOrScheduledItem(Attendance a, Object dateOrScheduledItem) {
         if (dateOrScheduledItem instanceof ScheduledItem scheduledItem) {
-            return Entities.sameId(a.getScheduledItem(), scheduledItem) || Objects.equals(a.getDate(), scheduledItem.getDate());
+            return Entities.sameId(a.getScheduledItem(), scheduledItem) || Objects.equals(Attendances.getDate(a), scheduledItem.getDate());
         }
         // dateOrScheduledItem is a LocalDate
-        return Objects.equals(a.getDate(), dateOrScheduledItem);
+        return Objects.equals(Attendances.getDate(a), dateOrScheduledItem);
     }
 }
