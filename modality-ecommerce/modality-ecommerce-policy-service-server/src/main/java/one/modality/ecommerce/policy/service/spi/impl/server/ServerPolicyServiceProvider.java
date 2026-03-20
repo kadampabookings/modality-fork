@@ -63,7 +63,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                         // or not bound to an event but happening in the event venue with over the period of the event
                         "      or si.event=null and si.site = e.venue and (si.date >= e.startDate and si.date <= e.endDate or exists(select EventPart ep where ep.event=e and si.date>=coalesce(ep.startBoundary.date, ep.startBoundary.scheduledItem.date) and si.date<=coalesce(ep.endBoundary.date, ep.endBoundary.scheduledItem.date))) from Event e where id=$1)" +
                         // Accommodation filter: when $4 provided use the specific item, else fall back to pool allocation check
-                        " and (si.item.family.code!='acco' or ($4::int=null ? exists(select ScheduledResource sr where scheduledItem=si and exists(select PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and event=$1)) : si.item=$4))" +
+                        " and (si.item.family.code!='acco' or exists(select Event where id=$1 and type=61) and si.item=398 or ($4::int=null ? exists(select ScheduledResource sr where scheduledItem=si and exists(select PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and event=$1)) : si.item=$4))" +
                         // Date range filter: limit to volunteer's stay dates when $2/$3 provided
                         " and ($2::date=null or si.date>=$2) and ($3::date=null or si.date<=$3)" +
                         " order by site?.ord,item?.ord,date", eventPk, startDate, endDate, accoPk)

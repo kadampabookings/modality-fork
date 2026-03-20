@@ -4,6 +4,7 @@ import dev.webfx.extras.i18n.controls.I18nControls;
 import dev.webfx.extras.styles.bootstrap.Bootstrap;
 import dev.webfx.extras.util.border.BorderFactory;
 import dev.webfx.platform.async.Future;
+import dev.webfx.platform.console.Console;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
@@ -14,6 +15,7 @@ import javafx.scene.paint.Color;
 import one.modality.booking.backoffice.bookingeditor.BookingEditor;
 import one.modality.booking.client.workingbooking.WorkingBooking;
 import one.modality.booking.client.workingbooking.WorkingBookingHistoryHelper;
+import one.modality.ecommerce.document.service.DocumentChangesStatus;
 
 /**
  * @author Bruno Salmon
@@ -35,8 +37,15 @@ public abstract class BookingEditorBase implements BookingEditor {
     @Override
     public Future<Void> saveChanges() {
         syncWorkingBookingFromUi();
-        return workingBooking.submitChanges(WorkingBookingHistoryHelper.generateHistoryComment(workingBooking), false)
-            .mapEmpty();
+        String historyComment = WorkingBookingHistoryHelper.generateHistoryComment(workingBooking);
+        return workingBooking.submitChanges(historyComment, false)
+            .onFailure(Console::log)
+            .onSuccess(result -> {
+                if (result.status() == DocumentChangesStatus.REJECTED)
+                    Console.log("Document changes rejected, reason = " + result.rejectedReason() + ", sold-out site: " + result.soldOutSitePrimaryKey() + ", sold-out item: " + result.soldOutItemPrimaryKey());
+            })
+            .mapEmpty()
+            ;
     }
 
     protected static Node embedInFrame(Node content, Object i18nKey) {
@@ -48,6 +57,7 @@ public abstract class BookingEditorBase implements BookingEditor {
         StackPane frame = new StackPane(content, label);
         frame.setBorder(BorderFactory.newBorder(Color.LIGHTGRAY, 10));
         frame.setPadding(new Insets(20, 15, 15, 15));
+        //frame.setMinWidth(400);
         return frame;
     }
 

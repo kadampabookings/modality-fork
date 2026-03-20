@@ -1,6 +1,7 @@
 package one.modality.ecommerce.document.service;
 
 import dev.webfx.platform.util.collection.Collections;
+import dev.webfx.stack.orm.entity.Entities;
 import dev.webfx.stack.orm.entity.EntityStore;
 import one.modality.base.shared.entities.*;
 import one.modality.ecommerce.document.service.events.AbstractDocumentEvent;
@@ -361,7 +362,7 @@ public final class DocumentAggregate {
 
     public Stream<DocumentLine> getSiteItemDocumentLinesStream(Site site, Item item) {
         return getDocumentLinesStream()
-                .filter(line -> Objects.equals(line.getSite(), site) && Objects.equals(line.getItem(), item));
+                .filter(line -> Entities.samePrimaryKey(line.getSite(), site) && Entities.samePrimaryKey(line.getItem(), item));
     }
 
     public List<DocumentLine> getSiteItemDocumentLines(Site site, Item item) {

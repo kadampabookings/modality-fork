@@ -22,9 +22,10 @@ public interface BookingEditorProvider {
 
     static BookingEditorProvider bestSuitableProvider(WorkingBooking workingBooking) {
         List<BookingEditorProvider> allProviders = MultipleServiceProviders.getProviders(BookingEditorProvider.class, () -> ServiceLoader.load(BookingEditorProvider.class));
-        if (allProviders.size() > 1)
+        allProviders = Collections.filter(allProviders, bookingEditorProvider -> bookingEditorProvider.acceptBooking(workingBooking));
+        if (allProviders.size() >= 1)
             return new MultiBookingEditorProvider(allProviders);
-        return Collections.findFirst(allProviders, bookingEditorProvider -> bookingEditorProvider.acceptBooking(workingBooking));
+        return Collections.first(allProviders);
     }
 
     static BookingEditor bestSuitableBookingEditor(WorkingBooking workingBooking) {

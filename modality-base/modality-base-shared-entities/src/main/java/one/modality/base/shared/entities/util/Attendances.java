@@ -1,9 +1,11 @@
 package one.modality.base.shared.entities.util;
 
+import dev.webfx.platform.util.collection.Collections;
 import dev.webfx.stack.orm.entity.Entities;
 import one.modality.base.shared.entities.*;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -55,5 +57,9 @@ public final class Attendances {
         }
         // dateOrScheduledItem is a LocalDate
         return Objects.equals(Attendances.getDate(a), dateOrScheduledItem);
+    }
+
+    public static List<LocalDate> toDates(List<Attendance> attendances) {
+        return Collections.map(attendances, Attendances::getDate);
     }
 }
