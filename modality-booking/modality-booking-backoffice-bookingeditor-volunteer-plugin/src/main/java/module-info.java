@@ -8,12 +8,12 @@ module modality.booking.backoffice.bookingeditor.volunteer.plugin {
     requires modality.base.shared.entities;
     requires modality.base.shared.knownitems;
     requires modality.booking.backoffice.bookingeditor;
-    requires modality.booking.client.scheduleditemsselector;
     requires modality.booking.client.scheduleditemsselector.box;
     requires modality.booking.client.workingbooking;
     requires modality.ecommerce.policy.service;
     requires webfx.extras.styles.bootstrap;
     requires webfx.kit.util;
+    requires webfx.platform.util;
     requires webfx.stack.orm.entity;
 
     // Exported packages
