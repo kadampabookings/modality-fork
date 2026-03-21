@@ -80,7 +80,7 @@ final class VolunteerBookingEditor extends FamilyBookingEditorBase {
         veganItem.setTemporal(false);
         veganItem.setOrd(0);
         if (workingBooking.isNewBooking()) {
-            Collections.setAll(attendanceDates, ScheduledItems.toDates(getPolicyFamilyScheduledItems()));
+            setAttendanceDates(ScheduledItems.toDates(getPolicyFamilyScheduledItems()));
             arrivalBoundary = Boundary.DINNER;
             departureBoundary = Boundary.LUNCH;
             bookAccommodation(true);
@@ -89,8 +89,7 @@ final class VolunteerBookingEditor extends FamilyBookingEditorBase {
             bookDinner(true);
             bookDiet(false);
         } else {
-            Collections.setAll(attendanceDates, Attendances.toDates(workingBooking.getBookedAttendances()));
-            attendanceDates.sort(LocalDate::compareTo);
+            setAttendanceDates(Attendances.toDates(workingBooking.getBookedAttendances()));
             LocalDate arrivalDate = getArrivalDate();
             if (isBreakfastBooked(arrivalDate))
                 arrivalBoundary = Boundary.BREAKFAST;
@@ -212,12 +211,17 @@ final class VolunteerBookingEditor extends FamilyBookingEditorBase {
 
     @Override
     public void syncWorkingBookingFromUi() {
-        Collections.setAll(attendanceDates, boxScheduledItemsSelector.getSelectedDates());
+        setAttendanceDates(boxScheduledItemsSelector.getSelectedDates());
         bookAccommodation(accommodationCheckBox.isSelected());
         bookBreakfast(breakfastCheckBox.isSelected());
         bookLunch(lunchCheckBox.isSelected());
         bookDinner(dinnerCheckBox.isSelected());
         bookDiet(veganCheckBox.isSelected());
+    }
+
+    private void setAttendanceDates(List<LocalDate> newDates) {
+        Collections.setAll(attendanceDates, newDates);
+        attendanceDates.sort(LocalDate::compareTo);
     }
 
     private LocalDate getArrivalDate() {
@@ -237,7 +241,10 @@ final class VolunteerBookingEditor extends FamilyBookingEditorBase {
         if (book) {
             boolean includingArrivalDate = arrivalBoundary.ordinal() <= Boundary.ACCOMMODATION.ordinal();
             boolean includingDepartureDate = departureBoundary.ordinal() >= Boundary.ACCOMMODATION.ordinal();
-            List<ScheduledItem> scheduledItems = Collections.filter(dormitoryScheduledItems, si -> (includingArrivalDate || !Objects.equals(si.getDate(), getArrivalDate())) && (includingDepartureDate || !Objects.equals(si.getDate(), getDepartureDate())));
+            List<ScheduledItem> scheduledItems = Collections.filter(dormitoryScheduledItems, si ->
+                attendanceDates.contains(si.getDate())
+                && (includingArrivalDate || !Objects.equals(si.getDate(), getArrivalDate()))
+                && (includingDepartureDate || !Objects.equals(si.getDate(), getDepartureDate())));
             workingBooking.bookScheduledItems(scheduledItems, true);
         } else
             workingBooking.unbookScheduledItems(dormitoryScheduledItems);
