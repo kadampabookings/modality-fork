@@ -10,6 +10,7 @@ import one.modality.base.shared.entities.Rate;
 import one.modality.base.shared.entities.SiteItem;
 import one.modality.base.shared.entities.util.Rates;
 import one.modality.ecommerce.document.service.DocumentAggregate;
+import one.modality.ecommerce.document.service.events.registration.documentline.PriceDocumentLineEvent;
 import one.modality.ecommerce.policy.service.PolicyAggregate;
 
 import java.time.LocalDate;
@@ -23,14 +24,16 @@ import java.util.stream.Collectors;
 public final class SiteItemBill {
 
     private final SiteItem siteItem;
+    private final PriceDocumentLineEvent priceDocumentLineEvent;
     private final List<AttendanceBill> attendanceBills = new ArrayList<>();
     private boolean childRateApplied;
 
     private int totalPrice = -1;
     private int minDeposit = -1;
 
-    SiteItemBill(SiteItem siteItem) {
+    SiteItemBill(SiteItem siteItem, PriceDocumentLineEvent priceDocumentLineEvent) {
         this.siteItem = siteItem;
+        this.priceDocumentLineEvent = priceDocumentLineEvent;
     }
 
     public SiteItem getSiteItem() {
@@ -74,17 +77,30 @@ public final class SiteItemBill {
     }
 
     int computePrice(DocumentBill documentBill, boolean minDeposit) {
-        int perDayRatesPrice = computeBlockPriceWithRates(documentBill, minDeposit, true);
-        int fixedRatesPrice = computeBlockPriceWithRates(documentBill, minDeposit, false);
-        if (perDayRatesPrice == Integer.MIN_VALUE) {
-            if (fixedRatesPrice == Integer.MIN_VALUE)
-                return 0;
+        int price;
+        Number price_custom = priceDocumentLineEvent != null ? priceDocumentLineEvent.getPrice_custom() : null;
+        Number price_discount = priceDocumentLineEvent != null ? priceDocumentLineEvent.getPrice_discount() : null;
+        if (price_custom != null && !minDeposit)
+            price = price_custom.intValue();
+        else if (Objects.areEquals(price_discount, 100, true))
+            price = 0;
+        else {
+            int perDayRatesPrice = computeBlockPriceWithRates(documentBill, minDeposit, true);
+            int fixedRatesPrice = computeBlockPriceWithRates(documentBill, minDeposit, false);
+            if (perDayRatesPrice == Integer.MIN_VALUE) {
+                if (fixedRatesPrice == Integer.MIN_VALUE)
+                    price = 0;
+                else
+                    price = fixedRatesPrice;
+            } else if (fixedRatesPrice == Integer.MIN_VALUE)
+                price = perDayRatesPrice;
             else
-                return fixedRatesPrice;
+                price = Math.min(perDayRatesPrice, fixedRatesPrice);
+            if (price_discount != null)
+                price = price * (100 - price_discount.intValue()) / 100;
+            if (price_custom != null)
+                price = Math.min(price, price_custom.intValue());
         }
-        if (fixedRatesPrice == Integer.MIN_VALUE)
-            return perDayRatesPrice;
-        int price = Math.min(perDayRatesPrice, fixedRatesPrice);
         if (minDeposit)
             this.minDeposit = price;
         else

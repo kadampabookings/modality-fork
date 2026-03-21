@@ -11,6 +11,7 @@ module modality.booking.backoffice.bookingeditor {
     requires modality.base.shared.entities;
     requires modality.base.shared.knownitems;
     requires modality.booking.client.workingbooking;
+    requires modality.ecommerce.document.service;
     requires modality.ecommerce.policy.service;
     requires webfx.extras.async;
     requires webfx.extras.controlfactory;
@@ -20,6 +21,7 @@ module modality.booking.backoffice.bookingeditor {
     requires webfx.extras.util.dialog;
     requires webfx.kit.util;
     requires webfx.platform.async;
+    requires webfx.platform.console;
     requires webfx.platform.service;
     requires webfx.platform.util;
     requires webfx.stack.orm.datasourcemodel.service;

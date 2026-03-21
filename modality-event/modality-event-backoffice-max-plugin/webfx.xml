@@ -18,6 +18,7 @@
 
         <plugin-module>modality-booking-backoffice-bookingeditor-teaching-plugin</plugin-module>
         <plugin-module>modality-booking-backoffice-bookingeditor-audiorecording-plugin</plugin-module>
+        <plugin-module>modality-booking-backoffice-bookingeditor-volunteer-plugin</plugin-module>
 
     </dependencies>
 

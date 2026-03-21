@@ -1,6 +1,7 @@
-package one.modality.booking.backoffice.bookingeditor.audiorecording;
+package one.modality.booking.backoffice.bookingeditor.volunteer;
 
-import one.modality.base.shared.knownitems.KnownItemFamily;
+import dev.webfx.stack.orm.entity.Entities;
+import one.modality.base.shared.entities.Event;
 import one.modality.booking.backoffice.bookingeditor.BookingEditor;
 import one.modality.booking.backoffice.bookingeditor.spi.BookingEditorProvider;
 import one.modality.booking.client.workingbooking.WorkingBooking;
@@ -8,15 +9,16 @@ import one.modality.booking.client.workingbooking.WorkingBooking;
 /**
  * @author Bruno Salmon
  */
-public final class AudioRecordingBookingEditorProvider implements BookingEditorProvider {
+public final class VolunteerBookingEditorProvider implements BookingEditorProvider {
 
     @Override
     public boolean acceptBooking(WorkingBooking workingBooking) {
-        return !workingBooking.getPolicyAggregate().filterScheduledItemsOfFamily(KnownItemFamily.AUDIO_RECORDING).isEmpty();
+        Event event = workingBooking.getEvent();
+        return Entities.samePrimaryKey(event.getTypeId(), 61);
     }
 
     @Override
     public BookingEditor createBookingEditor(WorkingBooking workingBooking) {
-        return new AudioRecordingBookingEditor(workingBooking);
+        return new VolunteerBookingEditor(workingBooking);
     }
 }

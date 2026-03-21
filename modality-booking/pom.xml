@@ -23,6 +23,7 @@
         <module>modality-booking-backoffice-bookingeditor</module>
         <module>modality-booking-backoffice-bookingeditor-audiorecording-plugin</module>
         <module>modality-booking-backoffice-bookingeditor-teaching-plugin</module>
+        <module>modality-booking-backoffice-bookingeditor-volunteer-plugin</module>
         <module>modality-booking-backoffice-operations-document</module>
         <module>modality-booking-client-scheduleditemsselector</module>
         <module>modality-booking-client-scheduleditemsselector-box</module>

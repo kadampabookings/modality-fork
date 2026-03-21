@@ -240,6 +240,7 @@ public final class WorkingBooking {
             documentLine.setItem(item);
             documentLine.setPool(pool);
             integrateNewDocumentEvent(new AddDocumentLineEvent(documentLine, allocate), false);
+            lastestDocumentAggregate = null;
         }
         return documentLine;
     }
@@ -406,7 +407,7 @@ public final class WorkingBooking {
     }
 
     private void cancelBooking(boolean cancel) {
-        integrateNewDocumentEvent(new CancelDocumentEvent(document, cancel, Meta.isBackoffice()), true);
+        integrateNewDocumentEvent(new CancelDocumentEvent(document, cancel, Meta.isBackoffice()), false);
         lastestDocumentAggregate = null;
     }
 
@@ -419,37 +420,37 @@ public final class WorkingBooking {
     }
 
     private void cancelDocumentLine(DocumentLine documentLine, boolean cancel) {
-        integrateNewDocumentEvent(new CancelDocumentLineEvent(documentLine, cancel, Meta.isBackoffice()), true);
+        integrateNewDocumentEvent(new CancelDocumentLineEvent(documentLine, cancel, Meta.isBackoffice()), false);
         lastestDocumentAggregate = null;
     }
 
     public void setShareOwnerInfo(DocumentLine documentLine, String[] matesNames) {
-        integrateNewDocumentEvent(new EditShareOwnerInfoDocumentLineEvent(documentLine, matesNames), true);
+        integrateNewDocumentEvent(new EditShareOwnerInfoDocumentLineEvent(documentLine, matesNames), false);
         lastestDocumentAggregate = null;
     }
 
     public void setShareMateInfo(DocumentLine documentLine, String ownerName) {
-        integrateNewDocumentEvent(new EditShareMateInfoDocumentLineEvent(documentLine, ownerName), true);
+        integrateNewDocumentEvent(new EditShareMateInfoDocumentLineEvent(documentLine, ownerName), false);
         lastestDocumentAggregate = null;
     }
 
     public void linkMateToOwner(DocumentLine documentLine, DocumentLine ownerDocumentLine) {
-        integrateNewDocumentEvent(new LinkMateToOwnerDocumentLineEvent(documentLine, ownerDocumentLine), true);
+        integrateNewDocumentEvent(new LinkMateToOwnerDocumentLineEvent(documentLine, ownerDocumentLine), false);
         lastestDocumentAggregate = null;
     }
 
     public void linkMateToOwner(DocumentLine documentLine, Person ownerPerson) {
-        integrateNewDocumentEvent(new LinkMateToOwnerDocumentLineEvent(documentLine, ownerPerson), true);
+        integrateNewDocumentEvent(new LinkMateToOwnerDocumentLineEvent(documentLine, ownerPerson), false);
         lastestDocumentAggregate = null;
     }
 
     public void allocateDocumentLine(DocumentLine documentLine, ResourceConfiguration resourceConfiguration) {
-        integrateNewDocumentEvent(new AllocateDocumentLineEvent(documentLine, resourceConfiguration), true);
+        integrateNewDocumentEvent(new AllocateDocumentLineEvent(documentLine, resourceConfiguration), false);
         lastestDocumentAggregate = null;
     }
 
     public void setCarersInfo(String carer1Name, Document carer1Document, String carer2Name, Document carer2Document) {
-        integrateNewDocumentEvent(new EditCarersInfoEvent(document, carer1Name, carer1Document, carer2Name, carer2Document), true);
+        integrateNewDocumentEvent(new EditCarersInfoEvent(document, carer1Name, carer1Document, carer2Name, carer2Document), false);
         lastestDocumentAggregate = null;
     }
 
@@ -486,6 +487,7 @@ public final class WorkingBooking {
     }
 
     private void integrateNewDocumentEvent(AbstractDocumentEvent e, boolean applyImmediatelyToDocument) {
+        e.setEntityStore(entityStore);
         if (applyImmediatelyToDocument) {
             e.replayEventOnDocument();
             if (e instanceof AbstractDocumentLineEvent dle)
@@ -729,8 +731,8 @@ public final class WorkingBooking {
         return getLastestDocumentAggregate().findEditCarersInfoEvent(fromChangesOnly);
     }
 
-    public PriceDocumentLineEvent findPriceDocumentLineEvent(boolean fromChangesOnly) {
-        return getLastestDocumentAggregate().findPriceDocumentLineEvent(fromChangesOnly);
+    public PriceDocumentLineEvent findPriceDocumentLineEvent(DocumentLine documentLine, boolean fromChangesOnly) {
+        return getLastestDocumentAggregate().findPriceDocumentLineEvent(documentLine, fromChangesOnly);
     }
 
     public MarkDocumentAsArrivedEvent findMarkAsArrivedDocumentEvent(boolean fromChangesOnly) {

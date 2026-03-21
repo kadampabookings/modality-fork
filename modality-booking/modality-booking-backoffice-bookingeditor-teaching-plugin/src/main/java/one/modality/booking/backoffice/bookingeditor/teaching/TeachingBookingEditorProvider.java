@@ -3,6 +3,7 @@ package one.modality.booking.backoffice.bookingeditor.teaching;
 import one.modality.booking.backoffice.bookingeditor.BookingEditor;
 import one.modality.booking.backoffice.bookingeditor.spi.BookingEditorProvider;
 import one.modality.booking.client.workingbooking.WorkingBooking;
+import one.modality.ecommerce.policy.service.PolicyAggregate;
 
 /**
  * @author Bruno Salmon
@@ -11,7 +12,8 @@ public final class TeachingBookingEditorProvider implements BookingEditorProvide
 
     @Override
     public boolean acceptBooking(WorkingBooking workingBooking) {
-        return true;
+        PolicyAggregate policyAggregate = workingBooking.getPolicyAggregate();
+        return !policyAggregate.filterTeachingScheduledItems().isEmpty();
     }
 
     @Override

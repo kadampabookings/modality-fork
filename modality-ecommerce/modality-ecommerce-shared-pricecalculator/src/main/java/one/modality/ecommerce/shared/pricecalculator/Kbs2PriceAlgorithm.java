@@ -5,7 +5,9 @@ import one.modality.base.shared.entities.util.Attendances;
 import one.modality.ecommerce.document.service.DocumentAggregate;
 
 import java.time.LocalDate;
-import java.util.*;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.stream.Stream;
 
 /**
@@ -25,7 +27,7 @@ final class Kbs2PriceAlgorithm {
             if (item.getRateAliasItem() != null)
                 item = item.getRateAliasItem();
             SiteItem siteItem = new SiteItem(site, item);
-            SiteItemBill siteItemBill = siteItemBills.computeIfAbsent(siteItem, SiteItemBill::new);
+            SiteItemBill siteItemBill = siteItemBills.computeIfAbsent(siteItem, siteItem1 -> new SiteItemBill(siteItem1, documentAggregate.findPriceDocumentLineEvent(line, false)));
             List<Attendance> lineAttendances = documentAggregate.getLineAttendances(line);
             lineAttendances.forEach(attendance -> {
                 LocalDate date = Attendances.getDate(attendance);
