@@ -5,6 +5,7 @@ import dev.webfx.kit.util.properties.FXProperties;
 import dev.webfx.kit.util.properties.ObservableLists;
 import dev.webfx.platform.util.collection.Collections;
 import dev.webfx.platform.util.collection.HashList;
+import dev.webfx.platform.util.time.Times;
 import dev.webfx.stack.orm.entity.Entities;
 import dev.webfx.stack.orm.entity.EntityStore;
 import javafx.geometry.HPos;
@@ -15,6 +16,7 @@ import javafx.scene.control.RadioButton;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.GridPane;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import one.modality.base.shared.entities.*;
 import one.modality.base.shared.entities.util.Attendances;
@@ -42,7 +44,11 @@ final class VolunteerBookingEditor extends FamilyBookingEditorBase {
     private final CheckBox lunchCheckBox = new CheckBox("Lunch");
     private final CheckBox dinnerCheckBox = new CheckBox("Dinner");
     private final CheckBox accommodationCheckBox = new CheckBox("Accommodation");
-    private final CheckBox veganCheckBox = new CheckBox("Vegan");
+    private final RadioButton vegetarianDietRadioButton = new RadioButton("Vegetarian");
+    private final RadioButton vegetarianWheatFreeDietRadioButton = new RadioButton("Vegetarian/Wheat-free");
+    private final RadioButton veganDietRadioButton = new RadioButton("Vegan");
+    private final RadioButton veganWheatFreeDietRadioButton = new RadioButton("Vegan/Wheat-free");
+    private final ToggleGroup dietToggleGroup = new ToggleGroup();
     private final RadioButton arrivalBreakfastRadioButton = new RadioButton();
     private final RadioButton arrivalLunchRadioButton = new RadioButton();
     private final RadioButton arrivalDinnerRadioButton = new RadioButton();
@@ -54,7 +60,8 @@ final class VolunteerBookingEditor extends FamilyBookingEditorBase {
     private final RadioButton departureAccommodationRadioButton = new RadioButton();
     private final ToggleGroup departureToggleGroup = new ToggleGroup();
     private final Timeline breakfastTimeline, lunchTimeline, dinnerTimeline;
-    private final Item vegetarianItem, veganItem;
+    private final ItemFamily dietFamily;
+    private final Item vegetarianItem, vegetarianWheatFreeItem, veganItem, veganWheatFreeItem;
     private Boundary arrivalBoundary;
     private Boundary departureBoundary;
 
@@ -67,27 +74,22 @@ final class VolunteerBookingEditor extends FamilyBookingEditorBase {
         dinnerTimeline = policyAggregate.getDinnerTimeline();
         EntityStore entityStore = workingBooking.getDocument().getStore();
         // Hardcoded vegetarian and vegan items for MKMC (to improve later)
-        ItemFamily dietFamily = entityStore.getOrCreateEntity(ItemFamily.class, KnownItemFamily.DIET.getPrimaryKey());
+        dietFamily = entityStore.getOrCreateEntity(ItemFamily.class, KnownItemFamily.DIET.getPrimaryKey());
         dietFamily.setOrd(50);
-        vegetarianItem = entityStore.getOrCreateEntity(Item.class, 399);
-        vegetarianItem.setName("Vegetarian");
-        vegetarianItem.setFamily(dietFamily);
-        vegetarianItem.setTemporal(false);
-        vegetarianItem.setOrd(0);
-        veganItem = entityStore.getOrCreateEntity(Item.class, 873);
-        veganItem.setName("Vegan");
-        veganItem.setFamily(dietFamily);
-        veganItem.setTemporal(false);
-        veganItem.setOrd(0);
+        vegetarianItem = createDietItem("Vegetarian", 399);
+        vegetarianWheatFreeItem = createDietItem("Vegetarian/Wheat-free", 400);
+        veganItem = createDietItem("Vegan", 873);
+        veganWheatFreeItem = createDietItem("Vegan/Wheat-free", 872);
         if (workingBooking.isNewBooking()) {
-            setAttendanceDates(ScheduledItems.toDates(getPolicyFamilyScheduledItems()));
+            Event event = policyAggregate.getEvent();
+            setAttendanceDates(ScheduledItems.toDates(Collections.filter(getPolicyFamilyScheduledItems(),si -> Times.isBetween(si.getDate(), event.getStartDate(), event.getEndDate()))));
             arrivalBoundary = Boundary.DINNER;
             departureBoundary = Boundary.LUNCH;
             bookAccommodation(true);
             bookBreakfast(true);
             bookLunch(true);
             bookDinner(true);
-            bookDiet(false);
+            bookDiet(vegetarianItem);
         } else {
             setAttendanceDates(Attendances.toDates(workingBooking.getBookedAttendances()));
             LocalDate arrivalDate = getArrivalDate();
@@ -145,7 +147,12 @@ final class VolunteerBookingEditor extends FamilyBookingEditorBase {
                 // We make the day texts bold in the box selector. Note: works on the web but not on OpenJFX
                 Bootstrap.strong(boxScheduledItemsSelector.buildUi()),
                 gridPane,
-                veganCheckBox
+                new HBox(20,
+                    vegetarianDietRadioButton,
+                    vegetarianWheatFreeDietRadioButton,
+                    veganDietRadioButton,
+                    veganWheatFreeDietRadioButton
+                )
             )
         );
     }
@@ -189,8 +196,15 @@ final class VolunteerBookingEditor extends FamilyBookingEditorBase {
             case ACCOMMODATION: departureAccommodationRadioButton.setSelected(true); break;
         }
         FXProperties.runOnPropertyChange(this::syncDepartureBoundaryFromUi, departureToggleGroup.selectedToggleProperty());
-        veganCheckBox.setSelected(isVeganBooked());
-        FXProperties.runOnPropertyChange(this::bookDiet, veganCheckBox.selectedProperty());
+        vegetarianDietRadioButton.setToggleGroup(dietToggleGroup);
+        vegetarianWheatFreeDietRadioButton.setToggleGroup(dietToggleGroup);
+        veganDietRadioButton.setToggleGroup(dietToggleGroup);
+        veganWheatFreeDietRadioButton.setToggleGroup(dietToggleGroup);
+        if (isItemBooked(veganItem, null)) veganDietRadioButton.setSelected(true);
+        else if (isItemBooked(vegetarianWheatFreeItem, null)) vegetarianWheatFreeDietRadioButton.setSelected(true);
+        else if (isItemBooked(veganWheatFreeItem, null)) veganWheatFreeDietRadioButton.setSelected(true);
+        else vegetarianDietRadioButton.setSelected(true);
+        FXProperties.runOnPropertyChange(this::syncDietFromUi, dietToggleGroup.selectedToggleProperty());
     }
 
     private void syncArrivalBoundaryFromUi() {
@@ -216,7 +230,7 @@ final class VolunteerBookingEditor extends FamilyBookingEditorBase {
         bookBreakfast(breakfastCheckBox.isSelected());
         bookLunch(lunchCheckBox.isSelected());
         bookDinner(dinnerCheckBox.isSelected());
-        bookDiet(veganCheckBox.isSelected());
+        bookDiet(getSelectedDietItem());
     }
 
     private void setAttendanceDates(List<LocalDate> newDates) {
@@ -304,22 +318,23 @@ final class VolunteerBookingEditor extends FamilyBookingEditorBase {
         return workingBooking.getBookedAttendances().stream().anyMatch(a -> Entities.samePrimaryKey(a.getDocumentLine().getItem(), item) && date.equals(Attendances.getDate(a)));
     }
 
-    private boolean isVeganBooked() {
-        return isItemBooked(veganItem, null);
+    private Item getSelectedDietItem() {
+        if (veganDietRadioButton.isSelected()) return veganItem;
+        if (vegetarianWheatFreeDietRadioButton.isSelected()) return vegetarianWheatFreeItem;
+        if (veganWheatFreeDietRadioButton.isSelected()) return veganWheatFreeItem;
+        return vegetarianItem;
     }
 
-    private void bookDiet(boolean vegan) {
+    private void syncDietFromUi() {
+        bookDiet(getSelectedDietItem());
+    }
+
+    private void bookDiet(Item selectedDietItem) {
         boolean anyMealsBooked = isAnyMealsBooked();
-        bookVegan(anyMealsBooked && vegan);
-        bookVegetarian(anyMealsBooked && !vegan);
-    }
-
-    private void bookVegan(boolean book) {
-        bookDiet(book, veganItem);
-    }
-
-    private void bookVegetarian(boolean book) {
-        bookDiet(book, vegetarianItem);
+        bookDiet(anyMealsBooked && Entities.samePrimaryKey(selectedDietItem, vegetarianItem), vegetarianItem);
+        bookDiet(anyMealsBooked && Entities.samePrimaryKey(selectedDietItem, vegetarianWheatFreeItem), vegetarianWheatFreeItem);
+        bookDiet(anyMealsBooked && Entities.samePrimaryKey(selectedDietItem, veganItem), veganItem);
+        bookDiet(anyMealsBooked && Entities.samePrimaryKey(selectedDietItem, veganWheatFreeItem), veganWheatFreeItem);
     }
 
     private void bookDiet(boolean book, Item dietItem) {
@@ -328,6 +343,16 @@ final class VolunteerBookingEditor extends FamilyBookingEditorBase {
             workingBooking.bookNonTemporalItem(site, dietItem);
         else
             workingBooking.unbookItem(site, dietItem);
+    }
+
+    private Item createDietItem(String name, Object primaryKey) {
+        EntityStore store = dietFamily.getStore();
+        Item dietOption = store.getOrCreateEntity(Item.class, primaryKey);
+        dietOption.setName(name);
+        dietOption.setFamily(dietFamily);
+        dietOption.setTemporal(false);
+        dietOption.setOrd(0);
+        return dietOption;
     }
 
 }
