@@ -13,6 +13,7 @@ import javafx.scene.Node;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.RadioButton;
+import javafx.scene.control.TextArea;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.GridPane;
@@ -49,6 +50,7 @@ final class VolunteerBookingEditor extends FamilyBookingEditorBase {
     private final RadioButton veganDietRadioButton = new RadioButton("Vegan");
     private final RadioButton veganWheatFreeDietRadioButton = new RadioButton("Vegan/Wheat-free");
     private final ToggleGroup dietToggleGroup = new ToggleGroup();
+    private final TextArea requestTextArea = new TextArea();
     private final RadioButton arrivalBreakfastRadioButton = new RadioButton();
     private final RadioButton arrivalLunchRadioButton = new RadioButton();
     private final RadioButton arrivalDinnerRadioButton = new RadioButton();
@@ -142,19 +144,20 @@ final class VolunteerBookingEditor extends FamilyBookingEditorBase {
         gridPane.add(accommodationCheckBox, 0, 4);
         gridPane.add(arrivalAccommodationRadioButton, 1, 4);
         gridPane.add(departureAccommodationRadioButton, 2, 4);
-        return embedInFamilyFrame(
-            new VBox(10,
-                // We make the day texts bold in the box selector. Note: works on the web but not on OpenJFX
-                Bootstrap.strong(boxScheduledItemsSelector.buildUi()),
-                gridPane,
-                new HBox(20,
-                    vegetarianDietRadioButton,
-                    vegetarianWheatFreeDietRadioButton,
-                    veganDietRadioButton,
-                    veganWheatFreeDietRadioButton
-                )
+        VBox vBox = new VBox(10,
+            // We make the day texts bold in the box selector. Note: works on the web but not on OpenJFX
+            Bootstrap.strong(boxScheduledItemsSelector.buildUi()),
+            gridPane,
+            new HBox(20,
+                vegetarianDietRadioButton,
+                vegetarianWheatFreeDietRadioButton,
+                veganDietRadioButton,
+                veganWheatFreeDietRadioButton
             )
         );
+        if (workingBooking.isNewBooking())
+            vBox.getChildren().add(new VBox(5, new Label("Request"), requestTextArea));
+        return embedInFamilyFrame(vBox);
     }
 
     @Override
@@ -231,6 +234,11 @@ final class VolunteerBookingEditor extends FamilyBookingEditorBase {
         bookLunch(lunchCheckBox.isSelected());
         bookDinner(dinnerCheckBox.isSelected());
         bookDiet(getSelectedDietItem());
+        if (workingBooking.isNewBooking()) {
+            String request = requestTextArea.getText().trim();
+            if (!request.isEmpty())
+                workingBooking.addRequest(request);
+        }
     }
 
     private void setAttendanceDates(List<LocalDate> newDates) {
