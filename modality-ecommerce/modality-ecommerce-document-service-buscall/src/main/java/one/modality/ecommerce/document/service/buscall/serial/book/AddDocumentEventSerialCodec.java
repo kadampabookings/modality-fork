@@ -19,6 +19,7 @@ public final class AddDocumentEventSerialCodec extends AbstractDocumentEventSeri
     private static final String FIRST_NAME_KEY = "firstName";
     private static final String LAST_NAME_KEY = "lastName";
     private static final String EMAIL_KEY = "email";
+    private static final String AGE_KEY = "age";
     private static final String REF_KEY = "ref";
 
     public AddDocumentEventSerialCodec() {
@@ -35,7 +36,8 @@ public final class AddDocumentEventSerialCodec extends AbstractDocumentEventSeri
         encodeString( serial,  FIRST_NAME_KEY,     o.getFirstName());
         encodeString( serial,  LAST_NAME_KEY,      o.getLastName());
         encodeString( serial,  EMAIL_KEY,          o.getEmail());
-        encodeInteger(serial, REF_KEY,             o.getRef());
+        encodeInteger(serial,  AGE_KEY,            o.getAge());
+        encodeInteger(serial,  REF_KEY,            o.getRef());
     }
 
     @Override
@@ -49,6 +51,7 @@ public final class AddDocumentEventSerialCodec extends AbstractDocumentEventSeri
             decodeString( serial, FIRST_NAME_KEY),
             decodeString( serial, LAST_NAME_KEY),
             decodeString( serial, EMAIL_KEY),
+            decodeInteger(serial, AGE_KEY),
             decodeInteger(serial, REF_KEY)
         ), serial);
     }

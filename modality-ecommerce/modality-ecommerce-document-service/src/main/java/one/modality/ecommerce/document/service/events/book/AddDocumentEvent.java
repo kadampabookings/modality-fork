@@ -17,11 +17,12 @@ public final class AddDocumentEvent extends AbstractDocumentEvent {
     // Booking with an account
     private Person person; // not serialized
     private Object personPrimaryKey; // serialized
-    // Booking as a guest
+    // Booking as a guest - or loaded by server
     private String firstName;
     private String lastName;
     private String email;
-    // Generated information once stored in the database
+    // Additional fields loaded by server only
+    private final Integer age;
     private Integer ref;
 
     public AddDocumentEvent(Document document) {
@@ -33,10 +34,11 @@ public final class AddDocumentEvent extends AbstractDocumentEvent {
         firstName = document.getFirstName();
         lastName = document.getLastName();
         email = document.getEmail();
+        age = document.getAge();
         ref = document.getRef();
     }
 
-    public AddDocumentEvent(Object documentPrimaryKey, Object eventPrimaryKey, boolean inPerson, String personLang, Object personPrimaryKey, String firstName, String lastName, String email, Integer ref) {
+    public AddDocumentEvent(Object documentPrimaryKey, Object eventPrimaryKey, boolean inPerson, String personLang, Object personPrimaryKey, String firstName, String lastName, String email, Integer age, Integer ref) {
         super(documentPrimaryKey);
         this.eventPrimaryKey = eventPrimaryKey;
         this.inPerson = inPerson;
@@ -45,6 +47,7 @@ public final class AddDocumentEvent extends AbstractDocumentEvent {
         this.firstName = firstName;
         this.lastName = lastName;
         this.email = email;
+        this.age = age;
         this.ref = ref;
     }
 
@@ -105,6 +108,10 @@ public final class AddDocumentEvent extends AbstractDocumentEvent {
         this.email = email;
     }
 
+    public Integer getAge() {
+        return age;
+    }
+
     public Integer getRef() {
         return ref;
     }
@@ -136,6 +143,7 @@ public final class AddDocumentEvent extends AbstractDocumentEvent {
         document.setFirstName(firstName);
         document.setLastName(lastName);
         document.setEmail(email);
+        document.setAge(age);
         if (ref != null)
             document.setRef(ref);
     }
