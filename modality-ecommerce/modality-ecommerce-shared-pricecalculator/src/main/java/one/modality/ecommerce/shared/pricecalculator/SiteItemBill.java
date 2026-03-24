@@ -145,6 +145,11 @@ public final class SiteItemBill {
                     // Ignoring rates for long stay discounts (if requested)
                     if (documentBill.ignoreLongStayDiscount && !rate.isPerDay()) // assuming that a rate not per day is a long stay discount TODO: check this more carefully
                         continue;
+                    // Ignoring expired rates (such as early birds discounts)
+                    LocalDate offDate = rate.getOffDate();
+                    if (offDate != null && Times.isPastOrToday(offDate, documentAggregate.getEvent().getEventClock())) {
+                        continue;
+                    }
                     // Ignoring rates that are not in the range of dates
                     LocalDate startDate = rate.getStartDate();
                     LocalDate endDate = rate.getEndDate();
