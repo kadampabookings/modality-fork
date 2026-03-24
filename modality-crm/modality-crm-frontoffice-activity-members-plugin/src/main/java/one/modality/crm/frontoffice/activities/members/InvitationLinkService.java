@@ -15,7 +15,7 @@ import one.modality.base.shared.entities.Person;
 import one.modality.base.shared.entities.Recipient;
 import one.modality.base.shared.util.ActivityHashUtil;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 /**
  * Service for managing member invitation workflow including authorization requests,
@@ -259,7 +259,7 @@ public final class InvitationLinkService {
         EntityStore entityStore = EntityStore.create(dataSourceModel);
         UpdateStore updateStore = UpdateStore.createAbove(entityStore);
         Invitation invitation = updateStore.insertEntity(Invitation.class);
-        invitation.setCreationDate(LocalDateTime.now());
+        invitation.setCreationDate(Instant.now());
         invitation.setInviter(inviter);
         invitation.setInvitee(invitee);
         invitation.setAliasFirstName(aliasFirstName);
@@ -288,7 +288,7 @@ public final class InvitationLinkService {
         Invitation updated = updateStore.updateEntity(invitation);
         updated.setPending(false);
         updated.setAccepted(true);
-        updated.setUsageDate(java.time.LocalDateTime.now());
+        updated.setUsageDate(Instant.now());
 
         Person inviter = invitation.getInviter();
         Person invitee = invitation.getInvitee();

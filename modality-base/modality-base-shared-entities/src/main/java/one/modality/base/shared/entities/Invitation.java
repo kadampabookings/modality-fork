@@ -3,7 +3,8 @@ package one.modality.base.shared.entities;
 import dev.webfx.stack.orm.entity.Entity;
 import dev.webfx.stack.orm.entity.EntityId;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 
 /**
  * @author Bruno Salmon
@@ -22,20 +23,20 @@ public interface Invitation extends Entity {
     String aliasLastName = "aliasLastName";
     String createdAliasPerson = "createdAliasPerson";
 
-    default void setCreationDate(LocalDateTime value) {
+    default void setCreationDate(Instant value) {
         setFieldValue(creationDate, value);
     }
 
-    default LocalDateTime getCreationDate() {
-        return getLocalDateTimeFieldValue(creationDate);
+    default Instant getCreationDate() {
+        return getInstantFieldValue(creationDate);
     }
 
-    default void setUsageDate(LocalDateTime value) {
+    default void setUsageDate(Instant value) {
         setFieldValue(usageDate, value);
     }
 
-    default LocalDateTime getUsageDate() {
-        return getLocalDateTimeFieldValue(usageDate);
+    default Instant getUsageDate() {
+        return getInstantFieldValue(usageDate);
     }
 
     default void setToken(String value) {
@@ -128,15 +129,15 @@ public interface Invitation extends Entity {
     }
 
     // Token expiry is calculated dynamically: creationDate + 7 days
-    default LocalDateTime getTokenExpiry() {
-        LocalDateTime creationDate = getCreationDate();
-        return creationDate != null ? creationDate.plusDays(7) : null;
+    default Instant getTokenExpiry() {
+        Instant creationDate = getCreationDate();
+        return creationDate != null ? creationDate.plus(7, ChronoUnit.DAYS) : null;
     }
 
     // Check if token is still valid (not expired)
     default boolean isTokenValid() {
-        LocalDateTime expiry = getTokenExpiry();
-        return expiry != null && LocalDateTime.now().isBefore(expiry);
+        Instant expiry = getTokenExpiry();
+        return expiry != null && Instant.now().isBefore(expiry);
     }
 
 }

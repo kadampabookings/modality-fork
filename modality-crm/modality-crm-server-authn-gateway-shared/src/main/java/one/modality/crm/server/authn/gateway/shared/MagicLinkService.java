@@ -21,7 +21,7 @@ import one.modality.crm.shared.services.authn.ModalityAuthenticationI18nKeys;
 
 import java.time.Clock;
 import java.time.Duration;
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 /**
  * @author Bruno Salmon
@@ -138,7 +138,7 @@ public final class MagicLinkService {
                 if (checkValidity && !SKIP_LINK_VALIDITY_CHECK) {
                     if (magicLink.getUsageDate() != null)
                         return Future.failedFuture("[%s] Magic link already used (token: %s)".formatted(ModalityAuthenticationI18nKeys.LoginLinkAlreadyUsedError, tokenOrVerificationCode));
-                    LocalDateTime now = now();
+                    Instant now = now();
                     if (magicLink.getCreationDate() == null || now.isAfter(magicLink.getCreationDate().plus(LINK_EXPIRATION_DURATION))) {
                         return Future.failedFuture("[%s] Magic link expired (token: %s)".formatted(ModalityAuthenticationI18nKeys.LoginLinkExpiredError, tokenOrVerificationCode));
                     }
@@ -174,8 +174,8 @@ public final class MagicLinkService {
             .map(Collections::first); // the owner of the account is the first person recorded in that account.
     }
 
-    private static LocalDateTime now() {
-        return LocalDateTime.now(Clock.systemUTC());
+    private static Instant now() {
+        return Instant.now(Clock.systemUTC());
     }
 
 }

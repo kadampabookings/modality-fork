@@ -2,7 +2,7 @@ package one.modality.base.shared.entities;
 
 import dev.webfx.stack.orm.entity.Entity;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 /**
  * @author Bruno Salmon
@@ -20,20 +20,20 @@ public interface MagicLink extends Entity {
     String requestedPath = "requestedPath";
     String verificationCode = "verificationCode";
 
-    default void setCreationDate(LocalDateTime value) {
+    default void setCreationDate(Instant value) {
         setFieldValue(creationDate, value);
     }
 
-    default LocalDateTime getCreationDate() {
-        return getLocalDateTimeFieldValue(creationDate);
+    default Instant getCreationDate() {
+        return getInstantFieldValue(creationDate);
     }
 
-    default void setUsageDate(LocalDateTime value) {
+    default void setUsageDate(Instant value) {
         setFieldValue(usageDate, value);
     }
 
-    default LocalDateTime getUsageDate() {
-        return getLocalDateTimeFieldValue(usageDate);
+    default Instant getUsageDate() {
+        return getInstantFieldValue(usageDate);
     }
 
     default void setUsageRunId(String value) {
