@@ -39,8 +39,8 @@ import one.modality.base.shared.knownitems.KnownItemFamily;
 import one.modality.event.backoffice.activities.medias.MediaDashboardPresentationModel.ConsumptionTypeFilter;
 import one.modality.event.client.event.fx.FXEvent;
 
+import java.time.Instant;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -699,7 +699,7 @@ final class MediaDashboardTabView {
         private long totalDurationMillis;
         public boolean hasLivestreamed;
         public boolean hasRecorded;
-        private LocalDateTime lastWatchDateTime;
+        private Instant lastWatchDateTime;
 
         public UserConsumptionData(String userName, String userEmail) {
             this.userName = userName;
@@ -719,7 +719,7 @@ final class MediaDashboardTabView {
                 hasRecorded = true;
             }
 
-            LocalDateTime dateTime = mc.getDate();
+            Instant dateTime = mc.getDate();
             if (dateTime != null && (lastWatchDateTime == null || dateTime.isAfter(lastWatchDateTime))) {
                 lastWatchDateTime = dateTime;
             }
@@ -750,10 +750,6 @@ final class MediaDashboardTabView {
             } else {
                 return "RECORDING";
             }
-        }
-
-        public LocalDateTime getLastWatchDateTime() {
-            return lastWatchDateTime;
         }
     }
 
