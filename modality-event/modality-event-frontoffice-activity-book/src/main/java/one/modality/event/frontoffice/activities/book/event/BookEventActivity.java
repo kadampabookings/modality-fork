@@ -21,6 +21,7 @@ import javafx.beans.property.SimpleObjectProperty;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
+import javafx.scene.layout.Region;
 import one.modality.base.client.mainframe.fx.FXMainFrameOverlayArea;
 import one.modality.base.frontoffice.mainframe.fx.FXCollapseMenu;
 import one.modality.base.shared.entities.AttendanceMode;
@@ -63,6 +64,7 @@ public final class BookEventActivity extends ViewDomainActivityBase implements B
         ALL_BOOKING_FORM_PROVIDERS_SORTED_BY_PRIORITY.sort((p1, p2) -> p2.getPriority() - p1.getPriority());
     }
 
+    private final Region loadingSpinner = Controls.createSectionSizeSpinner();
     private final WorkingBookingProperties workingBookingProperties = new WorkingBookingProperties();
     // Container for the booking form
     private final MonoPane activityContainer = new MonoPane();
@@ -184,7 +186,7 @@ public final class BookEventActivity extends ViewDomainActivityBase implements B
     }
 
     private void showLoadingSpinner() {
-        activityContainer.setContent(Controls.createSectionSizeSpinner());
+        activityContainer.setContent(loadingSpinner);
         activityContainer.setAlignment(Pos.CENTER);
     }
 
@@ -252,7 +254,7 @@ public final class BookEventActivity extends ViewDomainActivityBase implements B
                                 return; // No longer relevant
                             // Ensure FXEvent is available before proceeding (for rebuildEntities)
                             Event fxEvent = FXEvent.getEvent();
-                            if (fxEvent != null && Entities.samePrimaryKey(fxEvent, eventPk)) {
+                            if (Entities.samePrimaryKey(fxEvent, eventPk)) {
                                 policyAggregate.rebuildEntities(fxEvent);
                                 onPolityAndDocumentAggregatesLoaded(policyAggregate, null);
                             } else {
@@ -304,6 +306,7 @@ public final class BookEventActivity extends ViewDomainActivityBase implements B
                     // when user clicks Continue). Pass null person to skip the 4-query DocumentAggregate.
                     deferredDocumentLoad = userPersonPrimaryKey != null;
                 }
+                showLoadingSpinner();
                 // When deferring, pass null person so only PolicyAggregate is loaded (~300ms vs ~4s)
                 DocumentService.loadPolicyAndDocument(event, deferredDocumentLoad ? null : userPersonPrimaryKey)
                     .onFailure(Console::error)
