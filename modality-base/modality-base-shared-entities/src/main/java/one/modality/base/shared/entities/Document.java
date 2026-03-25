@@ -6,6 +6,8 @@ import one.modality.base.shared.entities.markers.EntityHasEvent;
 import one.modality.base.shared.entities.markers.EntityHasPerson;
 import one.modality.base.shared.entities.markers.EntityHasPersonalDetailsCopy;
 
+import java.time.Instant;
+
 /**
  * @author Bruno Salmon
  */
@@ -34,6 +36,15 @@ public interface Document extends
     String inPerson = "inPerson";
     String carer1Document = "person_carer1Document";
     String carer2Document = "person_carer2Document";
+    String creationDate = "creationDate";
+
+    default void setCreationDate(Instant value) {
+        setFieldValue(creationDate, value);
+    }
+
+    default Instant getCreationDate() {
+        return getInstantFieldValue(creationDate);
+    }
 
     default void setRef(Integer value) {
         setFieldValue(ref, value);

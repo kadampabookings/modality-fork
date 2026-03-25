@@ -6,6 +6,8 @@ import one.modality.base.shared.entities.Event;
 import one.modality.base.shared.entities.Person;
 import one.modality.ecommerce.document.service.events.AbstractDocumentEvent;
 
+import java.time.Instant;
+
 /**
  * @author Bruno Salmon
  */
@@ -24,6 +26,7 @@ public final class AddDocumentEvent extends AbstractDocumentEvent {
     // Additional fields loaded by server only
     private final Integer age;
     private Integer ref;
+    private final Instant creationDate;
 
     public AddDocumentEvent(Document document) {
         super(document);
@@ -36,9 +39,10 @@ public final class AddDocumentEvent extends AbstractDocumentEvent {
         email = document.getEmail();
         age = document.getAge();
         ref = document.getRef();
+        creationDate = document.isNew() ? Instant.now() : document.getCreationDate();
     }
 
-    public AddDocumentEvent(Object documentPrimaryKey, Object eventPrimaryKey, boolean inPerson, String personLang, Object personPrimaryKey, String firstName, String lastName, String email, Integer age, Integer ref) {
+    public AddDocumentEvent(Object documentPrimaryKey, Object eventPrimaryKey, boolean inPerson, String personLang, Object personPrimaryKey, String firstName, String lastName, String email, Integer age, Integer ref, Instant creationDate) {
         super(documentPrimaryKey);
         this.eventPrimaryKey = eventPrimaryKey;
         this.inPerson = inPerson;
@@ -49,6 +53,7 @@ public final class AddDocumentEvent extends AbstractDocumentEvent {
         this.email = email;
         this.age = age;
         this.ref = ref;
+        this.creationDate = creationDate;
     }
 
     public Object getEventPrimaryKey() {
@@ -120,6 +125,10 @@ public final class AddDocumentEvent extends AbstractDocumentEvent {
         this.ref = ref;
     }
 
+    public Instant getCreationDate() {
+        return creationDate;
+    }
+
     @Override
     protected void createDocument() {
         if (isForSubmit()) {
@@ -146,5 +155,7 @@ public final class AddDocumentEvent extends AbstractDocumentEvent {
         document.setAge(age);
         if (ref != null)
             document.setRef(ref);
+        if (creationDate != null)
+            document.setCreationDate(creationDate);
     }
 }

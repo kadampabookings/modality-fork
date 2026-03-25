@@ -59,7 +59,7 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
         Object docPk = argument.documentPrimaryKey();
         EntityStoreQuery[] queries = {
             // 0 - Loading document
-            new EntityStoreQuery("select event,person,ref,inPerson,person_lang,person_firstName,person_lastName,person_email,person_age,person_facilityFee,request,person_carer1Name, person_carer1Document, person_carer2Name, person_carer2Document, arrived, checkedOut from Document where id=$1 order by id", docPk),
+            new EntityStoreQuery("select creationDate,event,person,ref,inPerson,person_lang,person_firstName,person_lastName,person_email,person_age,person_facilityFee,request,person_carer1Name, person_carer1Document, person_carer2Name, person_carer2Document, arrived, checkedOut from Document where id=$1 order by id", docPk),
             // 1 - Loading document lines
             new EntityStoreQuery("select document,site,item,price_net,price_minDeposit,price_custom,price_discount" +
                                  ",share_owner,share_owner_mate1Name,share_owner_mate2Name,share_owner_mate3Name,share_owner_mate4Name,share_owner_mate5Name,share_owner_mate6Name,share_owner_mate7Name" +

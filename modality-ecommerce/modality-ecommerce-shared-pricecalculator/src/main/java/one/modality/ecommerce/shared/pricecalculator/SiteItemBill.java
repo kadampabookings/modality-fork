@@ -13,7 +13,10 @@ import one.modality.ecommerce.document.service.DocumentAggregate;
 import one.modality.ecommerce.document.service.events.registration.documentline.PriceDocumentLineEvent;
 import one.modality.ecommerce.policy.service.PolicyAggregate;
 
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -147,8 +150,16 @@ public final class SiteItemBill {
                         continue;
                     // Ignoring expired rates (such as early birds discounts)
                     LocalDate offDate = rate.getOffDate();
-                    if (offDate != null && Times.isPastOrToday(offDate, documentAggregate.getEvent().getEventClock())) {
-                        continue;
+                    if (offDate != null) {
+                        Instant creationDate = documentAggregate.getDocument().getCreationDate();
+                        if (creationDate == null)
+                            creationDate = Instant.now();
+                        ZoneId eventZoneId = documentAggregate.getEvent().getEventZoneId();
+                        if (eventZoneId == null)
+                            eventZoneId = ZoneOffset.UTC;
+                        Instant offInstant = offDate.atStartOfDay(eventZoneId).toInstant();
+                        if (creationDate.isAfter(offInstant))
+                            continue;
                     }
                     // Ignoring rates that are not in the range of dates
                     LocalDate startDate = rate.getStartDate();
