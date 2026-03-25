@@ -1545,6 +1545,8 @@
     "discovery_discount": "integer",
     "discovery_price": "Price",
     "endDate": "Temporal.PlainDate",
+    "event": "Event",
+    "eventType": "EventType",
     "facilityFee_discount": "integer",
     "facilityFee_price": "Price",
     "guest_discount": "integer",
@@ -1971,7 +1973,6 @@
     "arrivalReminderLetter": "Letter",
     "availableReferralSources": "string",
     "availableSkills": "string",
-    "availableReferralSources": "string",
     "breakfastItem": "Item",
     "datesConfirmedLetter": "Letter",
     "description": "HTML",
@@ -1995,13 +1996,7 @@
     "timezone": "string",
     "volunteerEvent": "Event",
     "workOnArrivalDay": "boolean",
-    "workOnDepartureDay": "boolean",
-    "referenceRequestLetter": "Letter",
-    "preConfirmationLetter": "Letter",
-    "datesConfirmedLetter": "Letter",
-    "arrivalReminderLetter": "Letter",
-    "applicationReceivedLetter": "Letter",
-    "newApplicationCoordinatorLetter": "Letter"
+    "workOnDepartureDay": "boolean"
   },
   "VolunteeringSpecialNeeds": {
     "id": 157,
