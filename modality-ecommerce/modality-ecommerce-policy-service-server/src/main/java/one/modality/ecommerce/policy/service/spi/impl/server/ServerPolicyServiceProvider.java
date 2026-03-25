@@ -128,6 +128,8 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                     "select r.site.event = coalesce(e.repeatedEvent, e)" +
                     // or global sites of the organization with scheduled items over the period of the event
                     " or r.site.(event = null and organization=e.organization and exists(select ScheduledItem si where si.site=r.site and si.item=r.item and si.date>=e.startDate and si.date<=e.endDate))" +
+                    "    and (r.event = null or r.event = coalesce(e.repeatedEvent, e))" +
+                    "    and (r.eventType = null or r.eventType = coalesce(e.repeatedEvent.type, e.type))" +
                     " from Event e where id=$1)" +
                     // Note: TeachingsPricing relies on the following order to work properly
                     " order by site,item,perDay desc,startDate,endDate,price", eventPk)
