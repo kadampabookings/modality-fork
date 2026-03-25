@@ -643,6 +643,18 @@ public final class WorkingBooking {
         return Collections.first(getTeachingDocumentLines());
     }
 
+    public List<DocumentLine> getAccommodationDocumentLines() {
+        return getFamilyDocumentLines(KnownItemFamily.ACCOMMODATION);
+    }
+
+    public DocumentLine getAccommodationDocumentLine() {
+        return Collections.first(getAccommodationDocumentLines());
+    }
+
+    public boolean hasBookedAccommodation() {
+        return !getAccommodationDocumentLines().isEmpty();
+    }
+
     public void applyDocumentLineFreeOfCharge(DocumentLine documentLine, boolean freeOfCharge) {
         if (isDocumentLineFreeOfCharge(documentLine) == freeOfCharge)
             return;
