@@ -24,6 +24,15 @@ public interface Organization extends
     String globalSite = "globalSite";
     String termsUrlLabel = "termsUrlLabel";
     String privacyUrlLabel = "privacyUrlLabel";
+    String timezone = "timezone";
+
+    default void setTimezone(String value) {
+        setFieldValue(timezone, value);
+    }
+
+    default String getTimezone() {
+        return getStringFieldValue(timezone);
+    }
 
     default void setClosed(boolean value) { setFieldValue(closed, value); }
 

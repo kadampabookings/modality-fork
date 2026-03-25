@@ -8,6 +8,7 @@ import dev.webfx.stack.orm.entity.EntityStore;
 import dev.webfx.stack.orm.entity.impl.DynamicEntity;
 import dev.webfx.stack.orm.entity.impl.EntityFactoryProviderImpl;
 import one.modality.base.shared.entities.Event;
+import one.modality.base.shared.entities.Organization;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -31,6 +32,11 @@ public final class EventImpl extends DynamicEntity implements Event {
     public ZoneId getEventZoneId() {
         if (eventZoneId == null) {
             String timezone = getTimezone();
+            if (timezone == null) {
+                Organization organization = getOrganization();
+                if (organization != null)
+                    timezone = organization.getTimezone();
+            }
             if (timezone != null)
                 eventZoneId = ZoneId.of(timezone);
         }
