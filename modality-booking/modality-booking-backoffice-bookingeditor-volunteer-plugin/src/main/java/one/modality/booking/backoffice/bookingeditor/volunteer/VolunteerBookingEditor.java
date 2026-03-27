@@ -25,19 +25,17 @@ import one.modality.base.shared.entities.util.ScheduledItems;
 import one.modality.base.shared.knownitems.KnownItemFamily;
 import one.modality.booking.backoffice.bookingeditor.family.FamilyBookingEditorBase;
 import one.modality.booking.client.selecteditemsselector.box.BoxScheduledItemsSelector;
+import one.modality.booking.client.workingbooking.ArrivalDepartureTime;
 import one.modality.booking.client.workingbooking.WorkingBooking;
 import one.modality.ecommerce.policy.service.PolicyAggregate;
 
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Objects;
 
 /**
  * @author Bruno Salmon
  */
 final class VolunteerBookingEditor extends FamilyBookingEditorBase {
-
-    private enum Boundary { BREAKFAST, LUNCH, DINNER, ACCOMMODATION }
 
     private final BoxScheduledItemsSelector boxScheduledItemsSelector = new BoxScheduledItemsSelector(true, false);
     private final List<LocalDate> attendanceDates = new HashList<>();
@@ -61,19 +59,15 @@ final class VolunteerBookingEditor extends FamilyBookingEditorBase {
     private final RadioButton departureDinnerRadioButton = new RadioButton();
     private final RadioButton departureAccommodationRadioButton = new RadioButton();
     private final ToggleGroup departureToggleGroup = new ToggleGroup();
-    private final Timeline breakfastTimeline, lunchTimeline, dinnerTimeline;
     private final ItemFamily dietFamily;
     private final Item vegetarianItem, vegetarianWheatFreeItem, veganItem, veganWheatFreeItem;
-    private Boundary arrivalBoundary;
-    private Boundary departureBoundary;
+    private ArrivalDepartureTime arrivalTime;
+    private ArrivalDepartureTime departureTime;
 
     VolunteerBookingEditor(WorkingBooking workingBooking) {
         super(workingBooking, KnownItemFamily.ACCOMMODATION);
         workingBooking.enableDocumentChangesLog();
         PolicyAggregate policyAggregate = workingBooking.getPolicyAggregate();
-        breakfastTimeline = policyAggregate.getBreakfastTimeline();
-        lunchTimeline = policyAggregate.getLunchTimeline();
-        dinnerTimeline = policyAggregate.getDinnerTimeline();
         EntityStore entityStore = workingBooking.getDocument().getStore();
         // Hardcoded vegetarian and vegan items for MKMC (to improve later)
         dietFamily = entityStore.getOrCreateEntity(ItemFamily.class, KnownItemFamily.DIET.getPrimaryKey());
@@ -85,8 +79,8 @@ final class VolunteerBookingEditor extends FamilyBookingEditorBase {
         if (workingBooking.isNewBooking()) {
             Event event = policyAggregate.getEvent();
             setAttendanceDates(ScheduledItems.toDates(Collections.filter(getPolicyFamilyScheduledItems(),si -> Times.isBetween(si.getDate(), event.getStartDate(), event.getEndDate()))));
-            arrivalBoundary = Boundary.DINNER;
-            departureBoundary = Boundary.LUNCH;
+            arrivalTime = ArrivalDepartureTime.DINNER;
+            departureTime = ArrivalDepartureTime.LUNCH;
             bookAccommodation(true);
             bookBreakfast(true);
             bookLunch(true);
@@ -94,24 +88,8 @@ final class VolunteerBookingEditor extends FamilyBookingEditorBase {
             bookDiet(vegetarianItem);
         } else {
             setAttendanceDates(Attendances.toDates(workingBooking.getBookedAttendances()));
-            LocalDate arrivalDate = getArrivalDate();
-            if (isBreakfastBooked(arrivalDate))
-                arrivalBoundary = Boundary.BREAKFAST;
-            else if (isLunchBooked(arrivalDate))
-                arrivalBoundary = Boundary.LUNCH;
-            else if (isDinnerBooked(arrivalDate))
-                arrivalBoundary = Boundary.DINNER;
-            else
-                arrivalBoundary = Boundary.ACCOMMODATION;
-            LocalDate departureDate = getDepartureDate();
-            if (isAccommodationBooked(departureDate))
-                departureBoundary = Boundary.ACCOMMODATION;
-            else if (isDinnerBooked(departureDate))
-                departureBoundary = Boundary.DINNER;
-            else if (isLunchBooked(departureDate))
-                departureBoundary = Boundary.LUNCH;
-            else
-                departureBoundary = Boundary.BREAKFAST;
+            arrivalTime = workingBooking.getArrivalTime();
+            departureTime = workingBooking.getDepartureTime();
         }
         // Final subclasses should call this method
         initiateUiAndSyncFromWorkingBooking();
@@ -169,19 +147,19 @@ final class VolunteerBookingEditor extends FamilyBookingEditorBase {
         ObservableLists.runOnListChange(ignored ->
                 syncWorkingBookingFromUi()
             , boxScheduledItemsSelector.getSelectedDates());
-        breakfastCheckBox.setSelected(isBreakfastBooked(null));
+        breakfastCheckBox.setSelected(workingBooking.isBreakfastBooked());
         FXProperties.runOnPropertyChange(this::bookBreakfast, breakfastCheckBox.selectedProperty());
-        lunchCheckBox.setSelected(isLunchBooked(null));
+        lunchCheckBox.setSelected(workingBooking.isLunchBooked());
         FXProperties.runOnPropertyChange(this::bookLunch, lunchCheckBox.selectedProperty());
-        dinnerCheckBox.setSelected(isDinnerBooked(null));
+        dinnerCheckBox.setSelected(workingBooking.isDinnerBooked());
         FXProperties.runOnPropertyChange(this::bookDinner, dinnerCheckBox.selectedProperty());
-        accommodationCheckBox.setSelected(isAccommodationBooked(null));
+        accommodationCheckBox.setSelected(workingBooking.isAccommodationBooked());
         FXProperties.runOnPropertyChange(this::bookAccommodation, accommodationCheckBox.selectedProperty());
         arrivalBreakfastRadioButton.setToggleGroup(arrivalToggleGroup);
         arrivalLunchRadioButton.setToggleGroup(arrivalToggleGroup);
         arrivalDinnerRadioButton.setToggleGroup(arrivalToggleGroup);
         arrivalAccommodationRadioButton.setToggleGroup(arrivalToggleGroup);
-        switch (arrivalBoundary) {
+        switch (arrivalTime) {
             case BREAKFAST: arrivalBreakfastRadioButton.setSelected(true); break;
             case LUNCH: arrivalLunchRadioButton.setSelected(true); break;
             case DINNER: arrivalDinnerRadioButton.setSelected(true); break;
@@ -192,7 +170,7 @@ final class VolunteerBookingEditor extends FamilyBookingEditorBase {
         departureLunchRadioButton.setToggleGroup(departureToggleGroup);
         departureDinnerRadioButton.setToggleGroup(departureToggleGroup);
         departureAccommodationRadioButton.setToggleGroup(departureToggleGroup);
-        switch (departureBoundary) {
+        switch (departureTime) {
             case BREAKFAST: departureBreakfastRadioButton.setSelected(true); break;
             case LUNCH: departureLunchRadioButton.setSelected(true); break;
             case DINNER: departureDinnerRadioButton.setSelected(true); break;
@@ -203,26 +181,28 @@ final class VolunteerBookingEditor extends FamilyBookingEditorBase {
         vegetarianWheatFreeDietRadioButton.setToggleGroup(dietToggleGroup);
         veganDietRadioButton.setToggleGroup(dietToggleGroup);
         veganWheatFreeDietRadioButton.setToggleGroup(dietToggleGroup);
-        if (isItemBooked(veganItem, null)) veganDietRadioButton.setSelected(true);
-        else if (isItemBooked(vegetarianWheatFreeItem, null)) vegetarianWheatFreeDietRadioButton.setSelected(true);
-        else if (isItemBooked(veganWheatFreeItem, null)) veganWheatFreeDietRadioButton.setSelected(true);
-        else vegetarianDietRadioButton.setSelected(true);
+        if (workingBooking.isItemBooked(veganItem)) veganDietRadioButton.setSelected(true);
+        else if (workingBooking.isItemBooked(vegetarianWheatFreeItem)) vegetarianWheatFreeDietRadioButton.setSelected(true);
+        else {
+            if (workingBooking.isItemBooked(veganWheatFreeItem)) veganWheatFreeDietRadioButton.setSelected(true);
+            else vegetarianDietRadioButton.setSelected(true);
+        }
         FXProperties.runOnPropertyChange(this::syncDietFromUi, dietToggleGroup.selectedToggleProperty());
     }
 
     private void syncArrivalBoundaryFromUi() {
-        if (arrivalBreakfastRadioButton.isSelected()) arrivalBoundary = Boundary.BREAKFAST;
-        if (arrivalLunchRadioButton.isSelected()) arrivalBoundary = Boundary.LUNCH;
-        if (arrivalDinnerRadioButton.isSelected()) arrivalBoundary = Boundary.DINNER;
-        if (arrivalAccommodationRadioButton.isSelected()) arrivalBoundary = Boundary.ACCOMMODATION;
+        if (arrivalBreakfastRadioButton.isSelected()) arrivalTime = ArrivalDepartureTime.BREAKFAST;
+        if (arrivalLunchRadioButton.isSelected()) arrivalTime = ArrivalDepartureTime.LUNCH;
+        if (arrivalDinnerRadioButton.isSelected()) arrivalTime = ArrivalDepartureTime.DINNER;
+        if (arrivalAccommodationRadioButton.isSelected()) arrivalTime = ArrivalDepartureTime.ACCOMMODATION;
         syncWorkingBookingFromUi();
     }
 
     private void syncDepartureBoundaryFromUi() {
-        if (departureBreakfastRadioButton.isSelected()) departureBoundary = Boundary.BREAKFAST;
-        if (departureLunchRadioButton.isSelected()) departureBoundary = Boundary.LUNCH;
-        if (departureDinnerRadioButton.isSelected()) departureBoundary = Boundary.DINNER;
-        if (departureAccommodationRadioButton.isSelected()) departureBoundary = Boundary.ACCOMMODATION;
+        if (departureBreakfastRadioButton.isSelected()) departureTime = ArrivalDepartureTime.BREAKFAST;
+        if (departureLunchRadioButton.isSelected()) departureTime = ArrivalDepartureTime.LUNCH;
+        if (departureDinnerRadioButton.isSelected()) departureTime = ArrivalDepartureTime.DINNER;
+        if (departureAccommodationRadioButton.isSelected()) departureTime = ArrivalDepartureTime.ACCOMMODATION;
         syncWorkingBookingFromUi();
     }
 
@@ -246,84 +226,21 @@ final class VolunteerBookingEditor extends FamilyBookingEditorBase {
         attendanceDates.sort(LocalDate::compareTo);
     }
 
-    private LocalDate getArrivalDate() {
-        return Collections.first(attendanceDates);
-    }
-
-    private LocalDate getDepartureDate() {
-        return Collections.last(attendanceDates);
-    }
-
-    private boolean isAccommodationBooked(LocalDate date) {
-        return getBookedFamilyScheduledItems(KnownItemFamily.ACCOMMODATION).stream().anyMatch(si -> date == null || date.equals(si.getDate()));
-    }
-
-    private void bookAccommodation(boolean book) {
+     private void bookAccommodation(boolean book) {
         List<ScheduledItem> dormitoryScheduledItems = getPolicyFamilyScheduledItems();
-        if (book) {
-            boolean includingArrivalDate = arrivalBoundary.ordinal() <= Boundary.ACCOMMODATION.ordinal();
-            boolean includingDepartureDate = departureBoundary.ordinal() >= Boundary.ACCOMMODATION.ordinal();
-            List<ScheduledItem> scheduledItems = Collections.filter(dormitoryScheduledItems, si ->
-                attendanceDates.contains(si.getDate())
-                && (includingArrivalDate || !Objects.equals(si.getDate(), getArrivalDate()))
-                && (includingDepartureDate || !Objects.equals(si.getDate(), getDepartureDate())));
-            workingBooking.bookScheduledItems(scheduledItems, true);
-        } else
-            workingBooking.unbookScheduledItems(dormitoryScheduledItems);
+        workingBooking.bookAccommodation(book, dormitoryScheduledItems, attendanceDates, arrivalTime, departureTime);
     }
 
     private void bookBreakfast(boolean book) {
-        bookMeals(book, breakfastTimeline, arrivalBoundary.ordinal() <= Boundary.BREAKFAST.ordinal(), true);
+        workingBooking.bookBreakfast(book, attendanceDates, arrivalTime);
     }
 
     private void bookLunch(boolean book) {
-        bookMeals(book, lunchTimeline, arrivalBoundary.ordinal() <= Boundary.LUNCH.ordinal(), departureBoundary.ordinal() >= Boundary.LUNCH.ordinal());
+        workingBooking.bookLunch(book, attendanceDates, arrivalTime, departureTime);
     }
 
     private void bookDinner(boolean book) {
-        bookMeals(book, dinnerTimeline, arrivalBoundary.ordinal() <= Boundary.DINNER.ordinal(), departureBoundary.ordinal() >= Boundary.DINNER.ordinal());
-    }
-
-    private void bookMeals(boolean book, Timeline mealsTimeline, boolean includingArrivalDate, boolean includingDepartureDate) {
-        bookMeals(book, mealsTimeline.getSite(), mealsTimeline.getItem(), includingArrivalDate, includingDepartureDate);
-    }
-
-    private void bookMeals(boolean book, Site mealsSite, Item mealsItem, boolean includingArrivalDate, boolean includingDepartureDate) {
-        if (book) {
-            List<LocalDate> dates = Collections.listOf(attendanceDates);
-            if (!includingArrivalDate)
-                dates.remove(getArrivalDate());
-            if (!includingDepartureDate)
-                dates.remove(getDepartureDate());
-            workingBooking.bookTemporalButNonScheduledItem(mealsSite, mealsItem, dates, true);
-        } else
-            workingBooking.unbookItem(mealsSite, mealsItem);
-    }
-
-    private boolean isBreakfastBooked(LocalDate date) {
-        return isMealsBooked(breakfastTimeline, date);
-    }
-
-    private boolean isLunchBooked(LocalDate date) {
-        return isMealsBooked(lunchTimeline, date);
-    }
-
-    private boolean isDinnerBooked(LocalDate date) {
-        return isMealsBooked(dinnerTimeline, date);
-    }
-
-    private boolean isMealsBooked(Timeline mealsTimeline, LocalDate date) {
-        return isItemBooked(mealsTimeline.getItem(), date);
-    }
-
-    private boolean isAnyMealsBooked() {
-        return isBreakfastBooked(null) || isLunchBooked(null) || isDinnerBooked(null);
-    }
-
-    private boolean isItemBooked(Item item, LocalDate date) {
-        if (date == null)
-            return workingBooking.getDocumentLines().stream().anyMatch(dl -> Entities.samePrimaryKey(dl.getItem(), item));
-        return workingBooking.getBookedAttendances().stream().anyMatch(a -> Entities.samePrimaryKey(a.getDocumentLine().getItem(), item) && date.equals(Attendances.getDate(a)));
+        workingBooking.bookDinner(book, attendanceDates, arrivalTime, departureTime);
     }
 
     private Item getSelectedDietItem() {
@@ -338,19 +255,11 @@ final class VolunteerBookingEditor extends FamilyBookingEditorBase {
     }
 
     private void bookDiet(Item selectedDietItem) {
-        boolean anyMealsBooked = isAnyMealsBooked();
-        bookDiet(anyMealsBooked && Entities.samePrimaryKey(selectedDietItem, vegetarianItem), vegetarianItem);
-        bookDiet(anyMealsBooked && Entities.samePrimaryKey(selectedDietItem, vegetarianWheatFreeItem), vegetarianWheatFreeItem);
-        bookDiet(anyMealsBooked && Entities.samePrimaryKey(selectedDietItem, veganItem), veganItem);
-        bookDiet(anyMealsBooked && Entities.samePrimaryKey(selectedDietItem, veganWheatFreeItem), veganWheatFreeItem);
-    }
-
-    private void bookDiet(boolean book, Item dietItem) {
-        Site site = lunchTimeline.getSite();
-        if (book)
-            workingBooking.bookNonTemporalItem(site, dietItem);
-        else
-            workingBooking.unbookItem(site, dietItem);
+        boolean anyMealsBooked = workingBooking.isAnyMealsBooked();
+        workingBooking.bookDiet(anyMealsBooked && Entities.samePrimaryKey(selectedDietItem, vegetarianItem), vegetarianItem);
+        workingBooking.bookDiet(anyMealsBooked && Entities.samePrimaryKey(selectedDietItem, vegetarianWheatFreeItem), vegetarianWheatFreeItem);
+        workingBooking.bookDiet(anyMealsBooked && Entities.samePrimaryKey(selectedDietItem, veganItem), veganItem);
+        workingBooking.bookDiet(anyMealsBooked && Entities.samePrimaryKey(selectedDietItem, veganWheatFreeItem), veganWheatFreeItem);
     }
 
     private Item createDietItem(String name, Object primaryKey) {

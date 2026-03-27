@@ -701,6 +701,148 @@ public final class WorkingBooking {
         return Collections.filter(attendancesAdded, attendance -> !attendancesRemoved.contains(attendance));
     }
 
+    public List<ScheduledItem> getBookedScheduledItems() {
+        return ScheduledItems.fromAttendances(getBookedAttendances());
+    }
+
+    public List<ScheduledItem> getBookedFamilyScheduledItems(KnownItemFamily family) {
+        return ScheduledItems.filterFamily(getBookedScheduledItems(), family);
+    }
+
+    public LocalDate getArrivalDate() {
+        List<LocalDate> bookedDates = Attendances.toDates(getBookedAttendances());
+        bookedDates.sort(LocalDate::compareTo);
+        return Collections.first(bookedDates);
+    }
+
+    public LocalDate getDepartureDate() {
+        List<LocalDate> bookedDates = Attendances.toDates(getBookedAttendances());
+        bookedDates.sort(LocalDate::compareTo);
+        return Collections.last(bookedDates);
+    }
+
+    public ArrivalDepartureTime getArrivalTime() {
+        LocalDate arrivalDate = getArrivalDate();
+        if (isBreakfastBooked(arrivalDate))
+            return ArrivalDepartureTime.BREAKFAST;
+        if (isLunchBooked(arrivalDate))
+            return ArrivalDepartureTime.LUNCH;
+        if (isDinnerBooked(arrivalDate))
+            return ArrivalDepartureTime.DINNER;
+        return ArrivalDepartureTime.ACCOMMODATION;
+    }
+
+    public ArrivalDepartureTime getDepartureTime() {
+        LocalDate departureDate = getDepartureDate();
+        if (isAccommodationBooked(departureDate))
+            return ArrivalDepartureTime.ACCOMMODATION;
+        if (isDinnerBooked(departureDate))
+            return ArrivalDepartureTime.DINNER;
+        if (isLunchBooked(departureDate))
+            return ArrivalDepartureTime.LUNCH;
+        return ArrivalDepartureTime.BREAKFAST;
+    }
+
+    public boolean isAccommodationBooked() {
+        return isAccommodationBooked(null);
+    }
+
+    private boolean isAccommodationBooked(LocalDate date) {
+        return getBookedFamilyScheduledItems(KnownItemFamily.ACCOMMODATION).stream().anyMatch(si -> date == null || date.equals(si.getDate()));
+    }
+
+    public void bookAccommodation(boolean book, List<ScheduledItem> dormitoryScheduledItems, List<LocalDate> globalAttendanceDates, ArrivalDepartureTime arrivalTime, ArrivalDepartureTime departureTime) {
+        if (book) {
+            boolean includingArrivalDate = arrivalTime.ordinal() <= ArrivalDepartureTime.ACCOMMODATION.ordinal();
+            boolean includingDepartureDate = departureTime.ordinal() >= ArrivalDepartureTime.ACCOMMODATION.ordinal();
+            List<ScheduledItem> scheduledItems = Collections.filter(dormitoryScheduledItems, si ->
+                globalAttendanceDates.contains(si.getDate())
+                && (includingArrivalDate || !Objects.equals(si.getDate(), getArrivalDate()))
+                && (includingDepartureDate || !Objects.equals(si.getDate(), getDepartureDate())));
+            bookScheduledItems(scheduledItems, true);
+        } else
+            unbookScheduledItems(dormitoryScheduledItems);
+    }
+
+    public void bookBreakfast(boolean book, List<LocalDate> globalAttendanceDates, ArrivalDepartureTime arrivalTime) {
+        bookMeals(book, policyAggregate.getBreakfastTimeline(), globalAttendanceDates, arrivalTime.ordinal() <= ArrivalDepartureTime.BREAKFAST.ordinal(), true);
+    }
+
+    public void bookLunch(boolean book, List<LocalDate> globalAttendanceDates, ArrivalDepartureTime arrivalTime, ArrivalDepartureTime departureTime) {
+        bookMeals(book, policyAggregate.getLunchTimeline(), globalAttendanceDates, arrivalTime.ordinal() <= ArrivalDepartureTime.LUNCH.ordinal(), departureTime.ordinal() >= ArrivalDepartureTime.LUNCH.ordinal());
+    }
+
+    public void bookDinner(boolean book, List<LocalDate> globalAttendanceDates, ArrivalDepartureTime arrivalTime, ArrivalDepartureTime departureTime) {
+        bookMeals(book, policyAggregate. getDinnerTimeline(), globalAttendanceDates, arrivalTime.ordinal() <= ArrivalDepartureTime.DINNER.ordinal(), departureTime.ordinal() >= ArrivalDepartureTime.DINNER.ordinal());
+    }
+
+    private void bookMeals(boolean book, Timeline mealsTimeline, List<LocalDate> globalAttendanceDates, boolean includingArrivalDate, boolean includingDepartureDate) {
+        bookMeals(book, mealsTimeline.getSite(), mealsTimeline.getItem(), globalAttendanceDates, includingArrivalDate, includingDepartureDate);
+    }
+
+    private void bookMeals(boolean book, Site mealsSite, Item mealsItem, List<LocalDate> globalAttendanceDates, boolean includingArrivalDate, boolean includingDepartureDate) {
+        if (book) {
+            List<LocalDate> dates = Collections.listOf(globalAttendanceDates);
+            if (!includingArrivalDate)
+                dates.remove(getArrivalDate());
+            if (!includingDepartureDate)
+                dates.remove(getDepartureDate());
+            bookTemporalButNonScheduledItem(mealsSite, mealsItem, dates, true);
+        } else
+            unbookItem(mealsSite, mealsItem);
+    }
+
+    public boolean isBreakfastBooked() {
+        return isBreakfastBooked(null);
+    }
+
+    public boolean isBreakfastBooked(LocalDate date) {
+        return isMealsBooked(policyAggregate.getBreakfastTimeline(), date);
+    }
+
+    public boolean isLunchBooked() {
+        return isLunchBooked(null);
+    }
+
+    public boolean isLunchBooked(LocalDate date) {
+        return isMealsBooked(policyAggregate.getLunchTimeline(), date);
+    }
+
+    public boolean isDinnerBooked() {
+        return isDinnerBooked(null);
+    }
+
+    public boolean isDinnerBooked(LocalDate date) {
+        return isMealsBooked(policyAggregate.getDinnerTimeline(), date);
+    }
+
+    private boolean isMealsBooked(Timeline mealsTimeline, LocalDate date) {
+        return isItemBooked(mealsTimeline.getItem(), date);
+    }
+
+    public boolean isAnyMealsBooked() {
+        return isBreakfastBooked(null) || isLunchBooked(null) || isDinnerBooked(null);
+    }
+
+    public boolean isItemBooked(Item item) {
+        return isItemBooked(item, null);
+    }
+
+    public boolean isItemBooked(Item item, LocalDate date) {
+        if (date == null)
+            return getDocumentLines().stream().anyMatch(dl -> Entities.samePrimaryKey(dl.getItem(), item));
+        return getBookedAttendances().stream().anyMatch(a -> Entities.samePrimaryKey(a.getDocumentLine().getItem(), item) && date.equals(Attendances.getDate(a)));
+    }
+
+    public void bookDiet(boolean book, Item dietItem) {
+        Site site = policyAggregate.getLunchTimeline().getSite();
+        if (book)
+            bookNonTemporalItem(site, dietItem);
+        else
+            unbookItem(site, dietItem);
+    }
+
+
     // Some shorthand methods to lastestDocumentAggregate
 
     public List<Attendance> getAttendancesAdded(boolean fromChangesOnly) {
