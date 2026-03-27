@@ -43,7 +43,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                         ",(select [" +
                         // male availability
                         "sum(!sr.configuration.allowsMale ? 0 :" +
-                        " coalesce((select quantity from PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and event=$1 limit 1), 0)" +
+                        " coalesce((select quantity from PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and (event=null or event=$1) limit 1), 0)" +
                         " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledResource=sr and present and documentLine.(!frontend_released and (pool = null or pool.allowsPublic))), 0)" +
                         ")," +
                         // female availability
@@ -52,7 +52,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                         " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledResource=sr and present and documentLine.(!frontend_released and (pool = null or pool.allowsPublic))), 0)" +
                         ")] from ScheduledResource sr" +
                         // We consider only the resources allocated to the general guest pool for this event
-                        " where scheduledItem=si and exists(select PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and event=$1)" +
+                        " where scheduledItem=si and exists(select PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and (event = null or event=$1))" +
                         " group by scheduledItem)" +
                         " as " + ScheduledItem.maleFemaleAvailabilities +
                         " from ScheduledItem si" + " where" +
@@ -62,8 +62,8 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                         " and (select si.event = coalesce(e.repeatedEvent, e) " +
                         // or not bound to an event but happening in the event venue with over the period of the event
                         "      or si.event=null and si.site = e.venue and (si.date >= coalesce(e.preDate, e.startDate) and si.date <= coalesce(e.postDate, e.endDate) or exists(select EventPart ep where ep.event=e and si.date>=coalesce(ep.startBoundary.date, ep.startBoundary.scheduledItem.date) and si.date<=coalesce(ep.endBoundary.date, ep.endBoundary.scheduledItem.date))) from Event e where id=$1)" +
-                        // Accommodation filter: when $4 provided use the specific item, else fall back to pool allocation check - Also loading dormitory (398) for MKMC Festival preparation events (61)
-                        " and (si.item.family.code!='acco' or exists(select Event where id=$1 and type=61) and si.item=398 or ($4::int=null ? exists(select ScheduledResource sr where scheduledItem=si and exists(select PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and event=$1)) : si.item=$4))" +
+                        // Accommodation filter: when $4 provided use the specific item, else fall back to pool allocation check
+                        " and (si.item.family.code!='acco' or exists(select ItemPolicy ip where item=si.item and scope.(site=si.site and (event = null or event=$1) and (eventType = null or (select type=ip.scope.eventType from Event where id=$1)))) or ($4::int=null ? exists(select ScheduledResource sr where scheduledItem=si and exists(select PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and event=$1)) : si.item=$4))" +
                         // Date range filter: limit to volunteer's stay dates when $2/$3 provided
                         " and ($2::date=null or si.date>=$2) and ($3::date=null or si.date<=$3)" +
                         " order by site?.ord,item?.ord,date", eventPk, startDate, endDate, accoPk)
