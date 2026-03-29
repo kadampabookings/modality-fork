@@ -38,8 +38,6 @@ public final class PolicyAggregate {
     private final QueryResult itemFamilyPoliciesQueryResult;
     private final QueryResult itemPoliciesQueryResult;
     private final QueryResult ratesQueryResult;
-    @Deprecated
-    private final QueryResult bookablePeriodsQueryResult;
     private final long creationTimeMillis = System.currentTimeMillis();
 
     // Fields intended for application code
@@ -69,8 +67,7 @@ public final class PolicyAggregate {
             QueryResult phaseCoveragesQueryResult,
             QueryResult itemFamilyPoliciesQueryResult,
             QueryResult itemPoliciesQueryResult,
-            QueryResult ratesQueryResult,
-            QueryResult bookablePeriodsQueryResult) {
+            QueryResult ratesQueryResult) {
         this.eventQueryResult = eventQueryResult;
         this.scheduledItemsQueryResult = scheduledItemsQueryResult;
         this.scheduledBoundariesQueryResult = scheduledBoundariesQueryResult;
@@ -81,7 +78,6 @@ public final class PolicyAggregate {
         this.ratesQueryResult = ratesQueryResult;
         this.itemFamilyPoliciesQueryResult = itemFamilyPoliciesQueryResult;
         this.itemPoliciesQueryResult = itemPoliciesQueryResult;
-        this.bookablePeriodsQueryResult = bookablePeriodsQueryResult;
     }
 
     public void rebuildEntities(Event event) {
@@ -126,9 +122,6 @@ public final class PolicyAggregate {
         queryMapping = (QueryRowToEntityMapping) ratesQueryResult.getEntityMapping();
         rates = QueryResultToEntitiesMapper.mapQueryResultToEntities(ratesQueryResult, queryMapping, entityStore,
                 "rates");
-        queryMapping = (QueryRowToEntityMapping) bookablePeriodsQueryResult.getEntityMapping();
-        bookablePeriods = QueryResultToEntitiesMapper.mapQueryResultToEntities(bookablePeriodsQueryResult, queryMapping,
-                entityStore, "bookablePeriods");
     }
 
     public Future<Void> reloadAvailabilities() {
@@ -475,9 +468,5 @@ public final class PolicyAggregate {
 
     public QueryResult getRatesQueryResult() {
         return ratesQueryResult;
-    }
-
-    public QueryResult getBookablePeriodsQueryResult() {
-        return bookablePeriodsQueryResult;
     }
 }

@@ -21,8 +21,6 @@ public final class PolicyAggregateSerialCodec extends SerialCodecBase<PolicyAggr
     private static final String RATES_QUERY_RESULT_KEY = "rqr";
     private static final String ITEM_FAMILY_POLICIES_QUERY_RESULT_KEY = "ifpqr";
     private static final String ITEM_POLICIES_QUERY_RESULT_KEY = "ipqr";
-    private static final String BOOKABLE_PERIODS_QUERY_RESULT_KEY = "bpqr";
-
 
     public PolicyAggregateSerialCodec() {
         super(PolicyAggregate.class, CODEC_ID);
@@ -40,7 +38,6 @@ public final class PolicyAggregateSerialCodec extends SerialCodecBase<PolicyAggr
         encodeObject(serial, ITEM_FAMILY_POLICIES_QUERY_RESULT_KEY,  pa.getItemFamilyPoliciesQueryResult());
         encodeObject(serial, ITEM_POLICIES_QUERY_RESULT_KEY,         pa.getItemPoliciesQueryResult());
         encodeObject(serial, RATES_QUERY_RESULT_KEY,                 pa.getRatesQueryResult());
-        encodeObject(serial, BOOKABLE_PERIODS_QUERY_RESULT_KEY,      pa.getBookablePeriodsQueryResult());
     }
 
     @Override
@@ -55,8 +52,7 @@ public final class PolicyAggregateSerialCodec extends SerialCodecBase<PolicyAggr
             decodeObject(serial, EVENT_PHASE_COVERAGES_QUERY_RESULT_KEY),
             decodeObject(serial, ITEM_FAMILY_POLICIES_QUERY_RESULT_KEY),
             decodeObject(serial, ITEM_POLICIES_QUERY_RESULT_KEY),
-            decodeObject(serial, RATES_QUERY_RESULT_KEY),
-            decodeObject(serial, BOOKABLE_PERIODS_QUERY_RESULT_KEY)
+            decodeObject(serial, RATES_QUERY_RESULT_KEY)
         );
     }
 }

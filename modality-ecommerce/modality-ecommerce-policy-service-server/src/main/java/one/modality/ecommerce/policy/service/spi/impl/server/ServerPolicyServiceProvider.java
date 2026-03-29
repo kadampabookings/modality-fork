@@ -133,11 +133,6 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                     " from Event e where id=$1)" +
                     // Note: TeachingsPricing relies on the following order to work properly
                     " order by site,item,perDay desc,startDate,endDate,price", eventPk)
-                    // 10 (deprecated) - Loading bookable periods (of this event or of the repeated event if set)
-                    , DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
-                    "select startScheduledItem,endScheduledItem,name,label" +
-                    " from BookablePeriod bp" + " where (select bp.event = coalesce(e.repeatedEvent, e) from Event e where id=$1)" +
-                    " order by startScheduledItem.date,endScheduledItem.date", eventPk)
                 }))
             .map(batch -> new PolicyAggregate(
                 batch.get(0),
@@ -149,8 +144,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                 batch.get(6),
                 batch.get(7),
                 batch.get(8),
-                batch.get(9),
-                batch.get(10)
+                batch.get(9)
             ));
     }
 
