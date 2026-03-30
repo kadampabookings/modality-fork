@@ -14,8 +14,8 @@ module modality.booking.backoffice.bookingeditor.volunteer.plugin {
     requires webfx.extras.styles.bootstrap;
     requires webfx.kit.util;
     requires webfx.platform.util;
-    requires webfx.stack.orm.entity;
     requires webfx.platform.util.time;
+    requires webfx.stack.orm.entity;
 
     // Exported packages
     exports one.modality.booking.backoffice.bookingeditor.volunteer;
