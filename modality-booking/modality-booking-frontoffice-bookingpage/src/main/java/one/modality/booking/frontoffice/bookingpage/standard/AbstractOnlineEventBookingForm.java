@@ -228,6 +228,7 @@ public abstract class AbstractOnlineEventBookingForm implements StandardBookingF
      * @param props the WorkingBookingProperties
      */
     protected void loadTeachingProgramme(WorkingBookingProperties props) {
+/* old code based on BookablePeriod which is deprecated
         if (props == null) return;
 
         PolicyAggregate policyAggregate = props.getPolicyAggregate();
@@ -285,6 +286,7 @@ public abstract class AbstractOnlineEventBookingForm implements StandardBookingF
                 callback.accept(period);
             }
         }
+*/
     }
 
     /**

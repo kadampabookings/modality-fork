@@ -54,8 +54,6 @@ public final class PolicyAggregate {
     private EntityList<ItemFamilyPolicy> itemFamilyPolicies;
     private EntityList<ItemPolicy> itemPolicies;
     private EntityList<Rate> rates;
-    @Deprecated
-    private EntityList<BookablePeriod> bookablePeriods;
 
     public PolicyAggregate(
             QueryResult eventQueryResult,
@@ -408,38 +406,7 @@ public final class PolicyAggregate {
         return Rates.hasFacilityFees(getRatesStream());
     }
 
-    @Deprecated
-    public List<BookablePeriod> getBookablePeriods() {
-        return bookablePeriods;
-    }
-
-    @Deprecated
-    public List<BookablePeriod> getBookablePeriods(KnownItemFamily knownItemFamily) {
-        return Collections.filter(getBookablePeriods(), bp -> Entities
-                .samePrimaryKey(bp.getStartScheduledItem().getItem().getFamily(), knownItemFamily.getPrimaryKey()));
-    }
-
-    @Deprecated
-    public List<BookablePeriod> getBookablePeriods(KnownItemFamily knownItemFamily, Object wholePeriodI18nKey) {
-        List<BookablePeriod> bookablePeriods = getBookablePeriods(knownItemFamily);
-        bookablePeriods.add(createFamilyWholeBookablePeriod(knownItemFamily, wholePeriodI18nKey));
-        return bookablePeriods;
-    }
-
-    @Deprecated
-    public BookablePeriod createFamilyWholeBookablePeriod(KnownItemFamily knownItemFamily, Object i18nKey) {
-        List<ScheduledItem> familyScheduledItems = filterScheduledItemsOfFamily(knownItemFamily);
-        BookablePeriod wholeBookablePeriod = entityStore.createEntity(BookablePeriod.class);
-        wholeBookablePeriod.setEvent(event);
-        wholeBookablePeriod.setStartScheduledItem(Collections.first(familyScheduledItems)); // should be the first
-                                                                                            // teaching date
-        wholeBookablePeriod.setEndScheduledItem(Collections.last(familyScheduledItems)); // should be the last teaching
-                                                                                         // date
-        wholeBookablePeriod.setFieldValue("i18nKey", i18nKey); // Will be recognized by I18nFunction
-        return wholeBookablePeriod;
-    }
-
-    // The following methods are meant to be used for serialization, not by the
+        // The following methods are meant to be used for serialization, not by the
     // application code
 
     public QueryResult getEventQueryResult() {
