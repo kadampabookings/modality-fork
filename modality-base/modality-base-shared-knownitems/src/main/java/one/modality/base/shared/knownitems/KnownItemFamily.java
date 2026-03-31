@@ -17,6 +17,7 @@ public enum KnownItemFamily {
     TAX("tax", 26, null),
     AUDIO_RECORDING("record", 20, KnownItemI18nKeys.AudioRecordings),
     CEREMONY("cerem", 16, null),
+    EXAM("exam", 4, null),
     UNKNOWN(null, -1, null);
 
     private final String code;

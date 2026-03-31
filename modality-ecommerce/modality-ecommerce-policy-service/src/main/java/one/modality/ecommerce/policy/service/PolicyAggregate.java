@@ -185,6 +185,18 @@ public final class PolicyAggregate {
         return filterScheduledItemsOfFamily(KnownItemFamily.CEREMONY);
     }
 
+    public ScheduledItem getCeremonyScheduledItem() {
+        return Collections.first(filterCeremonyScheduledItems());
+    }
+
+    public List<ScheduledItem> filterExamScheduledItems() {
+        return filterScheduledItemsOfFamily(KnownItemFamily.EXAM);
+    }
+
+    public ScheduledItem getExamScheduledItem() {
+        return Collections.first(filterExamScheduledItems());
+    }
+
     public EntityList<ScheduledBoundary> getScheduledBoundaries() {
         return scheduledBoundaries;
     }
