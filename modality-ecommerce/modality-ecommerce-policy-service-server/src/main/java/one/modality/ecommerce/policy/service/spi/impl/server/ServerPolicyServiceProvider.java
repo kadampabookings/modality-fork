@@ -38,7 +38,9 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                     // 1 - Loading scheduled items (of this event or of the repeated event if set)
                     // $1=eventPk, $2=startDate (null → no date filter), $3=endDate, $4=accommodationItemPk (null → pool allocation check)
                     DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
-                        "select name,label,comment,site.name,item.(name,label,code,temporal,family.(code,name,label,ord),capacity,share_mate,ord),date,startTime,timeline?.(site,item,startTime,endTime),cancelled,resource" +
+                        // CTE materializes the event row so PostgreSQL treats it as a guaranteed single row
+                        "with e as (select repeatedEvent,startDate,endDate,preDate,postDate,venue from Event where id=$1)" +
+                        " select name,label,comment,site.name,item.(name,label,code,temporal,family.(code,name,label,ord),capacity,share_mate,ord),date,startTime,timeline?.(site,item,startTime,endTime),cancelled,resource" +
                         // We also compute the remaining available space for guests
                         ",(select [" +
                         // male availability
@@ -55,10 +57,10 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                         " where scheduledItem=si and exists(select PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and (event = null or event=$1))" +
                         " group by scheduledItem)" +
                         " as " + ScheduledItem.maleFemaleAvailabilities +
-                        // Event e is joined as a FROM table (not a correlated subquery) so its fields are evaluated once
-                        " from ScheduledItem si, Event e where e=$1" +
+                        // ScheduledItem si joined with the materialized CTE e (single event row)
+                        " from ScheduledItem si, e e" +
                         // Only bookable items
-                        " and bookableScheduledItem=id" +
+                        " where bookableScheduledItem=id" +
                         // bound to this event (or its repeatedEvent), or unbound but happening at the event venue during the event period
                         " and (si.event = coalesce(e.repeatedEvent, e)" +
                         "      or si.event=null and si.site = e.venue and (si.date >= coalesce(e.preDate, e.startDate) and si.date <= coalesce(e.postDate, e.endDate) or exists(select EventPart ep where ep.event=e and si.date>=coalesce(ep.startBoundary.date, ep.startBoundary.scheduledItem.date) and si.date<=coalesce(ep.endBoundary.date, ep.endBoundary.scheduledItem.date))))" +
