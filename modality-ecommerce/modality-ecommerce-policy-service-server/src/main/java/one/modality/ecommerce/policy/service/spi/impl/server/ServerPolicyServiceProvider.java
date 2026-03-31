@@ -50,7 +50,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                         ")," +
                         // female availability
                         "sum(!sr.configuration.allowsFemale ? 0 :" +
-                        " coalesce((select quantity from PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and event=$1 limit 1), 0)" +
+                        " coalesce((select quantity from PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and (event=null or event=$1) limit 1), 0)" +
                         " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledResource=sr and present and documentLine.(!frontend_released and (pool = null or pool.allowsPublic))), 0)" +
                         ")] from ScheduledResource sr" +
                         // We consider only the resources allocated to the general guest pool for this event
@@ -68,7 +68,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                         " and (si.item.family.code!='acco' or exists(select ItemPolicy ip where item=si.item and scope.(site=si.site and (event = null or event=$1) and (eventType = null or (select type=ip.scope.eventType from Event where id=$1)))) or ($4::int=null ? exists(select ScheduledResource sr where scheduledItem=si and exists(select PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and event=$1)) : si.item=$4))" +
                         // Date range filter: limit to volunteer's stay dates when $2/$3 provided
                         " and ($2::date=null or si.date>=$2) and ($3::date=null or si.date<=$3)" +
-                        " order by site?.ord,item?.ord,date", eventPk, startDate, endDate, accoPk)
+                        " order by site?.ord,site.id,item.family.id,item?.ord,item.id,date", eventPk, startDate, endDate, accoPk)
                     // 2 - Loading scheduled boundaries (of this event or of the repeated event if set)
                     , DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
                     "select event,scheduledItem,timeline.(startTime,endTime),atStartTime,date" +
