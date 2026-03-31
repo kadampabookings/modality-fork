@@ -38,7 +38,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                     // 1 - Loading scheduled items (of this event or of the repeated event if set)
                     // $1=eventPk, $2=startDate (null → no date filter), $3=endDate, $4=accommodationItemPk (null → pool allocation check)
                     DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
-                        "select name,label,comment,site.name,item.(name,label,code,temporal,family.(code,name,label,ord),capacity,share_mate,ord),date,startTime,timeline.(site,item,startTime,endTime),cancelled,resource" +
+                        "select name,label,comment,site.name,item.(name,label,code,temporal,family.(code,name,label,ord),capacity,share_mate,ord),date,startTime,timeline?.(site,item,startTime,endTime),cancelled,resource" +
                         // We also compute the remaining available space for guests
                         ",(select [" +
                         // male availability
@@ -56,7 +56,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                         " group by scheduledItem)" +
                         " as " + ScheduledItem.maleFemaleAvailabilities +
                         // Event e is joined as a FROM table (not a correlated subquery) so its fields are evaluated once
-                        " from ScheduledItem si, Event e" + " where e=$1" +
+                        " from ScheduledItem si, Event e where e=$1" +
                         // Only bookable items
                         " and bookableScheduledItem=id" +
                         // bound to this event (or its repeatedEvent), or unbound but happening at the event venue during the event period
@@ -70,27 +70,27 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                     // 2 - Loading scheduled boundaries (of this event or of the repeated event if set)
                     , DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
                     "select event,scheduledItem,timeline.(startTime,endTime),atStartTime,date" +
-                    " from ScheduledBoundary sb, Event e" + " where e=$1 and sb.event = coalesce(e.repeatedEvent, e)" +
+                    " from ScheduledBoundary sb, Event e where e=$1 and sb.event = coalesce(e.repeatedEvent, e)" +
                     " order by scheduledItem.date", eventPk)
                     // 3 - Loading event parts (of this event or of the repeated event if set)
                     , DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
                     "select event,name,label,startBoundary,endBoundary,accommodationChangeAllowed" +
-                    " from EventPart epa, Event e" + " where e=$1 and epa.event = coalesce(e.repeatedEvent, e)" +
+                    " from EventPart epa, Event e where e=$1 and epa.event = coalesce(e.repeatedEvent, e)" +
                     " order by startBoundary.id", eventPk)
                     // 4 - Loading event selections (of this event or of the repeated event if set)
                     , DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
                     "select event,name,label,inPerson,online,part1,part2,part3" +
-                    " from EventSelection es, Event e" + " where e=$1 and es.event = coalesce(e.repeatedEvent, e)" +
+                    " from EventSelection es, Event e where e=$1 and es.event = coalesce(e.repeatedEvent, e)" +
                     " order by id", eventPk) // Will introduce an ord later
                     // 5 - Loading event phases (of this event or of the repeated event if set)
                     , DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
                     "select event,name,label,startBoundary,endBoundary" +
-                    " from EventPhase eph, Event e" + " where e=$1 and eph.event = coalesce(e.repeatedEvent, e)" +
+                    " from EventPhase eph, Event e where e=$1 and eph.event = coalesce(e.repeatedEvent, e)" +
                     " order by id", eventPk)
                     // 6 - Loading phase coverages (of this event or of the repeated event if set)
                     , DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
                     "select event,name,label,phase1,phase2,phase3,phase4" +
-                    " from EventPhaseCoverage epc, Event e" + " where e=$1 and epc.event = coalesce(e.repeatedEvent, e)" +
+                    " from EventPhaseCoverage epc, Event e where e=$1 and epc.event = coalesce(e.repeatedEvent, e)" +
                     " order by id", eventPk) // Will introduce an ord later
                     // 7 - Loading item family policy (of this event or of the repeated event if set)
                     , DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
@@ -98,7 +98,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                     ",itemFamily.ord" +
                     ",eventPhaseCoverage1,eventPhaseCoverage2,eventPhaseCoverage3,eventPhaseCoverage4" +
                     ",noticeLabel,prerequisiteDescriptionLabel,prerequisiteConfirmationLabel" +
-                    " from ItemFamilyPolicy ifp, Event e" + " where e=$1 and ifp.scope.(" +
+                    " from ItemFamilyPolicy ifp, Event e where e=$1 and ifp.scope.(" +
                     " organization = e.organization" +
                     " and (site = null or site?.event = null or site?.event = coalesce(e.repeatedEvent, e))" +
                     " and (eventType = null or eventType = coalesce(e.repeatedEvent?.type, e.type))" +
@@ -110,7 +110,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                     "select scope.(organization,site,eventType,event)" +
                     ",item.(name,label,code,temporal,family.(code,name,label,ord),capacity,share_mate,ord)" +
                     ",descriptionLabel,noticeLabel,minDay,default,genderInfoRequired,earlyAccommodationAllowed,lateAccommodationAllowed,minOccupancy,forceSoldOut" +
-                    " from ItemPolicy ip, Event e" + " where e=$1 and ip.scope.(" +
+                    " from ItemPolicy ip, Event e where e=$1 and ip.scope.(" +
                     " organization = e.organization" +
                     " and (site = null or site?.event = null or site?.event = coalesce(e.repeatedEvent, e))" +
                     " and (eventType = null or eventType = coalesce(e.repeatedEvent?.type, e.type))" +
@@ -123,7 +123,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                     ",cutoffDate,minDeposit2" +
                     ",age1_max,age1_price,age1_discount,age2_max,age2_price,age2_discount" +
                     ",resident_price,resident_discount,resident2_price,resident2_discount" +
-                    " from Rate r, Event e" + " where e=$1 and (" +
+                    " from Rate r, Event e where e=$1 and (" +
                     // Sites dedicated to this event
                     "r.site.event = coalesce(e.repeatedEvent, e)" +
                     // or global sites of the organization with scheduled items over the period of the event
