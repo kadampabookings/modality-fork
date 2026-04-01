@@ -21,6 +21,7 @@ public interface ItemFamilyPolicy extends Entity,
     String noticeLabel = "noticeLabel";
     String prerequisiteDescriptionLabel = "prerequisiteDescriptionLabel";
     String prerequisiteConfirmationLabel = "prerequisiteConfirmationLabel";
+    String includedByDefault = "includedByDefault";
 
     default void setScope(Object value) {
         setForeignField(scope, value);
@@ -124,6 +125,14 @@ public interface ItemFamilyPolicy extends Entity,
 
     default Label getPrerequisiteConfirmationLabel() {
         return getForeignEntity(prerequisiteConfirmationLabel);
+    }
+
+    default void setIncludedByDefault(Boolean value) {
+        setFieldValue(includedByDefault, value);
+    }
+
+    default Boolean isIncludedByDefault() {
+        return getBooleanFieldValue(includedByDefault);
     }
 
 }
