@@ -106,6 +106,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                     "with e as (select coalesce(repeatedEvent,id) as finalEvent,coalesce(repeatedEvent?.type,type) as finalEventType,organization from Event where id=$1)" +
                     " select scope.(organization,site,eventType,event)" +
                     ",itemFamily.ord" +
+                    ",includedByDefault" +
                     ",eventPhaseCoverage1,eventPhaseCoverage2,eventPhaseCoverage3,eventPhaseCoverage4" +
                     ",noticeLabel,prerequisiteDescriptionLabel,prerequisiteConfirmationLabel" +
                     " from ItemFamilyPolicy ifp, e where ifp.scope.(" +
