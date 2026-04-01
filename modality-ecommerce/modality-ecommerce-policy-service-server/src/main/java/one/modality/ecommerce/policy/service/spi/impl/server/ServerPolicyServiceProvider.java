@@ -164,10 +164,12 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
     @Override
     public Future<QueryResult> loadAvailabilities(LoadPolicyArgument argument) {
         return QueryService.executeQuery(
-            DqlQueries.newQueryArgumentForDefaultDataSource(
+            DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
                 // CTE e: materializes the single event row (avoids correlated scalar subquery per ScheduledItem row)
                 // CTE ep: pre-computes EventPart boundaries (avoids re-evaluating per ScheduledItem row)
-                "with e as (select coalesce(repeatedEvent,id) as finalEvent,startDate,endDate,organization from Event where id=$1)" +
+                // CTE e: materializes the single event row; finalEvent = coalesce(repeatedEvent, id)
+                // CTE ep: pre-computes EventPart boundaries for this event
+                "with e as (select coalesce(repeatedEvent,id) as finalEvent,startDate,endDate,preDate,postDate,venue from Event where id=$1)" +
                 ", ep as (select startBoundary,endBoundary from EventPart where event=(select e.finalEvent from e))" +
                 " select name,label,comment,site.name,item.(name,label,code,temporal,family.(code,name,label,ord),capacity,share_mate,ord),date,startTime,timeline?.(site,item,startTime,endTime),cancelled,resource" +
                 // We also compute the remaining available space for guests
@@ -183,14 +185,15 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                 " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledResource=sr and present and documentLine.(!frontend_released and (pool = null or pool.allowsPublic))), 0)" +
                 ")] from ScheduledResource sr" +
                 // We consider only the resources allocated to the general guest pool for this event
-                " where scheduledItem=si and exists(select PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and event=$1)" +
+                " where scheduledItem=si and exists(select PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and (event = null or event=$1))" +
                 " group by scheduledItem)" +
                 " as " + ScheduledItem.maleFemaleAvailabilities +
                 " from ScheduledItem si, e" +
                 " where bookableScheduledItem=id" +
                 " and (si.event = e.finalEvent" +
-                "      or si.event=null and si.timeline?.site?.organization = e.organization and (si.date >= e.startDate and si.date <= e.endDate or exists(select ep where si.date>=coalesce(ep.startBoundary.date, ep.startBoundary.scheduledItem.date) and si.date<=coalesce(ep.endBoundary.date, ep.endBoundary.scheduledItem.date))))" +
-                " order by site?.ord,item?.ord,date", argument.getEventPk())
+                "      or si.event=null and si.site = e.venue and (si.date >= coalesce(e.preDate, e.startDate) and si.date <= coalesce(e.postDate, e.endDate) or exists(select ep where si.date>=coalesce(ep.startBoundary.date, ep.startBoundary.scheduledItem.date) and si.date<=coalesce(ep.endBoundary.date, ep.endBoundary.scheduledItem.date))))" +
+                " and (si.item.family.code!='acco' or exists(select ItemPolicy ip where item=si.item and scope.(site=si.site and (event=null or event=$1) and (eventType=null or (select type=ip.scope.eventType from Event where id=$1)))) or (exists(select ScheduledResource sr where scheduledItem=si and exists(select PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and event=$1))))" +
+                " order by site?.ord,site.id,item.family.id,item?.ord,item.id,date", argument.getEventPk())
         );
     }
 }
