@@ -38,8 +38,10 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                     // 1 - Loading scheduled items (of this event or of the repeated event if set)
                     // $1=eventPk, $2=startDate (null → no date filter), $3=endDate, $4=accommodationItemPk (null → pool allocation check)
                     DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
-                        // CTE materializes the event row so PostgreSQL treats it as a guaranteed single row
+                        // CTE e: materializes the single event row
+                        // CTE ep: pre-computes EventPart boundaries for this event (avoids re-evaluating 6000+ times)
                         "with e as (select repeatedEvent,startDate,endDate,preDate,postDate,venue from Event where id=$1)" +
+                        ", ep as (select startBoundary,endBoundary from EventPart where event=(select coalesce(e.repeatedEvent,e) from e e))" +
                         " select name,label,comment,site.name,item.(name,label,code,temporal,family.(code,name,label,ord),capacity,share_mate,ord),date,startTime,timeline?.(site,item,startTime,endTime),cancelled,resource" +
                         // We also compute the remaining available space for guests
                         ",(select [" +
@@ -58,49 +60,55 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                         " group by scheduledItem)" +
                         " as " + ScheduledItem.maleFemaleAvailabilities +
                         // ScheduledItem si joined with the materialized CTE e (single event row)
-                        " from ScheduledItem si, e e" +
+                        " from ScheduledItem si, e" +
                         // Only bookable items
                         " where bookableScheduledItem=id" +
                         // bound to this event (or its repeatedEvent), or unbound but happening at the event venue during the event period
                         " and (si.event = coalesce(e.repeatedEvent, e)" +
-                        "      or si.event=null and si.site = e.venue and (si.date >= coalesce(e.preDate, e.startDate) and si.date <= coalesce(e.postDate, e.endDate) or exists(select EventPart ep where ep.event=e and si.date>=coalesce(ep.startBoundary.date, ep.startBoundary.scheduledItem.date) and si.date<=coalesce(ep.endBoundary.date, ep.endBoundary.scheduledItem.date))))" +
+                        "      or si.event=null and si.site = e.venue and (si.date >= coalesce(e.preDate, e.startDate) and si.date <= coalesce(e.postDate, e.endDate) or exists(select ep where si.date>=coalesce(ep.startBoundary.date, ep.startBoundary.scheduledItem.date) and si.date<=coalesce(ep.endBoundary.date, ep.endBoundary.scheduledItem.date))))" +
                         // Accommodation filter: when $4 provided use the specific item, else fall back to pool allocation check
-                        " and (si.item.family.code!='acco' or exists(select ItemPolicy ip where item=si.item and scope.(site=si.site and (event = null or event=$1) and (eventType = null or (select type=ip.scope.eventType from Event where id=$1)))) or ($4::int=null ? exists(select ScheduledResource sr where scheduledItem=si and exists(select PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and event=$1)) : si.item=$4))" +
+                        " and (si.item.family.code!='acco' or exists(select ItemPolicy ip where item=si.item and scope.(site=si.site and (event=null or event=$1) and (eventType=null or (select type=ip.scope.eventType from Event where id=$1)))) or ($4::int=null ? exists(select ScheduledResource sr where scheduledItem=si and exists(select PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and event=$1)) : si.item=$4))" +
                         // Date range filter: limit to volunteer's stay dates when $2/$3 provided
                         " and ($2::date=null or si.date>=$2) and ($3::date=null or si.date<=$3)" +
                         " order by site?.ord,site.id,item.family.id,item?.ord,item.id,date", eventPk, startDate, endDate, accoPk)
                     // 2 - Loading scheduled boundaries (of this event or of the repeated event if set)
                     , DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
-                    "select event,scheduledItem,timeline.(startTime,endTime),atStartTime,date" +
-                    " from ScheduledBoundary sb, Event e where e=$1 and sb.event = coalesce(e.repeatedEvent, e)" +
+                    "with e as (select repeatedEvent from Event where id=$1)" +
+                    " select event,scheduledItem,timeline.(startTime,endTime),atStartTime,date" +
+                    " from ScheduledBoundary sb, e where sb.event = coalesce(e.repeatedEvent, e)" +
                     " order by scheduledItem.date", eventPk)
                     // 3 - Loading event parts (of this event or of the repeated event if set)
                     , DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
-                    "select event,name,label,startBoundary,endBoundary,accommodationChangeAllowed" +
-                    " from EventPart epa, Event e where e=$1 and epa.event = coalesce(e.repeatedEvent, e)" +
+                    "with e as (select repeatedEvent from Event where id=$1)" +
+                    " select event,name,label,startBoundary,endBoundary,accommodationChangeAllowed" +
+                    " from EventPart epa, e where epa.event = coalesce(e.repeatedEvent, e)" +
                     " order by startBoundary.id", eventPk)
                     // 4 - Loading event selections (of this event or of the repeated event if set)
                     , DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
-                    "select event,name,label,inPerson,online,part1,part2,part3" +
-                    " from EventSelection es, Event e where e=$1 and es.event = coalesce(e.repeatedEvent, e)" +
+                    "with e as (select repeatedEvent from Event where id=$1)" +
+                    " select event,name,label,inPerson,online,part1,part2,part3" +
+                    " from EventSelection es, e where es.event = coalesce(e.repeatedEvent, e)" +
                     " order by id", eventPk) // Will introduce an ord later
                     // 5 - Loading event phases (of this event or of the repeated event if set)
                     , DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
-                    "select event,name,label,startBoundary,endBoundary" +
-                    " from EventPhase eph, Event e where e=$1 and eph.event = coalesce(e.repeatedEvent, e)" +
+                    "with e as (select repeatedEvent from Event where id=$1)" +
+                    " select event,name,label,startBoundary,endBoundary" +
+                    " from EventPhase eph, e where eph.event = coalesce(e.repeatedEvent, e)" +
                     " order by id", eventPk)
                     // 6 - Loading phase coverages (of this event or of the repeated event if set)
                     , DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
-                    "select event,name,label,phase1,phase2,phase3,phase4" +
-                    " from EventPhaseCoverage epc, Event e where e=$1 and epc.event = coalesce(e.repeatedEvent, e)" +
+                    "with e as (select repeatedEvent from Event where id=$1)" +
+                    " select event,name,label,phase1,phase2,phase3,phase4" +
+                    " from EventPhaseCoverage epc, e where epc.event = coalesce(e.repeatedEvent, e)" +
                     " order by id", eventPk) // Will introduce an ord later
                     // 7 - Loading item family policy (of this event or of the repeated event if set)
                     , DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
-                    "select scope.(organization,site,eventType,event)" +
+                    "with e as (select repeatedEvent,type,organization from Event where id=$1)" +
+                    " select scope.(organization,site,eventType,event)" +
                     ",itemFamily.ord" +
                     ",eventPhaseCoverage1,eventPhaseCoverage2,eventPhaseCoverage3,eventPhaseCoverage4" +
                     ",noticeLabel,prerequisiteDescriptionLabel,prerequisiteConfirmationLabel" +
-                    " from ItemFamilyPolicy ifp, Event e where e=$1 and ifp.scope.(" +
+                    " from ItemFamilyPolicy ifp, e where ifp.scope.(" +
                     " organization = e.organization" +
                     " and (site = null or site?.event = null or site?.event = coalesce(e.repeatedEvent, e))" +
                     " and (eventType = null or eventType = coalesce(e.repeatedEvent?.type, e.type))" +
@@ -109,10 +117,11 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                     " order by itemFamily.ord,id", eventPk)
                     // 8 - Loading item policies (of this event or of the repeated event if set)
                     , DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
-                    "select scope.(organization,site,eventType,event)" +
+                    "with e as (select repeatedEvent,type,organization from Event where id=$1)" +
+                    " select scope.(organization,site,eventType,event)" +
                     ",item.(name,label,code,temporal,family.(code,name,label,ord),capacity,share_mate,ord)" +
                     ",descriptionLabel,noticeLabel,minDay,default,genderInfoRequired,earlyAccommodationAllowed,lateAccommodationAllowed,minOccupancy,forceSoldOut" +
-                    " from ItemPolicy ip, Event e where e=$1 and ip.scope.(" +
+                    " from ItemPolicy ip, e where ip.scope.(" +
                     " organization = e.organization" +
                     " and (site = null or site?.event = null or site?.event = coalesce(e.repeatedEvent, e))" +
                     " and (eventType = null or eventType = coalesce(e.repeatedEvent?.type, e.type))" +
@@ -121,11 +130,12 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                     " order by item.family.ord,item.ord,id", eventPk)
                     // 9 - Loading rates (of this event or of the repeated event if set)
                     , DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
-                    "select site,item,price,perDay,perPerson,applicableToInPerson,applicableToOnline,facilityFee_price,facilityFee_discount,startDate,endDate,onDate,offDate,minDeposit" +
+                    "with e as (select repeatedEvent,type,organization,startDate,endDate from Event where id=$1)" +
+                    " select site,item,price,perDay,perPerson,applicableToInPerson,applicableToOnline,facilityFee_price,facilityFee_discount,startDate,endDate,onDate,offDate,minDeposit" +
                     ",cutoffDate,minDeposit2" +
                     ",age1_max,age1_price,age1_discount,age2_max,age2_price,age2_discount" +
                     ",resident_price,resident_discount,resident2_price,resident2_discount" +
-                    " from Rate r, Event e where e=$1 and (" +
+                    " from Rate r, e where (" +
                     // Sites dedicated to this event
                     "r.site.event = coalesce(e.repeatedEvent, e)" +
                     // or global sites of the organization with scheduled items over the period of the event
@@ -154,24 +164,31 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
     public Future<QueryResult> loadAvailabilities(LoadPolicyArgument argument) {
         return QueryService.executeQuery(
             DqlQueries.newQueryArgumentForDefaultDataSource(
-                "select name,label,comment,site.name,item.(name,label,code,temporal,family.(code,name,label,ord),capacity,share_mate,ord),date,startTime,timeline.(site,item,startTime,endTime),cancelled,resource" +
+                // CTE e: materializes the single event row (avoids correlated scalar subquery per ScheduledItem row)
+                // CTE ep: pre-computes EventPart boundaries (avoids re-evaluating per ScheduledItem row)
+                "with e as (select repeatedEvent,startDate,endDate,organization from Event where id=$1)" +
+                ", ep as (select startBoundary,endBoundary from EventPart where event=(select coalesce(e.repeatedEvent,e) from e e))" +
+                " select name,label,comment,site.name,item.(name,label,code,temporal,family.(code,name,label,ord),capacity,share_mate,ord),date,startTime,timeline?.(site,item,startTime,endTime),cancelled,resource" +
                 // We also compute the remaining available space for guests
                 ",(select [" +
                 // male availability
                 "sum(!sr.configuration.allowsMale ? 0 :" +
-                " coalesce((select quantity from PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and event=$1 limit 1), 0)" +
+                " coalesce((select quantity from PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and (event=null or event=$1) limit 1), 0)" +
                 " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledResource=sr and present and documentLine.(!frontend_released and (pool = null or pool.allowsPublic))), 0)" +
                 ")," +
                 // female availability
                 "sum(!sr.configuration.allowsFemale ? 0 :" +
-                " coalesce((select quantity from PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and event=$1 limit 1), 0)" +
+                " coalesce((select quantity from PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and (event=null or event=$1) limit 1), 0)" +
                 " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledResource=sr and present and documentLine.(!frontend_released and (pool = null or pool.allowsPublic))), 0)" +
                 ")] from ScheduledResource sr" +
                 // We consider only the resources allocated to the general guest pool for this event
                 " where scheduledItem=si and exists(select PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and event=$1)" +
                 " group by scheduledItem)" +
                 " as " + ScheduledItem.maleFemaleAvailabilities +
-                " from ScheduledItem si" + " where bookableScheduledItem=id and (select si.event = coalesce(e.repeatedEvent, e) or si.event=null and si.timeline?.site?.organization = e.organization and (si.date >= e.startDate and si.date <= e.endDate or exists(select EventPart ep where ep.event=e and si.date>=coalesce(ep.startBoundary.date, ep.startBoundary.scheduledItem.date) and si.date<=coalesce(ep.endBoundary.date, ep.endBoundary.scheduledItem.date))) from Event e where id=$1)" +
+                " from ScheduledItem si, e" +
+                " where bookableScheduledItem=id" +
+                " and (si.event = coalesce(e.repeatedEvent, e)" +
+                "      or si.event=null and si.timeline?.site?.organization = e.organization and (si.date >= e.startDate and si.date <= e.endDate or exists(select ep where si.date>=coalesce(ep.startBoundary.date, ep.startBoundary.scheduledItem.date) and si.date<=coalesce(ep.endBoundary.date, ep.endBoundary.scheduledItem.date))))" +
                 " order by site?.ord,item?.ord,date", argument.getEventPk())
         );
     }
