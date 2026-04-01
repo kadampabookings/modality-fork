@@ -18,6 +18,7 @@ public enum KnownItemFamily {
     AUDIO_RECORDING("record", 20, KnownItemI18nKeys.AudioRecordings),
     CEREMONY("cerem", 16, null),
     EXAM("exam", 4, null),
+    DAY_VISITOR_FEE("dayfee", 5, null),
     UNKNOWN(null, -1, null);
 
     private final String code;
@@ -54,6 +55,9 @@ public enum KnownItemFamily {
                 case "transp" : return TRANSPORT;
                 case "tax" : return TAX;
                 case "record" : return AUDIO_RECORDING;
+                case "cerem" : return CEREMONY;
+                case "exam" : return EXAM;
+                case "dayfee" : return DAY_VISITOR_FEE;
             }
         }
         return UNKNOWN;
