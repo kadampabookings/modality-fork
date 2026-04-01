@@ -38,10 +38,10 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                     // 1 - Loading scheduled items (of this event or of the repeated event if set)
                     // $1=eventPk, $2=startDate (null → no date filter), $3=endDate, $4=accommodationItemPk (null → pool allocation check)
                     DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
-                        // CTE e: materializes the single event row
+                        // CTE e: materializes the single event row; finalEvent = coalesce(repeatedEvent, id)
                         // CTE ep: pre-computes EventPart boundaries for this event (avoids re-evaluating 6000+ times)
-                        "with e as (select repeatedEvent,startDate,endDate,preDate,postDate,venue from Event where id=$1)" +
-                        ", ep as (select startBoundary,endBoundary from EventPart where event=(select coalesce(e.repeatedEvent,e) from e e))" +
+                        "with e as (select coalesce(repeatedEvent,id) as finalEvent,startDate,endDate,preDate,postDate,venue from Event where id=$1)" +
+                        ", ep as (select startBoundary,endBoundary from EventPart where event=(select e.finalEvent from e))" +
                         " select name,label,comment,site.name,item.(name,label,code,temporal,family.(code,name,label,ord),capacity,share_mate,ord),date,startTime,timeline?.(site,item,startTime,endTime),cancelled,resource" +
                         // We also compute the remaining available space for guests
                         ",(select [" +
@@ -64,7 +64,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                         // Only bookable items
                         " where bookableScheduledItem=id" +
                         // bound to this event (or its repeatedEvent), or unbound but happening at the event venue during the event period
-                        " and (si.event = coalesce(e.repeatedEvent, e)" +
+                        " and (si.event = e.finalEvent" +
                         "      or si.event=null and si.site = e.venue and (si.date >= coalesce(e.preDate, e.startDate) and si.date <= coalesce(e.postDate, e.endDate) or exists(select ep where si.date>=coalesce(ep.startBoundary.date, ep.startBoundary.scheduledItem.date) and si.date<=coalesce(ep.endBoundary.date, ep.endBoundary.scheduledItem.date))))" +
                         // Accommodation filter: when $4 provided use the specific item, else fall back to pool allocation check
                         " and (si.item.family.code!='acco' or exists(select ItemPolicy ip where item=si.item and scope.(site=si.site and (event=null or event=$1) and (eventType=null or (select type=ip.scope.eventType from Event where id=$1)))) or ($4::int=null ? exists(select ScheduledResource sr where scheduledItem=si and exists(select PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and event=$1)) : si.item=$4))" +
@@ -73,75 +73,75 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                         " order by site?.ord,site.id,item.family.id,item?.ord,item.id,date", eventPk, startDate, endDate, accoPk)
                     // 2 - Loading scheduled boundaries (of this event or of the repeated event if set)
                     , DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
-                    "with e as (select repeatedEvent from Event where id=$1)" +
+                    "with e as (select coalesce(repeatedEvent,id) as finalEvent from Event where id=$1)" +
                     " select event,scheduledItem,timeline.(startTime,endTime),atStartTime,date" +
-                    " from ScheduledBoundary sb, e where sb.event = coalesce(e.repeatedEvent, e)" +
+                    " from ScheduledBoundary sb, e where sb.event = e.finalEvent" +
                     " order by scheduledItem.date", eventPk)
                     // 3 - Loading event parts (of this event or of the repeated event if set)
                     , DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
-                    "with e as (select repeatedEvent from Event where id=$1)" +
+                    "with e as (select coalesce(repeatedEvent,id) as finalEvent from Event where id=$1)" +
                     " select event,name,label,startBoundary,endBoundary,accommodationChangeAllowed" +
-                    " from EventPart epa, e where epa.event = coalesce(e.repeatedEvent, e)" +
+                    " from EventPart epa, e where epa.event = e.finalEvent" +
                     " order by startBoundary.id", eventPk)
                     // 4 - Loading event selections (of this event or of the repeated event if set)
                     , DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
-                    "with e as (select repeatedEvent from Event where id=$1)" +
+                    "with e as (select coalesce(repeatedEvent,id) as finalEvent from Event where id=$1)" +
                     " select event,name,label,inPerson,online,part1,part2,part3" +
-                    " from EventSelection es, e where es.event = coalesce(e.repeatedEvent, e)" +
+                    " from EventSelection es, e where es.event = e.finalEvent" +
                     " order by id", eventPk) // Will introduce an ord later
                     // 5 - Loading event phases (of this event or of the repeated event if set)
                     , DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
-                    "with e as (select repeatedEvent from Event where id=$1)" +
+                    "with e as (select coalesce(repeatedEvent,id) as finalEvent from Event where id=$1)" +
                     " select event,name,label,startBoundary,endBoundary" +
-                    " from EventPhase eph, e where eph.event = coalesce(e.repeatedEvent, e)" +
+                    " from EventPhase eph, e where eph.event = e.finalEvent" +
                     " order by id", eventPk)
                     // 6 - Loading phase coverages (of this event or of the repeated event if set)
                     , DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
-                    "with e as (select repeatedEvent from Event where id=$1)" +
+                    "with e as (select coalesce(repeatedEvent,id) as finalEvent from Event where id=$1)" +
                     " select event,name,label,phase1,phase2,phase3,phase4" +
-                    " from EventPhaseCoverage epc, e where epc.event = coalesce(e.repeatedEvent, e)" +
+                    " from EventPhaseCoverage epc, e where epc.event = e.finalEvent" +
                     " order by id", eventPk) // Will introduce an ord later
                     // 7 - Loading item family policy (of this event or of the repeated event if set)
                     , DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
-                    "with e as (select repeatedEvent,type,organization from Event where id=$1)" +
+                    "with e as (select coalesce(repeatedEvent,id) as finalEvent,coalesce(repeatedEvent?.type,type) as finalEventType,organization from Event where id=$1)" +
                     " select scope.(organization,site,eventType,event)" +
                     ",itemFamily.ord" +
                     ",eventPhaseCoverage1,eventPhaseCoverage2,eventPhaseCoverage3,eventPhaseCoverage4" +
                     ",noticeLabel,prerequisiteDescriptionLabel,prerequisiteConfirmationLabel" +
                     " from ItemFamilyPolicy ifp, e where ifp.scope.(" +
                     " organization = e.organization" +
-                    " and (site = null or site?.event = null or site?.event = coalesce(e.repeatedEvent, e))" +
-                    " and (eventType = null or eventType = coalesce(e.repeatedEvent?.type, e.type))" +
-                    " and (event = null or event = coalesce(e.repeatedEvent, e))" +
+                    " and (site = null or site?.event = null or site?.event = e.finalEvent)" +
+                    " and (eventType = null or eventType = e.finalEventType)" +
+                    " and (event = null or event = e.finalEvent)" +
                     " )" +
                     " order by itemFamily.ord,id", eventPk)
                     // 8 - Loading item policies (of this event or of the repeated event if set)
                     , DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
-                    "with e as (select repeatedEvent,type,organization from Event where id=$1)" +
+                    "with e as (select coalesce(repeatedEvent,id) as finalEvent,coalesce(repeatedEvent?.type,type) as finalEventType,organization from Event where id=$1)" +
                     " select scope.(organization,site,eventType,event)" +
                     ",item.(name,label,code,temporal,family.(code,name,label,ord),capacity,share_mate,ord)" +
                     ",descriptionLabel,noticeLabel,minDay,default,genderInfoRequired,earlyAccommodationAllowed,lateAccommodationAllowed,minOccupancy,forceSoldOut" +
                     " from ItemPolicy ip, e where ip.scope.(" +
                     " organization = e.organization" +
-                    " and (site = null or site?.event = null or site?.event = coalesce(e.repeatedEvent, e))" +
-                    " and (eventType = null or eventType = coalesce(e.repeatedEvent?.type, e.type))" +
-                    " and (event = null or event = coalesce(e.repeatedEvent, e))" +
+                    " and (site = null or site?.event = null or site?.event = e.finalEvent)" +
+                    " and (eventType = null or eventType = e.finalEventType)" +
+                    " and (event = null or event = e.finalEvent)" +
                     " )" +
                     " order by item.family.ord,item.ord,id", eventPk)
                     // 9 - Loading rates (of this event or of the repeated event if set)
                     , DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
-                    "with e as (select repeatedEvent,type,organization,startDate,endDate from Event where id=$1)" +
+                    "with e as (select coalesce(repeatedEvent,id) as finalEvent,coalesce(repeatedEvent?.type,type) as finalEventType,organization,startDate,endDate from Event where id=$1)" +
                     " select site,item,price,perDay,perPerson,applicableToInPerson,applicableToOnline,facilityFee_price,facilityFee_discount,startDate,endDate,onDate,offDate,minDeposit" +
                     ",cutoffDate,minDeposit2" +
                     ",age1_max,age1_price,age1_discount,age2_max,age2_price,age2_discount" +
                     ",resident_price,resident_discount,resident2_price,resident2_discount" +
                     " from Rate r, e where (" +
                     // Sites dedicated to this event
-                    "r.site.event = coalesce(e.repeatedEvent, e)" +
+                    "r.site.event = e.finalEvent" +
                     // or global sites of the organization with scheduled items over the period of the event
                     " or r.site.(event = null and organization=e.organization and exists(select ScheduledItem si where si.site=r.site and si.item=r.item and si.date>=e.startDate and si.date<=e.endDate))" +
-                    "    and (r.event = null or r.event = coalesce(e.repeatedEvent, e))" +
-                    "    and (r.eventType = null or r.eventType = coalesce(e.repeatedEvent?.type, e.type))" +
+                    "    and (r.event = null or r.event = e.finalEvent)" +
+                    "    and (r.eventType = null or r.eventType = e.finalEventType)" +
                     ")" +
                     // Note: TeachingsPricing relies on the following order to work properly
                     " order by site,item,perDay desc,startDate,endDate,price", eventPk)
@@ -166,8 +166,8 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
             DqlQueries.newQueryArgumentForDefaultDataSource(
                 // CTE e: materializes the single event row (avoids correlated scalar subquery per ScheduledItem row)
                 // CTE ep: pre-computes EventPart boundaries (avoids re-evaluating per ScheduledItem row)
-                "with e as (select repeatedEvent,startDate,endDate,organization from Event where id=$1)" +
-                ", ep as (select startBoundary,endBoundary from EventPart where event=(select coalesce(e.repeatedEvent,e) from e e))" +
+                "with e as (select coalesce(repeatedEvent,id) as finalEvent,startDate,endDate,organization from Event where id=$1)" +
+                ", ep as (select startBoundary,endBoundary from EventPart where event=(select e.finalEvent from e))" +
                 " select name,label,comment,site.name,item.(name,label,code,temporal,family.(code,name,label,ord),capacity,share_mate,ord),date,startTime,timeline?.(site,item,startTime,endTime),cancelled,resource" +
                 // We also compute the remaining available space for guests
                 ",(select [" +
@@ -187,7 +187,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                 " as " + ScheduledItem.maleFemaleAvailabilities +
                 " from ScheduledItem si, e" +
                 " where bookableScheduledItem=id" +
-                " and (si.event = coalesce(e.repeatedEvent, e)" +
+                " and (si.event = e.finalEvent" +
                 "      or si.event=null and si.timeline?.site?.organization = e.organization and (si.date >= e.startDate and si.date <= e.endDate or exists(select ep where si.date>=coalesce(ep.startBoundary.date, ep.startBoundary.scheduledItem.date) and si.date<=coalesce(ep.endBoundary.date, ep.endBoundary.scheduledItem.date))))" +
                 " order by site?.ord,item?.ord,date", argument.getEventPk())
         );
