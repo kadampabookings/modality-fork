@@ -4,11 +4,12 @@ import dev.webfx.platform.async.Future;
 import dev.webfx.platform.console.Console;
 import dev.webfx.platform.scheduler.Scheduled;
 import dev.webfx.platform.scheduler.Scheduler;
+import dev.webfx.platform.ast.AST;
+import dev.webfx.platform.ast.AstObject;
+import dev.webfx.stack.com.bus.BusService;
 import dev.webfx.stack.com.bus.DeliveryOptions;
-import dev.webfx.stack.orm.entity.result.EntityChangesBuilder;
 import dev.webfx.stack.push.server.PushServerService;
 import one.modality.base.shared.entities.Event;
-import one.modality.base.shared.entity.message.sender.ModalityEntityMessageSender;
 import one.modality.ecommerce.document.service.SubmitDocumentChangesResult;
 import one.modality.ecommerce.document.service.buscall.DocumentServiceBusAddresses;
 
@@ -36,7 +37,7 @@ final class DocumentSubmitEventQueue {
         LocalDateTime bookingProcessStart = event.getBookingProcessStart();
         if (bookingProcessStart == null)
             bookingProcessStart = event.getOpeningDate();
-        long delayMs = bookingProcessStart == null ? 0 : bookingProcessStart.toInstant(ZoneOffset.UTC).toEpochMilli() - System.currentTimeMillis();
+        long delayMs = bookingProcessStart == null ? 0 : bookingProcessStart.atZone(event.getEventZoneId()).toInstant().toEpochMilli() - System.currentTimeMillis();
         ready = delayMs <= 0;
         if (!ready) {
             scheduled = Scheduler.scheduleDelay(delayMs, this::setReady);
@@ -50,6 +51,10 @@ final class DocumentSubmitEventQueue {
 
     boolean isEmpty() {
         return queue.isEmpty();
+    }
+
+    int size() {
+        return queue.size();
     }
 
     boolean isReady() {
@@ -125,13 +130,13 @@ final class DocumentSubmitEventQueue {
         // immediately), and this should be actually most of the cases.
         if (scheduled == null && totalRequests == 1)
             return;
-        // But for events with big opening, we do publish the progress so the front-office can animate a progress bar
+        // Broadcast progress to all subscribed clients via bus publish
         log("Notifying front-office of progress");
-        ModalityEntityMessageSender.getFrontOfficeEntityMessageSender().publishEntityChanges(
-            EntityChangesBuilder.create()
-                .addFieldChange(event, Event.queueProgress, processedRequests + "/" + totalRequests)
-                .build()
-        );
+        AstObject progressMessage = AST.createObject()
+            .set("eventId", event.getPrimaryKey())
+            .set("processed", processedRequests)
+            .set("total", totalRequests);
+        BusService.bus().publish(DocumentServiceBusAddresses.QUEUE_PROGRESS_CLIENT_PUSH_ADDRESS, progressMessage);
         if (request != null && result != null)
             DocumentSubmitController.notifyClient(request, result, 30);
     }

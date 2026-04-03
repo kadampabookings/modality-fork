@@ -61,7 +61,7 @@ final class DocumentSubmitController {
     }
 
     private static Future<DocumentSubmitEventQueue> createEventSubmitQueue(DocumentSubmitRequest request) {
-        return request.updateStore().getOrCreateEntity(Event.class, request.eventPrimaryKey()).<Event>onExpressionLoaded("name,openingDate,bookingProcessStart")
+        return request.updateStore().getOrCreateEntity(Event.class, request.eventPrimaryKey()).<Event>onExpressionLoaded("name,openingDate,bookingProcessStart,timezone,organization.timezone")
             .map(DocumentSubmitEventQueue::new);
     }
 
@@ -79,7 +79,7 @@ final class DocumentSubmitController {
 
         Console.log("Enqueued request token = " + request.queueToken() + " from client runId = " + request.runId());
         // Otherwise we return the enqueued result with the queue token, and the request will be processed later
-        return Future.succeededFuture(SubmitDocumentChangesResult.createEnqueuedResult(request.queueToken()));
+        return Future.succeededFuture(SubmitDocumentChangesResult.createEnqueuedResult(request.queueToken(), eventQueue.size()));
     }
 
     static Future<SubmitDocumentChangesResult> processRequest(DocumentSubmitRequest request, DocumentSubmitEventQueue eventQueue, boolean pushResult) {

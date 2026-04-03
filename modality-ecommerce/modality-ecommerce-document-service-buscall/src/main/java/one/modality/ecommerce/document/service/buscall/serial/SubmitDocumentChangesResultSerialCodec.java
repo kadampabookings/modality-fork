@@ -23,6 +23,7 @@ public final class SubmitDocumentChangesResultSerialCodec extends SerialCodecBas
     private static final String SOLD_OUT_SITE_PRIMARY_KEY_KEY = "soldOutSitePk";
     private static final String SOLD_OUT_ITEM_PRIMARY_KEY_KEY = "soldOutItemPk";
     private static final String QUEUE_TOKEN_KEY = "queueToken";
+    private static final String QUEUE_TOTAL_KEY = "queueTotal";
     private static final String ERROR_KEY = "error";
 
     public SubmitDocumentChangesResultSerialCodec() {
@@ -41,6 +42,8 @@ public final class SubmitDocumentChangesResultSerialCodec extends SerialCodecBas
         encodeObject(serial, SOLD_OUT_SITE_PRIMARY_KEY_KEY, arg.soldOutSitePrimaryKey());
         encodeObject(serial, SOLD_OUT_ITEM_PRIMARY_KEY_KEY, arg.soldOutItemPrimaryKey());
         encodeObject(serial, QUEUE_TOKEN_KEY,               arg.queueToken());
+        if (arg.queueTotal() > 0)
+            encodeInteger(serial, QUEUE_TOTAL_KEY,          arg.queueTotal());
         encodeObject(serial, ERROR_KEY,                     arg.errorMessage());
     }
 
@@ -57,6 +60,7 @@ public final class SubmitDocumentChangesResultSerialCodec extends SerialCodecBas
             decodeObject(serial, SOLD_OUT_SITE_PRIMARY_KEY_KEY),
             decodeObject(serial, SOLD_OUT_ITEM_PRIMARY_KEY_KEY),
             decodeObject(serial, QUEUE_TOKEN_KEY),
+            decodeInteger(serial, QUEUE_TOTAL_KEY, 0),
             decodeString(serial, ERROR_KEY)
             );
     }
