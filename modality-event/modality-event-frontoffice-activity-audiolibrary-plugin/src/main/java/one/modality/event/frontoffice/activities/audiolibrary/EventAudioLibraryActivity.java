@@ -193,7 +193,7 @@ final class EventAudioLibraryActivity extends ViewDomainActivityBase {
                                     balance = price - paid;
                                     isRegistrationConfirmed = parameters.getBoolean(3);
                                 }
-                                if (Collections.first(entityLists[0]) instanceof ScheduledItem scheduledItem1) {
+                                if (Collections.first(entityLists[1]) instanceof ScheduledItem scheduledItem1) {
                                     parameters = (AstArray) scheduledItem1.getFieldValue("paymentAndConfirmedInfoJSonArray");
                                     event.setFieldValue("documentPk", parameters.getInteger(0));
                                     paid = parameters.getInteger(1);
