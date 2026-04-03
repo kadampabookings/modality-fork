@@ -53,6 +53,10 @@ final class DocumentSubmitEventQueue {
         return queue.isEmpty();
     }
 
+    int size() {
+        return queue.size();
+    }
+
     boolean isReady() {
         return ready;
     }
