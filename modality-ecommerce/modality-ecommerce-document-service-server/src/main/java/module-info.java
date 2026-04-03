@@ -4,7 +4,6 @@ module modality.ecommerce.document.service.server {
 
     // Direct dependencies modules
     requires modality.base.shared.entities;
-    requires modality.base.shared.entity.message.sender;
     requires modality.ecommerce.document.service;
     requires modality.ecommerce.document.service.buscall;
     requires modality.ecommerce.history.server;
