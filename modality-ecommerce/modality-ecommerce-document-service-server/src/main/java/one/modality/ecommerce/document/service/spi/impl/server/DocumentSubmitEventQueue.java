@@ -36,7 +36,7 @@ final class DocumentSubmitEventQueue {
         LocalDateTime bookingProcessStart = event.getBookingProcessStart();
         if (bookingProcessStart == null)
             bookingProcessStart = event.getOpeningDate();
-        long delayMs = bookingProcessStart == null ? 0 : bookingProcessStart.toInstant(ZoneOffset.UTC).toEpochMilli() - System.currentTimeMillis();
+        long delayMs = bookingProcessStart == null ? 0 : bookingProcessStart.atZone(event.getEventZoneId()).toInstant().toEpochMilli() - System.currentTimeMillis();
         ready = delayMs <= 0;
         if (!ready) {
             scheduled = Scheduler.scheduleDelay(delayMs, this::setReady);
