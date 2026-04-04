@@ -3,11 +3,14 @@ package one.modality.ecommerce.document.service.spi.impl.server;
 import dev.webfx.platform.async.Future;
 import dev.webfx.platform.console.Console;
 import dev.webfx.stack.orm.entity.Entities;
+import dev.webfx.stack.orm.entity.EntityStore;
 import one.modality.base.shared.entities.Document;
 import one.modality.base.shared.entities.Event;
+import one.modality.base.shared.entities.ScheduledItem;
 import one.modality.ecommerce.document.service.SubmitDocumentChangesResult;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -61,25 +64,43 @@ final class DocumentSubmitController {
     }
 
     private static Future<DocumentSubmitEventQueue> createEventSubmitQueue(DocumentSubmitRequest request) {
-        return request.updateStore().getOrCreateEntity(Event.class, request.eventPrimaryKey()).<Event>onExpressionLoaded("name,openingDate,bookingProcessStart,timezone,organization.timezone")
-            .map(DocumentSubmitEventQueue::new);
+        Object eventPk = request.eventPrimaryKey();
+        return request.updateStore().getOrCreateEntity(Event.class, eventPk).<Event>onExpressionLoaded("name,openingDate,bookingProcessStart,timezone,organization.timezone")
+            .compose(event -> EntityStore.create()
+                .<ScheduledItem>executeQuery(
+                    // Load all ScheduledItems with resource management (i.e. having at least one ScheduledResource).
+                    // The "bound to event" condition matches ServerPolicyServiceProvider: either directly bound to
+                    // the event (or its repeatedEvent), or unbound but at the event venue during the event period.
+                    "with e as (select coalesce(repeatedEvent,id) as finalEvent,startDate,endDate,preDate,postDate,venue from Event where id=$1)" +
+                    ", ep as (select startBoundary,endBoundary from EventPart where event=(select e.finalEvent from e))" +
+                    " select site,item from ScheduledItem si, e" +
+                    " where (si.event = e.finalEvent" +
+                    "        or si.event=null and si.site = e.venue and (si.date >= coalesce(e.preDate, e.startDate) and si.date <= coalesce(e.postDate, e.endDate) or exists(select ep where si.date>=coalesce(ep.startBoundary.date, ep.startBoundary.scheduledItem.date) and si.date<=coalesce(ep.endBoundary.date, ep.endBoundary.scheduledItem.date))))" +
+                    " and exists(select ScheduledResource where scheduledItem=si)",
+                    eventPk)
+                .map(resourceManagedScheduledItems -> new DocumentSubmitEventQueue(event, resourceManagedScheduledItems))
+            );
     }
 
     private static Future<SubmitDocumentChangesResult> executeOrEnqueueSubmitDocumentChanges(DocumentSubmitRequest request, DocumentSubmitEventQueue eventQueue) {
-        // Even if we execute the request immediately, we still add it to the queue
-        boolean isTheOnlyRequest = eventQueue.isEmpty();
-        eventQueue.addRequest(request);
+        // Bookings not involving resource-managed SiteItems (e.g. online or day visitor) are added
+        // as priority: they don't wait for bookingProcessStart and are processed in FIFO order.
+        // Bookings with resource management wait for bookingProcessStart and are processed randomly (fair system).
+        // All go through a single serial queue to avoid deadlocks.
+        boolean priority = !eventQueue.requiresResourceManagement(request.argument());
 
-        // We execute the request immediately if it's the only request and the queue is ready (not waiting an opening time) and not processing
-        if (isTheOnlyRequest && eventQueue.isReady() && !eventQueue.isProcessing()) {
-            Console.log("Executing immediately request token = " + request.queueToken() + " from client runId = " + request.runId());
-            eventQueue.setProcessingRequest(request); // We inform the queue we process the request now
-            return processRequest(request, eventQueue, false); // We process it (this will also remove it from the queue and eventually process the next one)
+        eventQueue.addRequest(request, priority);
+
+        // Process immediately if not already processing, and either it's a priority
+        // request (doesn't wait for bookingProcessStart) or the queue is ready.
+        if (!eventQueue.isProcessing() && (priority || eventQueue.isReady())) {
+            Console.log("Executing immediately " + (priority ? "(priority) " : "") + "request token = " + request.queueToken() + " from client runId = " + request.runId());
+            eventQueue.setProcessingRequest(request);
+            return processRequest(request, eventQueue, false);
         }
 
-        Console.log("Enqueued request token = " + request.queueToken() + " from client runId = " + request.runId());
-        // Otherwise we return the enqueued result with the queue token, and the request will be processed later
-        return Future.succeededFuture(SubmitDocumentChangesResult.createEnqueuedResult(request.queueToken(), eventQueue.size()));
+        Console.log("Enqueued " + (priority ? "(priority) " : "") + "request token = " + request.queueToken() + " from client runId = " + request.runId());
+        return Future.succeededFuture(SubmitDocumentChangesResult.createEnqueuedResult(request.queueToken(), eventQueue.size(), priority));
     }
 
     static Future<SubmitDocumentChangesResult> processRequest(DocumentSubmitRequest request, DocumentSubmitEventQueue eventQueue, boolean pushResult) {

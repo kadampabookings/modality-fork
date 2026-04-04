@@ -8,16 +8,19 @@ import dev.webfx.platform.ast.AST;
 import dev.webfx.platform.ast.AstObject;
 import dev.webfx.stack.com.bus.BusService;
 import dev.webfx.stack.com.bus.DeliveryOptions;
+import dev.webfx.stack.orm.entity.Entities;
 import dev.webfx.stack.push.server.PushServerService;
 import one.modality.base.shared.entities.Event;
+import one.modality.base.shared.entities.ScheduledItem;
+import one.modality.base.shared.entities.SiteItem;
+import one.modality.ecommerce.document.service.SubmitDocumentChangesArgument;
 import one.modality.ecommerce.document.service.SubmitDocumentChangesResult;
 import one.modality.ecommerce.document.service.buscall.DocumentServiceBusAddresses;
+import one.modality.ecommerce.document.service.events.AbstractDocumentEvent;
+import one.modality.ecommerce.document.service.events.book.AddDocumentLineEvent;
 
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Random;
+import java.util.*;
 
 /**
  * @author Bruno Salmon
@@ -25,15 +28,25 @@ import java.util.Random;
 final class DocumentSubmitEventQueue {
 
     private final Event event; // Keeping reference for debugging purpose
+    private final Set<SiteItem> resourceManagedSiteItems; // SiteItems that require resource management (have ScheduledResources)
     private boolean ready;
     private Scheduled scheduled;
     private DocumentSubmitRequest processingRequest;
+    // All requests go into this single queue; priority tokens are tracked separately for ordering
     private final Map<Object, DocumentSubmitRequest> queue = new HashMap<>();
+    private final Set<Object> priorityTokens = new LinkedHashSet<>(); // preserves insertion order (FIFO)
     private final Random random = new Random();
-    private int processedRequests;
+    private int processedPriorityRequests;
+    private int processedStandardRequests;
 
-    public DocumentSubmitEventQueue(Event event) {
+    public DocumentSubmitEventQueue(Event event, List<ScheduledItem> resourceManagedScheduledItems) {
         this.event = event;
+        // Build set of SiteItems that have resource management (deduplicated via SiteItem.equals/hashCode)
+        resourceManagedSiteItems = new HashSet<>();
+        for (ScheduledItem si : resourceManagedScheduledItems) {
+            resourceManagedSiteItems.add(new SiteItem(si));
+        }
+        log("Resource-managed SiteItems: " + resourceManagedSiteItems.size());
         LocalDateTime bookingProcessStart = event.getBookingProcessStart();
         if (bookingProcessStart == null)
             bookingProcessStart = event.getOpeningDate();
@@ -47,6 +60,28 @@ final class DocumentSubmitEventQueue {
 
     Object getEventPrimaryKey() {
         return event.getPrimaryKey();
+    }
+
+    boolean requiresResourceManagement(SubmitDocumentChangesArgument argument) {
+        for (AbstractDocumentEvent documentEvent : argument.documentEvents()) {
+            if (documentEvent instanceof AddDocumentLineEvent) {
+                AddDocumentLineEvent adle = (AddDocumentLineEvent) documentEvent;
+                if (isResourceManagedSiteItem(adle.getSitePrimaryKey(), adle.getItemPrimaryKey())) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean isResourceManagedSiteItem(Object sitePk, Object itemPk) {
+        for (SiteItem siteItem : resourceManagedSiteItems) {
+            if (Objects.equals(Entities.getPrimaryKey(siteItem.getSite()), sitePk)
+             && Objects.equals(Entities.getPrimaryKey(siteItem.getItem()), itemPk)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     boolean isEmpty() {
@@ -63,11 +98,14 @@ final class DocumentSubmitEventQueue {
 
     private void setReady() {
         ready = true;
-        processNextRequestIfReadyAndNotProcessing();
+        processNextRequestIfNotProcessing();
     }
 
-    void addRequest(DocumentSubmitRequest request) {
+    void addRequest(DocumentSubmitRequest request, boolean priority) {
         queue.put(request.queueToken(), request);
+        if (priority) {
+            priorityTokens.add(request.queueToken());
+        }
         publishProgress();
     }
 
@@ -77,6 +115,16 @@ final class DocumentSubmitEventQueue {
 
     DocumentSubmitRequest pollProcessingRequest() {
         if (queue.isEmpty())
+            return null;
+        // Priority requests (no resource management) are always processed first, in FIFO order
+        if (!priorityTokens.isEmpty()) {
+            Object token = priorityTokens.iterator().next();
+            DocumentSubmitRequest request = queue.get(token);
+            setProcessingRequest(request);
+            return request;
+        }
+        // Normal requests are processed in random order (fair system for accommodation)
+        if (!ready) // but only when the queue is ready (after bookingProcessStart)
             return null;
         int index = random.nextInt(queue.size());
         DocumentSubmitRequest request = queue.values().stream().skip(index).findFirst().orElse(null);
@@ -88,25 +136,28 @@ final class DocumentSubmitEventQueue {
         return processingRequest != null;
     }
 
-    private void processNextRequestIfReadyAndNotProcessing() {
-        if (isReady() && !isProcessing()) {
+    private void processNextRequestIfNotProcessing() {
+        if (!isProcessing()) {
             DocumentSubmitRequest nextRequest = pollProcessingRequest();
             if (nextRequest != null) {
                 DocumentSubmitController.processRequest(nextRequest, this, true);
-            } else {
+            } else if (ready && queue.isEmpty()) {
                 DocumentSubmitController.releaseEventQueue(this);
-                log("Released after processing " + processedRequests + " request(s)");
+                log("Released after processing " + (processedPriorityRequests + processedStandardRequests) + " request(s)");
             }
         }
     }
 
     public void removedProcessedRequest(DocumentSubmitRequest request, SubmitDocumentChangesResult result) {
-        processedRequests++;
+        if (priorityTokens.contains(request.queueToken()))
+            processedPriorityRequests++;
+        else
+            processedStandardRequests++;
         removeRequest(request);
         publishProgressAndResult(request, result);
         if (processingRequest == request) {
             processingRequest = null;
-            processNextRequestIfReadyAndNotProcessing();
+            processNextRequestIfNotProcessing();
         }
     }
 
@@ -115,6 +166,7 @@ final class DocumentSubmitEventQueue {
     }
 
     DocumentSubmitRequest removeRequest(Object token) {
+        priorityTokens.remove(token);
         return queue.remove(token);
     }
 
@@ -123,9 +175,13 @@ final class DocumentSubmitEventQueue {
     }
 
     void publishProgressAndResult(DocumentSubmitRequest request, SubmitDocumentChangesResult result) {
+        int processedRequests = processedPriorityRequests + processedStandardRequests;
         int remainingRequests = queue.size();
+        int remainingPriorityRequests = priorityTokens.size();
+        int remainingStandardRequests = remainingRequests - remainingPriorityRequests;
         int totalRequests = processedRequests + remainingRequests;
-        log("Processed " + processedRequests + " request(s) over " + totalRequests + " (" + remainingRequests + " remaining)");
+        log("Processed " + processedRequests + " request(s) over " + totalRequests + " (" + remainingRequests + " remaining)"
+            + " [priority: " + processedPriorityRequests + ", standard: " + processedStandardRequests + "]");
         // We don't publish the progress for a single request in a non-waiting queue (as it will be processed
         // immediately), and this should be actually most of the cases.
         if (scheduled == null && totalRequests == 1)
@@ -134,8 +190,13 @@ final class DocumentSubmitEventQueue {
         log("Notifying front-office of progress");
         AstObject progressMessage = AST.createObject()
             .set("eventId", event.getPrimaryKey())
-            .set("processed", processedRequests)
-            .set("total", totalRequests);
+            .set("processedPriority", processedPriorityRequests)
+            .set("processedStandard", processedStandardRequests)
+            .set("processed", processedRequests) // kept for backward compatibility
+            .set("total", totalRequests)
+            .set("remaining", remainingRequests)
+            .set("remainingPriority", remainingPriorityRequests)
+            .set("remainingStandard", remainingStandardRequests);
         BusService.bus().publish(DocumentServiceBusAddresses.QUEUE_PROGRESS_CLIENT_PUSH_ADDRESS, progressMessage);
         if (request != null && result != null)
             DocumentSubmitController.notifyClient(request, result, 30);
