@@ -194,7 +194,7 @@ public class GPClassRateTypeSection implements BookingFormSection, HasRateTypeSe
         Rate rate = null;
         List<ScheduledItem> teachingItems = policyAggregate.filterTeachingScheduledItems();
         if (!teachingItems.isEmpty()) {
-            rate = policyAggregate.getScheduledItemDailyRate(teachingItems.get(0));
+            rate = policyAggregate.getScheduledItemDailyRateApplicableToday(teachingItems.get(0));
         }
 
         // Fallback to generic daily rate if no scheduled item rate found

@@ -308,7 +308,7 @@ public class BookingFormSoldOutHandler {
                             : HasAccommodationSelectionSection.AvailabilityStatus.AVAILABLE;
 
                 // Get rate for pricing
-                Rate rate = policy.getScheduledItemDailyRate(firstSi);
+                Rate rate = policy.getScheduledItemDailyRateApplicableToday(firstSi);
                 int pricePerNight = rate != null && rate.getPrice() != null ? rate.getPrice() : 0;
                 boolean perPerson = rate == null || rate.isPerPerson();
 

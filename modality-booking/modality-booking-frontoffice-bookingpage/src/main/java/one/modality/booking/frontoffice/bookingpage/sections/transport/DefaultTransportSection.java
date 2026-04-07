@@ -1010,7 +1010,7 @@ public class DefaultTransportSection implements HasTransportSection {
             // Get price from rate using the first scheduled item
             int price = 0;
             if (!scheduledItems.isEmpty()) {
-                Rate rate = policyAggregate.getScheduledItemDailyRate(scheduledItems.get(0));
+                Rate rate = policyAggregate.getScheduledItemDailyRateApplicableToday(scheduledItems.get(0));
                 if (rate != null) {
                     price = rate.getPrice();
                 }
@@ -1083,7 +1083,7 @@ public class DefaultTransportSection implements HasTransportSection {
             // Get price from rate using the first scheduled item
             int price = 0;
             if (!scheduledItems.isEmpty()) {
-                Rate rate = policyAggregate.getScheduledItemDailyRate(scheduledItems.get(0));
+                Rate rate = policyAggregate.getScheduledItemDailyRateApplicableToday(scheduledItems.get(0));
                 if (rate != null) {
                     price = rate.getPrice();
                 }

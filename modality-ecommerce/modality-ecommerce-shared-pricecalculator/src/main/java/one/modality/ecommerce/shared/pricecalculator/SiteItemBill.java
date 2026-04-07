@@ -13,10 +13,7 @@ import one.modality.ecommerce.document.service.DocumentAggregate;
 import one.modality.ecommerce.document.service.events.registration.documentline.PriceDocumentLineEvent;
 import one.modality.ecommerce.policy.service.PolicyAggregate;
 
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneId;
-import java.time.ZoneOffset;
+import java.time.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -132,9 +129,15 @@ public final class SiteItemBill {
         DocumentAggregate documentAggregate = documentBill.getDocumentAggregate();
         PolicyAggregate policyAggregate = documentAggregate.getPolicyAggregate();
         boolean inPerson = documentAggregate.getDocument().isInPerson();
+        Instant creationInstant = Objects.coalesce(documentAggregate.getDocument().getCreationDate(), Instant.now());
+        ZoneId eventZoneId = documentAggregate.getEvent().getEventZoneId();
+        if (eventZoneId == null)
+            eventZoneId = ZoneOffset.UTC;
+        LocalDateTime creationDateTime = LocalDateTime.ofInstant(creationInstant, eventZoneId);
+        LocalDate creationDate = creationDateTime.toLocalDate();
         List<Rate> rates = policyAggregate.filterRatesStreamOfSiteAndItem(siteItem.getSite(), siteItem.getItem(), perDayRates)
             .filter(r -> inPerson ? r.isApplicableToInPerson() : r.isApplicableToOnline())
-            .filter(r -> Rates.isOnTodayAndApplicableOverPeriod(r, firstDay, lastDay))
+            .filter(r -> Rates.isAndApplicableAtDateAndOverPeriod(r, creationDateTime, firstDay, lastDay))
             //.filter(r -> r.getRateMatchesDocument(bill.getDocument()))
             .collect(Collectors.toList());
         int price = Integer.MIN_VALUE;
@@ -150,17 +153,8 @@ public final class SiteItemBill {
                         continue;
                     // Ignoring expired rates (such as early birds discounts)
                     LocalDate offDate = rate.getOffDate();
-                    if (offDate != null) {
-                        Instant creationDate = documentAggregate.getDocument().getCreationDate();
-                        if (creationDate == null)
-                            creationDate = Instant.now();
-                        ZoneId eventZoneId = documentAggregate.getEvent().getEventZoneId();
-                        if (eventZoneId == null)
-                            eventZoneId = ZoneOffset.UTC;
-                        Instant offInstant = offDate.atStartOfDay(eventZoneId).toInstant();
-                        if (creationDate.isAfter(offInstant))
-                            continue;
-                    }
+                    if (offDate != null && creationDate.isAfter(offDate))
+                        continue;
                     // Ignoring rates that are not in the range of dates
                     LocalDate startDate = rate.getStartDate();
                     LocalDate endDate = rate.getEndDate();

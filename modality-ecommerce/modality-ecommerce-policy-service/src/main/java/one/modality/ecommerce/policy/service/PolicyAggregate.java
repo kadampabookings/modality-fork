@@ -16,6 +16,7 @@ import one.modality.base.shared.entities.util.ScheduledItems;
 import one.modality.base.shared.knownitems.KnownItemFamily;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
@@ -382,23 +383,23 @@ public final class PolicyAggregate {
         return Rates.filterRatesOfSiteAndItem(getFixedRatesStream(), site, item);
     }
 
-    public Stream<Rate> filterRatesStreamOfSiteAndItemOnTodayAndApplicableOverPeriod(Site site, Item item,
-            boolean perDay, LocalDate startDate, LocalDate endDate) {
+    public Stream<Rate> filterRatesStreamOfSiteAndItemOnAtDateAndApplicableOverPeriod(Site site, Item item,
+                                                                                      boolean perDay, LocalDateTime atDate, LocalDate startDate, LocalDate endDate) {
         return filterRatesStreamOfSiteAndItem(site, item, perDay)
-                .filter(r -> Rates.isOnTodayAndApplicableOverPeriod(r, startDate, endDate));
+                .filter(r -> Rates.isAndApplicableAtDateAndOverPeriod(r, atDate, startDate, endDate));
     }
 
-    public Rate getScheduledItemDailyRate(ScheduledItem scheduledItem) {
-        return getSiteItemDailyRateOverPeriod(scheduledItem.getSite(), scheduledItem.getItem(), scheduledItem.getDate(),
+    public Rate getScheduledItemDailyRateApplicableToday(ScheduledItem scheduledItem) {
+        return getScheduledItemDailyRateApplicableAt(scheduledItem, LocalDateTime.now());
+    }
+
+    public Rate getScheduledItemDailyRateApplicableAt(ScheduledItem scheduledItem, LocalDateTime atDate) {
+        return getSiteItemDailyRateAtDateOverPeriod(scheduledItem.getSite(), scheduledItem.getItem(), atDate, scheduledItem.getDate(),
                 scheduledItem.getDate());
     }
 
-    public Rate getSiteItemDailyRateOverPeriod(Site site, Item item, Period period) {
-        return getSiteItemDailyRateOverPeriod(site, item, period.getStartDate(), period.getEndDate());
-    }
-
-    public Rate getSiteItemDailyRateOverPeriod(Site site, Item item, LocalDate startDate, LocalDate endDate) {
-        return filterRatesStreamOfSiteAndItemOnTodayAndApplicableOverPeriod(site, item, true, startDate, endDate)
+    public Rate getSiteItemDailyRateAtDateOverPeriod(Site site, Item item, LocalDateTime atDate, LocalDate startDate, LocalDate endDate) {
+        return filterRatesStreamOfSiteAndItemOnAtDateAndApplicableOverPeriod(site, item, true, atDate, startDate, endDate)
                 .findFirst().orElse(null);
     }
 

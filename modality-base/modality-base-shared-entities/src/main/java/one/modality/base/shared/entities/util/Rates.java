@@ -9,6 +9,7 @@ import one.modality.base.shared.entities.Rate;
 import one.modality.base.shared.entities.Site;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Stream;
 
@@ -29,9 +30,9 @@ public final class Rates {
         return rate.getFacilityFeePrice() != null || rate.getFacilityFeeDiscount() != null;
     }
 
-    public static boolean isOnToday(Rate rate) {
-        return (rate.getOnDate() == null || Times.isPastOrToday(rate.getOnDate()))
-               && (rate.getOffDate() == null || Times.isFutureOrToday(rate.getOffDate()));
+    public static boolean isApplicableAtDate(Rate rate, LocalDateTime atDate) {
+        return (rate.getOnDate() == null || Times.isBeforeOrEquals(rate.getOnDate(), atDate.toLocalDate()))
+               && (rate.getOffDate() == null || Times.isAfterOrEquals(rate.getOffDate(), atDate.toLocalDate()));
     }
 
     public static boolean isApplicableOverPeriod(Rate rate, Period period) {
@@ -47,8 +48,8 @@ public final class Rates {
         return Entities.sameId(rate.getSite(), site) && Entities.sameId(rate.getItem(), item);
     }
 
-    public static boolean isOnTodayAndApplicableOverPeriod(Rate rate, LocalDate startDate, LocalDate endDate) {
-        return isOnToday(rate) && isApplicableOverPeriod(rate, startDate, endDate);
+    public static boolean isAndApplicableAtDateAndOverPeriod(Rate rate, LocalDateTime atDate, LocalDate startDate, LocalDate endDate) {
+        return isApplicableAtDate(rate, atDate) && isApplicableOverPeriod(rate, startDate, endDate);
     }
 
         public static Stream<Rate> filterDailyRates(Stream<Rate> rates) {

@@ -656,7 +656,7 @@ public class DefaultClassDateSelectionSection
         // Get pricing info - use the rate for the first scheduled item (more accurate
         // than generic daily rate)
         if (!scheduledItems.isEmpty()) {
-            Rate scheduledItemRate = policyAggregate.getScheduledItemDailyRate(scheduledItems.get(0));
+            Rate scheduledItemRate = policyAggregate.getScheduledItemDailyRateApplicableToday(scheduledItems.get(0));
             pricePerClass = scheduledItemRate != null ? scheduledItemRate.getPrice() : 0;
         } else {
             pricePerClass = policyAggregate.getDailyRatePrice();
