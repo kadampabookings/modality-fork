@@ -1627,7 +1627,9 @@
   "ResourceConfiguration": {
     "id": 44,
     "allowsFemale": "boolean",
+    "allowsLay": "boolean",
     "allowsMale": "boolean",
+    "allowsOrdained": "boolean",
     "building": {
       "expr": "resource.building"
     },
