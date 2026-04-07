@@ -47,12 +47,22 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                         // We also compute the remaining available space for guests
                         ",(select [" +
                         // male availability
-                        "sum(!sr.configuration.allowsMale ? 0 :" +
+                        "sum(!sr.configuration.(allowsMale and allowsLay) ? 0 :" +
                         " coalesce((select quantity from PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and (event=null or event=$1) limit 1), 0)" +
                         " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledResource=sr and present and documentLine.(!frontend_released and (pool = null or pool.allowsPublic))), 0)" +
                         ")," +
                         // female availability
-                        "sum(!sr.configuration.allowsFemale ? 0 :" +
+                        "sum(!sr.configuration.(allowsFemale and allowsLay) ? 0 :" +
+                        " coalesce((select quantity from PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and (event=null or event=$1) limit 1), 0)" +
+                        " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledResource=sr and present and documentLine.(!frontend_released and (pool = null or pool.allowsPublic))), 0)" +
+                        ")," +
+                        // monk availability
+                        "sum(!sr.configuration.(allowsMale and allowsOrdained) ? 0 :" +
+                        " coalesce((select quantity from PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and (event=null or event=$1) limit 1), 0)" +
+                        " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledResource=sr and present and documentLine.(!frontend_released and (pool = null or pool.allowsPublic))), 0)" +
+                        ")," +
+                        // nun availability
+                        "sum(!sr.configuration.(allowsFemale and allowsOrdained) ? 0 :" +
                         " coalesce((select quantity from PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and (event=null or event=$1) limit 1), 0)" +
                         " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledResource=sr and present and documentLine.(!frontend_released and (pool = null or pool.allowsPublic))), 0)" +
                         ")] from ScheduledResource sr" +
@@ -176,12 +186,22 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                 // We also compute the remaining available space for guests
                 ",(select [" +
                 // male availability
-                "sum(!sr.configuration.allowsMale ? 0 :" +
+                "sum(!sr.configuration.(allowsMale and allowsLay) ? 0 :" +
                 " coalesce((select quantity from PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and (event=null or event=$1) limit 1), 0)" +
                 " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledResource=sr and present and documentLine.(!frontend_released and (pool = null or pool.allowsPublic))), 0)" +
                 ")," +
                 // female availability
-                "sum(!sr.configuration.allowsFemale ? 0 :" +
+                "sum(!sr.configuration.(allowsFemale and allowsLay) ? 0 :" +
+                " coalesce((select quantity from PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and (event=null or event=$1) limit 1), 0)" +
+                " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledResource=sr and present and documentLine.(!frontend_released and (pool = null or pool.allowsPublic))), 0)" +
+                ")," +
+                // monk availability
+                "sum(!sr.configuration.(allowsMale and allowsOrdained) ? 0 :" +
+                " coalesce((select quantity from PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and (event=null or event=$1) limit 1), 0)" +
+                " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledResource=sr and present and documentLine.(!frontend_released and (pool = null or pool.allowsPublic))), 0)" +
+                ")," +
+                // nun availability
+                "sum(!sr.configuration.(allowsFemale and allowsOrdained) ? 0 :" +
                 " coalesce((select quantity from PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and (event=null or event=$1) limit 1), 0)" +
                 " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledResource=sr and present and documentLine.(!frontend_released and (pool = null or pool.allowsPublic))), 0)" +
                 ")] from ScheduledResource sr" +
