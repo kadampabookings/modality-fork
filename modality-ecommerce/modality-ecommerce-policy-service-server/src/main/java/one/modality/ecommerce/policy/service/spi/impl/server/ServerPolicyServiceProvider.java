@@ -67,7 +67,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                         " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledResource=sr and present and documentLine.(!frontend_released and (pool = null or pool.allowsPublic))), 0)" +
                         ")] from ScheduledResource sr" +
                         // We consider only the resources allocated to the general guest pool for this event
-                        " where scheduledItem=si and exists(select PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and (event = null or event=$1))" +
+                        " where scheduledItem=si and exists(select PoolAllocation where resource=sr.configuration.resource and pool.allowsPublic and (event = null or event=$1))" +
                         " group by scheduledItem)" +
                         " as " + ScheduledItem.maleFemaleAvailabilities +
                         // ScheduledItem si joined with the materialized CTE e (single event row)
