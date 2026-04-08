@@ -20,6 +20,49 @@ import java.time.LocalDate;
  */
 public final class ServerPolicyServiceProvider implements PolicyServiceProvider {
 
+    // ── Shared DQL fragments for scheduled items queries (loadPolicy & loadAvailabilities) ──
+
+    // CTEs + SELECT fields + availability subquery (via LATERAL) + FROM + common WHERE conditions
+    private static final String SCHEDULED_ITEMS_DQL_BASE =
+            "with e as (select coalesce(repeatedEvent,id) as finalEvent,startDate,endDate,preDate,postDate,venue from Event where id=$1)" +
+            ", ep as (select startBoundary,endBoundary from EventPart where event=(select e.finalEvent from e))" +
+            " select name,label,comment,site.name,item.(name,label,code,temporal,family.(code,name,label,ord),capacity,share_mate,ord),date,startTime,timeline?.(site,item,startTime,endTime),cancelled,resource" +
+            // Availability: for each ScheduledResource sr, LATERAL computes availability once, then distributes to 4 categories
+            ",(select [" +
+            "sum(!sr.configuration.(allowsMale and allowsLay) ? 0 : lat.avail)," +       // lay male
+            "sum(!sr.configuration.(allowsFemale and allowsLay) ? 0 : lat.avail)," +     // lay female
+            "sum(!sr.configuration.(allowsMale and allowsOrdained) ? 0 : lat.avail)," +  // monk
+            "sum(!sr.configuration.(allowsFemale and allowsOrdained) ? 0 : lat.avail)" + // nun
+            "] from ScheduledResource sr" +
+            ", lateral (select coalesce(" +
+            "(select pa.quantity" +
+            " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledResource=sr and present and documentLine.(!frontend_released and pool=pa.pool)), 0)" +
+            " from PoolAllocation pa" +
+            " where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and (event=$1 or event=null)" +
+            " order by event desc nulls last" +
+            " limit 1)" +
+            ", 0) as avail) lat" +
+            " where scheduledItem=si and exists(select PoolAllocation where resource=sr.configuration.resource and pool.allowsPublic and (event = null or event=$1))" +
+            " group by scheduledItem)" +
+            " as " + ScheduledItem.maleFemaleAvailabilities +
+            " from ScheduledItem si, e" +
+            " where bookableScheduledItem=id" +
+            // bound to this event (or its repeatedEvent), or unbound but happening at the event venue during the event period
+            " and (si.event = e.finalEvent" +
+            "      or si.event=null and si.site = e.venue and (si.date >= coalesce(e.preDate, e.startDate) and si.date <= coalesce(e.postDate, e.endDate) or exists(select ep where si.date>=coalesce(ep.startBoundary.date, ep.startBoundary.scheduledItem.date) and si.date<=coalesce(ep.endBoundary.date, ep.endBoundary.scheduledItem.date))))";
+            // Accommodation filter appended by each caller
+
+    // ItemPolicy exists check (shared by both acco filters)
+    private static final String ACCO_ITEM_POLICY_EXISTS =
+            "exists(select ItemPolicy ip where item=si.item and scope.(site=si.site and (event=null or event=$1) and (eventType=null or (select type=ip.scope.eventType from Event where id=$1))))";
+
+    // Pool allocation exists check (shared by both acco filters)
+    private static final String ACCO_POOL_EXISTS =
+            "exists(select ScheduledResource sr where scheduledItem=si and exists(select PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and event=$1))";
+
+    private static final String SCHEDULED_ITEMS_DQL_ORDER_BY =
+            " order by site?.ord,site.id,item.family.id,item?.ord,item.id,date";
+
     @Override
     public Future<PolicyAggregate> loadPolicy(LoadPolicyArgument argument) {
         // Managing the case of recurring event only for now
@@ -39,39 +82,12 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                     // 1 - Loading scheduled items (of this event or of the repeated event if set)
                     // $1=eventPk, $2=startDate (null → no date filter), $3=endDate, $4=accommodationItemPk (null → pool allocation check)
                     DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
-                        // CTE e: materializes the single event row; finalEvent = coalesce(repeatedEvent, id)
-                        // CTE ep: pre-computes EventPart boundaries for this event (avoids re-evaluating 6000+ times)
-                        "with e as (select coalesce(repeatedEvent,id) as finalEvent,startDate,endDate,preDate,postDate,venue from Event where id=$1)" +
-                        ", ep as (select startBoundary,endBoundary from EventPart where event=(select e.finalEvent from e))" +
-                        " select name,label,comment,site.name,item.(name,label,code,temporal,family.(code,name,label,ord),capacity,share_mate,ord),date,startTime,timeline?.(site,item,startTime,endTime),cancelled,resource" +
-                        // We also compute the remaining available space for guests.
-                        // For each ScheduledResource sr, we find the best PoolAllocation pa
-                        // (event-specific preferred over global) and compute:
-                        //   availability = pa.quantity - beds booked in pa's pool
-                        // Then we distribute this availability to the 4 categories based on
-                        // the resource configuration flags (allowsMale/Female, allowsLay/Ordained).
-                        ",(select [" +
-                        availabilitySum("allowsMale",   "allowsLay")     + "," + // lay male
-                        availabilitySum("allowsFemale", "allowsLay")     + "," + // lay female
-                        availabilitySum("allowsMale",   "allowsOrdained") + "," + // monk
-                        availabilitySum("allowsFemale", "allowsOrdained") +       // nun
-                        "] from ScheduledResource sr" +
-                        // We consider only the resources allocated to the general guest pool for this event
-                        " where scheduledItem=si and exists(select PoolAllocation where resource=sr.configuration.resource and pool.allowsPublic and (event = null or event=$1))" +
-                        " group by scheduledItem)" +
-                        " as " + ScheduledItem.maleFemaleAvailabilities +
-                        // ScheduledItem si joined with the materialized CTE e (single event row)
-                        " from ScheduledItem si, e" +
-                        // Only bookable items
-                        " where bookableScheduledItem=id" +
-                        // bound to this event (or its repeatedEvent), or unbound but happening at the event venue during the event period
-                        " and (si.event = e.finalEvent" +
-                        "      or si.event=null and si.site = e.venue and (si.date >= coalesce(e.preDate, e.startDate) and si.date <= coalesce(e.postDate, e.endDate) or exists(select ep where si.date>=coalesce(ep.startBoundary.date, ep.startBoundary.scheduledItem.date) and si.date<=coalesce(ep.endBoundary.date, ep.endBoundary.scheduledItem.date))))" +
+                        SCHEDULED_ITEMS_DQL_BASE +
                         // Accommodation filter: when $4 provided use the specific item, else fall back to pool allocation check
-                        " and (si.item.family.code!='acco' or exists(select ItemPolicy ip where item=si.item and scope.(site=si.site and (event=null or event=$1) and (eventType=null or (select type=ip.scope.eventType from Event where id=$1)))) or ($4::int=null ? exists(select ScheduledResource sr where scheduledItem=si and exists(select PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and event=$1)) : si.item=$4))" +
+                        " and (si.item.family.code!='acco' or " + ACCO_ITEM_POLICY_EXISTS + " or ($4::int=null ? " + ACCO_POOL_EXISTS + " : si.item=$4))" +
                         // Date range filter: limit to volunteer's stay dates when $2/$3 provided
                         " and ($2::date=null or si.date>=$2) and ($3::date=null or si.date<=$3)" +
-                        " order by site?.ord,site.id,item.family.id,item?.ord,item.id,date", eventPk, startDate, endDate, accoPk)
+                        SCHEDULED_ITEMS_DQL_ORDER_BY, eventPk, startDate, endDate, accoPk)
                     // 2 - Loading scheduled boundaries (of this event or of the repeated event if set)
                     , DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
                     "with e as (select coalesce(repeatedEvent,id) as finalEvent from Event where id=$1)" +
@@ -166,57 +182,10 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
     public Future<QueryResult> loadAvailabilities(LoadPolicyArgument argument) {
         return QueryService.executeQuery(
             DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
-                // CTE e: materializes the single event row (avoids correlated scalar subquery per ScheduledItem row)
-                // CTE ep: pre-computes EventPart boundaries (avoids re-evaluating per ScheduledItem row)
-                // CTE e: materializes the single event row; finalEvent = coalesce(repeatedEvent, id)
-                // CTE ep: pre-computes EventPart boundaries for this event
-                "with e as (select coalesce(repeatedEvent,id) as finalEvent,startDate,endDate,preDate,postDate,venue from Event where id=$1)" +
-                ", ep as (select startBoundary,endBoundary from EventPart where event=(select e.finalEvent from e))" +
-                " select name,label,comment,site.name,item.(name,label,code,temporal,family.(code,name,label,ord),capacity,share_mate,ord),date,startTime,timeline?.(site,item,startTime,endTime),cancelled,resource" +
-                // We also compute the remaining available space for guests
-                ",(select [" +
-                availabilitySum("allowsMale",   "allowsLay")     + "," + // lay male
-                availabilitySum("allowsFemale", "allowsLay")     + "," + // lay female
-                availabilitySum("allowsMale",   "allowsOrdained") + "," + // monk
-                availabilitySum("allowsFemale", "allowsOrdained") +       // nun
-                "] from ScheduledResource sr" +
-                    // We consider only the resources allocated to the general guest pool for this event
-                    " where scheduledItem=si and exists(select PoolAllocation where resource=sr.configuration.resource and pool.allowsPublic and (event = null or event=$1))" +
-                " group by scheduledItem)" +
-                " as " + ScheduledItem.maleFemaleAvailabilities +
-                " from ScheduledItem si, e" +
-                " where bookableScheduledItem=id" +
-                " and (si.event = e.finalEvent" +
-                "      or si.event=null and si.site = e.venue and (si.date >= coalesce(e.preDate, e.startDate) and si.date <= coalesce(e.postDate, e.endDate) or exists(select ep where si.date>=coalesce(ep.startBoundary.date, ep.startBoundary.scheduledItem.date) and si.date<=coalesce(ep.endBoundary.date, ep.endBoundary.scheduledItem.date))))" +
-                " and (si.item.family.code!='acco' or exists(select ItemPolicy ip where item=si.item and scope.(site=si.site and (event=null or event=$1) and (eventType=null or (select type=ip.scope.eventType from Event where id=$1)))) or (exists(select ScheduledResource sr where scheduledItem=si and exists(select PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and event=$1))))" +
-                " order by site?.ord,site.id,item.family.id,item?.ord,item.id,date", argument.getEventPk())
+                SCHEDULED_ITEMS_DQL_BASE +
+                " and (si.item.family.code!='acco' or " + ACCO_ITEM_POLICY_EXISTS + " or " + ACCO_POOL_EXISTS + ")" +
+                SCHEDULED_ITEMS_DQL_ORDER_BY, argument.getEventPk())
         );
     }
 
-    // ── Availability computation ──────────────────────────────────────────────
-
-    /**
-     * The core availability subquery, shared by all 4 categories. For each ScheduledResource sr,
-     * finds the best PoolAllocation pa (event-specific preferred over global) and computes:
-     *   pa.quantity - beds already booked in pa's pool
-     * Returns 0 when no pool allocation exists.
-     */
-    private static final String SR_AVAILABILITY =
-            "coalesce(" +
-            "(select pa.quantity" +
-            " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledResource=sr and present and documentLine.(!frontend_released and pool=pa.pool)), 0)" +
-            " from PoolAllocation pa" +
-            " where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and (event=$1 or event=null)" +
-            " order by event desc nulls last" +
-            " limit 1)" +
-            ", 0)";
-
-    /**
-     * Builds a DQL sum expression for a specific gender + ordination category.
-     * Returns 0 for resources whose configuration doesn't match; otherwise returns
-     * the shared SR_AVAILABILITY value.
-     */
-    private static String availabilitySum(String genderField, String ordinationField) {
-        return "sum(!sr.configuration.(" + genderField + " and " + ordinationField + ") ? 0 : " + SR_AVAILABILITY + ")";
-    }
 }
