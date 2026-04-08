@@ -44,28 +44,18 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                         "with e as (select coalesce(repeatedEvent,id) as finalEvent,startDate,endDate,preDate,postDate,venue from Event where id=$1)" +
                         ", ep as (select startBoundary,endBoundary from EventPart where event=(select e.finalEvent from e))" +
                         " select name,label,comment,site.name,item.(name,label,code,temporal,family.(code,name,label,ord),capacity,share_mate,ord),date,startTime,timeline?.(site,item,startTime,endTime),cancelled,resource" +
-                        // We also compute the remaining available space for guests
+                        // We also compute the remaining available space for guests.
+                        // For each ScheduledResource sr, we find the best PoolAllocation pa
+                        // (event-specific preferred over global) and compute:
+                        //   availability = pa.quantity - beds booked in pa's pool
+                        // Then we distribute this availability to the 4 categories based on
+                        // the resource configuration flags (allowsMale/Female, allowsLay/Ordained).
                         ",(select [" +
-                        // male availability
-                        "sum(!sr.configuration.(allowsMale and allowsLay) ? 0 :" +
-                        " coalesce((select quantity from PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and (event=null or event=$1) limit 1), 0)" +
-                        " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledResource=sr and present and documentLine.(!frontend_released and (pool = null or pool.allowsPublic))), 0)" +
-                        ")," +
-                        // female availability
-                        "sum(!sr.configuration.(allowsFemale and allowsLay) ? 0 :" +
-                        " coalesce((select quantity from PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and (event=null or event=$1) limit 1), 0)" +
-                        " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledResource=sr and present and documentLine.(!frontend_released and (pool = null or pool.allowsPublic))), 0)" +
-                        ")," +
-                        // monk availability
-                        "sum(!sr.configuration.(allowsMale and allowsOrdained) ? 0 :" +
-                        " coalesce((select quantity from PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and (event=null or event=$1) limit 1), 0)" +
-                        " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledResource=sr and present and documentLine.(!frontend_released and (pool = null or pool.allowsPublic))), 0)" +
-                        ")," +
-                        // nun availability
-                        "sum(!sr.configuration.(allowsFemale and allowsOrdained) ? 0 :" +
-                        " coalesce((select quantity from PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and (event=null or event=$1) limit 1), 0)" +
-                        " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledResource=sr and present and documentLine.(!frontend_released and (pool = null or pool.allowsPublic))), 0)" +
-                        ")] from ScheduledResource sr" +
+                        availabilitySum("allowsMale",   "allowsLay")     + "," + // lay male
+                        availabilitySum("allowsFemale", "allowsLay")     + "," + // lay female
+                        availabilitySum("allowsMale",   "allowsOrdained") + "," + // monk
+                        availabilitySum("allowsFemale", "allowsOrdained") +       // nun
+                        "] from ScheduledResource sr" +
                         // We consider only the resources allocated to the general guest pool for this event
                         " where scheduledItem=si and exists(select PoolAllocation where resource=sr.configuration.resource and pool.allowsPublic and (event = null or event=$1))" +
                         " group by scheduledItem)" +
@@ -185,28 +175,13 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                 " select name,label,comment,site.name,item.(name,label,code,temporal,family.(code,name,label,ord),capacity,share_mate,ord),date,startTime,timeline?.(site,item,startTime,endTime),cancelled,resource" +
                 // We also compute the remaining available space for guests
                 ",(select [" +
-                // male availability
-                "sum(!sr.configuration.(allowsMale and allowsLay) ? 0 :" +
-                " coalesce((select quantity from PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and (event=null or event=$1) limit 1), 0)" +
-                " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledResource=sr and present and documentLine.(!frontend_released and (pool = null or pool.allowsPublic))), 0)" +
-                ")," +
-                // female availability
-                "sum(!sr.configuration.(allowsFemale and allowsLay) ? 0 :" +
-                " coalesce((select quantity from PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and (event=null or event=$1) limit 1), 0)" +
-                " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledResource=sr and present and documentLine.(!frontend_released and (pool = null or pool.allowsPublic))), 0)" +
-                ")," +
-                // monk availability
-                "sum(!sr.configuration.(allowsMale and allowsOrdained) ? 0 :" +
-                " coalesce((select quantity from PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and (event=null or event=$1) limit 1), 0)" +
-                " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledResource=sr and present and documentLine.(!frontend_released and (pool = null or pool.allowsPublic))), 0)" +
-                ")," +
-                // nun availability
-                "sum(!sr.configuration.(allowsFemale and allowsOrdained) ? 0 :" +
-                " coalesce((select quantity from PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and (event=null or event=$1) limit 1), 0)" +
-                " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledResource=sr and present and documentLine.(!frontend_released and (pool = null or pool.allowsPublic))), 0)" +
-                ")] from ScheduledResource sr" +
-                // We consider only the resources allocated to the general guest pool for this event
-                " where scheduledItem=si and exists(select PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and (event = null or event=$1))" +
+                availabilitySum("allowsMale",   "allowsLay")     + "," + // lay male
+                availabilitySum("allowsFemale", "allowsLay")     + "," + // lay female
+                availabilitySum("allowsMale",   "allowsOrdained") + "," + // monk
+                availabilitySum("allowsFemale", "allowsOrdained") +       // nun
+                "] from ScheduledResource sr" +
+                    // We consider only the resources allocated to the general guest pool for this event
+                    " where scheduledItem=si and exists(select PoolAllocation where resource=sr.configuration.resource and pool.allowsPublic and (event = null or event=$1))" +
                 " group by scheduledItem)" +
                 " as " + ScheduledItem.maleFemaleAvailabilities +
                 " from ScheduledItem si, e" +
@@ -216,5 +191,32 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                 " and (si.item.family.code!='acco' or exists(select ItemPolicy ip where item=si.item and scope.(site=si.site and (event=null or event=$1) and (eventType=null or (select type=ip.scope.eventType from Event where id=$1)))) or (exists(select ScheduledResource sr where scheduledItem=si and exists(select PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and event=$1))))" +
                 " order by site?.ord,site.id,item.family.id,item?.ord,item.id,date", argument.getEventPk())
         );
+    }
+
+    // ── Availability computation ──────────────────────────────────────────────
+
+    /**
+     * The core availability subquery, shared by all 4 categories. For each ScheduledResource sr,
+     * finds the best PoolAllocation pa (event-specific preferred over global) and computes:
+     *   pa.quantity - beds already booked in pa's pool
+     * Returns 0 when no pool allocation exists.
+     */
+    private static final String SR_AVAILABILITY =
+            "coalesce(" +
+            "(select pa.quantity" +
+            " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledResource=sr and present and documentLine.(!frontend_released and pool=pa.pool)), 0)" +
+            " from PoolAllocation pa" +
+            " where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and (event=$1 or event=null)" +
+            " order by event desc nulls last" +
+            " limit 1)" +
+            ", 0)";
+
+    /**
+     * Builds a DQL sum expression for a specific gender + ordination category.
+     * Returns 0 for resources whose configuration doesn't match; otherwise returns
+     * the shared SR_AVAILABILITY value.
+     */
+    private static String availabilitySum(String genderField, String ordinationField) {
+        return "sum(!sr.configuration.(" + genderField + " and " + ordinationField + ") ? 0 : " + SR_AVAILABILITY + ")";
     }
 }
