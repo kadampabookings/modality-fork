@@ -2,6 +2,7 @@ package one.modality.booking.frontoffice.bookingpage.sections.transport;
 
 import dev.webfx.extras.i18n.I18n;
 import dev.webfx.extras.i18n.controls.I18nControls;
+import dev.webfx.extras.time.format.LocalizedTime;
 import dev.webfx.extras.util.layout.Layouts;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.ObjectProperty;
@@ -32,6 +33,7 @@ import one.modality.base.shared.entities.formatters.EventPriceFormatter;
 import one.modality.ecommerce.policy.service.PolicyAggregate;
 
 import java.time.LocalDate;
+import java.time.format.FormatStyle;
 import java.time.format.TextStyle;
 import java.util.ArrayList;
 import java.util.List;
@@ -1135,9 +1137,7 @@ public class DefaultTransportSection implements HasTransportSection {
         if (time == null) {
             return "";
         }
-        // Format as "h:mm a" (e.g., "2:00 PM")
-        java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH);
-        return "departs " + time.format(formatter);
+        return "departs " + LocalizedTime.formatLocalTime(time, FormatStyle.SHORT);
     }
 
     /**

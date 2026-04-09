@@ -1088,6 +1088,11 @@ public abstract class AbstractSinglePeriodInPersonBookingForm implements Standar
                 constraintLabel = I18n.getI18nText(BookingPageI18nKeys.MinNights, minNights);
             }
 
+            // Force sold-out when the ItemPolicy says so, regardless of actual availability
+            if (itemPolicy != null && Boolean.TRUE.equals(itemPolicy.isSoldOutForced())) {
+                status = HasAccommodationSelectionSection.AvailabilityStatus.SOLD_OUT;
+            }
+
             // Read early arrival / late departure restrictions from ItemPolicy
             // null or true means allowed, only explicit false means not allowed
             boolean earlyArrivalAllowed = itemPolicy == null || !Boolean.FALSE.equals(itemPolicy.isEarlyAccommodationAllowed());
