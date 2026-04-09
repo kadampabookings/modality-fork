@@ -35,6 +35,7 @@ module modality.booking.frontoffice.bookingpage {
     requires webfx.extras.panes;
     requires webfx.extras.responsive;
     requires webfx.extras.styles.bootstrap;
+    requires webfx.extras.time.format;
     requires webfx.extras.util.control;
     requires webfx.extras.util.dialog;
     requires webfx.extras.util.layout;
