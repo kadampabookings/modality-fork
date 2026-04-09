@@ -1663,7 +1663,7 @@
     "comment": "string",
     "commentLabel": "Label",
     "date": "Temporal.PlainDate",
-    "endTime": "Temporal.PlainDate",
+    "endTime": "Temporal.PlainTime",
     "event": "Event",
     "expirationDate": "Temporal.PlainDateTime",
     "item": "Item",
@@ -1674,7 +1674,7 @@
     "published": "boolean",
     "resource": "boolean",
     "site": "Site",
-    "startTime": "Temporal.PlainDate",
+    "startTime": "Temporal.PlainTime",
     "teacher": "Teacher",
     "timeline": "Timeline",
     "vodDelayed": "boolean"
@@ -1766,7 +1766,7 @@
     "id": 113,
     "audioOffered": "boolean",
     "dayTemplate": "DayTemplate",
-    "endTime": "Temporal.PlainDate",
+    "endTime": "Temporal.PlainTime",
     "event": "Event",
     "eventTimeline": "Timeline",
     "item": "Item",
@@ -1774,7 +1774,7 @@
     "label": "Label",
     "name": "string",
     "site": "Site",
-    "startTime": "Temporal.PlainDate",
+    "startTime": "Temporal.PlainTime",
     "videoOffered": "boolean"
   },
   "Topic": {
