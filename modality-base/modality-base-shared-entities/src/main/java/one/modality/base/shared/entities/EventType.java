@@ -16,8 +16,21 @@ public interface EventType extends Entity,
     EntityHasOrganization,
     EntityHasOrd {
 
+    String bookingForm = "bookingForm";
     String recurringItem = "recurringItem";
     String ord = "ord";
+
+    default void setBookingForm(Object value) {
+        setForeignField(bookingForm, value);
+    }
+
+    default EntityId getBookingFormId() {
+        return getForeignEntityId(bookingForm);
+    }
+
+    default BookingForm getBookingForm() {
+        return getForeignEntity(bookingForm);
+    }
 
     default void setRecurringItem(Object value) {
         setForeignField(recurringItem, value);

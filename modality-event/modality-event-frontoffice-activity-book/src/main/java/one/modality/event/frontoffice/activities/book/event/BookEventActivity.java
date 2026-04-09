@@ -61,10 +61,28 @@ import java.util.ServiceLoader;
  */
 public final class BookEventActivity extends ViewDomainActivityBase implements ButtonFactoryMixin, HasWorkingBookingProperties {
 
-    private static final List<BookingFormProvider> ALL_BOOKING_FORM_PROVIDERS_SORTED_BY_PRIORITY = MultipleServiceProviders
+    private static final List<BookingFormProvider> ALL_BOOKING_FORM_PROVIDERS = MultipleServiceProviders
             .getProviders(BookingFormProvider.class, () -> ServiceLoader.load(BookingFormProvider.class));
-    static {
-        ALL_BOOKING_FORM_PROVIDERS_SORTED_BY_PRIORITY.sort((p1, p2) -> p2.getPriority() - p1.getPriority());
+
+    /**
+     * Find the booking form provider for an event by matching event.type.bookingForm.code
+     * against each provider's getBookingFormCode(). Falls back to the default provider
+     * (getBookingFormCode() == null) when no match is found.
+     */
+    private static BookingFormProvider findBookingFormProvider(Event event) {
+        String code = null;
+        if (event.getType() != null && event.getType().getBookingForm() != null) {
+            code = event.getType().getBookingForm().getCode();
+        }
+        if (code != null) {
+            String finalCode = code;
+            BookingFormProvider provider = Collections.findFirst(ALL_BOOKING_FORM_PROVIDERS,
+                p -> finalCode.equals(p.getBookingFormCode()));
+            if (provider != null)
+                return provider;
+        }
+        // Fallback to default provider (getBookingFormCode() == null)
+        return Collections.findFirst(ALL_BOOKING_FORM_PROVIDERS, p -> p.getBookingFormCode() == null);
     }
 
     private final Region loadingSpinner = Controls.createSectionSizeSpinner();
@@ -332,8 +350,7 @@ public final class BookEventActivity extends ViewDomainActivityBase implements B
                 setCollapseMenu(); // Updating the collapse menu policy (because it depends on the event)
 
                 // Check if the provider wants to auto-load existing bookings for logged-in users
-                BookingFormProvider bookingFormProvider = Collections.findFirst(ALL_BOOKING_FORM_PROVIDERS_SORTED_BY_PRIORITY,
-                    provider -> provider.acceptEvent(event));
+                BookingFormProvider bookingFormProvider = findBookingFormProvider(event);
                 boolean autoLoadExistingBooking = bookingFormProvider != null && bookingFormProvider.autoLoadExistingBooking(event);
 
                 Person personToBook = FXPersonToBook.getPersonToBook();
@@ -395,8 +412,7 @@ public final class BookEventActivity extends ViewDomainActivityBase implements B
 
             // Find the booking form provider (may specify attendance mode)
             Event finalEvent = event;
-            BookingFormProvider bookingFormProvider = Collections.findFirst(ALL_BOOKING_FORM_PROVIDERS_SORTED_BY_PRIORITY,
-                provider -> provider.acceptEvent(finalEvent));
+            BookingFormProvider bookingFormProvider = findBookingFormProvider(finalEvent);
 
             // Create WorkingBooking based on whether we have an existing booking or not
             WorkingBooking workingBooking;
