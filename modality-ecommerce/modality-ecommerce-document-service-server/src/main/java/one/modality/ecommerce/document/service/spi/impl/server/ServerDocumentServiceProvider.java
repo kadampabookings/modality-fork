@@ -12,6 +12,7 @@ import dev.webfx.stack.com.serial.SerialCodecManager;
 import dev.webfx.stack.orm.entity.EntityStore;
 import dev.webfx.stack.orm.entity.EntityStoreQuery;
 import dev.webfx.stack.orm.entity.UpdateStore;
+import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 import one.modality.base.shared.entities.*;
 import one.modality.base.shared.entities.triggers.Triggers;
 import one.modality.ecommerce.document.service.*;
@@ -71,8 +72,23 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
             // 3 - Loading money transfers
             new EntityStoreQuery("select document,amount,pending,successful from MoneyTransfer where document=$1 order by id", docPk)
         };
+        // Frontoffice access control: when loading by document PK only (no person/account
+        // filter), restrict to documents accessible by the authenticated user's account.
+        // Back-office callers bypass this check.
         boolean personProvided = argument.personPrimaryKey() != null;
         boolean accountProvided = argument.accountPrimaryKey() != null;
+        if (docPk != null && !personProvided && !accountProvided && !ThreadLocalStateHolder.isBackoffice()) {
+            Object userId = ThreadLocalStateHolder.getUserId();
+            Object userAccountId = getUserAccountId(userId);
+            if (userAccountId == null) {
+                return Future.failedFuture("Authentication required to access this document");
+            }
+            // Filter document query so only documents belonging to the user's account are returned.
+            // Insert the condition before "order by" since appending would place it after ORDER BY.
+            String docQuery = queries[0].getSelect();
+            docQuery = docQuery.replace(" order by ", " and accountCanAccessPersonOrders($2, person) order by ");
+            queries[0] = new EntityStoreQuery(docQuery, docPk, userAccountId);
+        }
         if (personProvided || accountProvided) {
             String queryReplacement = " in (select Document where !cancelled and (%field%=$1 and event=$2) order by id desc %limit%)"
                 .replace("%field%", personProvided ? "person" : "person.frontendAccount")
@@ -109,6 +125,7 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
                 // Aggregating document lines by adding AddDocumentLineEvent and PriceDocumentLineEvent for each document
                 ((List<DocumentLine>) entityLists[1]).forEach(documentLine -> {
                     List<AbstractDocumentEvent> documentEvents = allDocumentEvents.get(documentLine.getDocument());
+                    if (documentEvents == null) return; // document was filtered by access control
                     documentEvents.add(new AddDocumentLineEvent(documentLine, documentLine.isAllocate()));
                     documentEvents.add(new PriceDocumentLineEvent(documentLine));
                     if (documentLine.isShareOwner()) {
@@ -131,12 +148,14 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
                 ((List<Attendance>) entityLists[2]).stream().collect(Collectors.groupingBy(Attendance::getDocumentLine))
                     .forEach((documentLine, attendances) -> {
                         List<AbstractDocumentEvent> documentEvents = allDocumentEvents.get(documentLine.getDocument());
+                        if (documentEvents == null) return; // document was filtered by access control
                         Attendance firstAttendance = Collections.first(attendances);
                         documentEvents.add(new AddAttendancesEvent(attendances.toArray(new Attendance[0]), firstAttendance != null && firstAttendance.isVideoAccessEnabled()));
                     });
                 // Aggregating money transfers by Adding AddMoneyTransferEvent
                 ((List<MoneyTransfer>) entityLists[3]).forEach(moneyTransfer -> {
                     List<AbstractDocumentEvent> documentEvents = allDocumentEvents.get(moneyTransfer.getDocument());
+                    if (documentEvents == null) return; // document was filtered by access control
                     documentEvents.add(new AddMoneyTransferEvent(moneyTransfer));
                 });
                 return allDocumentEvents.values().stream()
@@ -273,6 +292,19 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
             }
         }
         return null;
+    }
+
+    /**
+     * Extracts the user's frontend account ID from the userId principal object.
+     * Uses reflection to avoid a direct module dependency on modality.crm.shared.authn.
+     */
+    private static Object getUserAccountId(Object userId) {
+        if (userId == null) return null;
+        try {
+            return userId.getClass().getMethod("getUserAccountId").invoke(userId);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     @Override

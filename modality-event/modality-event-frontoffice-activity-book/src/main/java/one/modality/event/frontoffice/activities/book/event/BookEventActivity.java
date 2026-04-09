@@ -21,7 +21,10 @@ import javafx.beans.property.SimpleObjectProperty;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
+import javafx.scene.control.Label;
 import javafx.scene.layout.Region;
+import javafx.scene.layout.VBox;
+import javafx.scene.text.TextAlignment;
 import one.modality.base.client.mainframe.fx.FXMainFrameOverlayArea;
 import one.modality.base.frontoffice.mainframe.fx.FXCollapseMenu;
 import one.modality.base.shared.entities.AttendanceMode;
@@ -190,6 +193,25 @@ public final class BookEventActivity extends ViewDomainActivityBase implements B
         activityContainer.setAlignment(Pos.CENTER);
     }
 
+    private void showAccessDeniedMessage() {
+        Label titleLabel = new Label("Booking Not Found");
+        titleLabel.setStyle("-fx-font-size: 24px; -fx-font-weight: bold; -fx-text-fill: #dc2626;");
+        titleLabel.setTextAlignment(TextAlignment.CENTER);
+
+        Label messageLabel = new Label("This booking could not be found or you don't have\npermission to access it.\n\nPlease check that you are logged in with the correct account.");
+        messageLabel.setStyle("-fx-font-size: 14px; -fx-text-fill: #525252;");
+        messageLabel.setTextAlignment(TextAlignment.CENTER);
+        messageLabel.setWrapText(true);
+        messageLabel.setMaxWidth(400);
+
+        VBox messageBox = new VBox(16, titleLabel, messageLabel);
+        messageBox.setAlignment(Pos.CENTER);
+        messageBox.setPadding(new Insets(60, 20, 20, 20));
+
+        activityContainer.setContent(messageBox);
+        activityContainer.setAlignment(Pos.TOP_CENTER);
+    }
+
     void loadPolicyAndBooking() {
         Object modifyOrderDocumentId = getModifyOrderDocumentId();
         Object payOrderDocumentId = getPayOrderDocumentId();
@@ -224,6 +246,12 @@ public final class BookEventActivity extends ViewDomainActivityBase implements B
         } else if (modifyOrderDocumentId != null && payOrderDocumentId == null) {
             // MODIFY_BOOKING: lightweight approach — load only PolicyAggregate, defer DocumentAggregate
             // to when the user clicks Continue in the ExistingBookingSection (already loads on demand).
+            if (FXUserPersonId.getUserPersonPrimaryKey() == null) {
+                // Not logged in — wait for authentication, then retry
+                showAccessDeniedMessage();
+                FXProperties.onPropertySet(FXUserPersonId.userPersonIdProperty(), pk -> loadPolicyAndBooking());
+                return;
+            }
             if (Objects.areEquals(modifyOrderDocumentId, loadingModifyOrPayOrderDocumentId))
                 return;
             loadingModifyOrPayOrderDocumentId = modifyOrderDocumentId;
@@ -268,15 +296,31 @@ public final class BookEventActivity extends ViewDomainActivityBase implements B
                 });
         } else if (modifyOrPayOrderDocumentId != null) {
             // PAY_BOOKING: full load — DocumentAggregate needed immediately for payment flow
+            if (FXUserPersonId.getUserPersonPrimaryKey() == null) {
+                // Not logged in — wait for authentication, then retry
+                showAccessDeniedMessage();
+                FXProperties.onPropertySet(FXUserPersonId.userPersonIdProperty(), pk -> loadPolicyAndBooking());
+                return;
+            }
             if (Objects.areEquals(modifyOrPayOrderDocumentId, loadingModifyOrPayOrderDocumentId))
                 return;
             loadingModifyOrPayOrderDocumentId = modifyOrPayOrderDocumentId;
             showLoadingSpinner();
             // Note: this call doesn't automatically rebuild PolicyAggregate entities
             DocumentService.loadPolicyAndDocument(LoadDocumentArgument.ofDocument(modifyOrPayOrderDocumentId))
-                .onFailure(Console::error)
+                .onFailure(error -> {
+                    Console.error(error);
+                    loadingModifyOrPayOrderDocumentId = null;
+                    UiScheduler.runInUiThread(() -> showAccessDeniedMessage());
+                })
                 .onSuccess(policyAndDocumentAggregates -> {
                     loadingModifyOrPayOrderDocumentId = null;
+                    // Document not found or access denied (filtered by server-side access control)
+                    if (policyAndDocumentAggregates.policyAggregate() == null) {
+                        Console.error("Document not found or access denied for document " + modifyOrPayOrderDocumentId);
+                        UiScheduler.runInUiThread(() -> showAccessDeniedMessage());
+                        return;
+                    }
                     // Double-checking it's still relevant
                     if (Objects.areEquals(modifyOrPayOrderDocumentId, Objects.coalesce(getModifyOrderDocumentId(), getPayOrderDocumentId()))) {
                         onPolityAndDocumentAggregatesLoaded(policyAndDocumentAggregates);

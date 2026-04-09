@@ -4,6 +4,7 @@ module modality.event.frontoffice.activity.book {
 
     // Direct dependencies modules
     requires javafx.base;
+    requires javafx.controls;
     requires javafx.graphics;
     requires modality.base.client.mainframe.fx;
     requires modality.base.client.util;

@@ -91,7 +91,12 @@ public final class DocumentService {
     // Note: this method doesn't rebuild the PolicyAggregate entities because no event entity was passed
     public static Future<PolicyAndDocumentAggregates> loadPolicyAndDocument(LoadDocumentArgument loadDocumentArgument) {
         return loadDocument(loadDocumentArgument)
-            .compose(documentAggregate -> PolicyService.loadPolicy(new LoadPolicyArgument(documentAggregate.getEventPrimaryKey()))
-                .compose(policyAggregate -> Future.succeededFuture(new PolicyAndDocumentAggregates(policyAggregate, documentAggregate))));
+            .compose(documentAggregate -> {
+                if (documentAggregate == null) {
+                    return Future.succeededFuture(new PolicyAndDocumentAggregates(null, null));
+                }
+                return PolicyService.loadPolicy(new LoadPolicyArgument(documentAggregate.getEventPrimaryKey()))
+                    .compose(policyAggregate -> Future.succeededFuture(new PolicyAndDocumentAggregates(policyAggregate, documentAggregate)));
+            });
     }
 }
