@@ -505,7 +505,8 @@ public class DefaultAdditionalOptionsSection implements HasAdditionalOptionsSect
         KnownItemFamily.MEALS,         // Handled by meals section
         KnownItemFamily.DIET,          // Handled by meals section (dietary options)
         KnownItemFamily.TAX,           // Not user-selectable
-        KnownItemFamily.UNKNOWN        // Unknown items
+        KnownItemFamily.UNKNOWN,       // Unknown items
+        KnownItemFamily.CEREMONY       // Handled by ceremony section (Part 3 below)
     );
 
     // Dynamic exclusion for audio recording (when handled by dedicated phase section)
