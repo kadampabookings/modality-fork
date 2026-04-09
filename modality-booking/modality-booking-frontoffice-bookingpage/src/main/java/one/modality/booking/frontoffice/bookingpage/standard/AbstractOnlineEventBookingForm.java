@@ -9,6 +9,7 @@ import one.modality.base.shared.entities.BookablePeriod;
 import one.modality.base.shared.entities.Event;
 import one.modality.base.shared.entities.ItemFamilyPolicy;
 import one.modality.base.shared.entities.ScheduledItem;
+import one.modality.base.shared.entities.util.ScheduledItems;
 import one.modality.base.shared.knownitems.KnownItemFamily;
 import one.modality.booking.client.workingbooking.HasWorkingBookingProperties;
 import one.modality.booking.client.workingbooking.WorkingBooking;
@@ -228,65 +229,49 @@ public abstract class AbstractOnlineEventBookingForm implements StandardBookingF
      * @param props the WorkingBookingProperties
      */
     protected void loadTeachingProgramme(WorkingBookingProperties props) {
-/* old code based on BookablePeriod which is deprecated
         if (props == null) return;
 
         PolicyAggregate policyAggregate = props.getPolicyAggregate();
         if (policyAggregate == null) return;
 
-        // Get bookable periods with TEACHING items
-        List<BookablePeriod> bookablePeriods = policyAggregate.getBookablePeriods(
-                KnownItemFamily.TEACHING,
-                getTeachingPeriodFilterKey()
-        );
+        // Get all non-cancelled teaching scheduled items
+        List<ScheduledItem> teachingItems = ScheduledItems.filterNotCancelled(
+                policyAggregate.filterTeachingScheduledItems());
 
-        if (bookablePeriods.isEmpty()) {
-            // Fallback: try to get periods without filter key
-            bookablePeriods = policyAggregate.getBookablePeriods(KnownItemFamily.TEACHING, null);
-        }
+        if (teachingItems.isEmpty()) return;
 
-        if (bookablePeriods.isEmpty()) return;
+        // Book teaching items into WorkingBooking
+        props.getWorkingBooking().bookScheduledItems(teachingItems, true);
 
-        // Use the first bookable period
-        BookablePeriod period = bookablePeriods.get(0);
-
-        // Get dates from period
-        ScheduledItem startItem = period.getStartScheduledItem();
-        ScheduledItem endItem = period.getEndScheduledItem();
-        LocalDate startDate = startItem != null ? startItem.getDate() : null;
-        LocalDate endDate = endItem != null ? endItem.getDate() : null;
-
-        // Get teaching items within the period
-        List<ScheduledItem> allTeachingItems = policyAggregate.filterTeachingScheduledItems();
-        List<ScheduledItem> periodTeachingItems = filterTeachingItemsForPeriod(
-                allTeachingItems, startDate, endDate);
-
-        // Book teaching items into WorkingBooking (MODEL LAYER)
-        if (!periodTeachingItems.isEmpty()) {
-            props.getWorkingBooking().bookScheduledItems(periodTeachingItems, true);
+        // Derive date range from teaching items
+        LocalDate startDate = null;
+        LocalDate endDate = null;
+        for (ScheduledItem item : teachingItems) {
+            LocalDate date = item.getDate();
+            if (date != null) {
+                if (startDate == null || date.isBefore(startDate)) startDate = date;
+                if (endDate == null || date.isAfter(endDate)) endDate = date;
+            }
         }
 
         // Get event name for display on rate cards
         Event event = props.getWorkingBooking().getEvent();
         String eventName = event != null ? event.getName() : null;
 
-        // Set programme info on the section (UI LAYER)
+        // Set programme info on the rate section (UI LAYER)
         if (rateTypeSection instanceof DefaultRateTypeSection) {
             DefaultRateTypeSection section = (DefaultRateTypeSection) rateTypeSection;
-            section.setProgrammeInfo(period, eventName, startDate, endDate);
+            section.setProgrammeInfo(null, eventName, startDate, endDate);
         }
 
         // Calculate and set prices
         calculateAndSetRatePrices();
 
-        // Notify package selected callback (for audio recording section)
-        if (rateTypeSection != null) {
-            Consumer<BookablePeriod> callback = getOnPackageSelectedCallback();
-            if (callback != null) {
-                callback.accept(period);
-            }
+        // Notify audio recording section
+        Consumer<BookablePeriod> callback = getOnPackageSelectedCallback();
+        if (callback != null) {
+            callback.accept(null);
         }
-*/
     }
 
     /**
