@@ -1162,6 +1162,11 @@ public class DefaultAccommodationSelectionSection implements HasAccommodationSel
                 constraintLabel = I18n.getI18nText(BookingPageI18nKeys.MinNights, minNights);
             }
 
+            // Force sold-out when the ItemPolicy says so, regardless of actual availability
+            if (itemPolicy != null && Boolean.TRUE.equals(itemPolicy.isSoldOutForced())) {
+                status = AvailabilityStatus.SOLD_OUT;
+            }
+
             // Get price and perPerson flag from rates (accommodation daily rate)
             // Try to find rate for this item - first try with null site, then try all rates
             Rate itemRate = policyAggregate.filterDailyRatesStreamOfSiteAndItem(null, item)
