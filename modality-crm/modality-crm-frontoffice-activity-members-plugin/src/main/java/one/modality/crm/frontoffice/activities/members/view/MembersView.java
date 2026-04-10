@@ -685,15 +685,23 @@ public class MembersView implements MaterialFactoryMixin, ModalityButtonFactoryM
 
     /**
      * Show comprehensive edit dialog for direct members with all fields.
+     *
+     * @param hasRegistration true if this Person has at least one active (non-cancelled)
+     *                        Document. When true, the identity fields are locked per T&C:
+     *                        firstName + lastName always, birthDate additionally if one
+     *                        is already set. The caller (MembersController.editDirectMember)
+     *                        determines this via a Document query rather than relying on
+     *                        the unreliable Person.neverBooked column.
      */
-    public void showEditDirectMemberDialog(Person person, DataSourceModel dataSourceModel, Runnable onSuccess) {
+    public void showEditDirectMemberDialog(Person person, DataSourceModel dataSourceModel, boolean hasRegistration, Runnable onSuccess) {
         // Create UpdateStore early so we can bind to hasChanges
         EntityStore entityStore = EntityStore.create(dataSourceModel);
         UpdateStore updateStore = UpdateStore.createAbove(entityStore);
         Person personToUpdate = updateStore.updateEntity(person);
 
-        // Check if person has ever made a booking (name fields only editable if neverBooked)
-        boolean canEditName = Boolean.TRUE.equals(person.isNeverBooked());
+        // Identity lock (T&C: prevent registration transfers).
+        boolean canEditName = !hasRegistration;
+        boolean canEditBirthDate = !hasRegistration || person.getBirthDate() == null;
 
         // Create MaterialDesign form fields - Basic Info
         TextField firstNameField = newMaterialTextField(CrmI18nKeys.FirstName);
@@ -727,6 +735,8 @@ public class MembersView implements MaterialFactoryMixin, ModalityButtonFactoryM
         dev.webfx.extras.styles.materialdesign.textfield.MaterialTextField materialBirthDateField = MaterialUtil.getMaterialTextField(birthDateTextField);
         materialBirthDateField.setAnimateLabel(false);
         I18n.bindI18nTextProperty(materialBirthDateField.labelTextProperty(), CrmI18nKeys.BirthDate);
+        birthDateTextField.setEditable(canEditBirthDate);
+        birthDateTextField.setDisable(!canEditBirthDate);
 
         // Gender radio buttons
         ToggleGroup genderGroup = new ToggleGroup();
@@ -812,7 +822,9 @@ public class MembersView implements MaterialFactoryMixin, ModalityButtonFactoryM
             String email = emailField.getText();
             personToUpdate.setEmail(email != null && !email.trim().isEmpty() ? email.trim() : null);
 
-            personToUpdate.setBirthDate(birthDateField.getDate());
+            if (canEditBirthDate) {
+                personToUpdate.setBirthDate(birthDateField.getDate());
+            }
             personToUpdate.setMale(optionMale.isSelected());
             personToUpdate.setOrdained(optionOrdained.isSelected());
 
@@ -850,6 +862,22 @@ public class MembersView implements MaterialFactoryMixin, ModalityButtonFactoryM
         countrySelector.selectedItemProperty(),
         organizationSelector.selectedItemProperty()
         );
+
+        // Identity-lock warning banner — shown whenever the member has at least one
+        // active registration. Copy explains the T&C rationale and where to contact
+        // support (kbs@kadampa.net) to have identity info corrected.
+        if (hasRegistration) {
+            Label identityLockedHint = I18nControls.newLabel(MembersI18nKeys.IdentityLockedHint);
+            identityLockedHint.setWrapText(true);
+            identityLockedHint.setMaxWidth(Double.MAX_VALUE);
+            identityLockedHint.setStyle(
+                    "-fx-background-color: #fff7e6;" +
+                    "-fx-text-fill: #92400e;" +
+                    "-fx-padding: 8 12 8 12;" +
+                    "-fx-background-radius: 6;" +
+                    "-fx-font-size: 12px;");
+            formContent.getChildren().add(identityLockedHint);
+        }
 
         // Add all fields to form content
         formContent.getChildren().addAll(
@@ -895,18 +923,25 @@ public class MembersView implements MaterialFactoryMixin, ModalityButtonFactoryM
                 return;
             }
 
-            // Apply all field values (UpdateStore already created at top of method)
-            String firstName = firstNameField.getText();
-            personToUpdate.setFirstName(firstName != null ? firstName.trim() : "");
+            // Apply all field values (UpdateStore already created at top of method).
+            // Identity fields (firstName/lastName/birthDate) are only re-applied when
+            // the corresponding lock allows it — defensive guard against any path
+            // that might bypass the disable state.
+            if (canEditName) {
+                String firstName = firstNameField.getText();
+                personToUpdate.setFirstName(firstName != null ? firstName.trim() : "");
 
-            String lastName = lastNameField.getText();
-            personToUpdate.setLastName(lastName != null ? lastName.trim() : "");
+                String lastName = lastNameField.getText();
+                personToUpdate.setLastName(lastName != null ? lastName.trim() : "");
+            }
 
             String email = emailField.getText();
             email = email != null ? email.trim() : "";
             personToUpdate.setEmail(email.isEmpty() ? null : email);
 
-            personToUpdate.setBirthDate(birthDateField.getDate());
+            if (canEditBirthDate) {
+                personToUpdate.setBirthDate(birthDateField.getDate());
+            }
             personToUpdate.setMale(optionMale.isSelected());
             personToUpdate.setOrdained(optionOrdained.isSelected());
 

@@ -72,6 +72,7 @@ public interface MembersI18nKeys {
     Object FirstName = "FirstName";
     Object FirstNamePlaceholder = "FirstNamePlaceholder";
     Object GoToMembers = "GoToMembers";
+    Object IdentityLockedHint = "IdentityLockedHint";
     Object InvalidBirthdateFormat = "InvalidBirthdateFormat";
     Object InvalidInvitationLink = "InvalidInvitationLink";
     Object InvalidInvitationLinkDescription = "InvalidInvitationLinkDescription";

@@ -12,6 +12,7 @@ import dev.webfx.stack.orm.entity.EntityStore;
 import dev.webfx.stack.orm.entity.UpdateStore;
 import javafx.scene.control.Button;
 import one.modality.base.client.mainframe.fx.FXMainFrameDialogArea;
+import one.modality.base.shared.entities.Document;
 import one.modality.base.shared.entities.Invitation;
 import one.modality.base.shared.entities.Person;
 import one.modality.crm.frontoffice.activities.members.MembersI18nKeys;
@@ -727,12 +728,31 @@ public class MembersController {
     }
 
     /**
-     * Edit direct member - comprehensive dialog using UserProfileView
+     * Edit direct member - comprehensive dialog using UserProfileView.
+     *
+     * Before opening, probes for existing non-cancelled Documents for this Person.
+     * The result (hasRegistration) controls identity-field locking in the dialog:
+     * per T&C, a household member with an active registration cannot have their
+     * name (and birth date, if already set) changed, to prevent registration transfers.
+     * The `Person.neverBooked` DB column exists but is not reliably maintained, so
+     * we query Documents directly.
      */
     private void editDirectMember(Person person, one.modality.crm.frontoffice.activities.members.view.MembersView view) {
-        // Use refreshData() instead of updateMemberListDisplay() to re-check for matching accounts
-        // when email is changed
-        view.showEditDirectMemberDialog(person, dataSourceModel, this::refreshData);
+        EntityStore entityStore = EntityStore.create(dataSourceModel);
+        entityStore.<Document>executeQuery(
+                        "select id from Document where person=$1 and !cancelled limit 1",
+                        person.getId())
+                .onFailure(error -> {
+                    Console.log("Error checking member registrations: " + error);
+                    // Fail-open on probe failure — keep existing behavior (no lock) so UX is not blocked.
+                    UiScheduler.scheduleDeferred(() ->
+                            view.showEditDirectMemberDialog(person, dataSourceModel, false, this::refreshData));
+                })
+                .onSuccess(docs -> {
+                    boolean hasRegistration = docs != null && !docs.isEmpty();
+                    UiScheduler.scheduleDeferred(() ->
+                            view.showEditDirectMemberDialog(person, dataSourceModel, hasRegistration, this::refreshData));
+                });
     }
 
     /**
