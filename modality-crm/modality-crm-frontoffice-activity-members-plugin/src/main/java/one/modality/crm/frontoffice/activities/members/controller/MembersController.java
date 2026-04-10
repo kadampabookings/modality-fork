@@ -13,6 +13,7 @@ import dev.webfx.stack.orm.entity.UpdateStore;
 import javafx.scene.control.Button;
 import one.modality.base.client.mainframe.fx.FXMainFrameDialogArea;
 import one.modality.base.shared.entities.Document;
+import one.modality.base.shared.entities.FrontendAccount;
 import one.modality.base.shared.entities.Invitation;
 import one.modality.base.shared.entities.Person;
 import one.modality.crm.frontoffice.activities.members.MembersI18nKeys;
@@ -183,26 +184,29 @@ public class MembersController {
                         return;
                     }
 
-                    // Build WHERE clause for email matching (case-insensitive)
-                    StringBuilder emailConditions = new StringBuilder();
+                    // Build WHERE clause against frontendAccount.username (the authoritative
+                    // login identifier), not person.email — these can drift in the database
+                    // and using email misses or mis-routes matches.
+                    StringBuilder usernameConditions = new StringBuilder();
                     for (int i = 0; i < memberEmails.size(); i++) {
-                        if (i > 0) emailConditions.append(" or ");
-                        emailConditions.append("lower(email)=?");
+                        if (i > 0) usernameConditions.append(" or ");
+                        usernameConditions.append("lower(frontendAccount.username)=?");
                     }
 
                     entityStore.<Person>executeQuery(
-                                    "select id,fullName,firstName,lastName,email,owner,removed,frontendAccount.(id) from Person " +
-                                    "where owner=true and removed!=true and frontendAccount!=? and id!=? and (" + emailConditions + ")",
+                                    "select id,fullName,firstName,lastName,email,owner,removed,frontendAccount.(id,username) from Person " +
+                                    "where owner=true and removed!=true and frontendAccount!=? and id!=? and (" + usernameConditions + ")",
                                     // Prepend accountId and personId as first two parameters to exclude same frontendAccount and current user
                                     prependToArray(accountId, prependToArray(personId, memberEmails.toArray())))
                             .onSuccess(accountOwners -> {
-                                // Build email -> accountPerson map for quick lookup
+                                // Build username -> accountPerson map for quick lookup
                                 // Only includes ACTIVE account owners from DIFFERENT frontendAccounts (excludes current user)
                                 Map<String, Person> emailToAccountMap = new HashMap<>();
                                 for (Person accountOwner : accountOwners) {
-                                    String email = accountOwner.getEmail();
-                                    if (email != null && !email.isEmpty()) {
-                                        emailToAccountMap.put(email.toLowerCase(), accountOwner);
+                                    FrontendAccount fa = accountOwner.getFrontendAccount();
+                                    String username = fa != null ? fa.getUsername() : null;
+                                    if (username != null && !username.isEmpty()) {
+                                        emailToAccountMap.put(username.toLowerCase(), accountOwner);
                                     }
                                 }
 
@@ -493,11 +497,14 @@ public class MembersController {
                     }
                     Person inviter = persons.get(0);
 
-                    // Load account owner with same email
+                    // Load account owner whose login username matches the member's email.
+                    // We compare against frontendAccount.username (the authoritative login id),
+                    // not person.email, because those can drift in the database.
                     EntityStore checkStore = EntityStore.create(dataSourceModel);
+                    String memberEmailLower = member.getEmail() != null ? member.getEmail().toLowerCase() : null;
                     checkStore.<Person>executeQuery(
-                                    "select id,fullName,email from Person where email=$1 and owner=true limit 1",
-                                    member.getEmail())
+                                    "select id,fullName,email from Person where lower(frontendAccount.username)=$1 and owner=true limit 1",
+                                    memberEmailLower)
                             .onFailure(error -> UiScheduler.scheduleDeferred(() ->
                                     showErrorDialog("Error", "Failed to send validation request: " + error.getMessage())))
                             .onSuccess(accountOwners -> {
@@ -1140,10 +1147,13 @@ public class MembersController {
                     return;
                 }
 
-                // Check if email exists as an account owner
+                // Check if the typed email matches the login username of an existing
+                // account owner. Match on frontendAccount.username (authoritative) rather
+                // than person.email, which can drift.
+                String emailLower = email != null ? email.toLowerCase() : null;
                 entityStore.<Person>executeQuery(
-                        "select id,fullName,email,owner from Person where email=$1 and owner=true and removed!=true limit 1",
-                        email)
+                        "select id,fullName,email,owner from Person where lower(frontendAccount.username)=$1 and owner=true and removed!=true limit 1",
+                        emailLower)
                     .onFailure(error -> {
                         Console.log("Error checking email: " + error);
                         UiScheduler.scheduleDeferred(() ->
@@ -1291,11 +1301,14 @@ public class MembersController {
                     }
                     Person inviter = persons.get(0);
 
-                    // Check if manager person exists (must be an account owner)
+                    // Check if manager person exists (must be an account owner).
+                    // Match on frontendAccount.username (authoritative login id), not
+                    // person.email, which can drift in the database.
                     EntityStore checkStore = EntityStore.create(dataSourceModel);
+                    String emailLower = email != null ? email.toLowerCase() : null;
                     checkStore.<Person>executeQuery(
-                            "select id,fullName,firstName,lastName,email,frontendAccount from Person where email=$1 and owner=true limit 1",
-                            email)
+                            "select id,fullName,firstName,lastName,email,frontendAccount from Person where lower(frontendAccount.username)=$1 and owner=true limit 1",
+                            emailLower)
                             .onFailure(error -> UiScheduler.scheduleDeferred(() ->
                                     view.showErrorDialog("Error", "Failed to check email: " + error.getMessage())))
                             .onSuccess(managers -> UiScheduler.scheduleDeferred(() -> {
