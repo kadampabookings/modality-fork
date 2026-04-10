@@ -61,6 +61,11 @@
     "publishDate": "Temporal.PlainDate",
     "title": "string"
   },
+  "BookingForm": {
+    "id": 162,
+    "code": "string",
+    "name": "string"
+  },
   "BracketPattern": {
     "id": 75,
     "brackets": {
@@ -793,6 +798,7 @@
   "EventType": {
     "id": 95,
     "background": "string",
+    "bookingForm": "BookingForm",
     "deprecated": "boolean",
     "label": "Label",
     "name": "string",
@@ -1506,6 +1512,9 @@
     "eventPool": "boolean",
     "eventType": "EventType",
     "graphic": "string",
+    "icon": {
+      "expr": "eventPool ? image('images/16/event/liveEvent.png') : null"
+    },
     "label": "Label",
     "name": "string",
     "ord": "integer",

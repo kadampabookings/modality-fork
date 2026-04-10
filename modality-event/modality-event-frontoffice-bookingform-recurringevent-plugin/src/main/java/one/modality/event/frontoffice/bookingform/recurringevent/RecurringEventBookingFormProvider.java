@@ -17,13 +17,8 @@ import one.modality.event.frontoffice.eventheader.LocalEventHeader;
 public class RecurringEventBookingFormProvider implements BookingFormProvider {
 
     @Override
-    public boolean acceptEvent(Event event) {
-        return false;//event != null && event.isRecurring();
-    }
-
-    @Override
-    public int getPriority() {
-        return MODALITY_PRIORITY;
+    public String getBookingFormCode() {
+        return "recurring-event"; // Currently unused — no EventType has this bookingForm code
     }
 
     @Override

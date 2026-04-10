@@ -35,14 +35,8 @@ import one.modality.event.frontoffice.activities.book.event.EventBookingFormSett
 public final class DefaultBookingFormProvider implements BookingFormProvider {
 
     @Override
-    public boolean acceptEvent(Event event) {
-        // Accept all events as fallback provider
-        return event != null;
-    }
-
-    @Override
-    public int getPriority() {
-        return MODALITY_PRIORITY; // 0 - lowest priority, fallback
+    public String getBookingFormCode() {
+        return null; // Default/fallback provider — matches when no other provider does
     }
 
     @Override

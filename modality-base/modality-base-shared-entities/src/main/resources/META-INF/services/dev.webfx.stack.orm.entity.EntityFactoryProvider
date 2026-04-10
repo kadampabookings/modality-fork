@@ -7,6 +7,7 @@ one.modality.base.shared.entities.impl.AuthorizationRuleImpl$ProvidedFactory
 one.modality.base.shared.entities.impl.AuthorizationSuperAdminImpl$ProvidedFactory
 one.modality.base.shared.entities.impl.BookablePeriodImpl$ProvidedFactory
 one.modality.base.shared.entities.impl.BookImpl$ProvidedFactory
+one.modality.base.shared.entities.impl.BookingFormImpl$ProvidedFactory
 one.modality.base.shared.entities.impl.BuildingImpl$ProvidedFactory
 one.modality.base.shared.entities.impl.BuildingZoneImpl$ProvidedFactory
 one.modality.base.shared.entities.impl.CartImpl$ProvidedFactory

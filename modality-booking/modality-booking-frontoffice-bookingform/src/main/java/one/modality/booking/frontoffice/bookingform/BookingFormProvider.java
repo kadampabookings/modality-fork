@@ -7,10 +7,9 @@ import one.modality.booking.client.workingbooking.HasWorkingBookingProperties;
 /**
  * Service provider interface for creating booking forms.
  *
- * <p>Implementations of this interface are discovered via ServiceLoader and used to create
- * appropriate booking forms for different event types and entry points.</p>
- *
- * <p>The provider with the highest priority that accepts the event/entry point combination
+ * <p>Implementations of this interface are discovered via ServiceLoader and matched
+ * to events via the BookingForm.code stored in the event's EventType. The provider
+ * whose {@link #getBookingFormCode()} matches the event's type.bookingForm.code
  * will be selected to create the booking form.</p>
  *
  * @author Bruno Salmon
@@ -19,24 +18,14 @@ import one.modality.booking.client.workingbooking.HasWorkingBookingProperties;
  */
 public interface BookingFormProvider {
 
-    int MODALITY_PRIORITY = 0;
-    int APP_PRIORITY = 10;
-
     /**
-     * Returns whether this provider can handle the given event for the specified entry point.
+     * Returns the booking form code that this provider handles.
+     * Must match a BookingForm.code value in the database.
+     * Return null for the default/fallback provider.
      *
-     * @param event the event to check
-     * @return true if this provider can handle the event/entry point combination
+     * @return the booking form code, or null for the default provider
      */
-    boolean acceptEvent(Event event);
-
-    /**
-     * Returns the priority of this provider. Higher priority providers are chosen
-     * when multiple providers accept the same event.
-     *
-     * @return the priority (higher = more preferred)
-     */
-    int getPriority();
+    String getBookingFormCode();
 
     /**
      * Creates a booking form for the given event and entry point.
