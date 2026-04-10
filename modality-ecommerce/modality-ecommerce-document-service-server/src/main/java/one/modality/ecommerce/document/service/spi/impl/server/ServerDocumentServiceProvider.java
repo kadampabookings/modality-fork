@@ -58,7 +58,51 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
 
     private Future<DocumentAggregate[]> loadLatestDocumentsFromDatabase(LoadDocumentArgument argument, boolean limitTo1) {
         Object docPk = argument.documentPrimaryKey();
-        EntityStoreQuery[] queries = {
+        boolean personProvided = argument.personPrimaryKey() != null;
+        boolean accountProvided = argument.accountPrimaryKey() != null;
+
+        if (!personProvided && !accountProvided)
+            return loadBatchForDocumentPk(docPk, argument);
+
+        // Use a WITH clause (CTE) to resolve the document PK(s) inline so all 4 queries
+        // stay in a single batch round-trip. The previous "IN (subquery WITH ORDER BY LIMIT)"
+        // approach compiled to a Hash Semi Join that PostgreSQL's planner could not push
+        // inside its parallel workers, causing a full 1.26M-row seq scan (~9 s). The CTE is
+        // joined per query via ", target_doc" in the FROM clause (same pattern as
+        // ServerPolicyServiceProvider), giving the planner a direct equality it can satisfy
+        // with the document_line(document_id) index.
+        // CTE alias "td" (short, no underscore — DQL grammar requires the primary entity in
+        // a comma-joined FROM to carry an alias, so we also inject alias "t" on each main
+        // entity via the replaceFirst below).
+        String cteDql = "with td as (select id from Document where !cancelled and (%field%=$1 and event=$2) order by id desc %limit%) "
+                .replace("%field%", personProvided ? "person" : "person.frontendAccount")
+                .replace("%limit%", limitTo1 ? "limit 1" : "");
+        Object[] queryArguments = {personProvided ? argument.personPrimaryKey() : argument.accountPrimaryKey(),
+                                   Numbers.toShortestNumber(argument.eventPrimaryKey())};
+        if (docPk != null) {
+            cteDql = cteDql.replace(") order by", " or id=$3) order by");
+            queryArguments = Arrays.add(Object[]::new, queryArguments, docPk);
+        }
+        // Rewrite each batch query: prepend the CTE, inject "t, td" into the FROM clause
+        // (DQL requires the primary entity to have an alias when additional entities follow),
+        // and replace "=$1" (the document PK equality) with "=td.id".
+        EntityStoreQuery[] queries = buildBatchQueries(null);
+        for (int i = 0; i < queries.length; i++) {
+            String select = cteDql + queries[i].getSelect()
+                    .replaceFirst("( from )(\\w+)", "$1$2 t, td")
+                    .replace("=$1", "=td.id");
+            queries[i] = new EntityStoreQuery(select, queryArguments);
+        }
+        return executeQueryBatchAndMap(queries);
+    }
+
+    /**
+     * Returns the 4 template EntityStoreQuery objects with {@code docPk} as the {@code $1}
+     * parameter. For the CTE path {@code docPk} is {@code null} (the queries are rewritten
+     * before execution); for the direct-PK path it holds the resolved document primary key.
+     */
+    private static EntityStoreQuery[] buildBatchQueries(Object docPk) {
+        return new EntityStoreQuery[]{
             // 0 - Loading document
             new EntityStoreQuery("select creationDate,event,person,ref,inPerson,person_lang,person_firstName,person_lastName,person_email,person_age,person_facilityFee,request,person_carer1Name, person_carer1Document, person_carer2Name, person_carer2Document, arrived, checkedOut from Document where id=$1 order by id", docPk),
             // 1 - Loading document lines
@@ -72,12 +116,19 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
             // 3 - Loading money transfers
             new EntityStoreQuery("select document,amount,pending,successful from MoneyTransfer where document=$1 order by id", docPk)
         };
+    }
+
+    /**
+     * Executes the 4-query batch that loads a document aggregate by its direct primary key.
+     * Called after the document PK has already been resolved (either passed in directly or
+     * from a person/event lookup).
+     */
+    private Future<DocumentAggregate[]> loadBatchForDocumentPk(Object docPk, LoadDocumentArgument argumentForAccessControl) {
+        EntityStoreQuery[] queries = buildBatchQueries(docPk);
         // Frontoffice access control: when loading by document PK only (no person/account
         // filter), restrict to documents accessible by the authenticated user's account.
         // Back-office callers bypass this check.
-        boolean personProvided = argument.personPrimaryKey() != null;
-        boolean accountProvided = argument.accountPrimaryKey() != null;
-        if (docPk != null && !personProvided && !accountProvided && !ThreadLocalStateHolder.isBackoffice()) {
+        if (argumentForAccessControl != null && docPk != null && !ThreadLocalStateHolder.isBackoffice()) {
             Object userId = ThreadLocalStateHolder.getUserId();
             Object userAccountId = getUserAccountId(userId);
             if (userAccountId == null) {
@@ -89,19 +140,11 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
             docQuery = docQuery.replace(" order by ", " and accountCanAccessPersonOrders($2, person) order by ");
             queries[0] = new EntityStoreQuery(docQuery, docPk, userAccountId);
         }
-        if (personProvided || accountProvided) {
-            String queryReplacement = " in (select Document where !cancelled and (%field%=$1 and event=$2) order by id desc %limit%)"
-                .replace("%field%", personProvided ? "person" : "person.frontendAccount")
-                .replace("%limit%", limitTo1 ? "limit 1" : "");
-            Object[] queryArguments = {personProvided ? argument.personPrimaryKey() : argument.accountPrimaryKey(), Numbers.toShortestNumber(argument.eventPrimaryKey())};
-            if (docPk != null) {
-                queryReplacement = queryReplacement.replace(") order by", " or id=$3) order by");
-                queryArguments = Arrays.add(Object[]::new, queryArguments, docPk);
-            }
-            for (int i = 0; i < queries.length; i++) {
-                queries[i] = new EntityStoreQuery(queries[i].getSelect().replace("=$1", queryReplacement), queryArguments);
-            }
-        }
+        return executeQueryBatchAndMap(queries);
+    }
+
+    /** Executes the 4-query batch and maps the results into {@link DocumentAggregate} instances. */
+    private static Future<DocumentAggregate[]> executeQueryBatchAndMap(EntityStoreQuery[] queries) {
         return EntityStore.create()
             .executeQueryBatch(queries)
             .map(entityLists -> {
