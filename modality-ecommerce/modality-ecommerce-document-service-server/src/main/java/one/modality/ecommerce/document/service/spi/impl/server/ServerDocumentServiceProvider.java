@@ -64,36 +64,57 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
         if (!personProvided && !accountProvided)
             return loadBatchForDocumentPk(docPk, argument);
 
-        // Use a WITH clause (CTE) to resolve the document PK(s) inline so all 4 queries
-        // stay in a single batch round-trip. The previous "IN (subquery WITH ORDER BY LIMIT)"
-        // approach compiled to a Hash Semi Join that PostgreSQL's planner could not push
-        // inside its parallel workers, causing a full 1.26M-row seq scan (~9 s). The CTE is
-        // joined per query via ", target_doc" in the FROM clause (same pattern as
-        // ServerPolicyServiceProvider), giving the planner a direct equality it can satisfy
-        // with the document_line(document_id) index.
-        // CTE alias "td" (short, no underscore — DQL grammar requires the primary entity in
-        // a comma-joined FROM to carry an alias, so we also inject alias "t" on each main
-        // entity via the replaceFirst below).
-        String cteDql = "with td as (select id from Document where !cancelled and (%field%=$1 and event=$2) order by id desc %limit%) "
+        // Two-round-trip approach:
+        // Round 1 — fast indexed query on Document alone to resolve the PK(s).
+        // Round 2 — loadBatchForDocumentPk() uses direct =$1 equality so the planner can
+        //           satisfy every join with an index (document_line(document_id), etc.).
+        //
+        // A single-CTE approach was tried ("with td as (...) select ... from DocumentLine t, td
+        // where t.document=$td.id") but PostgreSQL materialises the CTE as an opaque subquery.
+        // The planner cannot push the join condition through parallel workers, so it falls back
+        // to a full 1.26 M-row seq scan on document_line (~8 s).  Two round trips each hitting
+        // only an index are far faster in practice.
+        Object primaryKey = personProvided ? argument.personPrimaryKey() : argument.accountPrimaryKey();
+        Object eventPk = Numbers.toShortestNumber(argument.eventPrimaryKey());
+        // %extra% adds "or id=$3" inside the parentheses when a known docPk must be included
+        // alongside the latest doc for this person/event (e.g. the booking confirmation flow).
+        String findDocsDql = "select id from Document where !cancelled and (%field%=$1 and event=$2%extra%) order by id desc%limit%"
                 .replace("%field%", personProvided ? "person" : "person.frontendAccount")
-                .replace("%limit%", limitTo1 ? "limit 1" : "");
-        Object[] queryArguments = {personProvided ? argument.personPrimaryKey() : argument.accountPrimaryKey(),
-                                   Numbers.toShortestNumber(argument.eventPrimaryKey())};
-        if (docPk != null) {
-            cteDql = cteDql.replace(") order by", " or id=$3) order by");
-            queryArguments = Arrays.add(Object[]::new, queryArguments, docPk);
-        }
-        // Rewrite each batch query: prepend the CTE, inject "t, td" into the FROM clause
-        // (DQL requires the primary entity to have an alias when additional entities follow),
-        // and replace "=$1" (the document PK equality) with "=td.id".
-        EntityStoreQuery[] queries = buildBatchQueries(null);
-        for (int i = 0; i < queries.length; i++) {
-            String select = cteDql + queries[i].getSelect()
-                    .replaceFirst("( from )(\\w+)", "$1$2 t, td")
-                    .replace("=$1", "=td.id");
-            queries[i] = new EntityStoreQuery(select, queryArguments);
-        }
-        return executeQueryBatchAndMap(queries);
+                .replace("%extra%", docPk != null ? " or id=$3" : "")
+                .replace("%limit%", limitTo1 ? " limit 1" : "");
+        EntityStoreQuery findDocsQuery = docPk != null
+                ? new EntityStoreQuery(findDocsDql, primaryKey, eventPk, docPk)
+                : new EntityStoreQuery(findDocsDql, primaryKey, eventPk);
+
+        return EntityStore.create()
+                .executeQueryBatch(new EntityStoreQuery[]{findDocsQuery})
+                .compose(entityLists -> {
+                    @SuppressWarnings("unchecked")
+                    List<Document> docs = (List<Document>) entityLists[0];
+                    if (docs.isEmpty())
+                        return Future.succeededFuture(new DocumentAggregate[0]);
+                    // Pass null for argumentForAccessControl: round 1 already filtered by
+                    // person/account, so the per-PK account check in loadBatchForDocumentPk
+                    // is redundant and would incorrectly reject unauthenticated sessions that
+                    // are allowed to book (e.g. noAccountBooking events).
+                    if (docs.size() == 1)
+                        return loadBatchForDocumentPk(docs.get(0).getPrimaryKey(), null);
+                    // Multiple docs (loadDocuments path): load and flatten sequentially.
+                    // Sequential is fine here — the per-doc batch is fast and the doc count is small.
+                    Future<DocumentAggregate[]> combined = Future.succeededFuture(new DocumentAggregate[0]);
+                    for (Document doc : docs) {
+                        Object pk = doc.getPrimaryKey();
+                        combined = combined.compose(prev ->
+                            loadBatchForDocumentPk(pk, null).map(next -> {
+                                DocumentAggregate[] merged = new DocumentAggregate[prev.length + next.length];
+                                System.arraycopy(prev, 0, merged, 0, prev.length);
+                                System.arraycopy(next, 0, merged, prev.length, next.length);
+                                return merged;
+                            })
+                        );
+                    }
+                    return combined;
+                });
     }
 
     /**
