@@ -148,7 +148,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                     " order by item.family.ord,item.ord,id", eventPk)
                     // 9 - Loading rates (of this event or of the repeated event if set)
                     , DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
-                    "with e as (select coalesce(repeatedEvent,id) as finalEvent,coalesce(repeatedEvent?.type,type) as finalEventType,organization,startDate,endDate from Event where id=$1)" +
+                    "with e as (select coalesce(repeatedEvent,id) as finalEvent,coalesce(repeatedEvent?.type,type) as finalEventType,organization,startDate,endDate,venue from Event where id=$1)" +
                     " select site,item,price,perDay,perPerson,applicableToInPerson,applicableToOnline,facilityFee_price,facilityFee_discount,startDate,endDate,onDate,offDate,minDeposit" +
                     ",cutoffDate,minDeposit2" +
                     ",age1_max,age1_price,age1_discount,age2_max,age2_price,age2_discount" +
@@ -157,7 +157,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                     // Sites dedicated to this event
                     "r.site.event = e.finalEvent" +
                     // or global sites of the organization with scheduled items over the period of the event
-                    " or r.site.(event = null and organization=e.organization and exists(select ScheduledItem si where si.site=r.site and si.item=r.item and si.date>=e.startDate and si.date<=e.endDate))" +
+                    " or r.site.(event = null and (id=e.venue or organization=e.organization) and exists(select ScheduledItem si where si.site=r.site and si.item=r.item and si.date>=e.startDate and si.date<=e.endDate))" +
                     "    and (r.event = null or r.event = e.finalEvent)" +
                     "    and (r.eventType = null or r.eventType = e.finalEventType)" +
                     ")" +
