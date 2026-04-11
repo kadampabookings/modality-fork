@@ -50,6 +50,7 @@ public class DefaultGeneralProgramSummarySection extends DefaultSummarySection {
     private Label subtotalLabel;
     private Label subtotalValue;
     private HBox discountRow;
+    private Label discountLabel;
     private Label discountValue;
     private HBox alreadyPaidRow;
     private Label alreadyPaidValue;
@@ -61,9 +62,18 @@ public class DefaultGeneralProgramSummarySection extends DefaultSummarySection {
     private boolean isModification = false;
     private int initialBookingPrice = 0;
 
+    // When true, use GP-specific labels ("Full Term" / "Full-Term Discount").
+    // When false, use generic labels ("Standard price" / "Early bird discount").
+    private boolean useGPLabels;
+
     public DefaultGeneralProgramSummarySection(HasClassDateSelectionSection dateSelectionSection) {
+        this(dateSelectionSection, true);
+    }
+
+    public DefaultGeneralProgramSummarySection(HasClassDateSelectionSection dateSelectionSection, boolean useGPLabels) {
         super(); // This calls buildUI() -> buildPriceBreakdownSection() before
                  // dateSelectionSection is set
+        this.useGPLabels = useGPLabels;
         this.dateSelectionSection = dateSelectionSection;
 
         // Now that dateSelectionSection is set, update the content and add listener
@@ -143,7 +153,8 @@ public class DefaultGeneralProgramSummarySection extends DefaultSummarySection {
         discountRow.setVisible(false);
         discountRow.setManaged(false);
 
-        Label discountLabel = I18nControls.newLabel(BookingPageI18nKeys.ClassSelectionFullTermDiscount);
+        // Create without binding - the correct key is bound in updatePriceContent()
+        discountLabel = new Label();
         discountLabel.getStyleClass().addAll(bookingpage_text_primary, bookingpage_font_medium);
 
         Region discountSpacer = new Region();
@@ -242,15 +253,23 @@ public class DefaultGeneralProgramSummarySection extends DefaultSummarySection {
 
         // Update subtotal
         int numSelected = selectedItems.size();
-        if (allSelected) {
-            subtotalLabel.setText(I18n.getI18nText(BookingPageI18nKeys.ClassSelectionFullTermPrice, numSelected));
+        if (useGPLabels) {
+            if (allSelected) {
+                subtotalLabel.setText(I18n.getI18nText(BookingPageI18nKeys.ClassSelectionFullTermPrice, numSelected));
+            } else {
+                subtotalLabel.setText(I18n.getI18nText(BookingPageI18nKeys.ClassSelectionXSelected, numSelected));
+            }
         } else {
-            subtotalLabel.setText(I18n.getI18nText(BookingPageI18nKeys.ClassSelectionXSelected, numSelected));
+            subtotalLabel.setText(I18n.getI18nText(BookingPageI18nKeys.SummaryStandardPrice));
         }
         subtotalValue.setText(EventPriceFormatter.formatWithCurrency(subtotal, event));
 
         // Update discount
         if (discount > 0) {
+            // Bind discount label to the appropriate i18n key for this form type
+            I18nControls.bindI18nProperties(discountLabel, useGPLabels
+                    ? BookingPageI18nKeys.ClassSelectionFullTermDiscount
+                    : BookingPageI18nKeys.SummaryEarlyBirdDiscount);
             discountValue.setText("-" + EventPriceFormatter.formatWithCurrency(discount, event));
             discountRow.setVisible(true);
             discountRow.setManaged(true);

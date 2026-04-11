@@ -543,6 +543,8 @@ public interface BookingPageI18nKeys {
     Object SubmitRegistration = "SubmitRegistration";
     Object SubmittingYourRegistration = "SubmittingYourRegistration";
     Object Summary = "Summary";
+    Object SummaryEarlyBirdDiscount = "SummaryEarlyBirdDiscount";
+    Object SummaryStandardPrice = "SummaryStandardPrice";
     Object TakeYourTime = "TakeYourTime";
     Object TermsAndConditions = "TermsAndConditions";
     Object TermsLinkText = "TermsLinkText";
