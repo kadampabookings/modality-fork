@@ -77,7 +77,7 @@ public final class EventLifeCycle {
     public static String getKbs2BookingFormUrl(Event event) {
         String url = event.evaluate("bookingFormUrl");
         if (url != null)
-            url = url.replace("{host}", "kadampabookings.org");
+            url = url.replace("{host}", "legacy.kadampabookings.org");
         Object language = I18n.getLanguage();
         if (language instanceof String)
             url = url + "&lang=" + language;

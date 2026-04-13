@@ -26,7 +26,7 @@ public final class BookStarter {
 
     private static void startBookKbs2Event(Event event) {
         String bookingFormUrl = event.evaluate("bookingFormUrl");
-        bookingFormUrl = bookingFormUrl.replace("{host}", "kadampabookings.org");
+        bookingFormUrl = bookingFormUrl.replace("{host}", "legacy.kadampabookings.org");
         //BrowserUtil.chooseHowToOpenWebsite(bookingFormUrl); // Was ok for KMC courses, but not NKT Festivals
         BrowserUtil.openExternalBrowser(bookingFormUrl);
     }
