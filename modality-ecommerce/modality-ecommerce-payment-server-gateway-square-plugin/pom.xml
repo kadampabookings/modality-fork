@@ -36,9 +36,16 @@
         </dependency>
 
         <dependency>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>okhttp-jvm</artifactId>
+            <version>5.2.1</version>
+            <scope>runtime</scope>
+        </dependency>
+
+        <dependency>
             <groupId>com.squareup</groupId>
             <artifactId>square</artifactId>
-            <version>45.1.0.20251016</version>
+            <version>46.0.0.20260122</version>
             <exclusions>
                 <exclusion>
                     <groupId>com.sun.activation</groupId>
