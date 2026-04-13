@@ -1,5 +1,6 @@
 package one.modality.ecommerce.shared.pricecalculator;
 
+import dev.webfx.platform.console.Console;
 import one.modality.base.shared.entities.*;
 import one.modality.base.shared.entities.util.Attendances;
 import one.modality.ecommerce.document.service.DocumentAggregate;
@@ -31,6 +32,14 @@ final class Kbs2PriceAlgorithm {
             List<Attendance> lineAttendances = documentAggregate.getLineAttendances(line);
             lineAttendances.forEach(attendance -> {
                 LocalDate date = Attendances.getDate(attendance);
+                if (date == null) {
+                    ScheduledItem scheduledItem = attendance.getScheduledItem();
+                    if (scheduledItem == null)
+                        Console.warn("No scheduled item could be found for attendance " + attendance.getPrimaryKey() + " - Was it added with a wrong date in KBS2?");
+                    else
+                        Console.warn("No date could be found for attendance " + attendance.getPrimaryKey() + " or its associated scheduled item " + scheduledItem.getPrimaryKey());
+                    return;
+                }
                 AttendanceBill attendanceBill = new AttendanceBill(line, date);
                 siteItemBill.addAttendanceBill(attendanceBill);
             });
