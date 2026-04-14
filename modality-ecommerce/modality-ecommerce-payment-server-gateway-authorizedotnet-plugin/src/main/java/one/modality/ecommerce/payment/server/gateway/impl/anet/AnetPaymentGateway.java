@@ -3,6 +3,7 @@ package one.modality.ecommerce.payment.server.gateway.impl.anet;
 import dev.webfx.platform.ast.AST;
 import dev.webfx.platform.ast.ReadOnlyAstObject;
 import dev.webfx.platform.async.Future;
+import dev.webfx.platform.console.Console;
 import dev.webfx.platform.resource.Resource;
 import dev.webfx.platform.util.Strings;
 import dev.webfx.platform.util.uuid.Uuid;
@@ -193,15 +194,27 @@ public final class AnetPaymentGateway implements PaymentGateway {
             TransactionResponse transactionResponse = response.getTransactionResponse();
             String transId = transactionResponse.getTransId();
             String responseCode = transactionResponse.getResponseCode();
-            PaymentStatus paymentStatus = "1".equals(responseCode) ? PaymentStatus.COMPLETED :  PaymentStatus.FAILED;
+
+            // Response code "4" = held for review (fraud screening) → PENDING, not a failure
+            PaymentStatus paymentStatus;
             PaymentFailureReason failureReason = null;
-            if (paymentStatus == PaymentStatus.FAILED) {
-                failureReason = switch (responseCode) {
-                    case "2" -> PaymentFailureReason.DECLINED_BY_BANK;
-                    case "3" -> PaymentFailureReason.GATEWAY_ERROR;
-                    case "4" -> PaymentFailureReason.INSUFFICIENT_FUNDS; // Actually "held for review" but let's stick to simple mapping for now
-                    default -> PaymentFailureReason.UNKNOWN_REASON;
-                };
+            if ("1".equals(responseCode)) {
+                paymentStatus = PaymentStatus.COMPLETED;
+            } else if ("4".equals(responseCode)) {
+                paymentStatus = PaymentStatus.PENDING;
+            } else {
+                paymentStatus = PaymentStatus.FAILED;
+                // Check transactionResponse errors first — they carry the specific decline reason
+                // (e.g., error code 6 = invalid card, 8 = expired, 78 = invalid CVV, 27 = AVS mismatch)
+                failureReason = mapTransactionErrorsToFailureReason(transactionResponse);
+                if (failureReason == null) {
+                    // Fall back to the top-level response code
+                    failureReason = switch (responseCode) {
+                        case "2" -> PaymentFailureReason.DECLINED_BY_BANK;
+                        case "3" -> PaymentFailureReason.GATEWAY_ERROR;
+                        default  -> PaymentFailureReason.UNKNOWN_REASON;
+                    };
+                }
             }
             return Future.succeededFuture(new GatewayCompletePaymentResult(
                 null,
@@ -210,39 +223,79 @@ public final class AnetPaymentGateway implements PaymentGateway {
                 paymentStatus,
                 failureReason
             ));
-        } else { // API request failed (technical error or validation failure)
-            StringBuilder sb = new StringBuilder();
-
-            // First, check transactionResponse errors (more specific)
+        } else { // API request technically failed (validation error before the transaction was even attempted)
+            // Map error codes to structured failure reasons rather than throwing a raw error string.
+            // The raw details are collected for server-side logging only.
             TransactionResponse transactionResponse = response == null ? null : response.getTransactionResponse();
+            PaymentFailureReason failureReason = mapTransactionErrorsToFailureReason(transactionResponse);
+            if (failureReason == null)
+                failureReason = PaymentFailureReason.UNKNOWN_REASON;
+
+            // Build a detail string for server-side logging (never shown to users)
+            StringBuilder sb = new StringBuilder("Authorize payment completion failed:");
             TransactionResponse.Errors errors = transactionResponse == null ? null : transactionResponse.getErrors();
             if (errors != null) {
                 for (TransactionResponse.Errors.Error error : errors.getError()) {
                     sb.append(" errorCode = ").append(error.getErrorCode()).append(": ").append(error.getErrorText());
                 }
             }
-
-            // Then check high-level API messages (generic like E00027)
             ANetApiResponse errorResponse = controller.getErrorResponse();
-            MessagesType messages;
-            if (errorResponse != null) {
-                messages = errorResponse.getMessages();
-            } else if (response != null) {
-                messages = response.getMessages();
-            } else {
-                messages = null;
-            }
+            MessagesType messages = errorResponse != null ? errorResponse.getMessages()
+                                  : response  != null ? response.getMessages()
+                                  : null;
             if (messages != null) {
                 for (MessagesType.Message message : messages.getMessage()) {
                     sb.append(" code = ").append(message.getCode()).append(": ").append(message.getText());
                 }
-            } else if (sb.isEmpty()) {
-                sb.append("no response or no message");
+            } else if (sb.toString().endsWith(":")) {
+                sb.append(" no response or no message");
             }
-
-            return Future.failedFuture("Authorize payment completion failed:" + sb);
+            // Log the technical detail server-side; return a clean structured result to the client
+            Console.log(sb.toString());
+            return Future.succeededFuture(new GatewayCompletePaymentResult(
+                null, null, null, PaymentStatus.FAILED, failureReason
+            ));
         }
     }
 
+    /**
+     * Maps Authorize.net transaction error codes to a {@link PaymentFailureReason}.
+     * Returns {@code null} if the error list is absent or contains no recognisable code,
+     * allowing callers to fall back to a coarser mapping.
+     *
+     * <p>Error code reference:
+     * <a href="https://developer.authorize.net/api/reference/responseCodes.html">Authorize.net Response Codes</a>
+     */
+    private static PaymentFailureReason mapTransactionErrorsToFailureReason(TransactionResponse transactionResponse) {
+        TransactionResponse.Errors errors = transactionResponse == null ? null : transactionResponse.getErrors();
+        if (errors == null)
+            return null;
+        for (TransactionResponse.Errors.Error error : errors.getError()) {
+            PaymentFailureReason reason = mapAnetErrorCode(error.getErrorCode());
+            if (reason != null)
+                return reason; // return on first recognisable code
+        }
+        return null;
+    }
+
+    /**
+     * Maps a single Authorize.net error code string to a {@link PaymentFailureReason}.
+     * Returns {@code null} for unrecognised codes so the caller can apply a fallback.
+     */
+    private static PaymentFailureReason mapAnetErrorCode(String errorCode) {
+        if (errorCode == null)
+            return null;
+        return switch (errorCode) {
+            case "6"       -> PaymentFailureReason.INVALID_CARD_NUMBER;  // The credit card number is invalid
+            case "7"       -> PaymentFailureReason.INVALID_EXPIRY_DATE;  // The expiration date is invalid
+            case "8"       -> PaymentFailureReason.EXPIRED_CARD;         // The credit card has expired
+            case "17", "28" -> PaymentFailureReason.CARD_TYPE_NOT_ACCEPTED; // Merchant does not accept this card type
+            case "27", "45" -> PaymentFailureReason.DECLINED_BY_BANK;   // AVS / CVV+AVS mismatch — bank declined
+            case "65"      -> PaymentFailureReason.INSUFFICIENT_FUNDS;  // Exceeds per-transaction limit
+            case "78"      -> PaymentFailureReason.INVALID_CVV;              // The CVV is invalid
+            case "33"      -> PaymentFailureReason.BILLING_ADDRESS_REQUIRED; // Bill To Address/Zip is required
+            default        -> null;
+        };
+    }
 
 }
