@@ -300,11 +300,13 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
                 String oldPassword = passwordUpdate.oldPassword();
                 // Note: in case of resetting the password from a magic link, the old password is not typed by the user
                 // but loaded again from the database (by the MagicLink gateway) and is therefore already encrypted.
-                // Otherwise (when the password reset originates from the user profile), the old password is in clear
-                // (what the user directly typed).
+                // When the password change originates from the legacy JavaFX user profile, the old password is in clear
+                // (what the user directly typed). The React front-office profile page omits the old password entirely
+                // (oldPassword == null) because the active authenticated session is sufficient proof of identity —
+                // queryModalityUserPerson() above already resolved the user via the session, so we can skip the check.
                 FrontendAccount fa = userPerson.getFrontendAccount();
                 // isTypedPasswordCorrect() is handling both cases (oldPassword in clear or already encrypted)
-                if (!isTypedPasswordCorrect(oldPassword, fa.getPassword(), fa.getSalt()))
+                if (oldPassword != null && !isTypedPasswordCorrect(oldPassword, fa.getPassword(), fa.getSalt()))
                     return Future.failedFuture("[%s] The old password is not matching".formatted(ModalityAuthenticationI18nKeys.AuthnOldPasswordNotMatchingError));
                 // 2) We update the password in the database
                 String storedEncryptedPassword = encryptPassword(passwordUpdate.newPassword(), fa.getSalt());
