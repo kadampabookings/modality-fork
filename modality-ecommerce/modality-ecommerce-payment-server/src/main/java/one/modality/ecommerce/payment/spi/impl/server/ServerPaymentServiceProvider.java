@@ -87,7 +87,8 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
                                     argument.isOriginOnHttps(),
                                     returnUrl,
                                     cancelUrl,
-                                    parameters
+                                    parameters,
+                                    createGatewayCustomer(databasePayment)
                                 )).map(gatewayResult -> new InitiatePaymentResult( // Step 5: Returning an InitiatePaymentResult
                                     paymentGateway.getName(),
                                     totalTransfer.getPrimaryKey(),
@@ -107,8 +108,29 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
 
     private Future<Void> loadDatabasePaymentDocuments(DatabasePayment databasePayment) {
         return databasePayment.totalTransfer().getStore()
-            .executeQuery("select toMoneyAccount.(currency.code, gatewayCompany.name), document.(ref,person_name,event.(state,live)) from MoneyTransfer where id=$1 or parent=$1", databasePayment.totalTransfer())
+            .executeQuery("select toMoneyAccount.(currency.code, gatewayCompany.name), document.(ref,person_name,person_firstName,person_lastName,person_email,person_phone,person_street,person_postCode,person_cityName,person_admin1Name,person_country.(name,iso_alpha2),person_countryName,event.(state,live)) from MoneyTransfer where id=$1 or parent=$1", databasePayment.totalTransfer())
             .mapEmpty();
+    }
+
+    private static GatewayCustomer createGatewayCustomer(DatabasePayment databasePayment) {
+        Document document = databasePayment.totalTransfer().getDocument();
+        if (document == null && databasePayment.allocatedTransfers() != null && databasePayment.allocatedTransfers().length > 0)
+            document = databasePayment.allocatedTransfers()[0].getDocument();
+        if (document == null)
+            return null;
+        return new GatewayCustomer(
+            Strings.toString(Entities.getPrimaryKey(document.getPersonId())),
+            document.getFirstName(),
+            document.getLastName(),
+            document.getEmail(),
+            document.getPhone(),
+            document.getStreet(),
+            document.getCityName(),
+            document.getPostCode(),
+            document.getAdmin1Name(),
+            document.evaluate("coalesce(person_country.name,person_countryName)"),
+            document.evaluate("person_country.iso_alpha2")
+        );
     }
 
     private static Document getDatabasePaymentPrimaryDocument(DatabasePayment databasePayment) {
@@ -161,7 +183,8 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
                 billingDocument.getCityName(),
                 billingDocument.getPostCode(),
                 billingDocument.getAdmin1Name(),
-                billingDocument.evaluate("coalesce(person_country.name,person_countryName)")
+                billingDocument.evaluate("coalesce(person_country.name,person_countryName)"),
+                billingDocument.evaluate("person_country.iso_alpha2")
             );
             DatabasePayment databasePayment = new DatabasePayment(moneyTransfer, allocatedTransfers.toArray(MoneyTransfer[]::new));
             GatewayOrder order = createGatewayOrder(databasePayment);

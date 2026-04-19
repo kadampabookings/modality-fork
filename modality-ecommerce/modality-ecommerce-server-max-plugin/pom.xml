@@ -26,14 +26,14 @@
 
         <dependency>
             <groupId>one.modality</groupId>
-            <artifactId>modality-ecommerce-payment-server-gateway-square-plugin</artifactId>
+            <artifactId>modality-ecommerce-payment-server-gateway-paypal-plugin</artifactId>
             <version>1.0.0-SNAPSHOT</version>
             <scope>runtime</scope>
         </dependency>
 
         <dependency>
             <groupId>one.modality</groupId>
-            <artifactId>modality-ecommerce-payment-server-gateway-stripe-plugin</artifactId>
+            <artifactId>modality-ecommerce-payment-server-gateway-square-plugin</artifactId>
             <version>1.0.0-SNAPSHOT</version>
             <scope>runtime</scope>
         </dependency>

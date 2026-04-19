@@ -13,7 +13,7 @@
         <plugin-module>modality-ecommerce-server-min-plugin</plugin-module>
 
         <plugin-module>modality-ecommerce-payment-server-gateway-authorizedotnet-plugin</plugin-module>
-        <plugin-module>modality-ecommerce-payment-server-gateway-stripe-plugin</plugin-module>
+        <plugin-module>modality-ecommerce-payment-server-gateway-paypal-plugin</plugin-module>
         <plugin-module>modality-ecommerce-payment-server-gateway-square-plugin</plugin-module>
 
     </dependencies>

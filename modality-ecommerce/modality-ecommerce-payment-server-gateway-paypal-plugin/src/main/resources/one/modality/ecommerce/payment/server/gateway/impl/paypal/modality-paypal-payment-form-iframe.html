@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<body style="margin: 0; padding: 16px; display: flex; justify-content: center; align-items: flex-start; min-height: 150px; box-sizing: border-box;">
+
+<div id="paypal-button-container" style="width: 100%; max-width: 400px;"></div>
+
+<script type="text/javascript">
+
+    const PAYPAL_ORDER_ID = "${orderId}";
+    const PAYPAL_SDK_URL  = "${paypalSdkUrl}";
+
+    let modality_javaPaymentForm;
+    let modality_initialized = false;
+    let modality_initError;
+    let modality_initNotificationCalled;
+
+    // Called at the initialization of WebPaymentForm
+    function modality_injectJavaPaymentForm(jpf, htmlHeaderText, htmlPayButtonText) {
+        modality_javaPaymentForm = jpf;
+        const script = document.createElement("script");
+        script.src = PAYPAL_SDK_URL;
+        script.async = true;
+        script.onerror = () => modality_notifyGatewayInitFailure("Failed to load PayPal JS SDK");
+        script.onload = () => {
+            paypal.Buttons({
+                // Reuse the order already created server-side in initiatePayment()
+                createOrder: () => Promise.resolve(PAYPAL_ORDER_ID),
+                onApprove: (data) => {
+                    // Pass the approved order ID to the server for capture via completePayment()
+                    modality_notifyGatewayPaymentVerificationSuccess(
+                        JSON.stringify({ paypal_orderId: data.orderID })
+                    );
+                },
+                onError: (err) => {
+                    modality_notifyGatewayCardVerificationFailure(String(err));
+                },
+                onCancel: () => {
+                    modality_notifyGatewayBuyerVerificationFailure("Payment cancelled by user");
+                }
+            }).render("#paypal-button-container")
+              .then(() => modality_notifyGatewayInitSuccess())
+              .catch((err) => modality_notifyGatewayInitFailure(String(err)));
+        };
+        document.head.appendChild(script);
+    }
+
+    // PayPal handles the full payment flow through its own button — nothing extra to do here
+    function modality_submitGatewayPayment(firstName, lastName, email, phone, address, city, state, zipCode, countryCode, countryName) {
+    }
+
+    // Methods called by this JS script to call back the Java WebPaymentForm class
+
+    function modality_notifyGatewayInitSuccess() {
+        modality_initialized = true;
+        if (modality_javaPaymentForm) {
+            modality_javaPaymentForm.onGatewayInitSuccess();
+            modality_initNotificationCalled = true;
+        }
+    }
+
+    function modality_notifyGatewayInitFailure(error) {
+        modality_initialized = true;
+        modality_initError = error;
+        if (modality_javaPaymentForm) {
+            modality_javaPaymentForm.onGatewayInitFailure(error);
+            modality_initNotificationCalled = true;
+        }
+    }
+
+    function modality_notifyGatewayCardVerificationFailure(error) {
+        if (modality_javaPaymentForm)
+            modality_javaPaymentForm.onGatewayCardVerificationFailure(error);
+    }
+
+    function modality_notifyGatewayBuyerVerificationFailure(error) {
+        if (modality_javaPaymentForm)
+            modality_javaPaymentForm.onGatewayBuyerVerificationFailure(error);
+    }
+
+    function modality_notifyGatewayPaymentVerificationSuccess(paymentCompletionPayload) {
+        if (modality_javaPaymentForm)
+            modality_javaPaymentForm.onGatewayPaymentVerificationSuccess(paymentCompletionPayload);
+    }
+
+    function modality_pay() {
+        if (modality_javaPaymentForm)
+            modality_javaPaymentForm.pay();
+    }
+
+    // Notify the parent frame whenever the document height changes (e.g. when
+    // PayPal expands the card form) so the iframe can be resized to fit.
+    const resizeObserver = new ResizeObserver(() => {
+        window.parent.postMessage(
+            { type: 'modality-iframe-resize', height: document.documentElement.scrollHeight },
+            '*'
+        );
+    });
+    resizeObserver.observe(document.body);
+
+</script>
+</body>
+</html>

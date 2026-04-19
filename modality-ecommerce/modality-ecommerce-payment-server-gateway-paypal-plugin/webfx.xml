@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project>
+
+    <description>The SPI payment gateway implementation for making redirect payments with PayPal.</description>
+
+    <exported-packages>
+        <source-packages/>
+        <resource-packages/>
+    </exported-packages>
+
+    <dependencies>
+        <used-by-source-modules/>
+    </dependencies>
+
+    <providers>
+        <provider interface="one.modality.ecommerce.payment.server.gateway.PaymentGateway">one.modality.ecommerce.payment.server.gateway.impl.paypal.PayPalPaymentGateway</provider>
+        <provider interface="dev.webfx.platform.boot.spi.ApplicationJob">one.modality.ecommerce.payment.server.gateway.impl.paypal.PayPalRestApiJob</provider>
+    </providers>
+
+    <!-- No external library required: HTTP calls use the built-in java.net.http.HttpClient (JDK 11+). -->
+
+</project>

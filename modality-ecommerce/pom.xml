@@ -44,6 +44,7 @@
         <module>modality-ecommerce-payment-server</module>
         <module>modality-ecommerce-payment-server-gateway</module>
         <module>modality-ecommerce-payment-server-gateway-authorizedotnet-plugin</module>
+        <module>modality-ecommerce-payment-server-gateway-paypal-plugin</module>
         <module>modality-ecommerce-payment-server-gateway-square-plugin</module>
         <module>modality-ecommerce-payment-server-gateway-stripe-plugin</module>
         <module>modality-ecommerce-policy-service</module>

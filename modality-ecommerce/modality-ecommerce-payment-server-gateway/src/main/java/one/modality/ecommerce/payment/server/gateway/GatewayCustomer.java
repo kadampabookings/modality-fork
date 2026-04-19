@@ -13,5 +13,6 @@ public record GatewayCustomer(
     String city,
     String zipCode,
     String state,
-    String country
+    String country,
+    String countryCode  // ISO 3166-1 alpha-2 (e.g. "GB"), may be null
 ) {}

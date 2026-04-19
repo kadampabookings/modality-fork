@@ -18,7 +18,8 @@ public record GatewayInitiatePaymentArgument(
     boolean isOriginOnHttps,
     String returnUrl,
     String cancelUrl,
-    Map<String, String> accountParameters
+    Map<String, String> accountParameters,
+    GatewayCustomer customer  // may be null; used by gateways to pre-fill billing details
 ) {
 
     public String getAccountParameter(String key, String defaultValue) {
