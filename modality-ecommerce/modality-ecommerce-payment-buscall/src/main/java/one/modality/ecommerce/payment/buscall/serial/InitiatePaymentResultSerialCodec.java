@@ -23,6 +23,7 @@ public final class InitiatePaymentResultSerialCodec extends SerialCodecBase<Init
     private static final String HAS_HTML_PAY_BUTTON_KEY = "hasHtmlPayButton";
     private static final String GATEWAY_NAME_KEY = "gateway";
     private static final String SANDBOX_CARDS_KEY = "sandboxCards";
+    private static final String FALLBACK_REDIRECT_URL_KEY = "fallbackRedirectUrl";
 
     public InitiatePaymentResultSerialCodec() {
         super(InitiatePaymentResult.class, CODEC_ID);
@@ -39,7 +40,8 @@ public final class InitiatePaymentResultSerialCodec extends SerialCodecBase<Init
         encodeString( serial, HTML_CONTENT_KEY,        arg.htmlContent());
         encodeBoolean(serial, SEAMLESS_KEY,            arg.isSeamless());
         encodeBoolean(serial, HAS_HTML_PAY_BUTTON_KEY, arg.hasHtmlPayButton());
-        encodeArray(  serial, SANDBOX_CARDS_KEY,       arg.sandboxCards());
+        encodeArray(  serial, SANDBOX_CARDS_KEY,           arg.sandboxCards());
+        encodeString( serial, FALLBACK_REDIRECT_URL_KEY,   arg.fallbackRedirectUrl());
     }
 
     @Override
@@ -54,7 +56,8 @@ public final class InitiatePaymentResultSerialCodec extends SerialCodecBase<Init
             decodeString( serial, HTML_CONTENT_KEY),
             decodeBoolean(serial, SEAMLESS_KEY),
             decodeBoolean(serial, HAS_HTML_PAY_BUTTON_KEY),
-            decodeArray(  serial, SANDBOX_CARDS_KEY, SandboxCard.class)
+            decodeArray(  serial, SANDBOX_CARDS_KEY, SandboxCard.class),
+            decodeString( serial, FALLBACK_REDIRECT_URL_KEY)
         );
     }
 }

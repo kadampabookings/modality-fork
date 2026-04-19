@@ -16,11 +16,16 @@ import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
+import one.modality.base.shared.entities.GatewayParameter;
 import one.modality.base.shared.entities.MoneyTransfer;
 import one.modality.ecommerce.payment.PaymentService;
 import one.modality.ecommerce.payment.PaymentStatus;
 import one.modality.ecommerce.payment.UpdatePaymentStatusArgument;
+import one.modality.ecommerce.payment.server.gateway.GatewayCompletePaymentResult;
 import one.modality.ecommerce.payment.server.gateway.impl.util.RestApiOneTimeHtmlResponsesCache;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Registers Vert.x routes for PayPal webhook notifications and handles incoming events.
@@ -45,8 +50,10 @@ import one.modality.ecommerce.payment.server.gateway.impl.util.RestApiOneTimeHtm
 public final class PayPalRestApiJob implements ApplicationJob {
 
     static final String PAYPAL_LOAD_FORM_ENDPOINT        = "/payment/paypal/loadPaymentForm/:htmlCacheKey";
-    static final String PAYPAL_LIVE_WEBHOOK_ENDPOINT    = "/payment/paypal/live/webhook";
-    static final String PAYPAL_SANDBOX_WEBHOOK_ENDPOINT = "/payment/paypal/sandbox/webhook";
+    static final String PAYPAL_LIVE_RETURN_ENDPOINT      = "/payment/paypal/live/return/:moneyTransferId";
+    static final String PAYPAL_SANDBOX_RETURN_ENDPOINT   = "/payment/paypal/sandbox/return/:moneyTransferId";
+    static final String PAYPAL_LIVE_WEBHOOK_ENDPOINT     = "/payment/paypal/live/webhook";
+    static final String PAYPAL_SANDBOX_WEBHOOK_ENDPOINT  = "/payment/paypal/sandbox/webhook";
 
     private static final SystemUserId PAYPAL_HISTORY_USER_ID = new SystemUserId(PayPalPaymentGateway.GATEWAY_NAME);
 
@@ -70,6 +77,16 @@ public final class PayPalRestApiJob implements ApplicationJob {
                         .end("No value for cache key: " + cacheKey);
             });
 
+        /*======================================= RETURN URL REST API ================================================*/
+        // PayPal redirects the browser here after the user approves the payment (redirect flow).
+        // We capture the order server-side, update the DB, then redirect to the React resume page.
+
+        router.route(PAYPAL_LIVE_RETURN_ENDPOINT)
+            .handler(ctx -> handleReturnUrl(ctx, true));
+
+        router.route(PAYPAL_SANDBOX_RETURN_ENDPOINT)
+            .handler(ctx -> handleReturnUrl(ctx, false));
+
         /*======================================== WEBHOOK REST API ================================================*/
 
         router.route(PAYPAL_LIVE_WEBHOOK_ENDPOINT)
@@ -79,6 +96,107 @@ public final class PayPalRestApiJob implements ApplicationJob {
         router.route(PAYPAL_SANDBOX_WEBHOOK_ENDPOINT)
             .handler(BodyHandler.create())
             .handler(ctx -> handleWebhook(ctx, false));
+    }
+
+    /**
+     * Handles the PayPal redirect return: PayPal redirects the buyer's browser here (with
+     * {@code ?token=ORDER_ID}) after they approve the payment on the PayPal site.
+     *
+     * <ol>
+     *   <li>Capture the approved order via the PayPal Orders API.</li>
+     *   <li>Update the {@link MoneyTransfer} status in the database.</li>
+     *   <li>HTTP 302 redirect to the original React resume-payment URL (stored in
+     *       {@link PayPalPaymentGateway#REACT_RETURN_URL_CACHE} at initiation time).</li>
+     * </ol>
+     */
+    private static void handleReturnUrl(RoutingContext ctx, boolean live) {
+        String moneyTransferId = ctx.pathParam("moneyTransferId");
+        String paypalOrderId   = ctx.request().getParam("token");
+        String logPrefix       = "[PayPal] " + (live ? "Live" : "Sandbox") + " return handler - ";
+        Console.log(logPrefix + "moneyTransferId=" + moneyTransferId + ", paypalOrderId=" + paypalOrderId);
+
+        // Retrieve the React resume-payment URL that was cached when the payment was initiated.
+        String reactReturnUrl = PayPalPaymentGateway.REACT_RETURN_URL_CACHE.remove(moneyTransferId);
+        if (reactReturnUrl == null) {
+            // Rare edge case (e.g. server restart between initiation and return). Derive a best-effort
+            // URL from the request origin and hope the app uses browser-history routing (no hash).
+            String origin = extractOriginFromAbsoluteUri(ctx.request().absoluteURI());
+            reactReturnUrl = origin != null ? origin + "/resume-payment/" + moneyTransferId : "/";
+            Console.warn(logPrefix + "No cached React return URL for moneyTransferId=" + moneyTransferId
+                + " — falling back to derived URL: " + reactReturnUrl);
+        }
+
+        if (paypalOrderId == null) {
+            Console.warn(logPrefix + "No 'token' query param — redirecting to React URL without capture");
+            redirectTo(ctx, reactReturnUrl);
+            return;
+        }
+
+        Object paymentPk   = Numbers.toShortestNumber(moneyTransferId);
+        String apiBaseUrl  = live ? PayPalPaymentGateway.PAYPAL_LIVE_API_BASE_URL
+                                  : PayPalPaymentGateway.PAYPAL_SANDBOX_API_BASE_URL;
+        final String finalReactReturnUrl = reactReturnUrl;
+
+        loadPaymentGatewayParameters(paymentPk, live)
+            .compose(parameters -> {
+                String clientId     = parameters.get("client_id");
+                String clientSecret = parameters.get("client_secret");
+                if (clientId == null || clientSecret == null)
+                    return Future.failedFuture("Missing PayPal credentials in gateway parameters for payment " + paymentPk);
+                return PayPalPaymentGateway.getAccessToken(apiBaseUrl, clientId, clientSecret)
+                    .compose(accessToken -> PayPalPaymentGateway.captureOrder(apiBaseUrl, accessToken, paypalOrderId));
+            })
+            .compose((GatewayCompletePaymentResult captureResult) -> {
+                boolean pending    = captureResult.paymentStatus().isPending();
+                boolean successful = captureResult.paymentStatus().isSuccessful();
+                Console.log(logPrefix + "Capture result: status=" + captureResult.paymentStatus()
+                    + ", transactionRef=" + captureResult.gatewayTransactionRef());
+                return PAYPAL_HISTORY_USER_ID.callAndReturn(() ->
+                    PaymentService.updatePaymentStatus(
+                        UpdatePaymentStatusArgument.createCapturedStatusArgument(
+                            paymentPk,
+                            captureResult.gatewayResponse(),
+                            captureResult.gatewayTransactionRef(),
+                            captureResult.gatewayStatus(),
+                            pending,
+                            successful))
+                );
+            })
+            .onComplete(ar -> {
+                if (ar.failed())
+                    Console.error(logPrefix + "Error during return handler processing", ar.cause());
+                // Always redirect to React regardless of capture outcome — React will show the
+                // appropriate status by querying the database.
+                redirectTo(ctx, finalReactReturnUrl);
+            });
+    }
+
+    private static void redirectTo(RoutingContext ctx, String url) {
+        ctx.response().setStatusCode(302).putHeader(HttpHeaders.LOCATION, url).end();
+    }
+
+    private static String extractOriginFromAbsoluteUri(String absoluteUri) {
+        if (absoluteUri == null) return null;
+        int schemeEnd = absoluteUri.indexOf("://");
+        if (schemeEnd < 0) return null;
+        int pathStart = absoluteUri.indexOf('/', schemeEnd + 3);
+        return pathStart < 0 ? absoluteUri : absoluteUri.substring(0, pathStart);
+    }
+
+    /**
+     * Loads PayPal gateway credentials ({@code client_id}, {@code client_secret}) for the given
+     * payment. Mirrors {@code ServerPaymentServiceProvider.loadPaymentGatewayParameters()}.
+     */
+    private static Future<Map<String, String>> loadPaymentGatewayParameters(Object paymentId, boolean live) {
+        return EntityStore.create()
+            .<GatewayParameter>executeQuery(
+                "select name,value from GatewayParameter where (account=(select toMoneyAccount from MoneyTransfer where id=$1) or account==null and lower(company.name)=lower((select lower(toMoneyAccount.gatewayCompany.name) from MoneyTransfer where id=$1))) and ($2 ? live : test) order by account nulls first",
+                paymentId, live)
+            .map(gpList -> {
+                Map<String, String> parameters = new HashMap<>();
+                gpList.forEach(gp -> parameters.put(gp.getName(), gp.getValue()));
+                return parameters;
+            });
     }
 
     private static void handleWebhook(RoutingContext ctx, boolean live) {

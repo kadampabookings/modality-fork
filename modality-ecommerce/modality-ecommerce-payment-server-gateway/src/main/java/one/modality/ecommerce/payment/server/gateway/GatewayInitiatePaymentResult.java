@@ -21,7 +21,10 @@ public record GatewayInitiatePaymentResult(
     String htmlContent,
     boolean isSeamless,
     boolean hasHtmlPayButton,
-    SandboxCard[] sandboxCards
+    SandboxCard[] sandboxCards,
+    // Optional redirect URL to fall back to if the embedded form cannot load
+    // (e.g., blocked by a browser extension). Null means no fallback available.
+    String fallbackRedirectUrl
 ) {
 
     /*=========================================== Static factory methods =============================================*/
@@ -38,7 +41,7 @@ public record GatewayInitiatePaymentResult(
     }
 
     public static GatewayInitiatePaymentResult createRedirectInitiatePaymentResult(boolean live, String url) {
-        return new GatewayInitiatePaymentResult(live, url, PaymentFormType.REDIRECTED, null, false, false, null);
+        return new GatewayInitiatePaymentResult(live, url, PaymentFormType.REDIRECTED, null, false, false, null, null);
     }
 
     /*========================================= Embedded API (HTML content)  =========================================*/
@@ -53,7 +56,7 @@ public record GatewayInitiatePaymentResult(
     }
 
     public static GatewayInitiatePaymentResult createEmbeddedContentInitiatePaymentResult(boolean live, boolean seamless, String htmlContent, boolean hasHtmlPayButton, SandboxCard[] sandboxCards) {
-        return new GatewayInitiatePaymentResult(live, null, PaymentFormType.EMBEDDED, htmlContent, seamless, hasHtmlPayButton, sandboxCards);
+        return new GatewayInitiatePaymentResult(live, null, PaymentFormType.EMBEDDED, htmlContent, seamless, hasHtmlPayButton, sandboxCards, null);
     }
 
     /*========================================= Embedded API (URL)  =========================================*/
@@ -69,6 +72,11 @@ public record GatewayInitiatePaymentResult(
 
 
     public static GatewayInitiatePaymentResult createEmbeddedUrlInitiatePaymentResult(boolean live, boolean seamless, String url, boolean hasHtmlPayButton, SandboxCard[] sandboxCards) {
-        return new GatewayInitiatePaymentResult(live, url, PaymentFormType.EMBEDDED, null, seamless, hasHtmlPayButton, sandboxCards);
+        return new GatewayInitiatePaymentResult(live, url, PaymentFormType.EMBEDDED, null, seamless, hasHtmlPayButton, sandboxCards, null);
+    }
+
+    /** Returns a copy of this result with the given fallback redirect URL set. */
+    public GatewayInitiatePaymentResult withFallbackRedirectUrl(String fallbackRedirectUrl) {
+        return new GatewayInitiatePaymentResult(isLive, url, formType, htmlContent, isSeamless, hasHtmlPayButton, sandboxCards, fallbackRedirectUrl);
     }
 }

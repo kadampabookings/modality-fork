@@ -19,8 +19,12 @@ import one.modality.ecommerce.payment.server.gateway.impl.util.RestApiOneTimeHtm
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static one.modality.ecommerce.payment.server.gateway.impl.paypal.PayPalRestApiJob.PAYPAL_LOAD_FORM_ENDPOINT;
+import static one.modality.ecommerce.payment.server.gateway.impl.paypal.PayPalRestApiJob.PAYPAL_LIVE_RETURN_ENDPOINT;
+import static one.modality.ecommerce.payment.server.gateway.impl.paypal.PayPalRestApiJob.PAYPAL_SANDBOX_RETURN_ENDPOINT;
 
 /**
  * PayPal payment gateway implementation using the PayPal Orders API v2.
@@ -60,8 +64,8 @@ public final class PayPalPaymentGateway implements PaymentGateway {
 
     static final String GATEWAY_NAME = "PayPal";
 
-    private static final String PAYPAL_LIVE_API_BASE_URL    = "https://api-m.paypal.com";
-    private static final String PAYPAL_SANDBOX_API_BASE_URL = "https://api-m.sandbox.paypal.com";
+    static final String PAYPAL_LIVE_API_BASE_URL    = "https://api-m.paypal.com";
+    static final String PAYPAL_SANDBOX_API_BASE_URL = "https://api-m.sandbox.paypal.com";
 
     // Well-known approval redirect URLs (avoids parsing the links[] array in the order response)
     private static final String PAYPAL_LIVE_APPROVE_BASE_URL    = "https://www.paypal.com/checkoutnow?token=";
@@ -82,6 +86,13 @@ public final class PayPalPaymentGateway implements PaymentGateway {
         new SandboxCard("Visa - Card expired",        "4000 0000 0000 0069", null, "123", null),
         new SandboxCard("Visa - Invalid CVV",         "4000 0000 0000 0127", null, "123", null),
     };
+
+    /**
+     * Cache of React resume-payment URLs, keyed by moneyTransferId (String).
+     * Populated at payment initiation so the server-side PayPal return handler can redirect the
+     * browser back to the correct React page after capturing the order.
+     */
+    static final Map<String, String> REACT_RETURN_URL_CACHE = new ConcurrentHashMap<>();
 
     private static final String HTML_TEMPLATE = Resource.getText(
         Resource.toUrl("modality-paypal-payment-form-iframe.html", PayPalPaymentGateway.class));
@@ -106,8 +117,19 @@ public final class PayPalPaymentGateway implements PaymentGateway {
                     + ", formType=" + argument.preferredFormType()
                     + ", orderName=" + order.longName());
 
+            // Build the server-side return URL so we can capture the order before redirecting the
+            // browser back to React (the React return URL is cached by moneyTransferId for later).
+            String reactReturnUrl = argument.returnUrl();
+            String reactOrigin    = extractOrigin(reactReturnUrl);
+            String returnEndpoint = live ? PAYPAL_LIVE_RETURN_ENDPOINT : PAYPAL_SANDBOX_RETURN_ENDPOINT;
+            String serverReturnUrl = reactOrigin != null
+                ? reactOrigin + returnEndpoint.replace(":moneyTransferId", argument.paymentId())
+                : reactReturnUrl; // fallback: use React URL directly if origin cannot be extracted
+            if (reactReturnUrl != null)
+                REACT_RETURN_URL_CACHE.put(argument.paymentId(), reactReturnUrl);
+
             return getAccessToken(apiBaseUrl, clientId, clientSecret)
-                .compose(accessToken -> createPayPalOrderId(apiBaseUrl, accessToken, argument, order))
+                .compose(accessToken -> createPayPalOrderId(apiBaseUrl, accessToken, argument, order, serverReturnUrl))
                 .compose(orderId -> {
                     if (argument.preferredFormType() == PaymentFormType.EMBEDDED)
                         return Future.succeededFuture(buildEmbeddedResult(orderId, clientId, argument.currencyCode(), live));
@@ -131,9 +153,13 @@ public final class PayPalPaymentGateway implements PaymentGateway {
         String htmlCacheKey = Uuid.randomUuid();
         RestApiOneTimeHtmlResponsesCache.registerOneTimeHtmlResponse(htmlCacheKey, paymentFormContent);
         String url = PAYPAL_LOAD_FORM_ENDPOINT.replace(":htmlCacheKey", htmlCacheKey);
+        // The approval URL is the redirect fallback: if the embedded PayPal JS SDK is blocked
+        // (e.g. by an ad blocker or corporate firewall), the user can still pay via redirect.
+        String fallbackRedirectUrl = (live ? PAYPAL_LIVE_APPROVE_BASE_URL : PAYPAL_SANDBOX_APPROVE_BASE_URL) + orderId;
         if (DEBUG_LOG)
-            Console.log("[PayPal][DEBUG] initiatePayment - embedded form URL: " + url);
-        return GatewayInitiatePaymentResult.createEmbeddedUrlInitiatePaymentResult(live, false, url, true, live ? null : SANDBOX_CARDS);
+            Console.log("[PayPal][DEBUG] initiatePayment - embedded form URL: " + url + ", fallback: " + fallbackRedirectUrl);
+        return GatewayInitiatePaymentResult.createEmbeddedUrlInitiatePaymentResult(live, false, url, true, live ? null : SANDBOX_CARDS)
+            .withFallbackRedirectUrl(fallbackRedirectUrl);
     }
 
     static Future<String> getAccessToken(String apiBaseUrl, String clientId, String clientSecret) {
@@ -159,11 +185,14 @@ public final class PayPalPaymentGateway implements PaymentGateway {
 
     private static Future<String> createPayPalOrderId(String apiBaseUrl, String accessToken,
                                                        GatewayInitiatePaymentArgument argument,
-                                                       GatewayOrder order) {
+                                                       GatewayOrder order,
+                                                       String serverReturnUrl) {
         String amountValue  = formatCentAmount(order.amount());
         String currencyCode = argument.currencyCode();
-        String returnUrl    = argument.returnUrl();
-        String cancelUrl    = argument.cancelUrl() != null ? argument.cancelUrl() : returnUrl;
+        // Use the server-side return URL: the server handler will capture the order, then redirect
+        // the browser to the cached React resume-payment URL (see REACT_RETURN_URL_CACHE).
+        String returnUrl = serverReturnUrl;
+        String cancelUrl = argument.cancelUrl() != null ? argument.cancelUrl() : returnUrl;
 
         // We intentionally omit the items[] breakdown from the purchase unit to avoid rounding
         // discrepancies that would cause PayPal to reject the order when item totals don't match exactly.
@@ -384,5 +413,14 @@ public final class PayPalPaymentGateway implements PaymentGateway {
     private static String truncate(String value, int maxLength) {
         if (value == null || value.length() <= maxLength) return value;
         return value.substring(0, maxLength);
+    }
+
+    /** Extracts the scheme+host (+ port if present) from a URL, e.g. "https://example.com:8080". */
+    private static String extractOrigin(String url) {
+        if (url == null) return null;
+        int schemeEnd = url.indexOf("://");
+        if (schemeEnd < 0) return null;
+        int pathStart = url.indexOf('/', schemeEnd + 3);
+        return pathStart < 0 ? url : url.substring(0, pathStart);
     }
 }

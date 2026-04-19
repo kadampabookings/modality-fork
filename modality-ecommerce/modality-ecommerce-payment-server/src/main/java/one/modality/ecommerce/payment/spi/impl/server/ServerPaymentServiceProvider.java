@@ -99,7 +99,8 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
                                     gatewayResult.htmlContent(),
                                     gatewayResult.isSeamless(),
                                     gatewayResult.hasHtmlPayButton(),
-                                    gatewayResult.sandboxCards()
+                                    gatewayResult.sandboxCards(),
+                                    gatewayResult.fallbackRedirectUrl()
                                 ));
                             });
                     });

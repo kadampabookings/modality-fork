@@ -24,5 +24,8 @@ public record InitiatePaymentResult(
     String htmlContent,
     boolean isSeamless,
     boolean hasHtmlPayButton,
-    SandboxCard[] sandboxCards
+    SandboxCard[] sandboxCards,
+    // Optional redirect URL to fall back to if the embedded form cannot load.
+    // Null means the gateway does not support a redirect fallback.
+    String fallbackRedirectUrl
 ) { }
