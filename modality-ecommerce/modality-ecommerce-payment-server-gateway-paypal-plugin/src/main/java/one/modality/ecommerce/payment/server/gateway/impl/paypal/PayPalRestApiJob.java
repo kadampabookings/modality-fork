@@ -52,6 +52,8 @@ public final class PayPalRestApiJob implements ApplicationJob {
     static final String PAYPAL_LOAD_FORM_ENDPOINT        = "/payment/paypal/loadPaymentForm/:htmlCacheKey";
     static final String PAYPAL_LIVE_RETURN_ENDPOINT      = "/payment/paypal/live/return/:moneyTransferId";
     static final String PAYPAL_SANDBOX_RETURN_ENDPOINT   = "/payment/paypal/sandbox/return/:moneyTransferId";
+    static final String PAYPAL_LIVE_CANCEL_ENDPOINT      = "/payment/paypal/live/cancel/:moneyTransferId";
+    static final String PAYPAL_SANDBOX_CANCEL_ENDPOINT   = "/payment/paypal/sandbox/cancel/:moneyTransferId";
     static final String PAYPAL_LIVE_WEBHOOK_ENDPOINT     = "/payment/paypal/live/webhook";
     static final String PAYPAL_SANDBOX_WEBHOOK_ENDPOINT  = "/payment/paypal/sandbox/webhook";
 
@@ -86,6 +88,12 @@ public final class PayPalRestApiJob implements ApplicationJob {
 
         router.route(PAYPAL_SANDBOX_RETURN_ENDPOINT)
             .handler(ctx -> handleReturnUrl(ctx, false));
+
+        router.route(PAYPAL_LIVE_CANCEL_ENDPOINT)
+            .handler(ctx -> handleCancelUrl(ctx, true));
+
+        router.route(PAYPAL_SANDBOX_CANCEL_ENDPOINT)
+            .handler(ctx -> handleCancelUrl(ctx, false));
 
         /*======================================== WEBHOOK REST API ================================================*/
 
@@ -169,6 +177,42 @@ public final class PayPalRestApiJob implements ApplicationJob {
                 // appropriate status by querying the database.
                 redirectTo(ctx, finalReactReturnUrl);
             });
+    }
+
+    /**
+     * Handles the PayPal cancel redirect: PayPal redirects the buyer's browser here when they
+     * click "Cancel and return to store" on the PayPal hosted checkout page.
+     *
+     * <ol>
+     *   <li>Mark the {@link MoneyTransfer} as explicitly cancelled in the database.</li>
+     *   <li>HTTP 302 redirect to the original React cancel URL (stored in
+     *       {@link PayPalPaymentGateway#REACT_CANCEL_URL_CACHE} at initiation time).</li>
+     * </ol>
+     */
+    private static void handleCancelUrl(RoutingContext ctx, boolean live) {
+        String moneyTransferId = ctx.pathParam("moneyTransferId");
+        String logPrefix       = "[PayPal] " + (live ? "Live" : "Sandbox") + " cancel handler - ";
+        Console.log(logPrefix + "moneyTransferId=" + moneyTransferId);
+
+        String reactCancelUrl = PayPalPaymentGateway.REACT_CANCEL_URL_CACHE.remove(moneyTransferId);
+        if (reactCancelUrl == null) {
+            String origin = extractOriginFromAbsoluteUri(ctx.request().absoluteURI());
+            reactCancelUrl = origin != null ? origin + "/orders" : "/";
+            Console.warn(logPrefix + "No cached React cancel URL for moneyTransferId=" + moneyTransferId
+                + " — falling back to derived URL: " + reactCancelUrl);
+        }
+
+        Object paymentPk             = Numbers.toShortestNumber(moneyTransferId);
+        final String finalReactCancelUrl = reactCancelUrl;
+
+        PAYPAL_HISTORY_USER_ID.callAndReturn(() ->
+            PaymentService.updatePaymentStatus(
+                UpdatePaymentStatusArgument.createCancelStatusArgument(paymentPk, true))
+        ).onComplete(ar -> {
+            if (ar.failed())
+                Console.error(logPrefix + "Error cancelling payment " + paymentPk, ar.cause());
+            redirectTo(ctx, finalReactCancelUrl);
+        });
     }
 
     private static void redirectTo(RoutingContext ctx, String url) {

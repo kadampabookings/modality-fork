@@ -23,7 +23,9 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static one.modality.ecommerce.payment.server.gateway.impl.paypal.PayPalRestApiJob.PAYPAL_LOAD_FORM_ENDPOINT;
+import static one.modality.ecommerce.payment.server.gateway.impl.paypal.PayPalRestApiJob.PAYPAL_LIVE_CANCEL_ENDPOINT;
 import static one.modality.ecommerce.payment.server.gateway.impl.paypal.PayPalRestApiJob.PAYPAL_LIVE_RETURN_ENDPOINT;
+import static one.modality.ecommerce.payment.server.gateway.impl.paypal.PayPalRestApiJob.PAYPAL_SANDBOX_CANCEL_ENDPOINT;
 import static one.modality.ecommerce.payment.server.gateway.impl.paypal.PayPalRestApiJob.PAYPAL_SANDBOX_RETURN_ENDPOINT;
 
 /**
@@ -94,6 +96,13 @@ public final class PayPalPaymentGateway implements PaymentGateway {
      */
     static final Map<String, String> REACT_RETURN_URL_CACHE = new ConcurrentHashMap<>();
 
+    /**
+     * Cache of React cancel URLs, keyed by moneyTransferId (String).
+     * Populated at payment initiation so the server-side PayPal cancel handler can redirect the
+     * browser back to the correct React page after recording the cancellation.
+     */
+    static final Map<String, String> REACT_CANCEL_URL_CACHE = new ConcurrentHashMap<>();
+
     private static final String HTML_TEMPLATE = Resource.getText(
         Resource.toUrl("modality-paypal-payment-form-iframe.html", PayPalPaymentGateway.class));
 
@@ -117,19 +126,26 @@ public final class PayPalPaymentGateway implements PaymentGateway {
                     + ", formType=" + argument.preferredFormType()
                     + ", orderName=" + order.longName());
 
-            // Build the server-side return URL so we can capture the order before redirecting the
-            // browser back to React (the React return URL is cached by moneyTransferId for later).
+            // Build server-side return/cancel URLs so we can update the DB before redirecting
+            // back to React. The original React URLs are cached by moneyTransferId for later.
             String reactReturnUrl = argument.returnUrl();
+            String reactCancelUrl = argument.cancelUrl();
             String reactOrigin    = extractOrigin(reactReturnUrl);
-            String returnEndpoint = live ? PAYPAL_LIVE_RETURN_ENDPOINT : PAYPAL_SANDBOX_RETURN_ENDPOINT;
+            String returnEndpoint  = live ? PAYPAL_LIVE_RETURN_ENDPOINT  : PAYPAL_SANDBOX_RETURN_ENDPOINT;
+            String cancelEndpoint  = live ? PAYPAL_LIVE_CANCEL_ENDPOINT  : PAYPAL_SANDBOX_CANCEL_ENDPOINT;
             String serverReturnUrl = reactOrigin != null
                 ? reactOrigin + returnEndpoint.replace(":moneyTransferId", argument.paymentId())
                 : reactReturnUrl; // fallback: use React URL directly if origin cannot be extracted
+            String serverCancelUrl = reactOrigin != null
+                ? reactOrigin + cancelEndpoint.replace(":moneyTransferId", argument.paymentId())
+                : reactCancelUrl;
             if (reactReturnUrl != null)
                 REACT_RETURN_URL_CACHE.put(argument.paymentId(), reactReturnUrl);
+            if (reactCancelUrl != null)
+                REACT_CANCEL_URL_CACHE.put(argument.paymentId(), reactCancelUrl);
 
             return getAccessToken(apiBaseUrl, clientId, clientSecret)
-                .compose(accessToken -> createPayPalOrderId(apiBaseUrl, accessToken, argument, order, serverReturnUrl))
+                .compose(accessToken -> createPayPalOrderId(apiBaseUrl, accessToken, argument, order, serverReturnUrl, serverCancelUrl))
                 .compose(orderId -> {
                     if (argument.preferredFormType() == PaymentFormType.EMBEDDED)
                         return Future.succeededFuture(buildEmbeddedResult(orderId, clientId, argument.currencyCode(), live));
@@ -186,13 +202,14 @@ public final class PayPalPaymentGateway implements PaymentGateway {
     private static Future<String> createPayPalOrderId(String apiBaseUrl, String accessToken,
                                                        GatewayInitiatePaymentArgument argument,
                                                        GatewayOrder order,
-                                                       String serverReturnUrl) {
+                                                       String serverReturnUrl,
+                                                       String serverCancelUrl) {
         String amountValue  = formatCentAmount(order.amount());
         String currencyCode = argument.currencyCode();
-        // Use the server-side return URL: the server handler will capture the order, then redirect
-        // the browser to the cached React resume-payment URL (see REACT_RETURN_URL_CACHE).
+        // Use server-side URLs: the return handler captures the order then redirects to React;
+        // the cancel handler records the cancellation in the DB then redirects to React.
         String returnUrl = serverReturnUrl;
-        String cancelUrl = argument.cancelUrl() != null ? argument.cancelUrl() : returnUrl;
+        String cancelUrl = serverCancelUrl != null ? serverCancelUrl : returnUrl;
 
         // We intentionally omit the items[] breakdown from the purchase unit to avoid rounding
         // discrepancies that would cause PayPal to reject the order when item totals don't match exactly.
