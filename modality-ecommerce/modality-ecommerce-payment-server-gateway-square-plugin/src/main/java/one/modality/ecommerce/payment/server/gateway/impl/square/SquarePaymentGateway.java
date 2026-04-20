@@ -14,7 +14,6 @@ import dev.webfx.platform.console.Console;
 import dev.webfx.platform.resource.Resource;
 import dev.webfx.platform.util.uuid.Uuid;
 import one.modality.ecommerce.payment.PaymentFailureReason;
-import one.modality.ecommerce.payment.PaymentFormType;
 import one.modality.ecommerce.payment.PaymentStatus;
 import one.modality.ecommerce.payment.SandboxCard;
 import one.modality.ecommerce.payment.server.gateway.*;
@@ -80,9 +79,10 @@ public final class SquarePaymentGateway implements PaymentGateway {
             locationId = argument.getAccountParameter("order.order.location_id"); // KBS2 (to remove later)
         boolean live = argument.isLive();
 
+        /* The Square embedded payment doesn't work with the React version yet.
         if (argument.preferredFormType() == PaymentFormType.EMBEDDED) {
             return initiatePaymentEmbedded(argument, locationId, live);
-        }
+        }*/
 
         return initiatePaymentRedirect(argument, locationId, live);
     }
