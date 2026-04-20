@@ -54,7 +54,7 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
     @Override
     public Future<InitiatePaymentResult> initiatePayment(InitiatePaymentArgument argument) {
         // Step 1: Inserting the payment in the database with its payment allocations
-        return insertPayment(argument.amount(), argument.paymentAllocations()) // insertPayment
+        return insertPayment(argument.amount(), argument.paymentAllocations(), argument.preferredFormType()) // insertPayment
             .compose(databasePayment -> {
                 MoneyTransfer totalTransfer = databasePayment.totalTransfer();
                 // Step 2: Loading the primary document for the database payment
@@ -193,7 +193,7 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
             // The following code is executed just after the call to the Payment Gateway (which will take a bit of time to
             // finalize the payment and return the status). However, we add a record in the history to indicate that the
             // booker submitted valid cc details.
-            HistoryRecorder.preparePaymentHistoriesBeforeSubmit("Submitted card details to " + gatewayName + " for payment [amount]", databasePayment)
+            HistoryRecorder.preparePaymentHistoriesBeforeSubmit("Submitted card details to " + gatewayName + " for payment [amount] (embedded form)", databasePayment)
                     .onFailure(Console::error)
                     .onSuccess(x -> updateStore.submitChanges());
 
@@ -204,7 +204,7 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
                     // We finally update the payment status through the payment service (this will also create a history entry)
                     gatewayUserId.callAndReturn(() ->
                         updatePaymentStatus(UpdatePaymentStatusArgument.createExceptionStatusArgument(
-                            paymentPrimaryKey, null, e.getMessage()))
+                            paymentPrimaryKey, null, e.getMessage()))  // formType not added to exception arguments
                             .onFailure(ex -> Console.log("An error occurred while completing payment: " + ex.getMessage()))
                     );
                 })
@@ -224,7 +224,8 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
                             gatewayTransactionRef,
                             gatewayStatus,
                             pending,
-                            successful))
+                            successful,
+                            PaymentFormType.EMBEDDED))
                             .map(ignoredVoid -> new CompletePaymentResult(paymentStatus, failureReason))
                             .onFailure(Console::error)
                     );
@@ -331,7 +332,7 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
             });
     }
 
-    private Future<DatabasePayment> insertPayment(int amount, PaymentAllocation[] paymentAllocations) {
+    private Future<DatabasePayment> insertPayment(int amount, PaymentAllocation[] paymentAllocations, PaymentFormType preferredFormType) {
         UpdateStore updateStore = UpdateStore.create(DataSourceModelService.getDefaultDataSourceModel());
         MoneyTransfer moneyTransfer = updateStore.insertEntity(MoneyTransfer.class);
         moneyTransfer.setAmount(amount);
@@ -358,7 +359,7 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
             databasePayment = new DatabasePayment(moneyTransfer, paymentChildren);
         }
 
-        return HistoryRecorder.preparePaymentHistoriesBeforeSubmit("Initiated payment [amount]", databasePayment)
+        return HistoryRecorder.preparePaymentHistoriesBeforeSubmit("Initiated payment [amount]" + formTypeLabel(preferredFormType), databasePayment)
             .compose(histories ->
                 updateStore.submitChanges()
                     // On success, we load the necessary data associated with this moneyTransfer for the payment gateway
@@ -417,12 +418,13 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
             if (errorMessage != null)
                 moneyTransfer.setComment(errorMessage);
 
+            String ftLabel = formTypeLabel(argument.formType());
             String historyComment =
                 errorMessage != null ? "Raised an error while processing payment [amount]" :
-                    !pending && successful ? (wasPending ? "Processed payment [amount] successfully" : "Reported payment [amount] is successful") :
-                        !pending && !successful ? (isGatewayUser ? "Reported payment [amount] is failed" : isExplicitUserCancellation ? "Cancelled payment [amount]" : "Abandoned payment [amount]" /* typically closed window */) :
-                            pending && successful ? "Reported payment [amount] is authorised (not yet completed)" :
-                                /*pending && !successful?*/ "Reported payment [amount] is pending";
+                    !pending && successful ? (wasPending ? "Processed payment [amount] successfully" : "Reported payment [amount] is successful") + ftLabel :
+                        !pending && !successful ? (isGatewayUser ? "Reported payment [amount] is failed" : isExplicitUserCancellation ? "Cancelled payment [amount]" : "Abandoned payment [amount]" /* typically closed window */) + ftLabel :
+                            pending && successful ? "Reported payment [amount] is authorised (not yet completed)" + ftLabel :
+                                /*pending && !successful?*/ "Reported payment [amount] is pending" + ftLabel;
 
             return loadDatabasePayment(moneyTransfer)
                 .compose(databasePayment ->
@@ -440,6 +442,12 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
                         )
                 );
         });
+    }
+
+    /** Returns " (embedded form)" or " (redirected page)" for use in history comments, or "" if formType is null. */
+    private static String formTypeLabel(PaymentFormType formType) {
+        if (formType == null) return "";
+        return formType == PaymentFormType.EMBEDDED ? " (embedded form)" : " (redirected page)";
     }
 
     private Future<DatabasePayment> loadDatabasePayment(MoneyTransfer moneyTransfer) {

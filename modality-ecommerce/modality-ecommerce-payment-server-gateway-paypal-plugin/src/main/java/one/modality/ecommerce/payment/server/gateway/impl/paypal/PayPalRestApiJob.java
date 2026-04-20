@@ -18,6 +18,7 @@ import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
 import one.modality.base.shared.entities.GatewayParameter;
 import one.modality.base.shared.entities.MoneyTransfer;
+import one.modality.ecommerce.payment.PaymentFormType;
 import one.modality.ecommerce.payment.PaymentService;
 import one.modality.ecommerce.payment.PaymentStatus;
 import one.modality.ecommerce.payment.UpdatePaymentStatusArgument;
@@ -167,7 +168,8 @@ public final class PayPalRestApiJob implements ApplicationJob {
                             captureResult.gatewayTransactionRef(),
                             captureResult.gatewayStatus(),
                             pending,
-                            successful))
+                            successful,
+                            PaymentFormType.REDIRECTED))
                 );
             })
             .onComplete(ar -> {
@@ -365,7 +367,7 @@ public final class PayPalRestApiJob implements ApplicationJob {
         return PAYPAL_HISTORY_USER_ID.callAndReturn(() ->
             PaymentService.updatePaymentStatus(
                 UpdatePaymentStatusArgument.createCapturedStatusArgument(
-                    paymentPk, textPayload, transactionRef, gatewayStatus, pending, successful))
+                    paymentPk, textPayload, transactionRef, gatewayStatus, pending, successful, PaymentFormType.REDIRECTED))
                 .onSuccess(v -> Console.log(logPrefix + "✅  Updated status=" + gatewayStatus + " for payment " + paymentPk))
                 .onFailure(e -> Console.error(logPrefix + "⛔️  Failed to update status=" + gatewayStatus + " for payment " + paymentPk, e))
         );

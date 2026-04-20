@@ -24,6 +24,7 @@ import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
 import one.modality.base.shared.entities.GatewayParameter;
 import one.modality.base.shared.entities.MoneyTransfer;
+import one.modality.ecommerce.payment.PaymentFormType;
 import one.modality.ecommerce.payment.PaymentService;
 import one.modality.ecommerce.payment.PaymentStatus;
 import one.modality.ecommerce.payment.UpdatePaymentStatusArgument;
@@ -210,7 +211,7 @@ public final class SquareRestApiJob implements ApplicationJob {
         } else {
             // We finally update the payment status through the payment service (this will also create a history entry)
             return SQUARE_HISTORY_USER_ID.callAndReturn(() ->
-                PaymentService.updatePaymentStatus(UpdatePaymentStatusArgument.createCapturedStatusArgument(paymentPk, textPayload, id, status, pending, successful))
+                PaymentService.updatePaymentStatus(UpdatePaymentStatusArgument.createCapturedStatusArgument(paymentPk, textPayload, id, status, pending, successful, PaymentFormType.REDIRECTED))
                     .onFailure(e -> Console.error(logPrefix + "⛔️️  Failed to update status " + status + " for transactionRef = " + id, e))
                     .onSuccess(v -> Console.log(logPrefix + "✅  Successfully updated status " + status + " for transactionRef = " + id))
             );
