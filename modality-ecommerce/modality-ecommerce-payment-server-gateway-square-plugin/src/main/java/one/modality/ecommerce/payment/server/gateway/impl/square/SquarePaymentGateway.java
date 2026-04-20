@@ -14,6 +14,7 @@ import dev.webfx.platform.console.Console;
 import dev.webfx.platform.resource.Resource;
 import dev.webfx.platform.util.uuid.Uuid;
 import one.modality.ecommerce.payment.PaymentFailureReason;
+import one.modality.ecommerce.payment.PaymentFormType;
 import one.modality.ecommerce.payment.PaymentStatus;
 import one.modality.ecommerce.payment.SandboxCard;
 import one.modality.ecommerce.payment.server.gateway.*;
@@ -79,10 +80,9 @@ public final class SquarePaymentGateway implements PaymentGateway {
             locationId = argument.getAccountParameter("order.order.location_id"); // KBS2 (to remove later)
         boolean live = argument.isLive();
 
-        /* The Square embedded payment doesn't work with the React version yet.
         if (argument.preferredFormType() == PaymentFormType.EMBEDDED) {
             return initiatePaymentEmbedded(argument, locationId, live);
-        }*/
+        }
 
         return initiatePaymentRedirect(argument, locationId, live);
     }
@@ -105,24 +105,40 @@ public final class SquarePaymentGateway implements PaymentGateway {
             Console.log("[Square][DEBUG] initiatePayment - content = " + paymentFormContent);
         }
         SandboxCard[] sandboxCards = live ? null : SANDBOX_CARDS;
+
+        GatewayInitiatePaymentResult embeddedResult;
         if (seamless) {
-            return Future.succeededFuture(GatewayInitiatePaymentResult.createEmbeddedContentInitiatePaymentResult(live, true, paymentFormContent, false, sandboxCards));
+            embeddedResult = GatewayInitiatePaymentResult.createEmbeddedContentInitiatePaymentResult(live, true, paymentFormContent, false, sandboxCards);
         } else { // In other cases, we embed the page in a WebView/iFrame that can be loaded through https (assuming this server is on https)
             String htmlCacheKey = Uuid.randomUuid();
             RestApiOneTimeHtmlResponsesCache.registerOneTimeHtmlResponse(htmlCacheKey, paymentFormContent);
             String url = SQUARE_PAYMENT_FORM_ENDPOINT.replace(":htmlCacheKey", htmlCacheKey);
-            return Future.succeededFuture(GatewayInitiatePaymentResult.createEmbeddedUrlInitiatePaymentResult(live, false, url, false, sandboxCards));
+            embeddedResult = GatewayInitiatePaymentResult.createEmbeddedUrlInitiatePaymentResult(live, false, url, false, sandboxCards);
         }
+
+        // Also create a Square-hosted checkout URL to use as a fallback if the embedded
+        // form fails to load (e.g. Square CDN blocked by a browser extension).
+        // If checkout URL creation fails we still return the embedded result without a fallback.
+        return createSquareCheckoutUrl(argument, locationId, live)
+            .map(embeddedResult::withFallbackRedirectUrl)
+            .recover(err -> {
+                Console.error("[Square] Failed to create fallback redirect URL for embedded form: " + err.getMessage());
+                return Future.succeededFuture(embeddedResult);
+            });
     }
 
     private Future<GatewayInitiatePaymentResult> initiatePaymentRedirect(GatewayInitiatePaymentArgument argument, String locationId, boolean live) {
-        GatewayOrder modalityOrder = argument.order();
         if (DEBUG_LOG) {
-            Console.log( + modalityOrder.amount() + ", currencyCode = " + argument.currencyCode() + ", live = " + live + ", locationId = " + locationId + ", orderName = " + modalityOrder.longName());
+            GatewayOrder modalityOrder = argument.order();
+            Console.log("[Square][DEBUG] initiatePaymentRedirect - amount = " + modalityOrder.amount() + ", currencyCode = " + argument.currencyCode() + ", live = " + live + ", locationId = " + locationId + ", orderName = " + modalityOrder.longName());
         }
+        return createSquareCheckoutUrl(argument, locationId, live)
+            .map(checkoutUrl -> GatewayInitiatePaymentResult.createRedirectInitiatePaymentResult(live, checkoutUrl));
+    }
 
-        // Creating the Square client
-        String accessToken = argument.getAccountParameter("access_token"); // Getting the access token from the account parameters
+    /** Creates a Square-hosted checkout URL for the given payment argument. */
+    private Future<String> createSquareCheckoutUrl(GatewayInitiatePaymentArgument argument, String locationId, boolean live) {
+        String accessToken = argument.getAccountParameter("access_token");
         AsyncSquareClient client = AsyncSquareClient.builder()
             .environment(live ? Environment.PRODUCTION : Environment.SANDBOX)
             .token(accessToken)
@@ -130,7 +146,7 @@ public final class SquarePaymentGateway implements PaymentGateway {
 
         // Build the order with line items
         List<OrderLineItem> lineItems = new ArrayList<>();
-        for (GatewayItem modalityItem : modalityOrder.items()) {
+        for (GatewayItem modalityItem : argument.order().items()) {
             lineItems.add(OrderLineItem.builder()
                 .quantity(String.valueOf(modalityItem.quantity()))
                 .uid(modalityItem.id())
@@ -149,7 +165,6 @@ public final class SquarePaymentGateway implements PaymentGateway {
             .lineItems(lineItems)
             .build();
 
-        // Creating a Payment Link using Square's Checkout API
         CreatePaymentLinkRequest request = CreatePaymentLinkRequest.builder()
             .idempotencyKey(Uuid.randomUuid())
             .order(order)
@@ -159,8 +174,7 @@ public final class SquarePaymentGateway implements PaymentGateway {
                 .build())
             .build();
 
-        // Finally, calling the Square checkout API to create the payment link
-        Promise<GatewayInitiatePaymentResult> promise = Promise.promise();
+        Promise<String> promise = Promise.promise();
         client.checkout()
             .paymentLinks()
             .create(request)
@@ -170,18 +184,18 @@ public final class SquarePaymentGateway implements PaymentGateway {
                     String checkoutUrl = paymentLink.getUrl().orElse(null);
                     if (checkoutUrl != null) {
                         if (DEBUG_LOG) {
-                            Console.log("[Square][DEBUG] initiatePaymentRedirect - checkout URL created: " + checkoutUrl);
+                            Console.log("[Square][DEBUG] createSquareCheckoutUrl - checkout URL created: " + checkoutUrl);
                         }
-                        promise.complete(GatewayInitiatePaymentResult.createRedirectInitiatePaymentResult(live, checkoutUrl));
+                        promise.complete(checkoutUrl);
                     } else {
-                        promise.fail("[Square] initiatePaymentRedirect - Payment link URL is null in response");
+                        promise.fail("[Square] createSquareCheckoutUrl - Payment link URL is null in response");
                     }
                 } else {
-                    promise.fail("[Square] initiatePaymentRedirect - Payment link is null in response");
+                    promise.fail("[Square] createSquareCheckoutUrl - Payment link is null in response");
                 }
             })
             .exceptionally(ex -> {
-                promise.fail(generateErrorMessage(ex, "initiatePaymentRedirect"));
+                promise.fail(generateErrorMessage(ex, "createSquareCheckoutUrl"));
                 return null;
             });
 
@@ -233,32 +247,76 @@ public final class SquarePaymentGateway implements PaymentGateway {
                 }
             })
             .exceptionally(ex -> {
-                promise.fail(generateErrorMessage(ex, "completePayment"));
-                return null;  // Required for exceptionally
+                Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
+                if (cause instanceof SquareApiException ae) {
+                    // Card declines and validation errors arrive as SquareApiException (4xx HTTP response).
+                    // Convert to a structured failure result so the UI can show a specific reason
+                    // rather than a generic server error.
+                    PaymentFailureReason failureReason = mapSquareErrorCodesToFailureReason(ae);
+                    String gatewayResponse = generateErrorMessage(ex, "completePayment");
+                    promise.complete(new GatewayCompletePaymentResult(gatewayResponse, null, "FAILED", PaymentStatus.FAILED, failureReason));
+                } else {
+                    // Non-API errors (network, timeout, etc.) are genuine server failures
+                    promise.fail(generateErrorMessage(ex, "completePayment"));
+                }
+                return null;
             });
         return promise.future();
     }
 
     private static GatewayCompletePaymentResult generateResultFromSquarePayment(Payment payment, CreatePaymentResponse response) {
-        // In v45, we serialize the response object to JSON for storage
-        String gatewayResponse = response.toString(); // This will be stored in the database
+        String gatewayResponse = response.toString();
         String gatewayTransactionRef = payment.getId().orElse(null);
         String gatewayStatus = payment.getStatus().orElse("UNKNOWN");
         SquarePaymentStatus squarePaymentStatus = SquarePaymentStatus.valueOf(gatewayStatus.toUpperCase());
         PaymentStatus paymentStatus = squarePaymentStatus.getGenericPaymentStatus();
-        PaymentFailureReason failureReason = null;
-        if (paymentStatus == PaymentStatus.FAILED) {
-            failureReason = PaymentFailureReason.UNKNOWN_REASON; // Should be refined by looking at response errors
-        }
+        PaymentFailureReason failureReason = paymentStatus == PaymentStatus.FAILED ? PaymentFailureReason.UNKNOWN_REASON : null;
         return new GatewayCompletePaymentResult(gatewayResponse, gatewayTransactionRef, gatewayStatus, paymentStatus, failureReason);
     }
 
-    private static String generateErrorMessage(Throwable ex, String method) {
-        // Extract the cause if wrapped
-        Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
-        StringBuilder message = new StringBuilder("[Square] ").append(method).append(" - Square raised exception ").append(cause.getMessage());
+    /**
+     * Inspects all errors in a SquareApiException and returns the most specific
+     * PaymentFailureReason, falling back to UNKNOWN_REASON.
+     */
+    private static PaymentFailureReason mapSquareErrorCodesToFailureReason(SquareApiException ae) {
+        for (Error error : ae.errors()) {
+            PaymentFailureReason mapped = mapSquareErrorCode(error.getCode().toString());
+            if (mapped != PaymentFailureReason.UNKNOWN_REASON)
+                return mapped;
+        }
+        return PaymentFailureReason.UNKNOWN_REASON;
+    }
 
-        // Enhanced logging for better debugging
+    /** Maps a single Square error code string to a PaymentFailureReason. */
+    private static PaymentFailureReason mapSquareErrorCode(String code) {
+        return switch (code) {
+            case "INVALID_CARD", "INVALID_CARD_DATA", "PAN_FAILURE"
+                -> PaymentFailureReason.INVALID_CARD_NUMBER;
+            case "CARD_EXPIRED", "EXPIRATION_FAILURE"
+                -> PaymentFailureReason.EXPIRED_CARD;
+            case "INVALID_EXPIRATION", "INVALID_EXPIRATION_DATE", "INVALID_EXPIRATION_YEAR", "BAD_EXPIRATION"
+                -> PaymentFailureReason.INVALID_EXPIRY_DATE;
+            case "CVV_FAILURE", "VERIFY_CVV_FAILURE"
+                -> PaymentFailureReason.INVALID_CVV;
+            case "ADDRESS_VERIFICATION_FAILURE", "VERIFY_AVS_FAILURE"
+                -> PaymentFailureReason.BILLING_ADDRESS_REQUIRED;
+            case "INSUFFICIENT_FUNDS", "CARDHOLDER_INSUFFICIENT_PERMISSIONS"
+                -> PaymentFailureReason.INSUFFICIENT_FUNDS;
+            case "CARD_NOT_SUPPORTED", "UNSUPPORTED_CARD_BRAND"
+                -> PaymentFailureReason.CARD_TYPE_NOT_ACCEPTED;
+            case "CARD_DECLINED", "CARD_DECLINED_CALL_ISSUER", "CARD_DECLINED_VERIFICATION_REQUIRED",
+                 "GENERIC_DECLINE", "VOICE_FAILURE"
+                -> PaymentFailureReason.DECLINED_BY_BANK;
+            case "CARD_PROCESSING_NOT_ENABLED"
+                -> PaymentFailureReason.GATEWAY_ERROR;
+            default
+                -> PaymentFailureReason.UNKNOWN_REASON;
+        };
+    }
+
+    private static String generateErrorMessage(Throwable ex, String method) {
+        Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
+        StringBuilder message = new StringBuilder("[Square] ").append(method).append(" - ").append(cause.getMessage());
         if (cause instanceof SquareApiException ae) {
             message.append(" | Errors: ");
             for (Error error : ae.errors()) {
