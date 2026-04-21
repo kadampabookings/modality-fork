@@ -157,7 +157,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                     // Sites dedicated to this event
                     "r.site.event = e.finalEvent" +
                     // or global sites of the organization with scheduled items over the period of the event
-                    " or r.site.(event = null and (id=e.venue or organization=e.organization) and exists(select ScheduledItem si where si.site=r.site and si.item=r.item and si.date>=e.startDate and si.date<=e.endDate))" +
+                    " or r.site.(event = null and (id=e.venue or organization=e.organization) and (!r.item.temporal and !r.perDay or exists(select ScheduledItem si where si.site=r.site and si.item=r.item and si.date>=e.startDate and si.date<=e.endDate)))" +
                     "    and (r.event = null or r.event = e.finalEvent)" +
                     "    and (r.eventType = null or r.eventType = e.finalEventType)" +
                     ")" +
