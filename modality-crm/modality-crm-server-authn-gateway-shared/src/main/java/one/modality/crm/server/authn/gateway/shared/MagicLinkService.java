@@ -96,7 +96,7 @@ public final class MagicLinkService {
         }
         String verificationCode = generateVerificationCode();
         String token = Uuid.randomUuid(); // used for the magic link
-        String link = clientOrigin + ActivityHashUtil.withHashPrefix(activityPath.replace(":token", token).replace(":lang", lang));
+        String link = clientOrigin + activityPath.replace(":token", token).replace(":lang", lang);
         requestedPath = ActivityHashUtil.withoutHashPrefix(requestedPath);
         UpdateStore updateStore = UpdateStore.create(dataSourceModel);
         MagicLink magicLink = updateStore.insertEntity(MagicLink.class);

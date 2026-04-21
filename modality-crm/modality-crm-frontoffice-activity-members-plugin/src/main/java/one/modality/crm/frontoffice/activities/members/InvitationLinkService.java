@@ -13,7 +13,6 @@ import one.modality.base.shared.entities.Invitation;
 import one.modality.base.shared.entities.Mail;
 import one.modality.base.shared.entities.Person;
 import one.modality.base.shared.entities.Recipient;
-import one.modality.base.shared.util.ActivityHashUtil;
 
 import java.time.Instant;
 
@@ -191,7 +190,7 @@ public final class InvitationLinkService {
             String clientOrigin,
             DataSourceModel dataSourceModel) {
 
-        String accountLink = clientOrigin + ActivityHashUtil.withHashPrefix("/members");
+        String accountLink = clientOrigin + "/members";
 
         // Load localized template asynchronously (GWT-compatible)
         String templatePath = getLocalizedTemplatePath(AUTHORIZATION_APPROVED_TEMPLATE);
@@ -222,7 +221,7 @@ public final class InvitationLinkService {
             String clientOrigin,
             DataSourceModel dataSourceModel) {
 
-        String accountLink = clientOrigin + ActivityHashUtil.withHashPrefix("/members");
+        String accountLink = clientOrigin + "/members";
 
         // Load localized template asynchronously (GWT-compatible)
         String templatePath = getLocalizedTemplatePath(MANAGER_ACCEPTED_TEMPLATE);
@@ -391,7 +390,7 @@ public final class InvitationLinkService {
      * Builds a link with the client origin and token
      */
     private static String buildLink(String clientOrigin, String pathTemplate, String token) {
-        return clientOrigin + ActivityHashUtil.withHashPrefix(pathTemplate.replace(":token", token));
+        return clientOrigin + pathTemplate.replace(":token", token);
     }
 
     private static Future<Void> sendEmail(Person recipient, String subject, String body, DataSourceModel dataSourceModel) {
