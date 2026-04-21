@@ -14,6 +14,7 @@ import dev.webfx.platform.console.Console;
 import dev.webfx.platform.resource.Resource;
 import dev.webfx.platform.util.uuid.Uuid;
 import one.modality.ecommerce.payment.PaymentFailureReason;
+import one.modality.ecommerce.payment.PaymentFormType;
 import one.modality.ecommerce.payment.PaymentStatus;
 import one.modality.ecommerce.payment.SandboxCard;
 import one.modality.ecommerce.payment.server.gateway.*;
@@ -79,10 +80,9 @@ public final class SquarePaymentGateway implements PaymentGateway {
             locationId = argument.getAccountParameter("order.order.location_id"); // KBS2 (to remove later)
         boolean live = argument.isLive();
 
-        /* The Square embedded payment doesn't work with the React version yet.
         if (argument.preferredFormType() == PaymentFormType.EMBEDDED) {
             return initiatePaymentEmbedded(argument, locationId, live);
-        }*/
+        }
 
         return initiatePaymentRedirect(argument, locationId, live);
     }
@@ -93,6 +93,10 @@ public final class SquarePaymentGateway implements PaymentGateway {
         boolean seamless = argument.favorSeamless()
             // && argument.isOriginOnHttps() // Maybe would be better to not use seamless integration on http, but commented for now as iFrame integration is not working well in browser (ex: WebPaymentForm fitHeight not working well)
             ;
+
+        if (DEBUG_LOG)
+            Console.log("[Square][DEBUG] initiatePayment - live = " + live + ", appId = " + appId + ", locationId = " + locationId + ", seamless = " + seamless);
+
         String template = seamless ? SCRIPT_TEMPLATE : HTML_TEMPLATE;
         String paymentFormContent = template
             .replace("${modality_amount}", String.valueOf(argument.order().amount()))
@@ -143,6 +147,9 @@ public final class SquarePaymentGateway implements PaymentGateway {
             .environment(live ? Environment.PRODUCTION : Environment.SANDBOX)
             .token(accessToken)
             .build();
+
+        if (DEBUG_LOG)
+            Console.log("[Square][DEBUG] createSquareCheckoutUrl - live = " + live + ", accessToken prefix = " + accessTokenPrefix(accessToken) + ", locationId = " + locationId);
 
         // Build the order with line items
         List<OrderLineItem> lineItems = new ArrayList<>();
@@ -219,7 +226,7 @@ public final class SquarePaymentGateway implements PaymentGateway {
         String sourceId = payload.getString("square_sourceId");
         String verificationToken = payload.getString("square_verificationToken");
         if (DEBUG_LOG) {
-            Console.log("[Square][DEBUG] completePayment - payload = " + argument.payload() + ", amount = " + amount + ", currencyCode = " + currencyCode + ", locationId = " + locationId + ", idempotencyKey = " + idempotencyKey + ", sourceId = " + sourceId + ", verificationToken = " + verificationToken);
+            Console.log("[Square][DEBUG] completePayment - live = " + live + ", accessToken prefix = " + accessTokenPrefix(accessToken) + ", amount = " + amount + ", currencyCode = " + currencyCode + ", locationId = " + locationId + ", idempotencyKey = " + idempotencyKey + ", sourceId = " + sourceId + ", verificationToken = " + verificationToken);
         }
 
         // Use Square SDK async client pattern (like AsyncCustomersClient)
@@ -280,7 +287,15 @@ public final class SquarePaymentGateway implements PaymentGateway {
      */
     private static PaymentFailureReason mapSquareErrorCodesToFailureReason(SquareApiException ae) {
         for (Error error : ae.errors()) {
-            PaymentFailureReason mapped = mapSquareErrorCode(error.getCode().toString());
+            String code = error.getCode().toString();
+            // INVALID_CARD_DATA can mean a misconfigured app_id (gateway config error) rather than
+            // a bad card number — distinguish by checking the detail message.
+            if ("INVALID_CARD_DATA".equals(code)) {
+                String detail = error.getDetail().map(String::toLowerCase).orElse("");
+                if (detail.contains("application environment"))
+                    return PaymentFailureReason.GATEWAY_ERROR;
+            }
+            PaymentFailureReason mapped = mapSquareErrorCode(code);
             if (mapped != PaymentFailureReason.UNKNOWN_REASON)
                 return mapped;
         }
@@ -290,7 +305,7 @@ public final class SquarePaymentGateway implements PaymentGateway {
     /** Maps a single Square error code string to a PaymentFailureReason. */
     private static PaymentFailureReason mapSquareErrorCode(String code) {
         return switch (code) {
-            case "INVALID_CARD", "INVALID_CARD_DATA", "PAN_FAILURE"
+            case "INVALID_CARD", "PAN_FAILURE"
                 -> PaymentFailureReason.INVALID_CARD_NUMBER;
             case "CARD_EXPIRED", "EXPIRATION_FAILURE"
                 -> PaymentFailureReason.EXPIRED_CARD;
@@ -327,5 +342,9 @@ public final class SquarePaymentGateway implements PaymentGateway {
             Console.error(method, ex);
         }
         return message.toString();
+    }
+
+    private static String accessTokenPrefix(String accessToken) {
+        return accessToken != null && accessToken.length() > 8 ? accessToken.substring(0, 8) + "..." : accessToken;
     }
 }

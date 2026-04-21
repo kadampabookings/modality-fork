@@ -7,8 +7,9 @@ const modality_seamless = ${modality_seamless};
 const square_webPaymentsSDKUrl = '${square_webPaymentsSDKUrl}';
 const square_appId = '${square_appId}';
 const square_locationId = '${square_locationId}';
-// Note: idempotency key is generated fresh per submission (see handlePaymentMethodSubmission)
-// so that retries after a decline are not rejected by Square's idempotency cache.
+// Refreshed at the start of each handlePaymentMethodSubmission call so retries after a
+// decline get a fresh key and are not served Square's cached declined response.
+let square_idempotencyKey = window.crypto.randomUUID();
 
 // Parameter injected by WebPaymentForm java class on the client side (to allow JS -> Java callbacks)
 let modality_javaPaymentForm;
@@ -231,6 +232,8 @@ import(square_webPaymentsSDKUrl)
         }
 
         async function handlePaymentMethodSubmission(firstName, lastName, email, phone, address, city, state, countryCode) {
+            // Fresh key for every attempt so Square doesn't serve its cached response from a previous declined payment
+            square_idempotencyKey = window.crypto.randomUUID();
             // Firstly: Card number verification
             let token;
             try {
@@ -260,7 +263,7 @@ import(square_webPaymentsSDKUrl)
                 square_locationId : square_locationId,
                 square_sourceId: token,
                 square_verificationToken: verificationToken,
-                square_idempotencyKey: window.crypto.randomUUID(),
+                square_idempotencyKey: square_idempotencyKey,
             };
 
             // Notifying the Java WebPaymentForm that the verification is successful => it will complete the payment on
