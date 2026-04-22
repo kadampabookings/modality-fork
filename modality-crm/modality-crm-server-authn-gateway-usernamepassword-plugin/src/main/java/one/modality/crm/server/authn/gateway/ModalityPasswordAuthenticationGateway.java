@@ -19,6 +19,7 @@ import dev.webfx.stack.session.state.StateAccessor;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 import one.modality.base.shared.entities.FrontendAccount;
 import one.modality.base.shared.entities.Person;
+import one.modality.crm.server.authn.gateway.shared.LocalizedMailTemplate;
 import one.modality.crm.server.authn.gateway.shared.MagicLinkService;
 import one.modality.crm.shared.services.authn.ModalityAuthenticationI18nKeys;
 import one.modality.crm.shared.services.authn.ModalityUserPrincipal;
@@ -39,20 +40,29 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
 
     // Temporarily hardcoded (to replace with database letters)
     private static final String CREATE_ACCOUNT_MAIL_FROM = "kbs@kadampa.net";
-    private static final String CREATE_ACCOUNT_MAIL_SUBJECT = "Account creation - Kadampa Booking System";
-    private static final String CREATE_ACCOUNT_MAIL_BODY = Resource.getText(Resource.toUrl("AccountCreationMailBody.html", ModalityPasswordAuthenticationGateway.class));
-    private static final String CREATE_ACCOUNT_WITH_VERIFICATION_CODE_MAIL_BODY = Resource.getText(Resource.toUrl("AccountCreationWithVerificationCodeMailBody.html", ModalityPasswordAuthenticationGateway.class));
+    // Display name shown next to the sender address in the recipient's inbox.
+    // Kept alongside the flow-specific `from` constants because the brand is
+    // context-sensitive (other email flows may send as a different persona).
+    private static final String MAIL_FROM_NAME = "Kadampa Booking System";
+
+    // Account-creation emails — dictionary-driven localization. Each template pairs a
+    // per-language HTML body (baseName.html + baseName_<lang>.html) with a .properties
+    // file holding the translated subject. See LocalizedMailTemplate for the wiring details.
+    private static final LocalizedMailTemplate CREATE_ACCOUNT_MAIL = LocalizedMailTemplate.load(
+        "AccountCreationMailBody", "AccountCreationMailMessages", ModalityPasswordAuthenticationGateway.class);
+    private static final LocalizedMailTemplate CREATE_ACCOUNT_WITH_VERIFICATION_CODE_MAIL = LocalizedMailTemplate.load(
+        "AccountCreationWithVerificationCodeMailBody", "AccountCreationWithVerificationCodeMailMessages", ModalityPasswordAuthenticationGateway.class);
+    private static final LocalizedMailTemplate CREATE_ACCOUNT_ALREADY_EXISTS_MAIL = LocalizedMailTemplate.load(
+        "AccountCreationAlreadyExistsMailBody", "AccountCreationAlreadyExistsMailMessages", ModalityPasswordAuthenticationGateway.class);
 
     private static final String CREATE_ACCOUNT_ALREADY_EXISTS_MAIL_FROM = "kbs@kadampa.net";
-    private static final String CREATE_ACCOUNT_ALREADY_EXISTS_MAIL_SUBJECT = "Account already exists - Kadampa Booking System";
-    private static final String CREATE_ACCOUNT_ALREADY_EXISTS_MAIL_BODY = Resource.getText(Resource.toUrl("AccountCreationAlreadyExistsMailBody.html", ModalityPasswordAuthenticationGateway.class));
 
     private static final String UPDATE_EMAIL_ACTIVITY_PATH_PREFIX = "/user-profile/email-update";
     private static final String UPDATE_EMAIL_ACTIVITY_PATH_FULL = UPDATE_EMAIL_ACTIVITY_PATH_PREFIX + "/:token";
 
     private static final String UPDATE_EMAIL_MAIL_FROM = "kbs@kadampa.net";
-    private static final String UPDATE_EMAIL_MAIL_SUBJECT = "Account email change - Kadampa Booking System";
-    private static final String UPDATE_EMAIL_MAIL_BODY = Resource.getText(Resource.toUrl("AccountEmailUpdateMailBody.html", ModalityPasswordAuthenticationGateway.class));
+    private static final LocalizedMailTemplate UPDATE_EMAIL_MAIL = LocalizedMailTemplate.load(
+        "AccountEmailUpdateMailBody", "AccountEmailUpdateMailMessages", ModalityPasswordAuthenticationGateway.class);
 
     private final DataSourceModel dataSourceModel;
 
@@ -157,22 +167,26 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
         // For this later case, we still create a login link that will actually act as a magic link.
         String loginRunId = ThreadLocalStateHolder.getRunId(); // Capturing the loginRunId before async operation
         boolean verificationCodeOnly = credentials.isVerificationCodeOnly();
+        // The user's chosen UI language flows in via InitiateAccountCreationCredentials so the
+        // email matches what they saw on the sign-up page.
+        String lang = Strings.toSafeString(credentials.getLanguage());
         return EntityStore.create(dataSourceModel)
             .<FrontendAccount>executeQuery("select FrontendAccount where corporation=$1 and lower(username)=lower($2) limit 1", 1, credentials.getEmail())
             .compose(accounts -> {
                     boolean doesntExists = accounts.isEmpty();
-                    // Choose the appropriate email body based on verificationCodeOnly flag
-                    String emailBody = doesntExists
-                        ? (verificationCodeOnly ? CREATE_ACCOUNT_WITH_VERIFICATION_CODE_MAIL_BODY : CREATE_ACCOUNT_MAIL_BODY)
-                        : CREATE_ACCOUNT_ALREADY_EXISTS_MAIL_BODY;
+                    // Pick the right template for the branch, then render body + subject in the user's language.
+                    LocalizedMailTemplate template = doesntExists
+                        ? (verificationCodeOnly ? CREATE_ACCOUNT_WITH_VERIFICATION_CODE_MAIL : CREATE_ACCOUNT_MAIL)
+                        : CREATE_ACCOUNT_ALREADY_EXISTS_MAIL;
                     return MagicLinkService.createAndSendMagicLink(
                         loginRunId,
                         credentials,
                         null,
                         doesntExists ? CREATE_ACCOUNT_ACTIVITY_PATH_FULL : ModalityMagicLinkAuthenticationGateway.MAGIC_LINK_ACTIVITY_PATH_FULL,
+                        MAIL_FROM_NAME,
                         doesntExists ? CREATE_ACCOUNT_MAIL_FROM : CREATE_ACCOUNT_ALREADY_EXISTS_MAIL_FROM,
-                        doesntExists ? CREATE_ACCOUNT_MAIL_SUBJECT : CREATE_ACCOUNT_ALREADY_EXISTS_MAIL_SUBJECT,
-                        emailBody,
+                        template.renderSubject(lang),
+                        template.renderBody(lang),
                         dataSourceModel
                     );
                 }
@@ -210,15 +224,18 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
     private Future<Void> sendEmailUpdateLink(InitiateEmailUpdateCredentials credentials) {
         // Capturing the required client state info from thread local (before it will be wiped out by the async call)
         String runId = ThreadLocalStateHolder.getRunId();
+        // Render the email in the user's current language — mirrors what they saw in the profile page.
+        String lang = Strings.toSafeString(credentials.getLanguage());
         return getUserClaims() // to get the old email (the passed credential contains the new email)
             .compose(userClaims -> MagicLinkService.createAndSendMagicLink(
                     runId,
                     credentials, // contains the new email (the one to send the link to)
                     userClaims.email(), // current email for this account (= old email)
                     UPDATE_EMAIL_ACTIVITY_PATH_FULL,
+                MAIL_FROM_NAME,
                 UPDATE_EMAIL_MAIL_FROM,
-                UPDATE_EMAIL_MAIL_SUBJECT,
-                UPDATE_EMAIL_MAIL_BODY,
+                UPDATE_EMAIL_MAIL.renderSubject(lang),
+                UPDATE_EMAIL_MAIL.renderBody(lang),
                     dataSourceModel
                 )
             );
@@ -313,7 +330,11 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
                 UpdateStore updateStore = UpdateStore.createAbove(fa.getStore());
                 FrontendAccount ufa = updateStore.updateEntity(fa);
                 ufa.setPassword(storedEncryptedPassword);
-                return updateStore.submitChanges();
+                // Map the SubmitChangesResult to null — the client only needs success/failure,
+                // and SubmitChangesResult has no registered SerialCodec so returning it would
+                // cause the bus-call reply to throw IllegalArgumentException during encode,
+                // leaving the client's Promise un-resolved until its 30 s timeout.
+                return updateStore.submitChanges().map(ignored -> null);
             });
     }
 

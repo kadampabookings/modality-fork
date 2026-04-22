@@ -35,6 +35,7 @@ public final class MagicLinkService {
     public static Future<Void> createAndSendMagicLink(
         AlternativeLoginActionCredentials request,
         String activityPath,
+        String fromName,
         String from,
         String subject,
         String body,
@@ -44,6 +45,7 @@ public final class MagicLinkService {
             request,
             null,
             activityPath,
+            fromName,
             from,
             subject,
             body,
@@ -56,6 +58,7 @@ public final class MagicLinkService {
         AlternativeLoginActionCredentials request,
         String oldEmail,
         String activityPath,
+        String fromName,
         String from,
         String subject,
         String body,
@@ -69,6 +72,7 @@ public final class MagicLinkService {
             oldEmail,
             request.getContext(),
             activityPath,
+            fromName,
             from,
             subject,
             body,
@@ -85,6 +89,7 @@ public final class MagicLinkService {
         String oldEmail,
         Object context,
         String activityPath,
+        String fromName,
         String from,
         String subject,
         String body,
@@ -117,7 +122,10 @@ public final class MagicLinkService {
                     .replaceAll("\\[magicLink\\]", magicLink.getLink())
                     .replaceAll("\\[verificationCode\\]", magicLink.getVerificationCode())
                     ;
-                return MailService.sendMail(new ModalityMailMessage(MailMessage.create(from, magicLink.getEmail(), subject, finalBody), modalityContext));
+                // `fromName` (e.g. "Kadampa Booking System") is carried via ModalityMailMessage
+                // so the provider can set Mail.from_name alongside Mail.from_email. Null means
+                // the caller didn't want a display name for this flow.
+                return MailService.sendMail(new ModalityMailMessage(MailMessage.create(from, magicLink.getEmail(), subject, finalBody), modalityContext, fromName));
             });
     }
 
