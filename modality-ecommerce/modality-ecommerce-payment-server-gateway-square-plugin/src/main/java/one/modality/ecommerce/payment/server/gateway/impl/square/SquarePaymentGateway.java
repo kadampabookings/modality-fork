@@ -59,7 +59,6 @@ public final class SquarePaymentGateway implements PaymentGateway {
         new SandboxCard("Visa - No challenge", "4800 0000 0000 0004", null, "111", "11111"),
         new SandboxCard("Mastercard - No challenge", "5222 2200 0000 0005", null, "111", "11111"),
         new SandboxCard("Discover EU - No challenge", "6011 0000 0020 1016", null, "111", "11111"),
-        new SandboxCard("JCB - Success", "3569 9900 1009 5841", null, "111", null),
         new SandboxCard("Visa EU - Verification code: 123456", "4310 0000 0020 1019", null, "1111", "11111"),
         new SandboxCard("Mastercard - Verification code: 123456", "5248 4800 0021 0026", null, "1111", "11111"),
         new SandboxCard("Mastercard EU - Verification code: 123456", "5500 0000 0020 1016", null, "1111", "11111"),

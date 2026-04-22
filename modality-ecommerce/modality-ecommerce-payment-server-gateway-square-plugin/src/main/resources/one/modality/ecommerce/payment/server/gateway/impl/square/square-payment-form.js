@@ -1,30 +1,35 @@
 console.log("Starting Modality-Square script");
 
 // Parameters injected by SquarePaymentGateway java class on the server side
-const modality_amount = ${modality_amount};
-const modality_currencyCode = "${modality_currencyCode}";
-const modality_seamless = ${modality_seamless};
-const square_webPaymentsSDKUrl = '${square_webPaymentsSDKUrl}';
-const square_appId = '${square_appId}';
-const square_locationId = '${square_locationId}';
+// Using 'var' so the script can be re-injected (React Strict Mode / retry) without
+// throwing "already declared" errors that const/let would cause on re-execution.
+var modality_amount = ${modality_amount};
+var modality_currencyCode = "${modality_currencyCode}";
+var modality_seamless = ${modality_seamless};
+var square_webPaymentsSDKUrl = '${square_webPaymentsSDKUrl}';
+var square_appId = '${square_appId}';
+var square_locationId = '${square_locationId}';
 // Refreshed at the start of each handlePaymentMethodSubmission call so retries after a
 // decline get a fresh key and are not served Square's cached declined response.
-let square_idempotencyKey = window.crypto.randomUUID();
+var square_idempotencyKey = window.crypto.randomUUID();
 
 // Parameter injected by WebPaymentForm java class on the client side (to allow JS -> Java callbacks)
-let modality_javaPaymentForm;
+var modality_javaPaymentForm;
 
-let modality_initialized;
-let modality_initError;
-let modality_initNotificationCalled;
-let modality_containerElement;
+var modality_initialized;
+var modality_initError;
+var modality_initNotificationCalled;
+var modality_containerElement;
 
 // Constants
-const modality_seamlessContainerId = 'modality-payment-form-container';
-const square_cardElementId = 'square-card-container';
+var modality_seamlessContainerId = 'modality-payment-form-container';
+var square_cardElementId = 'square-card-container';
 
 // Variables
 var square_card; // Using 'var' declaration so that we can get the object back when executing the script a second time
+// Guard against React Strict Mode double-injection: both import().then() callbacks would otherwise
+// both call onLoaded() and attach two card widgets. Reset to false on each script re-injection.
+var modality_onLoadedRunning = false;
 
 // Catches uncaught errors thrown by the Square SDK or browser extensions during initialisation
 // (e.g. "insertBefore" DOM errors caused by password-manager extensions injecting into the card
@@ -36,6 +41,9 @@ function modality_uncaughtInitErrorHandler(event) {
         modality_notifyGatewayInitFailure('Payment form failed to load: ' + (event.message || 'unknown error'));
     }
 }
+// Remove any listener left by a previous injection before adding a fresh one,
+// so re-injection (React Strict Mode / retry) never registers duplicate listeners.
+window.removeEventListener('error', modality_uncaughtInitErrorHandler);
 window.addEventListener('error', modality_uncaughtInitErrorHandler);
 
 // Methods called by WebPaymentForm java class on the client side
@@ -194,6 +202,11 @@ import(square_webPaymentsSDKUrl)
         }
 
         async function onLoaded() {
+            if (modality_onLoadedRunning) {
+                console.log("Square: onLoaded already running, skipping duplicate call");
+                return;
+            }
+            modality_onLoadedRunning = true;
             console.log("Square DOMContentLoaded");
             if (modality_javaPaymentForm) {
                 console.log("modality_javaPaymentForm is set");
