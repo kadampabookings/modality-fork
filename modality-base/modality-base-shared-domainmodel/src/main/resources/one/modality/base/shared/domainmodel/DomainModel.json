@@ -961,6 +961,8 @@
   },
   "ItemFamilyPolicy": {
     "id": 149,
+    "applicableToInPerson": "boolean",
+    "applicableToOnline": "boolean",
     "eventPhaseCoverage1": "EventPhaseCoverage",
     "eventPhaseCoverage2": "EventPhaseCoverage",
     "eventPhaseCoverage3": "EventPhaseCoverage",
@@ -974,6 +976,8 @@
   },
   "ItemPolicy": {
     "id": 143,
+    "applicableToInPerson": "boolean",
+    "applicableToOnline": "boolean",
     "default": "boolean",
     "descriptionLabel": "Label",
     "earlyAccommodationAllowed": "boolean",
@@ -1050,6 +1054,8 @@
     "id": 61,
     "account": "MailAccount",
     "active": "boolean",
+    "applicableToInPerson": "boolean",
+    "applicableToOnline": "boolean",
     "automation": {
       "expr": "documentCondition"
     },
