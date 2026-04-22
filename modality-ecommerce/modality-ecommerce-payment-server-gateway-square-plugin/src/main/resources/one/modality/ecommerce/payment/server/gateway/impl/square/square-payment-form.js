@@ -26,6 +26,18 @@ const square_cardElementId = 'square-card-container';
 // Variables
 var square_card; // Using 'var' declaration so that we can get the object back when executing the script a second time
 
+// Catches uncaught errors thrown by the Square SDK or browser extensions during initialisation
+// (e.g. "insertBefore" DOM errors caused by password-manager extensions injecting into the card
+// form). Routes them through modality_notifyGatewayInitFailure so the fallback redirect fires
+// instead of leaving the user with a broken form or a raw browser error message.
+function modality_uncaughtInitErrorHandler(event) {
+    if (!modality_initialized) {
+        console.error('Uncaught error during Square init (browser extension interference?)', event.error || event.message);
+        modality_notifyGatewayInitFailure('Payment form failed to load: ' + (event.message || 'unknown error'));
+    }
+}
+window.addEventListener('error', modality_uncaughtInitErrorHandler);
+
 // Methods called by WebPaymentForm java class on the client side
 
 function modality_injectJavaPaymentForm(jpf) {
@@ -70,6 +82,8 @@ function modality_notifyGatewayDebugStep(debugStep) {
 
 function modality_notifyGatewayInitSuccess() {
     modality_initialized = true;
+    // Remove the uncaught-error safety net — no longer needed once Square is up
+    window.removeEventListener('error', modality_uncaughtInitErrorHandler);
     if (modality_javaPaymentForm) {
         modality_javaPaymentForm.onGatewayInitSuccess();
         modality_initNotificationCalled = true;
@@ -79,6 +93,7 @@ function modality_notifyGatewayInitSuccess() {
 function modality_notifyGatewayInitFailure(error) {
     modality_initialized = true;
     modality_initError = error;
+    window.removeEventListener('error', modality_uncaughtInitErrorHandler);
     if (modality_javaPaymentForm) {
         modality_javaPaymentForm.onGatewayInitFailure(error);
         modality_initNotificationCalled = true;
