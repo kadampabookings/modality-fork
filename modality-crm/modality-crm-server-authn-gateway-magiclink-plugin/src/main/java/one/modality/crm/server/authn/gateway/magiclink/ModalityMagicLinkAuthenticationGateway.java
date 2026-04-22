@@ -3,7 +3,7 @@ package one.modality.crm.server.authn.gateway.magiclink;
 import dev.webfx.platform.async.Future;
 import dev.webfx.platform.async.Promise;
 import dev.webfx.platform.console.Console;
-import dev.webfx.platform.resource.Resource;
+import dev.webfx.platform.util.Strings;
 import dev.webfx.platform.util.collection.Collections;
 import dev.webfx.stack.authn.*;
 import dev.webfx.stack.authn.logout.server.LogoutPush;
@@ -18,6 +18,7 @@ import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 import one.modality.base.shared.entities.FrontendAccount;
 import one.modality.base.shared.entities.MagicLink;
 import one.modality.base.shared.util.ActivityHashUtil;
+import one.modality.crm.server.authn.gateway.shared.LocalizedMailTemplate;
 import one.modality.crm.server.authn.gateway.shared.MagicLinkService;
 import one.modality.crm.shared.services.authn.ModalityAuthenticationI18nKeys;
 import one.modality.crm.shared.services.authn.ModalityGuestPrincipal;
@@ -35,11 +36,29 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
 
     // Temporarily hardcoded (to replace with database letters)
     private static final String MAIL_FROM = "kbs@kadampa.net";
-    private static final String RECOVERY_MAIL_SUBJECT = "Password recovery - Kadampa Booking System";
-    private static final String RECOVERY_VERIFICATION_CODE_OR_MAGIC_LINK_MAIL_BODY = Resource.getText(Resource.toUrl("RecoveryWithVerificationCodeOrMagicLinkMailBody.html", ModalityMagicLinkAuthenticationGateway.class));
-    private static final String RECOVERY_VERIFICATION_CODE_ONLY_MAIL_BODY = Resource.getText(Resource.toUrl("RecoveryWithVerificationCodeOnlyMailBody.html", ModalityMagicLinkAuthenticationGateway.class));
-    private static final String UNKNOWN_ACCOUNT_MAIL_SUBJECT = "Assistance with your Kadampa booking account";
-    private static final String UNKNOWN_ACCOUNT_MAIL_BODY = Resource.getText(Resource.toUrl("UnknownAccountMailBody.html", ModalityMagicLinkAuthenticationGateway.class));
+    // Display name shown alongside MAIL_FROM in the recipient's inbox; flow-specific
+    // so it's set on the call site rather than as a platform-wide default.
+    private static final String MAIL_FROM_NAME = "Kadampa Booking System";
+
+    // Recovery + unknown-account emails — dictionary-driven localization.
+    // Each template is a per-language HTML body (baseName.html + baseName_<lang>.html)
+    // paired with a .properties file holding the translated subject.
+    // See LocalizedMailTemplate for the wiring details.
+    private static final LocalizedMailTemplate RECOVERY_WITH_VERIFICATION_CODE_OR_MAGIC_LINK_MAIL =
+        LocalizedMailTemplate.load(
+            "RecoveryWithVerificationCodeOrMagicLinkMailBody",
+            "RecoveryWithVerificationCodeOrMagicLinkMailMessages",
+            ModalityMagicLinkAuthenticationGateway.class);
+    private static final LocalizedMailTemplate RECOVERY_WITH_VERIFICATION_CODE_ONLY_MAIL =
+        LocalizedMailTemplate.load(
+            "RecoveryWithVerificationCodeOnlyMailBody",
+            "RecoveryWithVerificationCodeOnlyMailMessages",
+            ModalityMagicLinkAuthenticationGateway.class);
+    private static final LocalizedMailTemplate UNKNOWN_ACCOUNT_MAIL =
+        LocalizedMailTemplate.load(
+            "UnknownAccountMailBody",
+            "UnknownAccountMailMessages",
+            ModalityMagicLinkAuthenticationGateway.class);
 
     private final DataSourceModel dataSourceModel;
 
@@ -84,18 +103,26 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
         // still create a login link in the database for history purpose, even though it's not technically necessary as
         // the "Unknown account" email doesn't propose any further action.
         String loginRunId = ThreadLocalStateHolder.getRunId(); // Capturing the loginRunId before async operation
+        // Pick up the user's chosen UI language so the recovery email matches what they saw on the login page.
+        String lang = Strings.toSafeString(request.getLanguage());
         return EntityStore.create(dataSourceModel)
             .<FrontendAccount>executeQuery("select FrontendAccount where corporation=$1 and lower(username)=lower($2) limit 1", 1, request.getEmail())
             .compose(accounts -> {
                     boolean unknown = accounts.isEmpty();
+                    LocalizedMailTemplate template = unknown
+                        ? UNKNOWN_ACCOUNT_MAIL
+                        : request.isVerificationCodeOnly()
+                            ? RECOVERY_WITH_VERIFICATION_CODE_ONLY_MAIL
+                            : RECOVERY_WITH_VERIFICATION_CODE_OR_MAGIC_LINK_MAIL;
                     return MagicLinkService.createAndSendMagicLink(
                         loginRunId,
                         request,
                         null,
                         MAGIC_LINK_ACTIVITY_PATH_FULL,
+                        MAIL_FROM_NAME,
                         MAIL_FROM,
-                        unknown ? UNKNOWN_ACCOUNT_MAIL_SUBJECT : RECOVERY_MAIL_SUBJECT,
-                        unknown ? UNKNOWN_ACCOUNT_MAIL_BODY : request.isVerificationCodeOnly() ? RECOVERY_VERIFICATION_CODE_ONLY_MAIL_BODY : RECOVERY_VERIFICATION_CODE_OR_MAGIC_LINK_MAIL_BODY,
+                        template.renderSubject(lang),
+                        template.renderBody(lang),
                         dataSourceModel
                     );
                 }
@@ -111,6 +138,9 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
                     return Future.failedFuture("[%s] Magic link token not found".formatted(ModalityAuthenticationI18nKeys.LoginLinkUnrecognisedError));
                 String link = magicLink.getLink();
                 String clientOrigin = ActivityHashUtil.withoutHashSuffix(link.substring(0, link.indexOf(MAGIC_LINK_ACTIVITY_PATH_PREFIX)));
+                // Renewals reuse the language persisted on the original MagicLink so the user stays in
+                // the language they started the flow with, even if their session was lost in between.
+                String lang = Strings.toSafeString(magicLink.getLang());
                 return MagicLinkService.createAndSendMagicLink(
                     magicLink.getLoginRunId(),
                     magicLink.getLang(),
@@ -120,9 +150,10 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
                     null,
                     null,
                     MAGIC_LINK_ACTIVITY_PATH_FULL,
+                    MAIL_FROM_NAME,
                     MAIL_FROM,
-                    RECOVERY_MAIL_SUBJECT,
-                    RECOVERY_VERIFICATION_CODE_OR_MAGIC_LINK_MAIL_BODY,
+                    RECOVERY_WITH_VERIFICATION_CODE_OR_MAGIC_LINK_MAIL.renderSubject(lang),
+                    RECOVERY_WITH_VERIFICATION_CODE_OR_MAGIC_LINK_MAIL.renderBody(lang),
                     dataSourceModel
                 );
             });

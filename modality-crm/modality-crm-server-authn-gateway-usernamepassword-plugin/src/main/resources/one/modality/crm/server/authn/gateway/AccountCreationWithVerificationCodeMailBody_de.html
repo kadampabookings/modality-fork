@@ -1,7 +1,7 @@
-<html lang="en" dir="ltr"><head>
+<html lang="de" dir="ltr"><head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Account creation</title>
+    <title>Kontoerstellung</title>
     <style>
         /* Global Styles */
         body {
@@ -49,25 +49,18 @@
             border-top: 1px solid #dddddd;
         }
 
-        .button-container {
-            margin: 20px 0;
-        }
-
-        .button {
+        .verification-code {
             display: inline-block;
-            background-color: #009fe3;
-            color: #ffffff;
-            padding: 12px 25px;
-            text-decoration: none;
-            border-radius: 5px;
-            font-size: 16px;
-        }
-
-        .link {
-            font-size: 14px;
+            background-color: #f0f9ff;
             color: #009fe3;
-            text-decoration: none;
-            word-wrap: break-word;
+            padding: 20px 40px;
+            border: 2px solid #009fe3;
+            border-radius: 8px;
+            font-size: 32px;
+            font-weight: bold;
+            letter-spacing: 8px;
+            margin: 20px 0;
+            font-family: 'Courier New', monospace;
         }
 
         .footer {
@@ -80,29 +73,26 @@
 
 <body>
 <div class="email-container">
-    <div class="header">Create an account</div>
+    <div class="header">Konto erstellen</div>
 
     <div class="content">
-        <h2>Dear user</h2>
+        <h2>Guten Tag,</h2>
 
-        <p>You received this email because you requested to create a new account on Kadampa Bookings.</p>
+        <p>Sie erhalten diese E-Mail, weil Sie die Erstellung eines neuen Kontos bei Kadampa Bookings angefordert haben.</p>
 
         <hr class="divider">
 
-        <p>Confirm and continue with your account creation by clicking below</p>
+        <p>Geben Sie den folgenden Verifizierungscode ein, um die Erstellung Ihres Kontos fortzusetzen:</p>
 
-        <div class="button-container">
-            <a href="[magicLink]" style="color:white" class="button">Continue with your account creation</a>
+        <div class="verification-code">
+            [verificationCode]
         </div>
 
-        <p>Alternatively, click or copy and paste this link in your browser. It is valid for only one use:</p>
-        <a href="[magicLink]" class="link">
-            [magicLink]
-        </a>
+        <p style="font-size: 14px; color: #888888;">Dieser Code ist nur einmal gültig und läuft bald ab.</p>
     </div>
 
     <div class="footer">
-        <p>If you did not request this, please ignore this email.<br>No action needed.</p>
+        <p>Wenn Sie diese Anfrage nicht gestellt haben, ignorieren Sie diese E-Mail bitte.<br>Keine Aktion erforderlich.</p>
     </div>
 </div>
 

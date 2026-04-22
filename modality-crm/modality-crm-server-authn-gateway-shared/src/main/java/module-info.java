@@ -9,6 +9,7 @@ module modality.crm.server.authn.gateway.shared {
     requires modality.base.shared.util;
     requires modality.crm.shared.authn;
     requires webfx.platform.async;
+    requires webfx.platform.resource;
     requires webfx.platform.util;
     requires webfx.stack.authn;
     requires webfx.stack.mail;

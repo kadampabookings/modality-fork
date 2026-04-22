@@ -33,7 +33,13 @@ public class ModalityServerMailServiceProvider implements MailServiceProvider {
         mail.setContent(mailMessage.getBody());
         mail.setOut(true);
         if (mailMessage instanceof ModalityMailMessage) {
-            ModalityContext modalityContext = ((ModalityMailMessage) mailMessage).getModalityContext();
+            ModalityMailMessage modalityMessage = (ModalityMailMessage) mailMessage;
+            // Sender display name is flow-specific (branded for magic-link emails,
+            // unset for other flows), so the caller decides via ModalityMailMessage.
+            if (modalityMessage.getFromName() != null) {
+                mail.setFromName(modalityMessage.getFromName());
+            }
+            ModalityContext modalityContext = modalityMessage.getModalityContext();
             if (modalityContext != null) {
                 mail.setDocument(modalityContext.getDocumentId());
                 mail.setOrganization(modalityContext.getOrganizationId());
