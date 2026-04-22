@@ -9,7 +9,6 @@ module modality.crm.server.authn.gateway.magiclink.plugin {
     requires modality.crm.shared.authn;
     requires webfx.platform.async;
     requires webfx.platform.console;
-    requires webfx.platform.resource;
     requires webfx.platform.util;
     requires webfx.stack.authn;
     requires webfx.stack.authn.logout.server;

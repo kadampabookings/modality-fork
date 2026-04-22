@@ -12,7 +12,6 @@ module modality.crm.frontoffice.activity.members.plugin {
     requires modality.base.client.mainframe.fx;
     requires modality.base.client.time;
     requires modality.base.shared.entities;
-    requires modality.base.shared.util;
     requires modality.crm.client.authn.fx;
     requires modality.crm.client.i18n;
     requires modality.crm.frontoffice.activity.createaccount.plugin;
