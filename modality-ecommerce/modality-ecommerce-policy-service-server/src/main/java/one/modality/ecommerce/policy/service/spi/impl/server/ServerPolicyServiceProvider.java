@@ -123,7 +123,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                     "with e as (select coalesce(repeatedEvent,id) as finalEvent,coalesce(repeatedEvent?.type,type) as finalEventType,organization from Event where id=$1)" +
                     " select scope.(organization,site,eventType,event)" +
                     ",itemFamily.ord" +
-                    ",includedByDefault" +
+                    ",applicableToInPerson,applicableToOnline,includedByDefault" +
                     ",eventPhaseCoverage1,eventPhaseCoverage2,eventPhaseCoverage3,eventPhaseCoverage4" +
                     ",noticeLabel,prerequisiteDescriptionLabel,prerequisiteConfirmationLabel" +
                     " from ItemFamilyPolicy ifp, e where ifp.scope.(" +
@@ -138,7 +138,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                     "with e as (select coalesce(repeatedEvent,id) as finalEvent,coalesce(repeatedEvent?.type,type) as finalEventType,organization from Event where id=$1)" +
                     " select scope.(organization,site,eventType,event)" +
                     ",item.(name,label,code,temporal,family.(code,name,label,ord),capacity,share_mate,ord)" +
-                    ",descriptionLabel,noticeLabel,minDay,default,genderInfoRequired,earlyAccommodationAllowed,lateAccommodationAllowed,minOccupancy,forceSoldOut" +
+                    ",applicableToInPerson,applicableToOnline,descriptionLabel,noticeLabel,minDay,default,genderInfoRequired,earlyAccommodationAllowed,lateAccommodationAllowed,minOccupancy,forceSoldOut" +
                     " from ItemPolicy ip, e where ip.scope.(" +
                     " organization = e.organization" +
                     " and (site = null or site?.event = null or site?.event = e.finalEvent)" +
