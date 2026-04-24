@@ -110,16 +110,20 @@ public final class AnetPaymentGateway implements PaymentGateway {
         merchantAuthentication.setName(apiLoginID);
         merchantAuthentication.setTransactionKey(apiTransactionKey);
 
+        // Use the client-supplied value when non-blank; fall back to the server-side snapshot
+        // (denormalized person_* fields on the Document). The React client always sends strings
+        // (never null), so a plain != null check would silently accept empty strings and
+        // bypass the fallback — !Strings.isBlank() avoids that pitfall.
         CustomerAddressType billingAddress = new CustomerAddressType();
-        billingAddress.setFirstName(  clientSideFirstName != null ? clientSideFirstName : serverSideCustomer.firstName());
-        billingAddress.setLastName(   clientSideLastName  != null ? clientSideLastName  : serverSideCustomer.lastName());
-        billingAddress.setEmail(      clientSideEmail     != null ? clientSideEmail     : serverSideCustomer.email());
-        billingAddress.setPhoneNumber(clientSidePhone     != null ? clientSidePhone     : serverSideCustomer.phone());
-        billingAddress.setAddress(    clientSideAddress   != null ? clientSideAddress   : serverSideCustomer.address());
-        billingAddress.setCity(       clientSideCity      != null ? clientSideCity      : serverSideCustomer.city());
-        billingAddress.setState(      clientSideState     != null ? clientSideState     : serverSideCustomer.state());
-        billingAddress.setZip(        clientSideZipCode   != null ? clientSideZipCode   : serverSideCustomer.zipCode());
-        billingAddress.setCountry(    clientCountry       != null ? clientCountry       : serverSideCustomer.country());
+        billingAddress.setFirstName(  !Strings.isBlank(clientSideFirstName) ? clientSideFirstName : serverSideCustomer.firstName());
+        billingAddress.setLastName(   !Strings.isBlank(clientSideLastName)  ? clientSideLastName  : serverSideCustomer.lastName());
+        billingAddress.setEmail(      !Strings.isBlank(clientSideEmail)     ? clientSideEmail     : serverSideCustomer.email());
+        billingAddress.setPhoneNumber(!Strings.isBlank(clientSidePhone)     ? clientSidePhone     : serverSideCustomer.phone());
+        billingAddress.setAddress(    !Strings.isBlank(clientSideAddress)   ? clientSideAddress   : serverSideCustomer.address());
+        billingAddress.setCity(       !Strings.isBlank(clientSideCity)      ? clientSideCity      : serverSideCustomer.city());
+        billingAddress.setState(      !Strings.isBlank(clientSideState)     ? clientSideState     : serverSideCustomer.state());
+        billingAddress.setZip(        !Strings.isBlank(clientSideZipCode)   ? clientSideZipCode   : serverSideCustomer.zipCode());
+        billingAddress.setCountry(    !Strings.isBlank(clientCountry)       ? clientCountry       : serverSideCustomer.country());
 
         // Some fields are limited in length, so we truncate them if necessary
         // (Source: https://api.authorize.net/xml/v1/schema/anetapischema.xsd - nameAndAddressType)
