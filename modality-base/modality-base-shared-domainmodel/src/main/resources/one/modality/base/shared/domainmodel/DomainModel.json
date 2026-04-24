@@ -1,4 +1,28 @@
 {
+  "AllocationRule": {
+    "id": 78,
+    "active": "boolean",
+    "event": "Event",
+    "ifCarer": "boolean",
+    "ifChild": "boolean",
+    "ifCountry": "Country",
+    "ifItem": "Item",
+    "ifLanguage": "Language",
+    "ifLay": "boolean",
+    "ifOrdained": "boolean",
+    "ifOrganization": "Organization",
+    "ifPartialEvent": "boolean",
+    "ifRefMax": "integer",
+    "ifRefMin": "integer",
+    "ifResourceConfiguration": "ResourceConfiguration",
+    "ifSite": "Site",
+    "ifWholeEvent": "boolean",
+    "itemFamily": "ItemFamily",
+    "ord": "integer",
+    "resource": "Resource",
+    "resourceConfiguration": "ResourceConfiguration",
+    "triggerAllocate": "boolean"
+  },
   "Attendance": {
     "id": 48,
     "attended": "boolean",
@@ -172,7 +196,7 @@
     "cancelled": "boolean",
     "cart": "Cart",
     "cartUrl": {
-      "expr": "event.frontendUrl + (event.frontendIsAngular ? person_lang + '/cart/' : '?cartuuid=') + cart.uuid"
+      "expr": "event.frontendUrl + (event.kbs3 ? 'pay-cart/' : event.frontendIsAngular ? person_lang + '/cart/' : '?cartuuid=') + cart.uuid"
     },
     "changed": "boolean",
     "checkedOut": "boolean",
@@ -684,7 +708,7 @@
     "feesBottomLabel": "Label",
     "frontend": "string",
     "frontendHost": {
-      "expr": "host != null ? host : organization.id=2 ? 'inscriptions.kadampafrance.org' : organization.id=151 ? 'bookings.manjushri.org' : '{host}'"
+      "expr": "host != null ? host : kbs3 ? 'kadampabookings.org' : organization.id=2 ? 'inscriptions.kadampafrance.org' : organization.id=151 ? 'bookings.manjushri.org' : '{host}'"
     },
     "frontendIsAngular": {
       "expr": "frontend='KMC'"
@@ -693,7 +717,7 @@
       "expr": "true"
     },
     "frontendUrl": {
-      "expr": "(frontendIsHttps ? 'https://' : 'http://') + frontendHost + (frontendIsHttps ? '' : ':{webPort}') + (uri != null ? ('/' + uri +'/') : (frontendIsAngular ? '/#/' : '/frontend/'))"
+      "expr": "(frontendIsHttps ? 'https://' : 'http://') + frontendHost + (frontendIsHttps ? '' : ':{webPort}') + (uri != null ? ('/' + uri +'/') : (kbs3 ? '/' : frontendIsAngular ? '/#/' : '/frontend/'))"
     },
     "host": "string",
     "icon": {
@@ -705,6 +729,7 @@
     "kbs3": "boolean",
     "label": "Label",
     "live": "boolean",
+    "livechatUrl": "string",
     "livestreamMessageLabel": "Label",
     "livestreamUrl": "string",
     "longDescriptionLabel": "Label",
@@ -752,6 +777,7 @@
     "timezone": "string",
     "type": "EventType",
     "uri": "string",
+    "uuid": "string",
     "venue": "Site",
     "vodEnabled": "boolean",
     "vodExpirationDate": "Temporal.PlainDateTime",
