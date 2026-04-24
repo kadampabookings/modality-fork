@@ -45,7 +45,7 @@
     let modality_initNotificationCalled;
 
     // Called at the initialization of WebPaymentForm
-    function modality_injectJavaPaymentForm(jpf, htmlHeaderText, htmlPayButtonText) {
+    function modality_injectJavaPaymentForm(jpf, htmlHeaderText, htmlPayButtonText, showBillingAddress) {
         modality_javaPaymentForm = jpf;
         modality_notifyGatewayDebugStep(0);
         console.log("modality_injectJavaPaymentForm() called");
@@ -59,6 +59,10 @@
             displayFormButton.setAttribute("data-acceptUIFormHeaderTxt", htmlHeaderText);
         displayFormButton.setAttribute("data-acceptUIFormBtnTxt", htmlPayButtonText);
         displayFormButton.textContent = htmlPayButtonText;
+        // For unauthenticated flows (e.g. pay-cart), show and require the billing address inside
+        // the AcceptUI popup so Authorize.net can embed it in the payment token for AVS.
+        if (showBillingAddress)
+            displayFormButton.setAttribute("data-billingAddressOptions", '{"show":true, "required":true}');
         modality_notifyGatewayDebugStep(1);
         // And then we load AcceptUI.js
         const script = document.createElement("script");
