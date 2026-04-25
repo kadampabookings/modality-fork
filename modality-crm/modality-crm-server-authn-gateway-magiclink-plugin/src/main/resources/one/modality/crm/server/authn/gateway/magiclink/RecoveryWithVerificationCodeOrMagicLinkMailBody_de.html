@@ -1,155 +1,187 @@
 <html lang="de" dir="ltr"><head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wiederherstellungs-E-Mail</title>
+    <title>Bei Kadampa Bookings anmelden</title>
     <style>
-        /* Global Styles */
         body {
             margin: 0;
             padding: 0;
-            font-family: Arial, sans-serif;
-            background-color: #f9fafb;
+            background-color: #f3f4f6;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            color: #1f2937;
         }
-
+        .wrapper {
+            width: 100%;
+            padding: 32px 16px;
+            box-sizing: border-box;
+        }
         .email-container {
-            max-width: 600px;
-            margin: 20px auto;
-            background: #ffffff;
-            border-radius: 12px;
-            box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
+            max-width: 560px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 16px;
             overflow: hidden;
+            box-shadow: 0 4px 24px rgba(15, 23, 42, 0.06);
+        }
+        .brand-bar {
+            padding: 28px 24px 4px;
             text-align: center;
         }
-
-        .header {
-            background-color: #ffffff;
-            padding: 20px 0;
-            font-size: 32px;
+        .brand {
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: 0.12em;
             color: #009fe3;
-            font-weight: bold;
+            text-transform: uppercase;
         }
-
         .content {
-            padding: 20px 40px;
-            font-size: 16px;
-            color: #505050;
+            padding: 8px 40px 32px;
         }
-
-        .content h2 {
-            font-size: 18px;
-            margin-bottom: 10px;
-            font-weight: normal;
-            color: #606060;
+        h1 {
+            margin: 16px 0 8px;
+            font-size: 24px;
+            font-weight: 700;
+            color: #0f172a;
+            text-align: center;
         }
-
-        .divider {
-            width: 80%;
-            margin: 20px auto;
-            border: 0;
-            border-top: 1px solid #dddddd;
+        p.lead {
+            margin: 0 0 24px;
+            font-size: 15px;
+            line-height: 1.55;
+            color: #475569;
+            text-align: center;
         }
-
-        .verification-code {
-            display: inline-block;
-            background-color: #f0f9ff;
-            color: #009fe3;
-            padding: 20px 40px;
-            border: 2px solid #009fe3;
-            border-radius: 8px;
-            font-size: 32px;
-            font-weight: bold;
-            letter-spacing: 8px;
-            margin: 20px 0;
-            font-family: 'Courier New', monospace;
+        .cta-wrap {
+            text-align: center;
+            margin: 28px 0 16px;
         }
-
-        .button-container {
-            margin: 20px 0;
-        }
-
-        .button {
+        .cta-btn {
             display: inline-block;
             background-color: #009fe3;
-            color: #ffffff;
-            padding: 12px 25px;
+            color: #ffffff !important;
             text-decoration: none;
-            border-radius: 5px;
+            padding: 14px 36px;
+            border-radius: 10px;
+            font-weight: 600;
             font-size: 16px;
         }
-
-        .link {
-            font-size: 14px;
+        .fallback {
+            margin: 16px 0 0;
+            font-size: 12px;
+            line-height: 1.55;
+            color: #94a3b8;
+            text-align: center;
+        }
+        .fallback a {
             color: #009fe3;
-            text-decoration: none;
-            word-wrap: break-word;
+            text-decoration: underline;
+            word-break: break-all;
         }
-
-        .option-divider {
+        .divider-or {
             width: 60%;
-            margin: 30px auto;
+            margin: 32px auto 24px;
             border: 0;
-            border-top: 1px solid #dddddd;
+            border-top: 1px solid #e2e8f0;
             position: relative;
+            height: 1px;
         }
-
-        .option-divider::after {
+        .divider-or::after {
             content: 'ODER';
             position: absolute;
             top: -10px;
             left: 50%;
             transform: translateX(-50%);
             background: #ffffff;
-            padding: 0 10px;
-            color: #aaaaaa;
-            font-size: 14px;
-        }
-
-        .footer {
+            padding: 0 12px;
+            color: #94a3b8;
             font-size: 12px;
-            color: #aaaaaa;
-            margin: 20px 0;
+            letter-spacing: 0.12em;
+        }
+        .code-section {
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+        }
+        .code-section h2 {
+            margin: 0 0 14px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #475569;
+        }
+        .verification-code {
+            display: inline-block;
+            font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', 'Courier New', monospace;
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: 0.4em;
+            color: #0f172a;
+            background-color: #ffffff;
+            padding: 12px 20px;
+            border-radius: 8px;
+            border: 1px solid #cbd5e1;
+        }
+        .code-hint {
+            margin: 14px 0 0;
+            font-size: 12px;
+            color: #94a3b8;
+        }
+        .footer {
+            padding: 24px 40px 32px;
+            text-align: center;
+            font-size: 12px;
+            color: #94a3b8;
+            line-height: 1.6;
+        }
+        .footer strong {
+            color: #475569;
         }
     </style>
 </head>
 
 <body>
-<div class="email-container">
-    <div class="header">Wiederherstellung</div>
+<div class="wrapper">
+    <div class="email-container">
 
-    <div class="content">
-        <h2>Lieber Benutzer,</h2>
-
-        <p>Sie erhalten diese E-Mail, weil Sie die Wiederherstellung des Zugriffs auf Ihr Kadampa Bookings-Konto angefordert haben.</p>
-
-        <hr class="divider">
-
-        <p><strong>Option 1 :</strong> Geben Sie den folgenden Verifizierungscode ein :</p>
-
-        <div class="verification-code">
-            [verificationCode]
+        <div class="brand-bar">
+            <div class="brand">Kadampa Bookings</div>
         </div>
 
-        <p style="font-size: 14px; color: #888888;">Dieser Code ist nur für eine einmalige Verwendung gültig und verfällt bald.</p>
+        <div class="content">
+            <h1>Melden Sie sich bei Ihrem Konto an</h1>
 
-        <hr class="option-divider">
+            <p class="lead">
+                Klicken Sie auf die Schaltfläche unten, um sich sicher bei Ihrem Kadampa Bookings-Konto anzumelden.
+                Kein Passwort erforderlich.
+            </p>
 
-        <p><strong>Option 2 :</strong> Klicken Sie auf die Schaltfläche unten, um Ihr Konto automatisch wiederherzustellen :</p>
+            <div class="cta-wrap">
+                <a href="[magicLink]" class="cta-btn">Anmelden</a>
+            </div>
 
-        <div class="button-container">
-            <a href="[magicLink]" style="color:white" class="button">Konto wiederherstellen</a>
+            <p class="fallback">
+                Schaltfläche funktioniert nicht? Kopieren Sie diesen Link und fügen Sie ihn in Ihren Browser ein:<br>
+                <a href="[magicLink]">[magicLink]</a>
+            </p>
+
+            <hr class="divider-or">
+
+            <div class="code-section">
+                <h2>Bevorzugen Sie einen Code? Geben Sie ihn auf der Anmeldeseite ein</h2>
+                <div class="verification-code">[verificationCode]</div>
+                <p class="code-hint">Dieser Code und der obige Link verfallen beide in 10 Minuten.</p>
+            </div>
+
         </div>
 
-        <p>Oder kopieren Sie diesen Link und fügen Sie ihn in Ihren Browser ein :</p>
-        <a href="[magicLink]" class="link">
-            [magicLink]
-        </a>
-    </div>
+        <div class="footer">
+            <p>
+                Wenn Sie dies nicht angefordert haben, können Sie diese E-Mail sicher ignorieren — keine Aktion erforderlich.<br>
+                <strong>Kadampa Booking System</strong>
+            </p>
+        </div>
 
-    <div class="footer">
-        <p>Wenn Sie dies nicht angefordert haben, ignorieren Sie diese E-Mail bitte.<br>Es ist keine Aktion erforderlich.</p>
     </div>
 </div>
-
-
-
 </body></html>
