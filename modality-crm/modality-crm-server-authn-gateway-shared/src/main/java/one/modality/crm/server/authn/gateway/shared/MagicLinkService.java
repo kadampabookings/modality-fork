@@ -135,11 +135,31 @@ public final class MagicLinkService {
     }
 
     public static Future<MagicLink> loadMagicLinkFromTokenOrVerificationCode(String tokenOrVerificationCode, boolean checkValidity, DataSourceModel dataSourceModel) {
-        // 1) Checking the existence of the magic link in the database, and if so, loading it with required info
-        return EntityStore.create(dataSourceModel)
-            .<MagicLink>executeQuery("select loginRunId,email,creationDate,usageDate,requestedPath,oldEmail from MagicLink where token=$1 or verificationCode=$1 limit 1", tokenOrVerificationCode)
-            .compose(magicLinks -> {
-                MagicLink magicLink = Collections.first(magicLinks);
+        // 1) Checking the existence of the magic link in the database, and if so, loading it with required info.
+        // Verification codes are 6-digit strings; magic-link tokens are UUIDs.
+        // For verification codes we additionally scope by loginRunId — the tab that requested the code
+        // must be the one submitting it — to prevent cross-user collisions in the 10-minute window.
+        // We also filter usageDate is null in the query (rather than post-load) and order by id desc
+        // so concurrent duplicate codes always resolve to the most-recent row for the right client.
+        boolean isVerificationCode = tokenOrVerificationCode != null && tokenOrVerificationCode.matches("\\d{6}");
+        EntityStore entityStore = EntityStore.create(dataSourceModel);
+        // Map each branch immediately to Future<MagicLink> to avoid EntityList/List type mismatch.
+        Future<MagicLink> findFuture;
+        if (isVerificationCode) {
+            // Scope by loginRunId: the client that entered the code is the same tab that requested it.
+            String loginRunId = ThreadLocalStateHolder.getRunId();
+            findFuture = entityStore.<MagicLink>executeQuery(
+                "select loginRunId,email,creationDate,usageDate,requestedPath,oldEmail from MagicLink where verificationCode=$1 and loginRunId=$2 and usageDate is null order by id desc limit 1",
+                tokenOrVerificationCode, loginRunId)
+                .map(Collections::first);
+        } else {
+            findFuture = entityStore.<MagicLink>executeQuery(
+                "select loginRunId,email,creationDate,usageDate,requestedPath,oldEmail from MagicLink where token=$1 and usageDate is null order by id desc limit 1",
+                tokenOrVerificationCode)
+                .map(Collections::first);
+        }
+        return findFuture
+            .compose(magicLink -> {
                 if (magicLink == null)
                     return Future.failedFuture("[%s] Magic link not found (token: %s)".formatted(ModalityAuthenticationI18nKeys.LoginLinkUnrecognisedError, tokenOrVerificationCode));
                 // 2) Checking the magic link is still valid (not already used and not expired)
