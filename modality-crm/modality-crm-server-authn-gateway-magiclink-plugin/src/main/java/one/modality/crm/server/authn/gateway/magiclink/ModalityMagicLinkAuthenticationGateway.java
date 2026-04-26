@@ -172,7 +172,6 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
         // 1) Checking the existence of the magic link in the database, and if so, loading it with required info
         return MagicLinkService.loadMagicLinkFromTokenOrVerificationCode(tokenOrVerificationCode, true, dataSourceModel)
             .compose(magicLink -> {
-                Console.log("🔍 authenticateWithMagicLink: email=" + magicLink.getEmail() + " oldEmail=" + magicLink.getOldEmail());
                 // 2) The magic link is valid, so we memorize its usage date and also check if the request comes from
                 // a registered or unregistered user (with or without an account)
                 return MagicLinkService.loadUserPersonFromMagicLink(magicLink)
@@ -181,10 +180,8 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
                         Object userId;
                         if (userPerson != null) {
                             userId = new ModalityUserPrincipal(userPerson.getPrimaryKey(), userPerson.getForeignEntity("frontendAccount").getPrimaryKey());
-                            Console.log("🔍 authenticateWithMagicLink: userPerson found (id=" + userPerson.getPrimaryKey() + "), creating ModalityUserPrincipal");
                         } else {
                             userId = new ModalityGuestPrincipal(magicLink.getEmail());
-                            Console.log("🔍 authenticateWithMagicLink: userPerson is null, creating ModalityGuestPrincipal for email=" + magicLink.getEmail());
                         }
                         // 4) Pushing the userId to the magic link client which is identified by runId = usageRunId.
                         // Pushing the userId will cause a login, and subsequently a push of the authorizations.
