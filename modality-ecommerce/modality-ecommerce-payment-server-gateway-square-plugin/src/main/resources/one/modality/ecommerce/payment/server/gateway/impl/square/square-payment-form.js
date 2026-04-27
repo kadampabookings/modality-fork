@@ -181,13 +181,16 @@ import(square_webPaymentsSDKUrl)
                 <div id="square-payment-status-container"></div>
             `;
             await googlePay.attach('#square-google-pay-button');
+            console.log("Square Google Pay: button attached");
 
+            // Primary path: ontokenization event (Square SDK fires this after the user approves
+            // in the Google Pay sheet — the button handles the sheet opening internally).
             googlePay.addEventListener('ontokenization', async function(event) {
                 square_idempotencyKey = window.crypto.randomUUID();
                 const { tokenResult, error } = event.detail;
                 if (error) {
                     displayPaymentResults('FAILURE');
-                    console.error(error.message);
+                    console.error('Google Pay tokenization error:', error.message);
                     modality_notifyGatewayCardVerificationFailure(error.message);
                     return;
                 }
@@ -198,29 +201,52 @@ import(square_webPaymentsSDKUrl)
                     modality_notifyGatewayCardVerificationFailure(msg);
                     return;
                 }
-                const token = tokenResult.token;
+                await handleGooglePayToken(tokenResult.token);
+            });
 
+            // Fallback: some Square SDK versions deliver the result via a click handler on the
+            // button container instead of (or in addition to) the ontokenization event.
+            // Clicking the container is safe because the Google Pay button fills it entirely.
+            document.getElementById('square-google-pay-button').addEventListener('click', async function() {
+                square_idempotencyKey = window.crypto.randomUUID();
+                let token;
+                try {
+                    token = await tokenize(googlePay);
+                } catch (e) {
+                    // If ontokenization already handled this, tokenize() may throw a harmless
+                    // "already in progress" error — suppress it silently.
+                    if (String(e).toLowerCase().includes('progress') || String(e).toLowerCase().includes('pending')) {
+                        return; // already handled by ontokenization
+                    }
+                    displayPaymentResults('FAILURE');
+                    console.error('Google Pay tokenize failed:', e.message);
+                    modality_notifyGatewayCardVerificationFailure(e.message);
+                    return;
+                }
+                await handleGooglePayToken(token);
+            });
+
+            async function handleGooglePayToken(token) {
                 // Google Pay handles strong authentication natively; pass empty billingContact.
                 let verificationToken;
                 try {
                     verificationToken = await verifyBuyer(token, '', '', '', '', '', '', '', '');
                 } catch (e) {
                     displayPaymentResults('FAILURE');
-                    console.error(e.message);
+                    console.error('Google Pay buyer verification failed:', e.message);
                     modality_notifyGatewayBuyerVerificationFailure(e.message);
                     return;
                 }
-
                 const paymentCompletionPayload = {
-                    modality_amount:           modality_amount,
-                    modality_currencyCode:     modality_currencyCode,
-                    square_locationId:         square_locationId,
-                    square_sourceId:           token,
-                    square_verificationToken:  verificationToken,
-                    square_idempotencyKey:     square_idempotencyKey,
+                    modality_amount:          modality_amount,
+                    modality_currencyCode:    modality_currencyCode,
+                    square_locationId:        square_locationId,
+                    square_sourceId:          token,
+                    square_verificationToken: verificationToken,
+                    square_idempotencyKey:    square_idempotencyKey,
                 };
                 modality_notifyGatewayPaymentVerificationSuccess(JSON.stringify(paymentCompletionPayload));
-            });
+            }
 
             return googlePay;
         }
