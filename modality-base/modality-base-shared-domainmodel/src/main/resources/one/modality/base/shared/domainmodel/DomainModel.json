@@ -29,6 +29,7 @@
     "charged": "boolean",
     "date": "Temporal.PlainDate",
     "documentLine": "DocumentLine",
+    "expirationDate": "Temporal.PlainDateTime",
     "icon": {
       "expr": "image('images/16/attendance.png')"
     },
