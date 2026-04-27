@@ -10,13 +10,12 @@ import dev.webfx.platform.util.uuid.Uuid;
 import net.authorize.Environment;
 import net.authorize.api.contract.v1.*;
 import net.authorize.api.controller.CreateTransactionController;
-import one.modality.ecommerce.payment.PaymentFailureReason;
-import one.modality.ecommerce.payment.PaymentStatus;
-import one.modality.ecommerce.payment.SandboxCard;
+import one.modality.ecommerce.payment.*;
 import one.modality.ecommerce.payment.server.gateway.*;
 import one.modality.ecommerce.payment.server.gateway.impl.util.RestApiOneTimeHtmlResponsesCache;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 import static one.modality.ecommerce.payment.server.gateway.impl.anet.AnetRestApiJob.AUTHORIZE_PAYMENT_FORM_LOAD_ENDPOINT;
 
@@ -41,9 +40,18 @@ public final class AnetPaymentGateway implements PaymentGateway {
         new SandboxCard("Wrong CVV", "4111 1111 1111 1111", null, "901", "46282"),
     };
 
+    private static final List<GatewayPaymentMethodInfo> SUPPORTED_METHODS = List.of(
+        new GatewayPaymentMethodInfo(PaymentMethod.CARD, PaymentFormType.EMBEDDED)
+    );
+
     @Override
     public String getName() {
         return GATEWAY_NAME;
+    }
+
+    @Override
+    public List<GatewayPaymentMethodInfo> getSupportedPaymentMethods() {
+        return SUPPORTED_METHODS;
     }
 
     @Override

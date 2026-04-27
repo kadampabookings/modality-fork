@@ -6,10 +6,7 @@ import dev.webfx.platform.console.Console;
 import dev.webfx.platform.windowlocation.WindowLocation;
 import dev.webfx.stack.origin.client.ClientOrigin;
 import one.modality.crm.shared.services.authn.fx.FXUserPerson;
-import one.modality.ecommerce.payment.InitiatePaymentArgument;
-import one.modality.ecommerce.payment.PaymentAllocation;
-import one.modality.ecommerce.payment.PaymentFormType;
-import one.modality.ecommerce.payment.PaymentService;
+import one.modality.ecommerce.payment.*;
 
 /**
  * @author Bruno Salmon
@@ -39,6 +36,7 @@ public final class ClientPaymentUtil {
         return new InitiatePaymentArgument(
             amount,
             paymentAllocations,
+            PaymentMethod.CARD,
             preferredFormType,
             WebViewPane.isBrowser(),
             "https".equalsIgnoreCase(WindowLocation.getProtocol()),

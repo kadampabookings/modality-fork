@@ -1,3 +1,6 @@
+one.modality.ecommerce.payment.buscall.serial.GetPaymentMethodsArgumentSerialCodec
+one.modality.ecommerce.payment.buscall.serial.GatewayPaymentMethodInfoSerialCodec
+one.modality.ecommerce.payment.buscall.serial.GetPaymentMethodsResultSerialCodec
 one.modality.ecommerce.payment.buscall.serial.InitiatePaymentArgumentSerialCodec
 one.modality.ecommerce.payment.buscall.serial.InitiatePaymentResultSerialCodec
 one.modality.ecommerce.payment.buscall.serial.CompletePaymentArgumentSerialCodec

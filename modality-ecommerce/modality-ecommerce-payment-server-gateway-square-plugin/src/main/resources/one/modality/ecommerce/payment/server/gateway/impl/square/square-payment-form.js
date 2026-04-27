@@ -9,6 +9,9 @@ var modality_seamless = ${modality_seamless};
 var square_webPaymentsSDKUrl = '${square_webPaymentsSDKUrl}';
 var square_appId = '${square_appId}';
 var square_locationId = '${square_locationId}';
+var square_countryCode = '${square_countryCode}';
+// The specific payment method to render ('CARD', 'APPLE_PAY', …). Injected by the server.
+var modality_paymentMethodId = '${modality_paymentMethodId}';
 // Refreshed at the start of each handlePaymentMethodSubmission call so retries after a
 // decline get a fresh key and are not served Square's cached declined response.
 var square_idempotencyKey = window.crypto.randomUUID();
@@ -26,7 +29,9 @@ var modality_seamlessContainerId = 'modality-payment-form-container';
 var square_cardElementId = 'square-card-container';
 
 // Variables
-var square_card; // Using 'var' declaration so that we can get the object back when executing the script a second time
+var square_card;       // set when payment method is CARD
+var square_googlePay;  // set when payment method is GOOGLE_PAY
+var square_applePay;   // set when payment method is APPLE_PAY
 // Guard against React Strict Mode double-injection: both import().then() callbacks would otherwise
 // both call onLoaded() and attach two card widgets. Reset to false on each script re-injection.
 var modality_onLoadedRunning = false;
@@ -52,15 +57,20 @@ function modality_injectJavaPaymentForm(jpf) {
     console.log("modality_injectJavaPaymentForm() called");
     modality_javaPaymentForm = jpf;
     modality_notifyGatewayDebugStep(1);
-    if (square_card) { // happens if the customer uses the payment form several times in the same session
+    // Destroy any previous Square payment widget so the new one can attach cleanly
+    const previousWidget = square_card || square_googlePay || square_applePay;
+    if (previousWidget) {
         modality_notifyGatewayDebugStep(2);
-        try { // We destroy the previous card, otherwise attaching the new card won't work
-            console.log("Destroying previous card");
-            square_card.destroy();
+        try {
+            console.log("Destroying previous Square widget");
+            previousWidget.destroy();
+            square_card = undefined;
+            square_googlePay = undefined;
+            square_applePay = undefined;
         } catch (e) {
             modality_notifyGatewayDebugStep(3);
-            console.error('Destroying previous card failed', e);
-            modality_notifyGatewayInitFailure('Destroying previous card failed: ' + e.message);
+            console.error('Destroying previous Square widget failed', e);
+            modality_notifyGatewayInitFailure('Destroying previous Square widget failed: ' + e.message);
             return;
         }
     }
@@ -77,6 +87,9 @@ function modality_injectJavaPaymentForm(jpf) {
 
 function modality_submitGatewayPayment(firstName, lastName, email, phone, address, city, state, postCode, countryCode, countryName) {
     console.log("modality_submitGatewayPayment() called");
+    // Google Pay and Apple Pay are self-contained: their buttons directly trigger the
+    // payment sheet, so the React Pay button is hidden and this function is never called.
+    if (modality_paymentMethodId === 'GOOGLE_PAY' || modality_paymentMethodId === 'APPLE_PAY') return;
     handlePaymentMethodSubmission(firstName, lastName, email, phone, address, city, state, countryCode);
 }
 
@@ -123,6 +136,14 @@ function modality_notifyGatewayPaymentVerificationSuccess(paymentCompletionPaylo
         modality_javaPaymentForm.onGatewayPaymentVerificationSuccess(paymentCompletionPayload);
 }
 
+// Signals to the React bridge that this form contains its own pay button (Google Pay / Apple Pay).
+// React hides the external Pay button so the user interacts only with the wallet button —
+// these payment sheets must be opened by a direct user gesture on the native button.
+function modality_notifyGatewayHasSelfContainedPayment() {
+    if (modality_javaPaymentForm && typeof modality_javaPaymentForm.onGatewayHasSelfContainedPayment === 'function')
+        modality_javaPaymentForm.onGatewayHasSelfContainedPayment();
+}
+
 console.log("Loading Square module");
 
 import(square_webPaymentsSDKUrl)
@@ -138,6 +159,138 @@ import(square_webPaymentsSDKUrl)
             const card = await payments.card();
             await card.attach('#' + square_cardElementId);
             return card;
+        }
+
+        // Initialises the Google Pay payment method and renders a Google Pay button.
+        // The SDK attaches the button via googlePay.attach(); clicking it opens the Google Pay
+        // payment sheet automatically. The 'ontokenization' event fires with the result so
+        // we do not need a separate click handler calling tokenize().
+        async function initializeGooglePay(payments) {
+            const paymentRequest = payments.paymentRequest({
+                countryCode:  square_countryCode,
+                currencyCode: modality_currencyCode,
+                total: {
+                    amount: (Number(modality_amount) / 100).toFixed(2),
+                    label:  'Total',
+                },
+            });
+            const googlePay = await payments.googlePay(paymentRequest);
+
+            modality_containerElement.innerHTML = `
+                <div id="square-google-pay-button" style="padding: 4px 0;"></div>
+                <div id="square-payment-status-container"></div>
+            `;
+            await googlePay.attach('#square-google-pay-button');
+
+            googlePay.addEventListener('ontokenization', async function(event) {
+                square_idempotencyKey = window.crypto.randomUUID();
+                const { tokenResult, error } = event.detail;
+                if (error) {
+                    displayPaymentResults('FAILURE');
+                    console.error(error.message);
+                    modality_notifyGatewayCardVerificationFailure(error.message);
+                    return;
+                }
+                if (tokenResult.status !== 'OK') {
+                    const msg = `Google Pay tokenization failed: ${tokenResult.status}`;
+                    displayPaymentResults('FAILURE');
+                    console.error(msg);
+                    modality_notifyGatewayCardVerificationFailure(msg);
+                    return;
+                }
+                const token = tokenResult.token;
+
+                // Google Pay handles strong authentication natively; pass empty billingContact.
+                let verificationToken;
+                try {
+                    verificationToken = await verifyBuyer(token, '', '', '', '', '', '', '', '');
+                } catch (e) {
+                    displayPaymentResults('FAILURE');
+                    console.error(e.message);
+                    modality_notifyGatewayBuyerVerificationFailure(e.message);
+                    return;
+                }
+
+                const paymentCompletionPayload = {
+                    modality_amount:           modality_amount,
+                    modality_currencyCode:     modality_currencyCode,
+                    square_locationId:         square_locationId,
+                    square_sourceId:           token,
+                    square_verificationToken:  verificationToken,
+                    square_idempotencyKey:     square_idempotencyKey,
+                };
+                modality_notifyGatewayPaymentVerificationSuccess(JSON.stringify(paymentCompletionPayload));
+            });
+
+            return googlePay;
+        }
+
+        // Initialises the Apple Pay payment method and renders a native Apple Pay button.
+        // The button's click handler calls tokenize(applePay), which opens the Apple Pay
+        // payment sheet. The sheet is initiated within the click event so the browser
+        // recognises it as a direct user gesture (required by Safari for Apple Pay).
+        // Apple Pay handles SCA natively, so verifyBuyer receives an empty billingContact.
+        async function initializeApplePay(payments) {
+            const paymentRequest = payments.paymentRequest({
+                countryCode:  square_countryCode,
+                currencyCode: modality_currencyCode,
+                total: {
+                    amount: (Number(modality_amount) / 100).toFixed(2),
+                    label:  'Total',
+                },
+            });
+            const applePay = await payments.applePay(paymentRequest);
+
+            // Render a CSS-styled Apple Pay button (no attach() needed — clicking the button
+            // calls tokenize() which internally opens the Apple Pay sheet).
+            modality_containerElement.innerHTML = `
+                <div id="square-apple-pay-container" style="padding: 4px 0;">
+                    <button id="square-apple-pay-button" lang="en"
+                        style="-webkit-appearance: -apple-pay-button; apple-pay-button-type: plain;
+                               apple-pay-button-style: black; width: 100%; height: 48px;
+                               border: none; cursor: pointer;">
+                    </button>
+                </div>
+                <div id="square-payment-status-container"></div>
+            `;
+
+            document.getElementById('square-apple-pay-button').addEventListener('click', async (event) => {
+                event.preventDefault();
+                square_idempotencyKey = window.crypto.randomUUID();
+
+                let token;
+                try {
+                    token = await tokenize(applePay);
+                } catch (e) {
+                    displayPaymentResults('FAILURE');
+                    console.error(e.message);
+                    modality_notifyGatewayCardVerificationFailure(e.message);
+                    return;
+                }
+
+                // Apple Pay includes its own strong authentication; pass an empty billingContact
+                let verificationToken;
+                try {
+                    verificationToken = await verifyBuyer(token, '', '', '', '', '', '', '', '');
+                } catch (e) {
+                    displayPaymentResults('FAILURE');
+                    console.error(e.message);
+                    modality_notifyGatewayBuyerVerificationFailure(e.message);
+                    return;
+                }
+
+                const paymentCompletionPayload = {
+                    modality_amount:        modality_amount,
+                    modality_currencyCode:  modality_currencyCode,
+                    square_locationId:      square_locationId,
+                    square_sourceId:        token,
+                    square_verificationToken: verificationToken,
+                    square_idempotencyKey:  square_idempotencyKey,
+                };
+                modality_notifyGatewayPaymentVerificationSuccess(JSON.stringify(paymentCompletionPayload));
+            });
+
+            return applePay;
         }
 
         async function tokenize(paymentMethod) {
@@ -226,12 +379,15 @@ import(square_webPaymentsSDKUrl)
                 return;
             }
 
-            modality_containerElement.innerHTML = `
-                <form id="square-payment-form">
-                    <div id="square-card-container"></div>
-                </form>
-                <div id="square-payment-status-container"></div>
-            `;
+            // Container HTML for CARD only; wallet methods (GOOGLE_PAY, APPLE_PAY) set their own HTML
+            if (modality_paymentMethodId !== 'GOOGLE_PAY' && modality_paymentMethodId !== 'APPLE_PAY') {
+                modality_containerElement.innerHTML = `
+                    <form id="square-payment-form">
+                        <div id="square-card-container"></div>
+                    </form>
+                    <div id="square-payment-status-container"></div>
+                `;
+            }
 
             try {
                 console.log("Calling payments");
@@ -239,21 +395,45 @@ import(square_webPaymentsSDKUrl)
             } catch (e) {
                 console.error('Payments failed', e);
                 modality_notifyGatewayInitFailure('Square payments failed to initialize: ' + e.message);
-                const statusContainer = document.getElementById(
-                    'square-payment-status-container',
-                );
-                statusContainer.className = 'missing-credentials';
-                statusContainer.style.visibility = 'visible';
+                const statusContainer = document.getElementById('square-payment-status-container');
+                if (statusContainer) {
+                    statusContainer.className = 'missing-credentials';
+                    statusContainer.style.visibility = 'visible';
+                }
                 return;
             }
 
-            try {
-                console.log("Calling initializeCard");
-                square_card = await initializeCard(payments);
-            } catch (e) {
-                console.error('Initializing Card failed', e);
-                modality_notifyGatewayInitFailure('Square card initialization failed: ' + e.message);
-                return;
+            if (modality_paymentMethodId === 'GOOGLE_PAY') {
+                try {
+                    console.log("Calling initializeGooglePay");
+                    square_googlePay = await initializeGooglePay(payments);
+                } catch (e) {
+                    console.error('Initializing Google Pay failed', e);
+                    modality_notifyGatewayInitFailure('Square Google Pay initialization failed: ' + e.message);
+                    return;
+                }
+                // Hide the React Pay button — the Google Pay button is the payment trigger
+                modality_notifyGatewayHasSelfContainedPayment();
+            } else if (modality_paymentMethodId === 'APPLE_PAY') {
+                try {
+                    console.log("Calling initializeApplePay");
+                    square_applePay = await initializeApplePay(payments);
+                } catch (e) {
+                    console.error('Initializing Apple Pay failed', e);
+                    modality_notifyGatewayInitFailure('Square Apple Pay initialization failed: ' + e.message);
+                    return;
+                }
+                // Hide the React Pay button — the Apple Pay button is the payment trigger
+                modality_notifyGatewayHasSelfContainedPayment();
+            } else {
+                try {
+                    console.log("Calling initializeCard");
+                    square_card = await initializeCard(payments);
+                } catch (e) {
+                    console.error('Initializing Card failed', e);
+                    modality_notifyGatewayInitFailure('Square card initialization failed: ' + e.message);
+                    return;
+                }
             }
 
             modality_notifyGatewayInitSuccess();

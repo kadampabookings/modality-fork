@@ -14,6 +14,11 @@ import java.util.Map;
 public class RemotePaymentServiceProvider implements PaymentServiceProvider {
 
     @Override
+    public Future<GetPaymentMethodsResult> getPaymentMethods(GetPaymentMethodsArgument argument) {
+        return BusCallService.call(PaymentServiceBusAddress.GET_PAYMENT_METHODS_METHOD_ADDRESS, argument);
+    }
+
+    @Override
     public Future<InitiatePaymentResult> initiatePayment(InitiatePaymentArgument argument) {
         return BusCallService.call(PaymentServiceBusAddress.INITIATE_PAYMENT_METHOD_ADDRESS, argument);
     }

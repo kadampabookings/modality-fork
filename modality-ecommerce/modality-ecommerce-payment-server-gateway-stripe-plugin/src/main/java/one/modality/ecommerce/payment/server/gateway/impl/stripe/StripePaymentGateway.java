@@ -7,8 +7,12 @@ import com.stripe.param.PaymentIntentCreateParams;
 import com.stripe.param.checkout.SessionCreateParams;
 import dev.webfx.platform.async.Future;
 import dev.webfx.platform.resource.Resource;
+import one.modality.ecommerce.payment.GatewayPaymentMethodInfo;
 import one.modality.ecommerce.payment.PaymentFormType;
+import one.modality.ecommerce.payment.PaymentMethod;
 import one.modality.ecommerce.payment.server.gateway.*;
+
+import java.util.List;
 
 /**
  * @author Bruno Salmon
@@ -20,9 +24,18 @@ public final class StripePaymentGateway implements PaymentGateway {
     private final static String API_SECRET_KEY = "sk_test_26PHem9AhJZvU623DfE1x4sd";
     private final static String API_PUBLIC_KEY = "pk_test_qblFNYngBkEdjEZ16jxxoWSM";
 
+    private static final List<GatewayPaymentMethodInfo> SUPPORTED_METHODS = List.of(
+        new GatewayPaymentMethodInfo(PaymentMethod.CARD, PaymentFormType.REDIRECTED)
+    );
+
     @Override
     public String getName() {
         return GATEWAY_NAME;
+    }
+
+    @Override
+    public List<GatewayPaymentMethodInfo> getSupportedPaymentMethods() {
+        return SUPPORTED_METHODS;
     }
 
     @Override

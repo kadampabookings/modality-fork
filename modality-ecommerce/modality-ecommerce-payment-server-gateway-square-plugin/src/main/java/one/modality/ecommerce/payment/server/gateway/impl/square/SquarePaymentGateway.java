@@ -13,8 +13,10 @@ import dev.webfx.platform.async.Promise;
 import dev.webfx.platform.console.Console;
 import dev.webfx.platform.resource.Resource;
 import dev.webfx.platform.util.uuid.Uuid;
+import one.modality.ecommerce.payment.GatewayPaymentMethodInfo;
 import one.modality.ecommerce.payment.PaymentFailureReason;
 import one.modality.ecommerce.payment.PaymentFormType;
+import one.modality.ecommerce.payment.PaymentMethod;
 import one.modality.ecommerce.payment.PaymentStatus;
 import one.modality.ecommerce.payment.SandboxCard;
 import one.modality.ecommerce.payment.server.gateway.*;
@@ -66,9 +68,20 @@ public final class SquarePaymentGateway implements PaymentGateway {
         new SandboxCard("Visa - Failed verification", "4811 1100 0000 0008", null, "1111", "11111")
     };
 
+    private static final List<GatewayPaymentMethodInfo> SUPPORTED_METHODS = List.of(
+        new GatewayPaymentMethodInfo(PaymentMethod.CARD,       PaymentFormType.EMBEDDED),
+        new GatewayPaymentMethodInfo(PaymentMethod.GOOGLE_PAY, PaymentFormType.EMBEDDED),
+        new GatewayPaymentMethodInfo(PaymentMethod.APPLE_PAY,  PaymentFormType.EMBEDDED)
+    );
+
     @Override
     public String getName() {
         return GATEWAY_NAME;
+    }
+
+    @Override
+    public List<GatewayPaymentMethodInfo> getSupportedPaymentMethods() {
+        return SUPPORTED_METHODS;
     }
 
     @Override
@@ -96,6 +109,12 @@ public final class SquarePaymentGateway implements PaymentGateway {
         if (DEBUG_LOG)
             Console.log("[Square][DEBUG] initiatePayment - live = " + live + ", appId = " + appId + ", locationId = " + locationId + ", seamless = " + seamless);
 
+        // Merchant's ISO 3166-1 alpha-2 country code, required by Square's paymentRequest()
+        // for wallet methods (Apple Pay). Sourced from the event's organisation in the database.
+        String countryCode = argument.merchantCountryCode();
+        if (countryCode == null) countryCode = "US"; // safe fallback if organisation has no country set
+        String paymentMethodId = (argument.paymentMethod() != null ? argument.paymentMethod() : PaymentMethod.CARD).name();
+
         String template = seamless ? SCRIPT_TEMPLATE : HTML_TEMPLATE;
         String paymentFormContent = template
             .replace("${modality_amount}", String.valueOf(argument.order().amount()))
@@ -103,7 +122,9 @@ public final class SquarePaymentGateway implements PaymentGateway {
             .replace("${modality_seamless}", String.valueOf(seamless))
             .replace("${square_webPaymentsSDKUrl}", live ? SQUARE_LIVE_WEB_PAYMENTS_SDK_URL : SQUARE_SANDBOX_WEB_PAYMENTS_SDK_URL)
             .replace("${square_appId}", appId)
-            .replace("${square_locationId}", locationId);
+            .replace("${square_locationId}", locationId)
+            .replace("${square_countryCode}", countryCode)
+            .replace("${modality_paymentMethodId}", paymentMethodId);
         if (DEBUG_LOG) {
             Console.log("[Square][DEBUG] initiatePayment - content = " + paymentFormContent);
         }

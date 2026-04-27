@@ -10,23 +10,17 @@ import dev.webfx.platform.fetch.Headers;
 import dev.webfx.platform.fetch.Response;
 import dev.webfx.platform.resource.Resource;
 import dev.webfx.platform.util.uuid.Uuid;
-import one.modality.ecommerce.payment.PaymentFailureReason;
-import one.modality.ecommerce.payment.PaymentFormType;
-import one.modality.ecommerce.payment.PaymentStatus;
-import one.modality.ecommerce.payment.SandboxCard;
+import one.modality.ecommerce.payment.*;
 import one.modality.ecommerce.payment.server.gateway.*;
 import one.modality.ecommerce.payment.server.gateway.impl.util.RestApiOneTimeHtmlResponsesCache;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-import static one.modality.ecommerce.payment.server.gateway.impl.paypal.PayPalRestApiJob.PAYPAL_LOAD_FORM_ENDPOINT;
-import static one.modality.ecommerce.payment.server.gateway.impl.paypal.PayPalRestApiJob.PAYPAL_LIVE_CANCEL_ENDPOINT;
-import static one.modality.ecommerce.payment.server.gateway.impl.paypal.PayPalRestApiJob.PAYPAL_LIVE_RETURN_ENDPOINT;
-import static one.modality.ecommerce.payment.server.gateway.impl.paypal.PayPalRestApiJob.PAYPAL_SANDBOX_CANCEL_ENDPOINT;
-import static one.modality.ecommerce.payment.server.gateway.impl.paypal.PayPalRestApiJob.PAYPAL_SANDBOX_RETURN_ENDPOINT;
+import static one.modality.ecommerce.payment.server.gateway.impl.paypal.PayPalRestApiJob.*;
 
 /**
  * PayPal payment gateway implementation using the PayPal Orders API v2.
@@ -106,9 +100,25 @@ public final class PayPalPaymentGateway implements PaymentGateway {
     private static final String HTML_TEMPLATE = Resource.getText(
         Resource.toUrl("modality-paypal-payment-form-iframe.html", PayPalPaymentGateway.class));
 
+    // Seamless Card Fields script — renders PayPal card input fields directly (no button click needed).
+    // Used when paymentMethodType == "CARD". Requires Advanced Credit and Debit Card Payments on the
+    // merchant's PayPal account; falls back to the PayPal-hosted checkout redirect if not eligible.
+    private static final String CARD_FIELDS_SCRIPT_TEMPLATE = Resource.getText(
+        Resource.toUrl("modality-paypal-card-fields.js", PayPalPaymentGateway.class));
+
+    private static final List<GatewayPaymentMethodInfo> SUPPORTED_METHODS = List.of(
+        new GatewayPaymentMethodInfo(PaymentMethod.CARD,   PaymentFormType.EMBEDDED),
+        new GatewayPaymentMethodInfo(PaymentMethod.PAYPAL, PaymentFormType.EMBEDDED)
+    );
+
     @Override
     public String getName() {
         return GATEWAY_NAME;
+    }
+
+    @Override
+    public List<GatewayPaymentMethodInfo> getSupportedPaymentMethods() {
+        return SUPPORTED_METHODS;
     }
 
     @Override
@@ -124,6 +134,7 @@ public final class PayPalPaymentGateway implements PaymentGateway {
                 Console.log("[PayPal][DEBUG] initiatePayment - amount=" + order.amount()
                     + ", currencyCode=" + argument.currencyCode() + ", live=" + live
                     + ", formType=" + argument.preferredFormType()
+                    + ", paymentMethodType=" + argument.paymentMethod()
                     + ", orderName=" + order.longName());
 
             // Build server-side return/cancel URLs so we can update the DB before redirecting
@@ -148,7 +159,7 @@ public final class PayPalPaymentGateway implements PaymentGateway {
                 .compose(accessToken -> createPayPalOrderId(apiBaseUrl, accessToken, argument, order, serverReturnUrl, serverCancelUrl))
                 .compose(orderId -> {
                     if (argument.preferredFormType() == PaymentFormType.EMBEDDED)
-                        return Future.succeededFuture(buildEmbeddedResult(orderId, clientId, argument.currencyCode(), live));
+                        return Future.succeededFuture(buildEmbeddedResult(orderId, clientId, argument.currencyCode(), live, argument.paymentMethod()));
                     // REDIRECTED (default)
                     String approveUrl = (live ? PAYPAL_LIVE_APPROVE_BASE_URL : PAYPAL_SANDBOX_APPROVE_BASE_URL) + orderId;
                     if (DEBUG_LOG)
@@ -161,17 +172,64 @@ public final class PayPalPaymentGateway implements PaymentGateway {
         }
     }
 
-    private static GatewayInitiatePaymentResult buildEmbeddedResult(String orderId, String clientId, String currencyCode, boolean live) {
-        String paypalSdkUrl = PAYPAL_SDK_URL + "?client-id=" + clientId + "&currency=" + currencyCode + "&intent=capture";
+    /**
+     * Maps our PaymentMethodType name to the PayPal JS SDK funding source constant name.
+     * null → no fundingSource specified (PayPal shows all eligible methods).
+     */
+    private static String toPayPalFundingSource(PaymentMethod paymentMethodId) {
+        if (paymentMethodId == null) return null;
+        return switch (paymentMethodId) {
+            case CARD       -> "paypal.FUNDING.CARD";
+            case PAYPAL     -> "paypal.FUNDING.PAYPAL";
+            case GOOGLE_PAY -> "paypal.FUNDING.GOOGLEPAY";
+            case APPLE_PAY  -> "paypal.FUNDING.APPLEPAY";
+            case VENMO      -> "paypal.FUNDING.VENMO";
+            default         -> null;
+        };
+    }
+
+    private static GatewayInitiatePaymentResult buildEmbeddedResult(String orderId, String clientId, String currencyCode, boolean live, PaymentMethod paymentMethodId) {
+        String fallbackRedirectUrl = (live ? PAYPAL_LIVE_APPROVE_BASE_URL : PAYPAL_SANDBOX_APPROVE_BASE_URL) + orderId;
+
+        // CARD: use PayPal Card Fields (seamless — fields render directly, no button click needed).
+        // Requires Advanced Credit and Debit Card Payments on the merchant's PayPal account.
+        // Falls back to the PayPal-hosted checkout redirect via fallbackRedirectUrl if not eligible.
+        if (paymentMethodId == PaymentMethod.CARD) {
+            // Both components needed: card-fields for the primary path, buttons for the fallback
+            // when the merchant has not enabled Advanced Credit and Debit Card Payments.
+            String paypalSdkUrl = PAYPAL_SDK_URL + "?client-id=" + clientId + "&currency=" + currencyCode + "&intent=capture&components=buttons,card-fields";
+            String paymentFormContent = CARD_FIELDS_SCRIPT_TEMPLATE
+                .replace("${paypal_orderId}", orderId)
+                .replace("${paypal_sdkUrl}",  paypalSdkUrl);
+            if (DEBUG_LOG)
+                Console.log("[PayPal][DEBUG] initiatePayment - Card Fields seamless, fallback: " + fallbackRedirectUrl);
+            return GatewayInitiatePaymentResult.createEmbeddedContentInitiatePaymentResult(live, true, paymentFormContent, false, live ? null : SANDBOX_CARDS)
+                .withFallbackRedirectUrl(fallbackRedirectUrl);
+        }
+
+        // PAYPAL wallet (and any other method): iframe with the PayPal Buttons SDK.
+        // The wallet button click is inherent to PayPal's security model (popup requires a user gesture).
+        String fundingSource = toPayPalFundingSource(paymentMethodId);
+        // disable-funding=card prevents the card SDK components from loading when we want
+        // PayPal wallet only. Note: "paypal" is NOT a valid disable-funding value per PayPal
+        // docs — for that direction, fundingSource alone is sufficient to limit rendering.
+        String disableFunding = paymentMethodId == PaymentMethod.PAYPAL ? "&disable-funding=card" : "";
+        String paypalSdkUrl = PAYPAL_SDK_URL + "?client-id=" + clientId + "&currency=" + currencyCode + "&intent=capture" + disableFunding;
+        // ${fundingSource} sits at the top of the paypal.Buttons({}) config object so it is
+        // processed first. It expands to "fundingSource: paypal.FUNDING.PAYPAL,\n                "
+        // (with trailing newline+indent) or to "" when no specific method is requested.
+        String fundingSourceSnippet = fundingSource != null
+            ? "fundingSource: " + fundingSource + ",\n                "
+            : "";
         String paymentFormContent = HTML_TEMPLATE
-            .replace("${orderId}",      orderId)
-            .replace("${paypalSdkUrl}", paypalSdkUrl);
+            .replace("${orderId}",       orderId)
+            .replace("${paypalSdkUrl}",  paypalSdkUrl)
+            .replace("${fundingSource}", fundingSourceSnippet);
         String htmlCacheKey = Uuid.randomUuid();
         RestApiOneTimeHtmlResponsesCache.registerOneTimeHtmlResponse(htmlCacheKey, paymentFormContent);
         String url = PAYPAL_LOAD_FORM_ENDPOINT.replace(":htmlCacheKey", htmlCacheKey);
         // The approval URL is the redirect fallback: if the embedded PayPal JS SDK is blocked
         // (e.g. by an ad blocker or corporate firewall), the user can still pay via redirect.
-        String fallbackRedirectUrl = (live ? PAYPAL_LIVE_APPROVE_BASE_URL : PAYPAL_SANDBOX_APPROVE_BASE_URL) + orderId;
         if (DEBUG_LOG)
             Console.log("[PayPal][DEBUG] initiatePayment - embedded form URL: " + url + ", fallback: " + fallbackRedirectUrl);
         return GatewayInitiatePaymentResult.createEmbeddedUrlInitiatePaymentResult(live, false, url, true, live ? null : SANDBOX_CARDS)

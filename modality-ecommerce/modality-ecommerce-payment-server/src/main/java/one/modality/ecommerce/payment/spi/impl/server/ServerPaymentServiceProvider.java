@@ -52,6 +52,53 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
     }
 
     @Override
+    public Future<GetPaymentMethodsResult> getPaymentMethods(GetPaymentMethodsArgument argument) {
+        // Step 1: Load event state, live flag, and the event primary key from the document.
+        // The event state determines live vs test mode (KBS3 way); event.live is the KBS2 fallback.
+        return EntityStore.create()
+            .<Document>executeQuery(
+                "select event.(state, live, organization) from Document where id=$1",
+                argument.documentPrimaryKey())
+            .compose(documents -> {
+                if (documents.isEmpty())
+                    return Future.failedFuture("Document not found: " + argument.documentPrimaryKey());
+                Document document = documents.get(0);
+                Event event = document.getEvent();
+                EventState state = event.getState();
+                boolean live = state != null && state.compareTo(EventState.OPEN) >= 0  /* KBS3 way */
+                               || state == null && event.isLive();                     /* KBS2 way */
+                Object organizationPk = Numbers.toShortestNumber(Entities.getPrimaryKey(event.getOrganizationId()));
+                Object eventPk        = Numbers.toShortestNumber(event.getPrimaryKey());
+                // Step 2: Find the destination MoneyAccount for an online payment from this event's
+                // organization. This mirrors the autoset_money_transfer_to_account trigger logic:
+                // - type.internal=true and type.customer=false → destination account (not a customer account)
+                // - gatewayCompany!=null                       → only gateway-linked accounts
+                // - !closed                                    → account must be active
+                // - order by event=$eventPk desc               → prefer event-specific accounts over org-level ones
+                return EntityStore.create()
+                    .<MoneyAccount>executeQuery(
+                        "select gatewayCompany.name from MoneyAccount" +
+                        " where organization=$1 and !closed and gatewayCompany!=null" +
+                        " and type.internal and !type.customer" +
+                        " order by event=$2 desc, id",
+                        organizationPk, eventPk)
+                    .map(accounts -> {
+                        if (accounts.isEmpty())
+                            return new GetPaymentMethodsResult("Unknown", live, new GatewayPaymentMethodInfo[0]);
+                        String gatewayName = accounts.get(0).getGatewayCompany().getName();
+                        PaymentGateway gateway = findMatchingPaymentGatewayProvider(gatewayName);
+                        if (gateway == null)
+                            return new GetPaymentMethodsResult(gatewayName, live, new GatewayPaymentMethodInfo[0]);
+                        return new GetPaymentMethodsResult(
+                            gateway.getName(),
+                            live,
+                            gateway.getSupportedPaymentMethods().toArray(GatewayPaymentMethodInfo[]::new)
+                        );
+                    });
+            });
+    }
+
+    @Override
     public Future<InitiatePaymentResult> initiatePayment(InitiatePaymentArgument argument) {
         // Step 1: Inserting the payment in the database with its payment allocations
         return insertPayment(argument.amount(), argument.paymentAllocations(), argument.preferredFormType()) // insertPayment
@@ -77,18 +124,22 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
                             .compose(parameters -> {
                                 // Step 5: Calling the payment gateway with all the data collected
                                 String currencyCode = totalTransfer.getToMoneyAccount().getCurrency().getCode();
+                                Document primaryDoc = getDatabasePaymentPrimaryDocument(databasePayment);
+                                String merchantCountryCode = primaryDoc.evaluate("event.organization.country.iso_alpha2");
                                 return paymentGateway.initiatePayment(new GatewayInitiatePaymentArgument(
                                     moneyTransferId,
                                     createGatewayOrder(databasePayment),
                                     currencyCode,
                                     live,
+                                    argument.paymentMethod(),
                                     argument.preferredFormType(),
                                     argument.favorSeamless(),
                                     argument.isOriginOnHttps(),
                                     returnUrl,
                                     cancelUrl,
                                     parameters,
-                                    createGatewayCustomer(databasePayment)
+                                    createGatewayCustomer(databasePayment),
+                                    merchantCountryCode
                                 )).map(gatewayResult -> new InitiatePaymentResult( // Step 5: Returning an InitiatePaymentResult
                                     paymentGateway.getName(),
                                     totalTransfer.getPrimaryKey(),
@@ -109,7 +160,7 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
 
     private Future<Void> loadDatabasePaymentDocuments(DatabasePayment databasePayment) {
         return databasePayment.totalTransfer().getStore()
-            .executeQuery("select toMoneyAccount.(currency.code, gatewayCompany.name), document.(ref,person_name,person_firstName,person_lastName,person_email,person_phone,person_street,person_postCode,person_cityName,person_admin1Name,person_country.(name,iso_alpha2),person_countryName,event.(state,live)) from MoneyTransfer where id=$1 or parent=$1", databasePayment.totalTransfer())
+            .executeQuery("select toMoneyAccount.(currency.code, gatewayCompany.name), document.(ref,person_name,person_firstName,person_lastName,person_email,person_phone,person_street,person_postCode,person_cityName,person_admin1Name,person_country.(name,iso_alpha2),person_countryName,event.(state,live,organization.country.iso_alpha2)) from MoneyTransfer where id=$1 or parent=$1", databasePayment.totalTransfer())
             .mapEmpty();
     }
 

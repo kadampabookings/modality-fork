@@ -7,6 +7,8 @@ import java.util.Map;
 
 public interface PaymentServiceProvider {
 
+    Future<GetPaymentMethodsResult> getPaymentMethods(GetPaymentMethodsArgument argument);
+
     Future<InitiatePaymentResult> initiatePayment(InitiatePaymentArgument argument);
 
     Future<CompletePaymentResult> completePayment(CompletePaymentArgument argument);

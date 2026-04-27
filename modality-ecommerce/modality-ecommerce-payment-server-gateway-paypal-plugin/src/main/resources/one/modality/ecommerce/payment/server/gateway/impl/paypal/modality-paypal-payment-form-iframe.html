@@ -23,7 +23,7 @@
         script.onerror = () => modality_notifyGatewayInitFailure("Failed to load PayPal JS SDK");
         script.onload = () => {
             paypal.Buttons({
-                // Reuse the order already created server-side in initiatePayment()
+                ${fundingSource}// Reuse the order already created server-side in initiatePayment()
                 createOrder: () => Promise.resolve(PAYPAL_ORDER_ID),
                 onApprove: (data) => {
                     // Pass the approved order ID to the server for capture via completePayment()

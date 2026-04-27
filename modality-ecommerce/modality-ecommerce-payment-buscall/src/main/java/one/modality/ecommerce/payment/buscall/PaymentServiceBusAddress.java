@@ -5,8 +5,9 @@ package one.modality.ecommerce.payment.buscall;
  */
 public class PaymentServiceBusAddress {
 
-    public static final String INITIATE_PAYMENT_METHOD_ADDRESS = "service/payment/initiatePayment";
-    public static final String COMPLETE_PAYMENT_METHOD_ADDRESS = "service/payment/completePayment";
-    public static final String CANCEL_PAYMENT_METHOD_ADDRESS = "service/payment/cancelPayment";
+    public static final String GET_PAYMENT_METHODS_METHOD_ADDRESS  = "service/payment/getPaymentMethods";
+    public static final String INITIATE_PAYMENT_METHOD_ADDRESS     = "service/payment/initiatePayment";
+    public static final String COMPLETE_PAYMENT_METHOD_ADDRESS     = "service/payment/completePayment";
+    public static final String CANCEL_PAYMENT_METHOD_ADDRESS       = "service/payment/cancelPayment";
 
 }

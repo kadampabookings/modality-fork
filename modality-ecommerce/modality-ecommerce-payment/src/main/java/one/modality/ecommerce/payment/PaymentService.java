@@ -16,6 +16,10 @@ public final class PaymentService {
         return SingleServiceProvider.getProvider(PaymentServiceProvider.class, () -> ServiceLoader.load(PaymentServiceProvider.class));
     }
 
+    public static Future<GetPaymentMethodsResult> getPaymentMethods(GetPaymentMethodsArgument argument) {
+        return getProvider().getPaymentMethods(argument);
+    }
+
     public static Future<InitiatePaymentResult> initiatePayment(InitiatePaymentArgument argument) {
         return getProvider().initiatePayment(argument);
     }
