@@ -444,7 +444,11 @@ import(square_webPaymentsSDKUrl)
                     square_applePay = await initializeApplePay(payments);
                 } catch (e) {
                     console.error('Initializing Apple Pay failed', e);
-                    modality_notifyGatewayInitFailure('Square Apple Pay initialization failed: ' + e.message);
+                    // PaymentMethodUnsupportedError means the domain is not registered for Apple Pay.
+                    // Prefix the message so React can distinguish a permanent config issue (which
+                    // should remove the payment option) from a transient initialisation failure.
+                    const prefix = (e.name === 'PaymentMethodUnsupportedError') ? '__METHOD_UNSUPPORTED__:' : '';
+                    modality_notifyGatewayInitFailure(prefix + 'Square Apple Pay initialization failed: ' + e.message);
                     return;
                 }
                 // Hide the React Pay button — the Apple Pay button is the payment trigger
