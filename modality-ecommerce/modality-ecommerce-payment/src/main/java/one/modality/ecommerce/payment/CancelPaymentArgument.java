@@ -13,9 +13,4 @@ public record CancelPaymentArgument(
     boolean isExplicitUserCancellation,
     PaymentFormType formType,
     PaymentMethod paymentMethod
-) {
-    /** Convenience constructor preserving the original 2-arg signature for legacy callers. */
-    public CancelPaymentArgument(Object paymentPrimaryKey, boolean isExplicitUserCancellation) {
-        this(paymentPrimaryKey, isExplicitUserCancellation, null, null);
-    }
-}
+) { }

@@ -379,7 +379,7 @@ public final class WebPaymentForm {
 
     private Future<CancelPaymentResult> cancelPayment(boolean explicitUserCancellation) {
         paymentCancelled = true;
-        return PaymentService.cancelPayment(new CancelPaymentArgument(result.paymentPrimaryKey(), explicitUserCancellation))
+        return PaymentService.cancelPayment(new CancelPaymentArgument(result.paymentPrimaryKey(), explicitUserCancellation, null, null))
             .onComplete(ar -> allowUserInteraction());
     }
 
