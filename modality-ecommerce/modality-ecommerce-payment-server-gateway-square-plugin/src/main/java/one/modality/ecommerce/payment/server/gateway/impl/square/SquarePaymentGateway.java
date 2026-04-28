@@ -111,8 +111,10 @@ public final class SquarePaymentGateway implements PaymentGateway {
 
         // Merchant's ISO 3166-1 alpha-2 country code, required by Square's paymentRequest()
         // for wallet methods (Apple Pay). Sourced from the event's organisation in the database.
+        // Uppercased — Square's SDK rejects lowercase codes (e.g. 'gb') with InvalidPaymentRequestError.
         String countryCode = argument.merchantCountryCode();
         if (countryCode == null) countryCode = "US"; // safe fallback if organisation has no country set
+        else countryCode = countryCode.toUpperCase();
         String paymentMethodId = (argument.paymentMethod() != null ? argument.paymentMethod() : PaymentMethod.CARD).name();
 
         String template = seamless ? SCRIPT_TEMPLATE : HTML_TEMPLATE;
