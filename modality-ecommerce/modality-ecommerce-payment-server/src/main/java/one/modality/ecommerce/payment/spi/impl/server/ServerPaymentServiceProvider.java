@@ -336,10 +336,19 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
 
     @Override
     public Future<CancelPaymentResult> cancelPayment(CancelPaymentArgument argument) {
-        return updatePaymentStatusImpl(UpdatePaymentStatusArgument.createCancelStatusArgument(argument.paymentPrimaryKey(), argument.isExplicitUserCancellation()))
-            // When payments are canceled on recurring events, we automatically un-book unpaid options
-            .compose(this::unbookUnpaidOptionsIfRecurringEvent)
-            .onFailure(Console::error);
+        boolean explicit = argument.isExplicitUserCancellation();
+        Future<MoneyTransfer> updated = updatePaymentStatusImpl(
+                UpdatePaymentStatusArgument.createCancelStatusArgument(
+                        argument.paymentPrimaryKey(), explicit, argument.formType(), argument.paymentMethod()));
+        // Only un-book unpaid options on EXPLICIT cancellation. An abandonment
+        // (explicit=false: popup dismissed, window closed, wallet sheet swiped
+        // away) leaves the document changes intact, so if the user retries and
+        // succeeds the same MoneyTransfer can be flipped to successful without
+        // anything to restore.
+        Future<CancelPaymentResult> result = explicit
+                ? updated.compose(this::unbookUnpaidOptionsIfRecurringEvent)
+                : updated.map(mt -> new CancelPaymentResult(false));
+        return result.onFailure(Console::error);
     }
 
     private Future<CancelPaymentResult> unbookUnpaidOptionsIfRecurringEvent(MoneyTransfer moneyTransfer) {

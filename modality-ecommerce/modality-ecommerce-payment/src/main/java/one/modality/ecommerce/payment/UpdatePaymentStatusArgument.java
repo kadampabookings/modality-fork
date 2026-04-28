@@ -23,7 +23,13 @@ public record UpdatePaymentStatusArgument(
     }
 
     public static UpdatePaymentStatusArgument createCancelStatusArgument(Object paymentPrimaryKey, boolean explicitUserCancellation) {
-        return new UpdatePaymentStatusArgument(paymentPrimaryKey, null, null, null, false, false, explicitUserCancellation, null, null, null);
+        return createCancelStatusArgument(paymentPrimaryKey, explicitUserCancellation, null, null);
+    }
+
+    /** Variant that records the form type and payment method on the cancel/abandon history entry
+     *  so it reads e.g. "Abandoned payment £25 (Google Pay)" instead of "Abandoned payment £25". */
+    public static UpdatePaymentStatusArgument createCancelStatusArgument(Object paymentPrimaryKey, boolean explicitUserCancellation, PaymentFormType formType, PaymentMethod paymentMethod) {
+        return new UpdatePaymentStatusArgument(paymentPrimaryKey, null, null, null, false, false, explicitUserCancellation, null, formType, paymentMethod);
     }
 
     public static UpdatePaymentStatusArgument createExceptionStatusArgument(Object paymentPrimaryKey, String gatewayResponse, String errorMessage) {
