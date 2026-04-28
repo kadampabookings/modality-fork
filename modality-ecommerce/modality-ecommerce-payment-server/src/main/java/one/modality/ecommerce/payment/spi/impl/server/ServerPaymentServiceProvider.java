@@ -521,8 +521,9 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
         }
     }
 
-    /** Returns " (Google Pay)", " (Apple Pay)", " (embedded form)", " (redirected page)", or "" for history comments. */
+    /** Returns " (PayPal)", " (Google Pay)", " (Apple Pay)", " (embedded form)", " (redirected page)", or "" for history comments. */
     private static String paymentLabel(PaymentFormType formType, PaymentMethod paymentMethod) {
+        if (paymentMethod == PaymentMethod.PAYPAL)     return " (PayPal)";
         if (paymentMethod == PaymentMethod.GOOGLE_PAY) return " (Google Pay)";
         if (paymentMethod == PaymentMethod.APPLE_PAY)  return " (Apple Pay)";
         if (formType == null) return "";
