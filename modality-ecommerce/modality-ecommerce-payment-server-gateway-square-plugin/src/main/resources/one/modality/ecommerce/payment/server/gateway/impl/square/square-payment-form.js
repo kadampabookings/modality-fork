@@ -227,15 +227,13 @@ import(square_webPaymentsSDKUrl)
             });
 
             async function handleGooglePayToken(token) {
-                // Google Pay handles strong authentication natively; pass empty billingContact.
-                let verificationToken;
+                // verifyBuyer() adds 3DS/SCA on top of Google Pay's own authentication.
+                // Non-fatal: wallet device auth already satisfies SCA; proceed without token if it fails.
+                let verificationToken = null;
                 try {
                     verificationToken = await verifyBuyer(token, '', '', '', '', '', '', '', '');
                 } catch (e) {
-                    displayPaymentResults('FAILURE');
-                    console.error('Google Pay buyer verification failed:', e.message);
-                    modality_notifyGatewayBuyerVerificationFailure(e.message);
-                    return;
+                    console.warn('Google Pay: verifyBuyer failed, proceeding without verification token:', e.message);
                 }
                 const paymentCompletionPayload = {
                     modality_amount:          modality_amount,
@@ -294,15 +292,13 @@ import(square_webPaymentsSDKUrl)
                     return;
                 }
 
-                // Apple Pay includes its own strong authentication; pass an empty billingContact
-                let verificationToken;
+                // verifyBuyer() adds 3DS/SCA on top of Apple Pay's own authentication.
+                // Non-fatal: wallet device auth already satisfies SCA; proceed without token if it fails.
+                let verificationToken = null;
                 try {
                     verificationToken = await verifyBuyer(token, '', '', '', '', '', '', '', '');
                 } catch (e) {
-                    displayPaymentResults('FAILURE');
-                    console.error(e.message);
-                    modality_notifyGatewayBuyerVerificationFailure(e.message);
-                    return;
+                    console.warn('Apple Pay: verifyBuyer failed, proceeding without verification token:', e.message);
                 }
 
                 const paymentCompletionPayload = {
@@ -460,6 +456,40 @@ import(square_webPaymentsSDKUrl)
                     modality_notifyGatewayInitFailure('Square card initialization failed: ' + e.message);
                     return;
                 }
+            }
+
+            // Expose a direct trigger so React can open the payment sheet from within
+            // the Pay button's click handler (a live user gesture) without a second click
+            // on the embedded wallet button. Only set for wallet methods.
+            if (modality_paymentMethodId === 'GOOGLE_PAY' || modality_paymentMethodId === 'APPLE_PAY') {
+                window.modality_triggerWalletPayment = async function() {
+                    const wallet = square_googlePay || square_applePay;
+                    if (!wallet) return;
+                    let token;
+                    try {
+                        token = await tokenize(wallet);
+                    } catch(e) {
+                        modality_notifyGatewayCardVerificationFailure(e.message);
+                        return;
+                    }
+                    // verifyBuyer() adds 3DS/SCA on top of the wallet's own authentication.
+                    // It can fail in sandbox or non-SCA regions — treat as non-fatal and
+                    // proceed without it; the wallet's device auth already satisfies SCA.
+                    let verificationToken = null;
+                    try {
+                        verificationToken = await verifyBuyer(token, '', '', '', '', '', '', '', '');
+                    } catch(e) {
+                        console.warn('Wallet: verifyBuyer failed, proceeding without verification token:', e.message);
+                    }
+                    modality_notifyGatewayPaymentVerificationSuccess(JSON.stringify({
+                        modality_amount:          modality_amount,
+                        modality_currencyCode:    modality_currencyCode,
+                        square_locationId:        square_locationId,
+                        square_sourceId:          token,
+                        square_verificationToken: verificationToken,
+                        square_idempotencyKey:    window.crypto.randomUUID(),
+                    }));
+                };
             }
 
             modality_notifyGatewayInitSuccess();
