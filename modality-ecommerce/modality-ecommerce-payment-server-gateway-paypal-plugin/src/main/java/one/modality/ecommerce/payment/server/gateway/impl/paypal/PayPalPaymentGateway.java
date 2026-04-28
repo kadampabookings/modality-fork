@@ -207,13 +207,24 @@ public final class PayPalPaymentGateway implements PaymentGateway {
                 .withFallbackRedirectUrl(fallbackRedirectUrl);
         }
 
-        // PAYPAL wallet (and any other method): iframe with the PayPal Buttons SDK.
+        // PAYPAL wallet: in-app SDK rendering — the client renders the PayPal Buttons widget
+        // directly in the host page (same origin, no iframe). One user click on the PayPal
+        // button opens the PayPal popup. The widget calls back via createOrder/onApprove,
+        // and React forwards the approved order id to completePayment().
+        if (paymentMethodId == PaymentMethod.PAYPAL) {
+            if (DEBUG_LOG)
+                Console.log("[PayPal][DEBUG] initiatePayment - in-app SDK, orderId=" + orderId + ", fallback: " + fallbackRedirectUrl);
+            return GatewayInitiatePaymentResult.createPayPalInAppInitiatePaymentResult(
+                live, orderId, clientId, currencyCode, fallbackRedirectUrl, live ? null : SANDBOX_CARDS);
+        }
+
+        // Other methods (e.g. funding-specific buttons): iframe with the PayPal Buttons SDK.
         // The wallet button click is inherent to PayPal's security model (popup requires a user gesture).
         String fundingSource = toPayPalFundingSource(paymentMethodId);
         // disable-funding=card prevents the card SDK components from loading when we want
         // PayPal wallet only. Note: "paypal" is NOT a valid disable-funding value per PayPal
         // docs — for that direction, fundingSource alone is sufficient to limit rendering.
-        String disableFunding = paymentMethodId == PaymentMethod.PAYPAL ? "&disable-funding=card" : "";
+        String disableFunding = "";
         String paypalSdkUrl = PAYPAL_SDK_URL + "?client-id=" + clientId + "&currency=" + currencyCode + "&intent=capture" + disableFunding;
         // ${fundingSource} sits at the top of the paypal.Buttons({}) config object so it is
         // processed first. It expands to "fundingSource: paypal.FUNDING.PAYPAL,\n                "

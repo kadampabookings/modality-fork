@@ -24,6 +24,9 @@ public final class InitiatePaymentResultSerialCodec extends SerialCodecBase<Init
     private static final String GATEWAY_NAME_KEY = "gateway";
     private static final String SANDBOX_CARDS_KEY = "sandboxCards";
     private static final String FALLBACK_REDIRECT_URL_KEY = "fallbackRedirectUrl";
+    private static final String PAYPAL_IN_APP_ORDER_ID_KEY  = "paypalInAppOrderId";
+    private static final String PAYPAL_IN_APP_CLIENT_ID_KEY = "paypalInAppClientId";
+    private static final String PAYPAL_IN_APP_CURRENCY_KEY  = "paypalInAppCurrency";
 
     public InitiatePaymentResultSerialCodec() {
         super(InitiatePaymentResult.class, CODEC_ID);
@@ -42,6 +45,9 @@ public final class InitiatePaymentResultSerialCodec extends SerialCodecBase<Init
         encodeBoolean(serial, HAS_HTML_PAY_BUTTON_KEY, arg.hasHtmlPayButton());
         encodeArray(  serial, SANDBOX_CARDS_KEY,           arg.sandboxCards());
         encodeString( serial, FALLBACK_REDIRECT_URL_KEY,   arg.fallbackRedirectUrl());
+        encodeString( serial, PAYPAL_IN_APP_ORDER_ID_KEY,  arg.paypalInAppOrderId());
+        encodeString( serial, PAYPAL_IN_APP_CLIENT_ID_KEY, arg.paypalInAppClientId());
+        encodeString( serial, PAYPAL_IN_APP_CURRENCY_KEY,  arg.paypalInAppCurrency());
     }
 
     @Override
@@ -57,7 +63,10 @@ public final class InitiatePaymentResultSerialCodec extends SerialCodecBase<Init
             decodeBoolean(serial, SEAMLESS_KEY),
             decodeBoolean(serial, HAS_HTML_PAY_BUTTON_KEY),
             decodeArray(  serial, SANDBOX_CARDS_KEY, SandboxCard.class),
-            decodeString( serial, FALLBACK_REDIRECT_URL_KEY)
+            decodeString( serial, FALLBACK_REDIRECT_URL_KEY),
+            decodeString( serial, PAYPAL_IN_APP_ORDER_ID_KEY),
+            decodeString( serial, PAYPAL_IN_APP_CLIENT_ID_KEY),
+            decodeString( serial, PAYPAL_IN_APP_CURRENCY_KEY)
         );
     }
 }
