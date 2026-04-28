@@ -169,7 +169,7 @@ public final class PayPalRestApiJob implements ApplicationJob {
                             captureResult.gatewayStatus(),
                             pending,
                             successful,
-                            PaymentFormType.REDIRECTED))
+                            PaymentFormType.REDIRECTED, null))
                 );
             })
             .onComplete(ar -> {
@@ -367,7 +367,7 @@ public final class PayPalRestApiJob implements ApplicationJob {
         return PAYPAL_HISTORY_USER_ID.callAndReturn(() ->
             PaymentService.updatePaymentStatus(
                 UpdatePaymentStatusArgument.createCapturedStatusArgument(
-                    paymentPk, textPayload, transactionRef, gatewayStatus, pending, successful, PaymentFormType.REDIRECTED))
+                    paymentPk, textPayload, transactionRef, gatewayStatus, pending, successful, PaymentFormType.REDIRECTED, null))
                 .onSuccess(v -> Console.log(logPrefix + "✅  Updated status=" + gatewayStatus + " for payment " + paymentPk))
                 .onFailure(e -> Console.error(logPrefix + "⛔️  Failed to update status=" + gatewayStatus + " for payment " + paymentPk, e))
         );

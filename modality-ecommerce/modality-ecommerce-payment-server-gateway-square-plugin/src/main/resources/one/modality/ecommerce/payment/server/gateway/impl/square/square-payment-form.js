@@ -236,12 +236,13 @@ import(square_webPaymentsSDKUrl)
                     console.warn('Google Pay: verifyBuyer failed, proceeding without verification token:', e.message);
                 }
                 const paymentCompletionPayload = {
-                    modality_amount:          modality_amount,
-                    modality_currencyCode:    modality_currencyCode,
-                    square_locationId:        square_locationId,
-                    square_sourceId:          token,
-                    square_verificationToken: verificationToken,
-                    square_idempotencyKey:    square_idempotencyKey,
+                    modality_amount:           modality_amount,
+                    modality_currencyCode:     modality_currencyCode,
+                    modality_paymentMethodId:  modality_paymentMethodId,
+                    square_locationId:         square_locationId,
+                    square_sourceId:           token,
+                    square_verificationToken:  verificationToken,
+                    square_idempotencyKey:     square_idempotencyKey,
                 };
                 modality_notifyGatewayPaymentVerificationSuccess(JSON.stringify(paymentCompletionPayload));
             }
@@ -302,12 +303,13 @@ import(square_webPaymentsSDKUrl)
                 }
 
                 const paymentCompletionPayload = {
-                    modality_amount:        modality_amount,
-                    modality_currencyCode:  modality_currencyCode,
-                    square_locationId:      square_locationId,
-                    square_sourceId:        token,
-                    square_verificationToken: verificationToken,
-                    square_idempotencyKey:  square_idempotencyKey,
+                    modality_amount:           modality_amount,
+                    modality_currencyCode:     modality_currencyCode,
+                    modality_paymentMethodId:  modality_paymentMethodId,
+                    square_locationId:         square_locationId,
+                    square_sourceId:           token,
+                    square_verificationToken:  verificationToken,
+                    square_idempotencyKey:     square_idempotencyKey,
                 };
                 modality_notifyGatewayPaymentVerificationSuccess(JSON.stringify(paymentCompletionPayload));
             });
@@ -482,12 +484,13 @@ import(square_webPaymentsSDKUrl)
                         console.warn('Wallet: verifyBuyer failed, proceeding without verification token:', e.message);
                     }
                     modality_notifyGatewayPaymentVerificationSuccess(JSON.stringify({
-                        modality_amount:          modality_amount,
-                        modality_currencyCode:    modality_currencyCode,
-                        square_locationId:        square_locationId,
-                        square_sourceId:          token,
-                        square_verificationToken: verificationToken,
-                        square_idempotencyKey:    window.crypto.randomUUID(),
+                        modality_amount:           modality_amount,
+                        modality_currencyCode:     modality_currencyCode,
+                        modality_paymentMethodId:  modality_paymentMethodId,
+                        square_locationId:         square_locationId,
+                        square_sourceId:           token,
+                        square_verificationToken:  verificationToken,
+                        square_idempotencyKey:     window.crypto.randomUUID(),
                     }));
                 };
             }
