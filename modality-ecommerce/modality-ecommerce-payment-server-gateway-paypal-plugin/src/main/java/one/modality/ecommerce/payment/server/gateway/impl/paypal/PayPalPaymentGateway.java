@@ -107,8 +107,18 @@ public final class PayPalPaymentGateway implements PaymentGateway {
         Resource.toUrl("modality-paypal-card-fields.js", PayPalPaymentGateway.class));
 
     private static final List<GatewayPaymentMethodInfo> SUPPORTED_METHODS = List.of(
-        new GatewayPaymentMethodInfo(PaymentMethod.CARD,   PaymentFormType.EMBEDDED),
-        new GatewayPaymentMethodInfo(PaymentMethod.PAYPAL, PaymentFormType.EMBEDDED)
+        new GatewayPaymentMethodInfo(PaymentMethod.CARD,       PaymentFormType.EMBEDDED),
+        new GatewayPaymentMethodInfo(PaymentMethod.PAYPAL,     PaymentFormType.EMBEDDED),
+        // Google Pay and Apple Pay routed through PayPal use the same in-app SDK
+        // params (orderId / clientId / currency) as the PAYPAL method — the React
+        // side keys off `selectedMethodKey` to load the right SDK component
+        // (paypal.Googlepay() / paypal.Applepay()) and open the wallet sheet.
+        // The server doesn't differentiate at the order-creation level: PayPal
+        // creates a single order regardless of which funding source ultimately
+        // approves it. Eligibility (device support + PayPal merchant capability)
+        // is filtered client-side via the Google Pay / Apple Pay JS APIs.
+        new GatewayPaymentMethodInfo(PaymentMethod.GOOGLE_PAY, PaymentFormType.EMBEDDED),
+        new GatewayPaymentMethodInfo(PaymentMethod.APPLE_PAY,  PaymentFormType.EMBEDDED)
     );
 
     @Override
@@ -211,9 +221,17 @@ public final class PayPalPaymentGateway implements PaymentGateway {
         // directly in the host page (same origin, no iframe). One user click on the PayPal
         // button opens the PayPal popup. The widget calls back via createOrder/onApprove,
         // and React forwards the approved order id to completePayment().
-        if (paymentMethodId == PaymentMethod.PAYPAL) {
+        //
+        // GOOGLE_PAY / APPLE_PAY routed through PayPal: same in-app SDK params, but the
+        // client loads the SDK with components=googlepay / applepay and uses
+        // paypal.Googlepay() / paypal.Applepay() to open the native wallet sheet inside
+        // the user-gesture click. The PayPal order id is captured the same way once the
+        // wallet token is confirmed via paypal.<Wallet>().confirmOrder().
+        if (paymentMethodId == PaymentMethod.PAYPAL
+                || paymentMethodId == PaymentMethod.GOOGLE_PAY
+                || paymentMethodId == PaymentMethod.APPLE_PAY) {
             if (DEBUG_LOG)
-                Console.log("[PayPal][DEBUG] initiatePayment - in-app SDK, orderId=" + orderId + ", fallback: " + fallbackRedirectUrl);
+                Console.log("[PayPal][DEBUG] initiatePayment - in-app SDK (" + paymentMethodId + "), orderId=" + orderId + ", fallback: " + fallbackRedirectUrl);
             return GatewayInitiatePaymentResult.createPayPalInAppInitiatePaymentResult(
                 live, orderId, clientId, currencyCode, fallbackRedirectUrl, live ? null : SANDBOX_CARDS);
         }
