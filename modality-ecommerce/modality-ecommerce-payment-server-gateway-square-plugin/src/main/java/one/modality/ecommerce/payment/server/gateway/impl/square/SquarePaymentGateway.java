@@ -251,6 +251,14 @@ public final class SquarePaymentGateway implements PaymentGateway {
             Console.log("[Square][DEBUG] completePayment - live = " + live + ", accessToken prefix = " + accessTokenPrefix(accessToken) + ", amount = " + amount + ", currencyCode = " + currencyCode + ", locationId = " + locationId + ", idempotencyKey = " + idempotencyKey + ", sourceId = " + sourceId + ", verificationToken = " + verificationToken);
         }
 
+        // Note + referenceId give the Square dashboard something better than
+        // "Custom Amount". `note` is the human-readable description shown on
+        // the payment detail page (max 500 chars). `referenceId` is the
+        // merchant-side identifier (max 40 chars, no spaces or '#'), useful
+        // for cross-referencing with our DB / webhooks.
+        String note = truncate(argument.order().longName(), 500);
+        String referenceId = truncate(argument.order().id(), 40);
+
         // Use Square SDK async client pattern (like AsyncCustomersClient)
         client.payments()
             .create(
@@ -263,6 +271,8 @@ public final class SquarePaymentGateway implements PaymentGateway {
                         .amount(amount)
                         .currency(Currency.valueOf(currencyCode))
                         .build())
+                    .note(note)
+                    .referenceId(referenceId)
                     .build()
             )
             .thenAccept(response -> {
@@ -368,5 +378,11 @@ public final class SquarePaymentGateway implements PaymentGateway {
 
     private static String accessTokenPrefix(String accessToken) {
         return accessToken != null && accessToken.length() > 8 ? accessToken.substring(0, 8) + "..." : accessToken;
+    }
+
+    /** Returns the input truncated to `maxLength` characters, or `null` if input is null. */
+    private static String truncate(String value, int maxLength) {
+        if (value == null) return null;
+        return value.length() <= maxLength ? value : value.substring(0, maxLength);
     }
 }

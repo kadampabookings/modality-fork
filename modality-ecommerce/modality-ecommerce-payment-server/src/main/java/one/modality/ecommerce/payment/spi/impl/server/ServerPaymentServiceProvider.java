@@ -295,13 +295,25 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
         MoneyTransfer moneyTransfer = databasePayment.totalTransfer();
         Document primaryDocument = getDatabasePaymentPrimaryDocument(databasePayment);
         Event primaryEvent = primaryDocument.getEvent();
+        // Format used by gateway dashboards as the payment description / note:
+        //   "KBS - #<eventId> <eventName> - #<bookingRef>"               (single booking)
+        //   "KBS - #<eventId> <eventName> - #<ref1> #<ref2> #<ref3>"     (spread payment)
+        // The "KBS -" prefix lets staff filter payments coming from this booking
+        // system when the gateway account is also used for other things (e.g. a
+        // till or a separate webshop). Stored in `longName`; gateways pass it
+        // through to their own dashboards (Square `note`, PayPal order
+        // description, Authorize.net line item) so the org can identify which
+        // event/bookings each payment relates to.
+        String eventLabel = "KBS - #" + primaryEvent.getPrimaryKey() + " " + primaryEvent.getName();
+
         // Case of a simple payment made on a single booking
-        if (Booleans.isNotTrue(moneyTransfer.isSpread()))
+        if (Booleans.isNotTrue(moneyTransfer.isSpread())) {
+            String paymentDescription = eventLabel + " - #" + primaryDocument.getRef();
             return new GatewayOrder(
                 // Node: Some payment gateways like Square don't allow spaces and # in identifiers
                 "E" + primaryEvent.getPrimaryKey() + "-REF" + primaryDocument.getRef() + "-MT" + moneyTransfer.getPrimaryKey(),
                 primaryEvent.getName() + " #" + primaryDocument.getRef(),
-                primaryEvent.getName() + " - " + primaryDocument.getFullName(),
+                paymentDescription,
                 moneyTransfer.getAmount(),
                 new GatewayItem[]{
                     new GatewayItem(
@@ -313,13 +325,20 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
                     )
                 }
             );
+        }
 
         // Case of a multiple payment spread over several bookings
+        StringBuilder bookingRefs = new StringBuilder();
+        for (MoneyTransfer allocatedTransfer : databasePayment.allocatedTransfers()) {
+            if (!bookingRefs.isEmpty()) bookingRefs.append(' ');
+            bookingRefs.append('#').append(allocatedTransfer.getDocument().getRef());
+        }
+        String paymentDescription = eventLabel + " - " + bookingRefs;
         return new GatewayOrder(
             // Node: Some payment gateways like Square don't allow spaces and # in identifiers
             "E" + primaryEvent.getPrimaryKey() + "-MT" + moneyTransfer.getPrimaryKey(),
             primaryEvent.getName(),
-            primaryEvent.getName(),
+            paymentDescription,
             moneyTransfer.getAmount(),
             Arrays.map(databasePayment.allocatedTransfers(), allocatedTransfer -> {
                 Document document = allocatedTransfer.getDocument();
