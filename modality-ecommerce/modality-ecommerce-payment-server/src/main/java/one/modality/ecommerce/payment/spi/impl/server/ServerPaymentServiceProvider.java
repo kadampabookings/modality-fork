@@ -77,7 +77,7 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
                 // - order by event=$eventPk desc               → prefer event-specific accounts over org-level ones
                 return EntityStore.create()
                     .<MoneyAccount>executeQuery(
-                        "select gatewayCompany.name from MoneyAccount" +
+                        "select gatewayCompany.name,googlePayEnabled,applePayEnabled from MoneyAccount" +
                         " where organization=$1 and !closed and gatewayCompany!=null" +
                         " and type.internal and !type.customer" +
                         " order by event=$2 desc, id",
@@ -85,14 +85,22 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
                     .map(accounts -> {
                         if (accounts.isEmpty())
                             return new GetPaymentMethodsResult("Unknown", live, new GatewayPaymentMethodInfo[0]);
-                        String gatewayName = accounts.get(0).getGatewayCompany().getName();
+                        MoneyAccount moneyAccount = accounts.get(0);
+                        String gatewayName = moneyAccount.getGatewayCompany().getName();
                         PaymentGateway gateway = findMatchingPaymentGatewayProvider(gatewayName);
                         if (gateway == null)
                             return new GetPaymentMethodsResult(gatewayName, live, new GatewayPaymentMethodInfo[0]);
+                        List<GatewayPaymentMethodInfo> supportedPaymentMethods = Collections.filter(
+                            gateway.getSupportedPaymentMethods(),
+                            methodInfo ->
+                                methodInfo.method() == PaymentMethod.GOOGLE_PAY ? moneyAccount.isGooglePayEnabled() :
+                                methodInfo.method() == PaymentMethod.APPLE_PAY ? moneyAccount.isApplePayEnabled() :
+                                true
+                        );
                         return new GetPaymentMethodsResult(
                             gateway.getName(),
                             live,
-                            gateway.getSupportedPaymentMethods().toArray(GatewayPaymentMethodInfo[]::new)
+                            supportedPaymentMethods.toArray(GatewayPaymentMethodInfo[]::new)
                         );
                     });
             });

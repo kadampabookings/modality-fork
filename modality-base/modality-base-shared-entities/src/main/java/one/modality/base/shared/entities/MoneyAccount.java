@@ -16,6 +16,8 @@ public interface MoneyAccount extends
     String type = "type";
     String closed = "closed";
     String gatewayCompany = "gatewayCompany";
+    String googlePayEnabled = "googlePayEnabled";
+    String applePayEnabled = "applePayEnabled";
 
     default void setCurrency(Object value) {
         setForeignField(currency, value);
@@ -60,4 +62,21 @@ public interface MoneyAccount extends
     default GatewayCompany getGatewayCompany() {
         return getForeignEntity(gatewayCompany);
     }
+
+    default void setGooglePayEnabled(Boolean value) {
+        setFieldValue(googlePayEnabled, value);
+    }
+
+    default Boolean isGooglePayEnabled() {
+        return getBooleanFieldValue(googlePayEnabled);
+    }
+
+    default void setApplePayEnabled(Boolean value) {
+        setFieldValue(applePayEnabled, value);
+    }
+
+    default Boolean isApplePayEnabled() {
+        return getBooleanFieldValue(applePayEnabled);
+    }
+
 }

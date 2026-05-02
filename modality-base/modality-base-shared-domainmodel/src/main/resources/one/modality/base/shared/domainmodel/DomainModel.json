@@ -775,6 +775,7 @@
     "termsUrlEs": "string",
     "termsUrlFr": "string",
     "termsUrlPt": "string",
+    "theme": "EventTheme",
     "timezone": "string",
     "type": "EventType",
     "uri": "string",
@@ -821,6 +822,11 @@
     "part1": "EventPart",
     "part2": "EventPart",
     "part3": "EventPart"
+  },
+  "EventTheme": {
+    "id": 163,
+    "code": "string",
+    "name": "string"
   },
   "EventType": {
     "id": 95,
@@ -1253,11 +1259,13 @@
   },
   "MoneyAccount": {
     "id": 53,
+    "applePayEnabled": "boolean",
     "bankSystemAccount": "string",
     "closed": "boolean",
     "currency": "Currency",
     "event": "Event",
     "gatewayCompany": "GatewayCompany",
+    "googlePayEnabled": "boolean",
     "icon": {
       "expr": "type.icon"
     },
