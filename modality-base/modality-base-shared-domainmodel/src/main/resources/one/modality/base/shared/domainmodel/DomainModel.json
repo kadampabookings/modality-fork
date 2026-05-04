@@ -483,8 +483,11 @@
     "person_facilityFee": "boolean",
     "person_firstName": "string",
     "person_guest": "boolean",
+    "person_isAdult": {
+      "expr": "!person_isChild"
+    },
     "person_isChild": {
-      "expr": "person_age!=null"
+      "expr": "person_age < 18"
     },
     "person_known": "boolean",
     "person_lang": "string",
@@ -731,8 +734,14 @@
     "label": "Label",
     "live": "boolean",
     "livechatUrl": "string",
+    "livestreamAudioIssue": "string",
+    "livestreamAudioIssueLabel": "Label",
+    "livestreamConnectionIssue": "string",
+    "livestreamConnectionIssueLabel": "Label",
     "livestreamMessageLabel": "Label",
     "livestreamUrl": "string",
+    "livestreamVideoIssue": "string",
+    "livestreamVideoIssueLabel": "Label",
     "longDescriptionLabel": "Label",
     "maxDateTimeRange": "string",
     "minDateTimeRange": "string",
@@ -1149,6 +1158,7 @@
     "description": "string",
     "documentList": "boolean",
     "event": "Event",
+    "labelList": "boolean",
     "name": "string",
     "organization": "Organization",
     "personList": "boolean",
@@ -1158,6 +1168,7 @@
     "id": 161,
     "comment": "string",
     "document": "Document",
+    "label": "Label",
     "list": "List",
     "person": "Person"
   },
