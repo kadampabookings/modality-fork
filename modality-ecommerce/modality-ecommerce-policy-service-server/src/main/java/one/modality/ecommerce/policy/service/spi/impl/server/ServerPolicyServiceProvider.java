@@ -97,7 +97,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                     // 3 - Loading event parts (of this event or of the repeated event if set)
                     , DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
                     "with e as (select coalesce(repeatedEvent,id) as finalEvent from Event where id=$1)" +
-                    " select event,name,label,startBoundary,endBoundary,accommodationChangeAllowed" +
+                    " select event,name,label,startBoundary,endBoundary,accommodationChangeAllowed,hyt" +
                     " from EventPart epa, e where epa.event = e.finalEvent" +
                     " order by startBoundary.id", eventPk)
                     // 4 - Loading event selections (of this event or of the repeated event if set)

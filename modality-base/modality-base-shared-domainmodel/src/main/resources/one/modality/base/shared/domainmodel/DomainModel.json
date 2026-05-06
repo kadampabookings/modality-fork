@@ -485,7 +485,7 @@
     "person_firstName": "string",
     "person_guest": "boolean",
     "person_isAdult": {
-      "expr": "!person_isChild"
+      "expr": "person_age = null or person_age >= 18"
     },
     "person_isChild": {
       "expr": "person_age < 18"
@@ -801,6 +801,7 @@
     "accommodationChangeAllowed": "boolean",
     "endBoundary": "ScheduledBoundary",
     "event": "Event",
+    "hyt": "boolean",
     "label": "Label",
     "name": "string",
     "startBoundary": "ScheduledBoundary"
