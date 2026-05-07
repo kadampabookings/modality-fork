@@ -792,6 +792,8 @@
     "uri": "string",
     "uuid": "string",
     "venue": "Site",
+    "vodBunnyLibraryId": "string",
+    "vodBunnyPullZoneId": "string",
     "vodEnabled": "boolean",
     "vodExpirationDate": "Temporal.PlainDateTime",
     "vodProcessingTimeMinutes": "integer"
@@ -1440,6 +1442,9 @@
   },
   "Organization": {
     "id": 30,
+    "audioBunnyPullZoneId": "string",
+    "audioBunnyStorageZoneId": "string",
+    "bunnyApiKey": "string",
     "cityName": "string",
     "closed": "boolean",
     "country": "Country",
