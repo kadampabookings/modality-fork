@@ -367,6 +367,8 @@ import(square_webPaymentsSDKUrl)
             const statusContainer = document.getElementById(
                 'square-payment-status-container',
             );
+            // Guard: container may be absent if React re-rendered and recreated the host div
+            if (!statusContainer) return;
             if (status === 'SUCCESS') {
                 statusContainer.classList.remove('is-failure');
                 statusContainer.classList.add('is-success');
@@ -499,6 +501,10 @@ import(square_webPaymentsSDKUrl)
                 };
             }
 
+            // Register only after payments is initialized — prevents the React Strict Mode
+            // second-injection closure (which skips onLoaded) from overwriting this with a
+            // version that has payments=undefined, causing the verifyBuyer crash.
+            window.handlePaymentMethodSubmission = handlePaymentMethodSubmission;
             modality_notifyGatewayInitSuccess();
         }
 
@@ -510,9 +516,10 @@ import(square_webPaymentsSDKUrl)
             try {
                 token = await tokenize(square_card);
             } catch (e) {
-                displayPaymentResults('FAILURE');
+                // Notify the React bridge first — before any DOM work that could throw
                 console.error(e.message);
                 modality_notifyGatewayCardVerificationFailure(e.message);
+                displayPaymentResults('FAILURE');
                 return;
             }
 
@@ -521,9 +528,10 @@ import(square_webPaymentsSDKUrl)
             try {
                 verificationToken = await verifyBuyer(token, firstName, lastName, email, phone, address, city, state, countryCode);
             } catch (e) {
-                displayPaymentResults('FAILURE');
+                // Notify the React bridge first — before any DOM work that could throw
                 console.error(e.message);
                 modality_notifyGatewayBuyerVerificationFailure(e.message);
+                displayPaymentResults('FAILURE');
                 return;
             }
 
@@ -551,9 +559,6 @@ import(square_webPaymentsSDKUrl)
             // Document is not ready yet, so add an event listener for DOMContentLoaded
             document.addEventListener('DOMContentLoaded', onLoaded);
         }
-
-        // Making handlePaymentMethodSubmission function visible for modality_submitGatewayPayment
-        window.handlePaymentMethodSubmission = handlePaymentMethodSubmission;
 
     });
 
