@@ -14,6 +14,10 @@
         <!-- DeepL service, used by modality-event-backoffice-activity-medias-plugin which is included in modality-event-backoffice-max-plugin -->
         <plugin-module>webfx-stack-cloud-deepl-server-plugin</plugin-module>
 
+        <!-- Bunny.net Stream REST proxy: /rest/videos/* endpoints used by the
+             React backoffice publish-video flow. -->
+        <plugin-module>modality-event-server-rest-bunny-stream-vertx-plugin</plugin-module>
+
     </dependencies>
 
 </project>

@@ -48,6 +48,7 @@
         <module>modality-event-frontoffice-min-plugin</module>
         <module>modality-event-server-max-plugin</module>
         <module>modality-event-server-min-plugin</module>
+        <module>modality-event-server-rest-bunny-stream-vertx-plugin</module>
     </modules>
 
 </project>
