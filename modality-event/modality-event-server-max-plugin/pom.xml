@@ -23,16 +23,16 @@
         </dependency>
 
         <dependency>
-            <groupId>dev.webfx</groupId>
-            <artifactId>webfx-stack-cloud-deepl-server-plugin</artifactId>
-            <version>0.1.0-SNAPSHOT</version>
+            <groupId>one.modality</groupId>
+            <artifactId>modality-event-server-rest-bunny-stream-vertx-plugin</artifactId>
+            <version>1.0.0-SNAPSHOT</version>
             <scope>runtime</scope>
         </dependency>
 
         <dependency>
-            <groupId>one.modality</groupId>
-            <artifactId>modality-event-server-rest-bunny-stream-vertx-plugin</artifactId>
-            <version>1.0.0-SNAPSHOT</version>
+            <groupId>dev.webfx</groupId>
+            <artifactId>webfx-stack-cloud-deepl-server-plugin</artifactId>
+            <version>0.1.0-SNAPSHOT</version>
             <scope>runtime</scope>
         </dependency>
 
