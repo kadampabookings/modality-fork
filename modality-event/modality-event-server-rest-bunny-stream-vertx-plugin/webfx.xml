@@ -13,7 +13,7 @@
     </dependencies>
 
     <providers>
-        <provider interface="dev.webfx.platform.boot.spi.ApplicationModuleBooter">org.kadampabookings.kbs.server.bunnystream.BunnyStreamRestService</provider>
+        <provider interface="dev.webfx.platform.boot.spi.ApplicationModuleBooter">one.modality.event.server.rest.bunnystream.BunnyStreamRestService</provider>
     </providers>
 
 </project>

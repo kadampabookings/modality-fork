@@ -1,4 +1,4 @@
-// File managed manually for now; mirrors modality-base-server-rest-map-vertx-plugin structure.
+// File managed by WebFX (DO NOT EDIT MANUALLY)
 
 module modality.event.server.rest.bunny.stream.vertx.plugin {
 
@@ -6,8 +6,8 @@ module modality.event.server.rest.bunny.stream.vertx.plugin {
     requires io.vertx.core;
     requires io.vertx.web;
     requires modality.base.shared.entities;
-    requires webfx.platform.async;
     requires webfx.platform.ast;
+    requires webfx.platform.async;
     requires webfx.platform.boot;
     requires webfx.platform.console;
     requires webfx.platform.fetch;
