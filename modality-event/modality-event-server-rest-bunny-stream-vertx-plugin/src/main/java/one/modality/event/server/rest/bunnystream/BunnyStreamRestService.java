@@ -65,6 +65,10 @@ public final class BunnyStreamRestService implements ApplicationModuleBooter {
     private static final String LIBRARY_VIDEOS_PATH         = "/rest/videos/library-videos";
     private static final String LIBRARY_VIDEO_PATH          = "/rest/videos/library-video";
     private static final String LIBRARY_VIDEO_DOWNLOAD_PATH = "/rest/videos/library-video-download";
+    /** Period-based billing (storage prorated since each video's upload date,
+     *  bandwidth cumulative across the event's watching period via
+     *  api.bunny.net/statistics). */
+    private static final String LIBRARY_BILLING_PATH        = "/rest/videos/library-billing";
 
     /** Bunny's library-videos paging cap. Anything larger is silently clamped server-side
      *  by Bunny, but we clamp here to keep the client honest. */
@@ -118,11 +122,13 @@ public final class BunnyStreamRestService implements ApplicationModuleBooter {
             router.get(LIBRARY_VIDEO_PATH).handler(this::handleLibraryVideoGet);
             router.delete(LIBRARY_VIDEO_PATH).handler(this::handleLibraryVideoDelete);
             router.get(LIBRARY_VIDEO_DOWNLOAD_PATH).handler(this::handleLibraryVideoDownload);
+            router.get(LIBRARY_BILLING_PATH).handler(this::handleLibraryBilling);
 
             Console.log("[BUNNY-STREAM] REST routes registered: "
                     + LIBRARY_PATH + ", " + INIT_PATH + ", " + STATUS_PATH + ", " + ABORT_PATH
                     + ", " + LIBRARY_INFO_PATH + ", " + LIBRARY_VIDEOS_PATH + ", " + LIBRARY_VIDEO_PATH
-                    + " (GET/DELETE)" + ", " + LIBRARY_VIDEO_DOWNLOAD_PATH);
+                    + " (GET/DELETE)" + ", " + LIBRARY_VIDEO_DOWNLOAD_PATH
+                    + ", " + LIBRARY_BILLING_PATH);
             Console.log("[BUNNY-STREAM] Credentials resolved per-request from DB "
                     + "(Event.vodBunnyLibraryId/vodBunnyPullZoneId, Organization.bunnyApiKey).");
         } catch (Throwable t) {
@@ -534,6 +540,207 @@ public final class BunnyStreamRestService implements ApplicationModuleBooter {
         })
         .onSuccess(body -> sendJson(ctx, OK_200, body))
         .onFailure(err -> sendError(ctx, INTERNAL_SERVER_ERROR_500, err.getMessage()));
+    }
+
+    // ─── GET /rest/videos/library-billing ──────────────────────────────────
+
+    /**
+     * Period-based billing snapshot for the event's Bunny library — the actual
+     * dollar amount the operator can invoice the centre for, computed across
+     * the event's watching period (from {@code Event.startDate} to whichever
+     * comes first of today and {@code Event.vodExpirationDate}).
+     *
+     * <p>Storage is billed by Bunny per-hour (GB-month rate divided by ~730),
+     * so a video that lived in the library for 5 days only contributes 5/30
+     * of its monthly cost. We sum {@code (storageSizeGB × hours_in_period / 730)}
+     * across every current video in the library, capped on each side by the
+     * event's watching window. Bandwidth is cumulative across the period: we
+     * call the account-level CDN statistics endpoint with the library's pull
+     * zone id and read {@code TotalBandwidthUsed} (Bunny does the summing for
+     * us).
+     *
+     * <p>Caveat: deleted videos are no longer in the library list, so their
+     * historical storage cost can't be counted here. For libraries that delete
+     * videos mid-period this number under-counts; for libraries that keep
+     * videos until expiration (the common case for VOD events), it matches the
+     * Bunny invoice.
+     */
+    private void handleLibraryBilling(RoutingContext ctx) {
+        Long eventId = parseLong(ctx.request().getParam("eventId"));
+        if (eventId == null) {
+            sendError(ctx, BAD_REQUEST_400, "missing eventId");
+            return;
+        }
+        EntityStore.create().<Event>executeQuery(
+                        "select id, startDate, vodExpirationDate, vodBunnyLibraryId," +
+                                " vodBunnyPullZoneId, organization.bunnyApiKey" +
+                                " from Event where id=$1",
+                        eventId)
+                .compose(rows -> {
+                    if (rows.isEmpty()) return Future.failedFuture("Event " + eventId + " not found");
+                    Event event = rows.get(0);
+                    String rawLibraryId = event.getStringFieldValue("vodBunnyLibraryId");
+                    String libraryId = isBlank(rawLibraryId) ? null : rawLibraryId.trim();
+                    Organization org = event.getOrganization();
+                    String rawApiKey = org == null ? null : org.getStringFieldValue("bunnyApiKey");
+                    String accountKey = isBlank(rawApiKey) ? null : rawApiKey.trim();
+                    if (libraryId == null || accountKey == null) {
+                        return Future.failedFuture("Bunny credentials missing on event/org");
+                    }
+                    java.time.LocalDate startDate = event.getStartDate();
+                    java.time.LocalDateTime vodExpiration = event.getLocalDateTimeFieldValue("vodExpirationDate");
+                    java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneOffset.UTC);
+                    if (startDate == null) {
+                        return Future.failedFuture("Event " + eventId + " has no startDate — cannot compute billing period");
+                    }
+                    java.time.LocalDate cap = vodExpiration != null ? vodExpiration.toLocalDate() : today;
+                    java.time.LocalDate toDate = today.isBefore(cap) ? today : cap;
+                    if (toDate.isBefore(startDate)) toDate = startDate;
+                    final String fromIso = startDate.toString();
+                    final String toIso = toDate.toString();
+                    final java.time.LocalDate periodFrom = startDate;
+                    final java.time.LocalDate periodTo = toDate;
+
+                    return BunnyStreamApiClient.resolveLibrary(libraryId, accountKey)
+                            .compose(resolved -> {
+                                Future<ReadOnlyAstObject> videosF = BunnyStreamApiClient.listVideos(
+                                        libraryId, resolved.streamApiKey, 1, MAX_VIDEOS_PER_PAGE);
+                                // Pad dateTo by one day so Bunny's day-bucket cutoff
+                                // (often exclusive of the date passed in) doesn't drop
+                                // the trailing day's data — adding a day that has zero
+                                // recorded bytes is a no-op for the totals.
+                                final String paddedToIso = periodTo.plusDays(1).toString();
+                                Future<ReadOnlyAstObject> statsF = BunnyStreamApiClient.getCdnStatistics(
+                                        resolved.pullZoneId, accountKey, fromIso, paddedToIso);
+                                return Future.all(videosF, statsF).map(combined -> {
+                                    ReadOnlyAstObject videosJson = combined.resultAt(0);
+                                    ReadOnlyAstObject statsJson = combined.resultAt(1);
+                                    double storageGbMonths = computeStorageGbMonths(
+                                            videosJson, periodFrom, periodTo);
+                                    long totalReported = Numbers.longValue(statsJson.get("TotalBandwidthUsed"));
+                                    long chartSum = sumBandwidthChart(statsJson, "BandwidthUsedChart");
+                                    // Diagnostic log so we can compare what Bunny reports
+                                    // against the dashboard widget. The dashboard's
+                                    // "Total bandwidth" stat normally matches the chart
+                                    // sum; we prefer that here so the period total
+                                    // tracks the dashboard.
+                                    Console.log("[BUNNY-STREAM] library-billing eventId=" + eventId
+                                            + " period=[" + fromIso + ".." + paddedToIso + ")"
+                                            + " TotalBandwidthUsed=" + totalReported
+                                            + " sumChart=" + chartSum
+                                            + " storageGbMonths=" + storageGbMonths
+                                            + " videos=" + (videosJson.getArray("items") == null ? 0
+                                                    : videosJson.getArray("items").size()));
+                                    long bandwidthBytes = chartSum > 0 ? chartSum : totalReported;
+                                    return jsonLibraryBillingOk(fromIso, toIso, storageGbMonths, bandwidthBytes);
+                                });
+                            });
+                })
+                .onSuccess(body -> sendJson(ctx, OK_200, body))
+                .onFailure(err -> sendError(ctx, INTERNAL_SERVER_ERROR_500, err.getMessage()));
+    }
+
+    /** Average hours per month used for proration ({@code 365 × 24 / 12}).
+     *  Bunny bills storage by the hour internally and quotes it at "$X/GB-month",
+     *  so converting hours-stored to GB-months requires this constant. */
+    private static final double HOURS_PER_MONTH = 730.0;
+
+    /**
+     * Sum the {@code (size_GB × hours_in_period)} contribution of every video,
+     * then divide by {@link #HOURS_PER_MONTH} to get GB-months. Each video's
+     * contribution is bounded by {@code [max(uploadDate, periodFrom), periodTo]}
+     * so a video uploaded mid-period only counts from when it was uploaded.
+     *
+     * <p>The video's {@code dateUploaded} is parsed as a UTC {@link java.time.LocalDateTime}
+     * (Bunny returns "{@code YYYY-MM-DDTHH:mm:ss}" with no timezone). The
+     * {@code periodFrom} / {@code periodTo} are also UTC (caller derives them
+     * from {@link java.time.LocalDate#now(java.time.ZoneOffset) LocalDate.now(UTC)}),
+     * keeping the math timezone-consistent end-to-end.
+     */
+    private static double computeStorageGbMonths(
+            ReadOnlyAstObject videosJson,
+            java.time.LocalDate periodFrom,
+            java.time.LocalDate periodTo) {
+        ReadOnlyAstArray items = videosJson == null ? null : videosJson.getArray("items");
+        if (items == null || items.size() == 0) return 0;
+        java.time.Instant from = periodFrom.atStartOfDay(java.time.ZoneOffset.UTC).toInstant();
+        java.time.Instant cap   = periodTo.plusDays(1).atStartOfDay(java.time.ZoneOffset.UTC).toInstant();
+        java.time.Instant now   = java.time.Instant.now();
+        if (now.isBefore(cap)) cap = now;
+        double total = 0;
+        for (int i = 0; i < items.size(); i++) {
+            ReadOnlyAstObject v = items.getObject(i);
+            if (v == null) continue;
+            long sizeBytes = Numbers.longValue(v.get("storageSize"));
+            if (sizeBytes <= 0) continue;
+            String uploadedStr = v.getString("dateUploaded");
+            java.time.Instant uploaded = parseBunnyTimestamp(uploadedStr);
+            if (uploaded == null) continue;
+            java.time.Instant videoStart = uploaded.isAfter(from) ? uploaded : from;
+            if (!videoStart.isBefore(cap)) continue;
+            long hours = java.time.Duration.between(videoStart, cap).toHours();
+            if (hours <= 0) continue;
+            // GB = decimal (10⁹ bytes) — matches the cost-calc convention on the
+            // React side (library-cost-calc.ts BYTES_PER_GB = 1_000_000_000).
+            double sizeGb = sizeBytes / 1_000_000_000.0;
+            total += sizeGb * hours / HOURS_PER_MONTH;
+        }
+        return total;
+    }
+
+    /** Sum every value in a Bunny chart object — Bunny returns these as a
+     *  {@code {"<ISO timestamp>": bytes}} map keyed on the day boundary, so
+     *  the sum is the period total. Returns 0 if the chart is missing or empty.
+     *
+     *  <p>Used as a more reliable alternative to the {@code TotalBandwidthUsed}
+     *  scalar field, which we've seen under-report by a few percent vs the
+     *  Bunny dashboard's headline number. The dashboard widget itself sums the
+     *  chart; doing the same here keeps our number aligned with what an
+     *  operator visually verifies in Bunny. */
+    private static long sumBandwidthChart(ReadOnlyAstObject statsJson, String chartFieldName) {
+        if (statsJson == null) return 0;
+        ReadOnlyAstObject chart = statsJson.getObject(chartFieldName);
+        if (chart == null) return 0;
+        ReadOnlyAstArray keys = chart.keys();
+        if (keys == null) return 0;
+        long total = 0;
+        for (int i = 0; i < keys.size(); i++) {
+            String key = keys.getString(i);
+            if (key == null) continue;
+            total += Numbers.longValue(chart.get(key));
+        }
+        return total;
+    }
+
+    /** Parse a Bunny "{@code YYYY-MM-DDTHH:mm:ss[.fff]}" timestamp as a UTC
+     *  {@link java.time.Instant}. Returns null on null/empty/malformed input. */
+    private static java.time.Instant parseBunnyTimestamp(String s) {
+        if (s == null || s.isEmpty()) return null;
+        try {
+            return java.time.LocalDateTime.parse(s).atZone(java.time.ZoneOffset.UTC).toInstant();
+        } catch (java.time.format.DateTimeParseException e) {
+            return null;
+        }
+    }
+
+    /** Period-billing payload — {@code storageGbMonths} and {@code bandwidthBytes}
+     *  are raw usage; the React layer multiplies by the configured rates. */
+    private static String jsonLibraryBillingOk(
+            String fromDate, String toDate, double storageGbMonths, long bandwidthBytes) {
+        StringBuilder sb = new StringBuilder("{");
+        sb.append("\"ok\":true");
+        sb.append(",\"fromDate\":\"").append(fromDate).append('"');
+        sb.append(",\"toDate\":\"").append(toDate).append('"');
+        // Round to 6 decimal places — sub-millionths of a GB-month are noise.
+        sb.append(",\"storageGbMonths\":").append(roundTo6Decimals(storageGbMonths));
+        sb.append(",\"bandwidthBytes\":").append(bandwidthBytes);
+        sb.append('}');
+        return sb.toString();
+    }
+
+    private static double roundTo6Decimals(double v) {
+        if (!Double.isFinite(v)) return 0;
+        return Math.round(v * 1_000_000.0) / 1_000_000.0;
     }
 
     /** Pick the highest available height from Bunny's CSV string ("240p,360p,480p,...").

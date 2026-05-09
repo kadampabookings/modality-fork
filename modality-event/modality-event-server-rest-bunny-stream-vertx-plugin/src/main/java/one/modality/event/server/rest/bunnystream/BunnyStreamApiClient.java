@@ -5,6 +5,7 @@ import dev.webfx.platform.async.Future;
 import dev.webfx.platform.fetch.FetchOptions;
 import dev.webfx.platform.fetch.Headers;
 import dev.webfx.platform.fetch.json.JsonFetch;
+import dev.webfx.platform.util.Numbers;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -127,14 +128,28 @@ public final class BunnyStreamApiClient {
      *  pattern; the org's account-level API key is reused. */
     private static final String ACCOUNT_BASE_URL = "https://api.bunny.net";
 
-    /** Cache mapping library id → resolved per-library Stream API key. The Stream
-     *  key is published by the account API as the {@code ApiKey} field on each
-     *  library record; we fetch it once per library per process and reuse it for
-     *  every {@code video.bunnycdn.com} call. The cache lives forever (process
-     *  lifetime) — the per-library Stream key effectively never changes, and
-     *  rotating it from the Bunny dashboard would also require an operator
-     *  restart of the server to take effect anyway. */
-    private static final ConcurrentHashMap<String, String> STREAM_KEY_CACHE = new ConcurrentHashMap<>();
+    /** Cache mapping library id → resolved library properties (Stream API key
+     *  and numeric pull-zone id). Both come from the same account-API call so
+     *  caching them together avoids a second round-trip for the billing
+     *  endpoint, which needs the numeric pull-zone id to query CDN statistics.
+     *  The cache lives forever — the per-library values effectively never
+     *  change, and rotating them from the Bunny dashboard would also require
+     *  an operator restart of the server to take effect anyway. */
+    private static final ConcurrentHashMap<String, ResolvedLibrary> LIBRARY_CACHE = new ConcurrentHashMap<>();
+
+    /** Resolved properties of a Bunny Stream library — the per-library Stream
+     *  API key (used for {@code video.bunnycdn.com} calls) and the numeric pull
+     *  zone id (used for the account-level CDN statistics endpoint). */
+    public static final class ResolvedLibrary {
+        /** Per-library Stream API key — for {@code video.bunnycdn.com}. */
+        public final String streamApiKey;
+        /** Numeric pull-zone id — for {@code api.bunny.net/statistics?pullZone=…}. */
+        public final long pullZoneId;
+        public ResolvedLibrary(String streamApiKey, long pullZoneId) {
+            this.streamApiKey = streamApiKey;
+            this.pullZoneId = pullZoneId;
+        }
+    }
 
     /** Fetch the full library record from the account-level API.
      *
@@ -185,8 +200,8 @@ public final class BunnyStreamApiClient {
      *          if the account API rejected the key or the response did not
      *          include an {@code ApiKey} field.
      */
-    public static Future<String> resolveLibraryStreamKey(String libraryId, String accountApiKey) {
-        String cached = STREAM_KEY_CACHE.get(libraryId);
+    public static Future<ResolvedLibrary> resolveLibrary(String libraryId, String accountApiKey) {
+        ResolvedLibrary cached = LIBRARY_CACHE.get(libraryId);
         if (cached != null) return Future.succeededFuture(cached);
         return getVideoLibrary(libraryId, accountApiKey)
                 .compose(json -> {
@@ -198,15 +213,52 @@ public final class BunnyStreamApiClient {
                     if (streamKey == null || streamKey.isEmpty()) {
                         return Future.failedFuture("Library response did not include an ApiKey field");
                     }
-                    STREAM_KEY_CACHE.put(libraryId, streamKey);
-                    return Future.succeededFuture(streamKey);
+                    long pullZoneId = Numbers.longValue(json.get("PullZoneId"));
+                    ResolvedLibrary resolved = new ResolvedLibrary(streamKey, pullZoneId);
+                    LIBRARY_CACHE.put(libraryId, resolved);
+                    return Future.succeededFuture(resolved);
                 });
     }
 
-    /** Test-only hook to flush the Stream-key cache (e.g. between integration
+    /** Backwards-compatible shim — callers that only want the Stream API key
+     *  go through {@link #resolveLibrary} but only see the key. */
+    public static Future<String> resolveLibraryStreamKey(String libraryId, String accountApiKey) {
+        return resolveLibrary(libraryId, accountApiKey).map(r -> r.streamApiKey);
+    }
+
+    /** Account-level CDN statistics for a single pull zone, summed over a date
+     *  range. Used by the Library Management billing endpoint to compute the
+     *  total bandwidth served between an event's start date and today (or its
+     *  VOD expiration, whichever comes first) — Bunny's Stream library record
+     *  only carries the rolling current-month {@code TrafficUsage}, which is
+     *  not enough for events that span multiple months.
+     *
+     *  <p>Bunny's response includes {@code TotalBandwidthUsed} (a long, bytes)
+     *  pre-summed across the period, plus a {@code BandwidthUsedChart} for
+     *  per-day values; the caller normally just reads {@code TotalBandwidthUsed}.
+     *
+     *  @param pullZoneId    Numeric pull-zone id (from {@link ResolvedLibrary#pullZoneId}).
+     *  @param accountApiKey Account-level API key (account API only).
+     *  @param dateFrom      Period start (inclusive, ISO {@code YYYY-MM-DD}).
+     *  @param dateTo        Period end (inclusive, ISO {@code YYYY-MM-DD}).
+     */
+    public static Future<ReadOnlyAstObject> getCdnStatistics(
+            long pullZoneId, String accountApiKey, String dateFrom, String dateTo) {
+        FetchOptions options = new FetchOptions()
+                .setMethod("GET")
+                .setHeaders(authHeaders(accountApiKey, null));
+        String url = ACCOUNT_BASE_URL + "/statistics"
+                + "?dateFrom=" + dateFrom
+                + "&dateTo=" + dateTo
+                + "&pullZone=" + pullZoneId
+                + "&hourly=false";
+        return JsonFetch.fetchJsonObject(url, options);
+    }
+
+    /** Test-only hook to flush the library cache (e.g. between integration
      *  tests so each test starts with no resolved keys). Not used in production. */
     public static void clearStreamKeyCache() {
-        STREAM_KEY_CACHE.clear();
+        LIBRARY_CACHE.clear();
     }
 
     /** Delete a video — used to clean up after aborted/failed uploads so we don't
