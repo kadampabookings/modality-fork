@@ -61,9 +61,10 @@ public final class BunnyStreamRestService implements ApplicationModuleBooter {
     private static final String ABORT_PATH   = "/rest/videos/abort";
 
     // Library Management tab — event-scoped read/delete surface over Bunny.
-    private static final String LIBRARY_INFO_PATH   = "/rest/videos/library-info";
-    private static final String LIBRARY_VIDEOS_PATH = "/rest/videos/library-videos";
-    private static final String LIBRARY_VIDEO_PATH  = "/rest/videos/library-video";
+    private static final String LIBRARY_INFO_PATH           = "/rest/videos/library-info";
+    private static final String LIBRARY_VIDEOS_PATH         = "/rest/videos/library-videos";
+    private static final String LIBRARY_VIDEO_PATH          = "/rest/videos/library-video";
+    private static final String LIBRARY_VIDEO_DOWNLOAD_PATH = "/rest/videos/library-video-download";
 
     /** Bunny's library-videos paging cap. Anything larger is silently clamped server-side
      *  by Bunny, but we clamp here to keep the client honest. */
@@ -116,11 +117,12 @@ public final class BunnyStreamRestService implements ApplicationModuleBooter {
             router.get(LIBRARY_VIDEOS_PATH).handler(this::handleLibraryVideos);
             router.get(LIBRARY_VIDEO_PATH).handler(this::handleLibraryVideoGet);
             router.delete(LIBRARY_VIDEO_PATH).handler(this::handleLibraryVideoDelete);
+            router.get(LIBRARY_VIDEO_DOWNLOAD_PATH).handler(this::handleLibraryVideoDownload);
 
             Console.log("[BUNNY-STREAM] REST routes registered: "
                     + LIBRARY_PATH + ", " + INIT_PATH + ", " + STATUS_PATH + ", " + ABORT_PATH
                     + ", " + LIBRARY_INFO_PATH + ", " + LIBRARY_VIDEOS_PATH + ", " + LIBRARY_VIDEO_PATH
-                    + " (GET/DELETE)");
+                    + " (GET/DELETE)" + ", " + LIBRARY_VIDEO_DOWNLOAD_PATH);
             Console.log("[BUNNY-STREAM] Credentials resolved per-request from DB "
                     + "(Event.vodBunnyLibraryId/vodBunnyPullZoneId, Organization.bunnyApiKey).");
         } catch (Throwable t) {
@@ -155,7 +157,18 @@ public final class BunnyStreamRestService implements ApplicationModuleBooter {
                 sendJson(ctx, OK_200, jsonLibraryMissing(missing));
                 return;
             }
-            BunnyStreamApiClient.getLibrary(creds.libraryId, creds.apiKey)
+            // Same fallback chain as handleLibraryInfo — the account API returns
+            // a non-empty Name, the Stream API often doesn't. Detect Bunny's
+            // 200-with-error-envelope as a failure so the recover triggers.
+            BunnyStreamApiClient.getVideoLibrary(creds.libraryId, creds.apiKey)
+                    .compose(json -> {
+                        String errorKey = json.getString("ErrorKey");
+                        if (errorKey != null && !errorKey.isEmpty()) {
+                            return Future.failedFuture("Bunny account API rejected key (" + errorKey + ")");
+                        }
+                        return Future.succeededFuture(json);
+                    })
+                    .recover(err -> BunnyStreamApiClient.getLibrary(creds.libraryId, creds.streamApiKey))
                     .onSuccess(json -> {
                         // Bunny library API field is "Name" (capital N); fall back gracefully.
                         String name = json.getString("Name");
@@ -189,9 +202,9 @@ public final class BunnyStreamRestService implements ApplicationModuleBooter {
             if (!creds.isComplete()) {
                 return Future.failedFuture(missingMessage(creds.missingFields()));
             }
-            return BunnyStreamApiClient.createVideo(creds.libraryId, creds.apiKey, title)
+            return BunnyStreamApiClient.createVideo(creds.libraryId, creds.streamApiKey, title)
                     .map(guid -> {
-                        BunnyStreamApiClient.TusAuth auth = BunnyStreamApiClient.buildTusSignature(creds.libraryId, creds.apiKey, guid);
+                        BunnyStreamApiClient.TusAuth auth = BunnyStreamApiClient.buildTusSignature(creds.libraryId, creds.streamApiKey, guid);
                         return jsonInitResponse(guid, creds.libraryId, creds.pullZoneId, auth);
                     });
         })
@@ -241,7 +254,7 @@ public final class BunnyStreamRestService implements ApplicationModuleBooter {
             if (!creds.isComplete()) {
                 return Future.failedFuture(missingMessage(creds.missingFields()));
             }
-            return BunnyStreamApiClient.getVideo(creds.libraryId, creds.apiKey, guid)
+            return BunnyStreamApiClient.getVideo(creds.libraryId, creds.streamApiKey, guid)
                     .compose(json -> {
                         int status = Numbers.intValue(json.get("status"));
                         int encodeProgress = Numbers.intValue(json.get("encodeProgress"));
@@ -314,7 +327,7 @@ public final class BunnyStreamRestService implements ApplicationModuleBooter {
             if (!creds.isComplete()) {
                 return Future.failedFuture(missingMessage(creds.missingFields()));
             }
-            return BunnyStreamApiClient.deleteVideo(creds.libraryId, creds.apiKey, guid);
+            return BunnyStreamApiClient.deleteVideo(creds.libraryId, creds.streamApiKey, guid);
         })
         .onSuccess(v -> ctx.response().setStatusCode(NO_CONTENT_204).end())
         .onFailure(err -> sendError(ctx, INTERNAL_SERVER_ERROR_500, err.getMessage()));
@@ -349,7 +362,29 @@ public final class BunnyStreamRestService implements ApplicationModuleBooter {
                 sendJson(ctx, OK_200, jsonLibraryMissing(missing));
                 return;
             }
-            BunnyStreamApiClient.getLibrary(creds.libraryId, creds.apiKey)
+            // The account-level API at api.bunny.net returns Name + the usage
+            // counters (StorageUsage / TrafficUsage / VideoCount); the Stream API
+            // at video.bunnycdn.com returns only library settings, so those counters
+            // come back as zero from there. We try the account API first and fall
+            // back to the Stream API (with the resolved per-library key) when the
+            // user-supplied key is itself a per-library Stream key — Bunny signals
+            // that with either HTTP 401 OR an HTTP 200 + {ErrorKey, Message} body.
+            BunnyStreamApiClient.getVideoLibrary(creds.libraryId, creds.apiKey)
+                    .compose(json -> {
+                        String errorKey = json.getString("ErrorKey");
+                        if (errorKey != null && !errorKey.isEmpty()) {
+                            String message = json.getString("Message");
+                            return Future.failedFuture("Bunny account API rejected key (" + errorKey
+                                    + (message == null ? "" : ": " + message)
+                                    + "). Use the account-level API key on Organization.bunnyApiKey.");
+                        }
+                        return Future.succeededFuture(json);
+                    })
+                    .recover(err -> {
+                        Console.log("[BUNNY-STREAM] account API getVideoLibrary unavailable ("
+                                + err.getMessage() + "); falling back to Stream API getLibrary");
+                        return BunnyStreamApiClient.getLibrary(creds.libraryId, creds.streamApiKey);
+                    })
                     .onSuccess(json -> {
                         String name = json.getString("Name");
                         if (isBlank(name)) name = json.getString("name");
@@ -362,6 +397,7 @@ public final class BunnyStreamRestService implements ApplicationModuleBooter {
                     })
                     .onFailure(err -> {
                         String msg = err.getMessage();
+                        Console.log("[BUNNY-STREAM] library-info both endpoints failed: " + msg);
                         sendJson(ctx, OK_200, jsonLibraryError(
                                 msg == null || msg.isEmpty()
                                         ? "Bunny rejected the credentials (likely 401 Unauthorized)."
@@ -394,7 +430,7 @@ public final class BunnyStreamRestService implements ApplicationModuleBooter {
             if (!creds.isComplete()) {
                 return Future.failedFuture(missingMessage(creds.missingFields()));
             }
-            return BunnyStreamApiClient.listVideos(creds.libraryId, creds.apiKey, page, perPage)
+            return BunnyStreamApiClient.listVideos(creds.libraryId, creds.streamApiKey, page, perPage)
                     .map(BunnyStreamRestService::jsonLibraryVideosResponse);
         })
         .onSuccess(body -> sendJson(ctx, OK_200, body))
@@ -419,7 +455,7 @@ public final class BunnyStreamRestService implements ApplicationModuleBooter {
             if (!creds.isComplete()) {
                 return Future.failedFuture(missingMessage(creds.missingFields()));
             }
-            return BunnyStreamApiClient.getVideo(creds.libraryId, creds.apiKey, guid)
+            return BunnyStreamApiClient.getVideo(creds.libraryId, creds.streamApiKey, guid)
                     .map(json -> {
                         StringBuilder sb = new StringBuilder();
                         appendVideoJson(sb, json);
@@ -449,10 +485,88 @@ public final class BunnyStreamRestService implements ApplicationModuleBooter {
             if (!creds.isComplete()) {
                 return Future.failedFuture(missingMessage(creds.missingFields()));
             }
-            return BunnyStreamApiClient.deleteVideo(creds.libraryId, creds.apiKey, guid);
+            return BunnyStreamApiClient.deleteVideo(creds.libraryId, creds.streamApiKey, guid);
         })
         .onSuccess(v -> ctx.response().setStatusCode(NO_CONTENT_204).end())
         .onFailure(err -> sendError(ctx, INTERNAL_SERVER_ERROR_500, err.getMessage()));
+    }
+
+    // ─── GET /rest/videos/library-video-download ───────────────────────────
+
+    /**
+     * Resolves the highest-quality MP4 download URL for a library video. The actual
+     * download is performed client-side via a hidden anchor pointing at the pull-zone
+     * URL — the bytes never traverse this server. Re-uses the existing
+     * {@link BunnyStreamApiClient#getVideo} call (no new Bunny endpoint) to read
+     * {@code availableResolutions} and {@code title}, picks the highest height, and
+     * composes {@code https://{pullZoneId}.b-cdn.net/{guid}/play_{height}p.mp4}.
+     *
+     * <p>Returns {@code {"ok":false,"reason":"not-ready"}} (200 OK) when no resolution
+     * has finished encoding yet, so the React layer can show a "still transcoding"
+     * toast without parsing an error path.
+     */
+    private void handleLibraryVideoDownload(RoutingContext ctx) {
+        Long eventId = parseLong(ctx.request().getParam("eventId"));
+        String guid = ctx.request().getParam("guid");
+        if (eventId == null || guid == null || guid.isEmpty()) {
+            sendError(ctx, BAD_REQUEST_400, "missing eventId or guid");
+            return;
+        }
+        loadCredentialsByEventId(eventId).compose(creds -> {
+            if (!creds.isComplete()) {
+                return Future.failedFuture(missingMessage(creds.missingFields()));
+            }
+            return BunnyStreamApiClient.getVideo(creds.libraryId, creds.streamApiKey, guid)
+                    .map(json -> {
+                        String availableResolutions = json.getString("availableResolutions");
+                        int height = pickHighestHeight(availableResolutions);
+                        if (height < 0) {
+                            return jsonDownloadNotReady();
+                        }
+                        String title = json.getString("title");
+                        String filename = sanitiseFilename(title);
+                        if (filename.isEmpty()) filename = guid;
+                        filename = filename + "-" + height + "p.mp4";
+                        String url = "https://" + creds.pullZoneId + ".b-cdn.net/"
+                                + guid + "/play_" + height + "p.mp4";
+                        return jsonDownloadResponse(url, filename, height + "p");
+                    });
+        })
+        .onSuccess(body -> sendJson(ctx, OK_200, body))
+        .onFailure(err -> sendError(ctx, INTERNAL_SERVER_ERROR_500, err.getMessage()));
+    }
+
+    /** Pick the highest available height from Bunny's CSV string ("240p,360p,480p,...").
+     *  Returns -1 if no recognisable resolution is present (still transcoding). */
+    private static int pickHighestHeight(String csv) {
+        String[] parts = parseResolutions(csv);
+        int best = -1;
+        for (String p : parts) {
+            int end = 0;
+            while (end < p.length() && Character.isDigit(p.charAt(end))) end++;
+            if (end == 0) continue;
+            try {
+                int h = Integer.parseInt(p.substring(0, end));
+                if (h > best) best = h;
+            } catch (NumberFormatException ignored) {}
+        }
+        return best;
+    }
+
+    /** Replace anything not in {@code [A-Za-z0-9._-]} with {@code _} and cap at 80 chars.
+     *  Returns "" for null input — caller substitutes the GUID in that case. */
+    private static String sanitiseFilename(String title) {
+        if (title == null) return "";
+        StringBuilder sb = new StringBuilder(Math.min(title.length(), 80));
+        for (int i = 0; i < title.length() && sb.length() < 80; i++) {
+            char c = title.charAt(i);
+            boolean safe = (c >= 'A' && c <= 'Z')
+                    || (c >= 'a' && c <= 'z')
+                    || (c >= '0' && c <= '9')
+                    || c == '.' || c == '_' || c == '-';
+            sb.append(safe ? c : '_');
+        }
+        return sb.toString();
     }
 
     // ─── Credential resolution ─────────────────────────────────────────────
@@ -498,7 +612,8 @@ public final class BunnyStreamRestService implements ApplicationModuleBooter {
                             isBlank(libraryId) ? null : libraryId.trim(),
                             isBlank(pullZoneId) ? null : pullZoneId.trim(),
                             isBlank(apiKey) ? null : apiKey.trim());
-                });
+                })
+                .compose(BunnyStreamRestService::resolveStreamApiKey);
     }
 
     private static Event programEvent(ScheduledItem si) {
@@ -533,7 +648,8 @@ public final class BunnyStreamRestService implements ApplicationModuleBooter {
                             isBlank(libraryId) ? null : libraryId.trim(),
                             isBlank(pullZoneId) ? null : pullZoneId.trim(),
                             isBlank(apiKey) ? null : apiKey.trim());
-                });
+                })
+                .compose(BunnyStreamRestService::resolveStreamApiKey);
     }
 
     /** Build a flat user-facing message from the structured missing-field codes —
@@ -652,6 +768,25 @@ public final class BunnyStreamRestService implements ApplicationModuleBooter {
         return sb.toString();
     }
 
+    /** Successful download payload — pre-resolved MP4 URL the React anchor uses, plus
+     *  a sanitised filename and the chosen resolution label so the UI can show
+     *  "Downloading 1080p" without re-parsing the URL. */
+    private static String jsonDownloadResponse(String url, String filename, String resolution) {
+        StringBuilder sb = new StringBuilder("{");
+        sb.append("\"ok\":true");
+        sb.append(",\"url\":\"").append(BunnyStreamApiClient.escapeJson(url)).append('"');
+        sb.append(",\"filename\":\"").append(BunnyStreamApiClient.escapeJson(filename)).append('"');
+        sb.append(",\"resolution\":\"").append(BunnyStreamApiClient.escapeJson(resolution)).append('"');
+        sb.append('}');
+        return sb.toString();
+    }
+
+    /** Returned (with HTTP 200) when the video has no completed resolution yet —
+     *  React surfaces a "still transcoding" toast. */
+    private static String jsonDownloadNotReady() {
+        return "{\"ok\":false,\"reason\":\"not-ready\"}";
+    }
+
     /** Map Bunny's {@code {items, totalItems, currentPage, itemsPerPage}} response to
      *  our reduced {@code {items, totalItems, currentPage, itemsPerPage}} envelope —
      *  preserves pagination so the React grid can fetch additional pages without
@@ -675,9 +810,12 @@ public final class BunnyStreamRestService implements ApplicationModuleBooter {
 
     /** Serialise a single Bunny video item to the React-facing JSON shape. Kept as a
      *  shared helper so the {@code library-videos} list and the {@code library-video}
-     *  single-fetch produce byte-identical card payloads. The Bunny field for per-video
-     *  bandwidth is {@code totalBandwidthUsed}; we fall back to {@code 0} when absent
-     *  rather than emit {@code null} so the React layer can do plain numeric maths. */
+     *  single-fetch produce byte-identical card payloads. Bunny does not expose any
+     *  per-video bandwidth field on the Stream API (no {@code totalBandwidthUsed},
+     *  {@code bandwidthUsed}, etc. — confirmed via API reference), so we don't emit
+     *  one. The library-level {@code TrafficUsage} flowing through {@code library-info}
+     *  remains the only traffic figure available, and it's correct because CDN segment
+     *  GETs increment it regardless of which player the client uses. */
     static void appendVideoJson(StringBuilder sb, ReadOnlyAstObject item) {
         if (item == null) {
             sb.append("{}");
@@ -688,7 +826,6 @@ public final class BunnyStreamRestService implements ApplicationModuleBooter {
         int encodeProgress = Numbers.intValue(item.get("encodeProgress"));
         long length = Numbers.longValue(item.get("length"));
         long storageSize = Numbers.longValue(item.get("storageSize"));
-        long bandwidth = Numbers.longValue(item.get("totalBandwidthUsed"));
         String[] resolutions = parseResolutions(item.getString("availableResolutions"));
 
         sb.append('{');
@@ -698,7 +835,6 @@ public final class BunnyStreamRestService implements ApplicationModuleBooter {
         sb.append(",\"encodeProgress\":").append(encodeProgress);
         sb.append(",\"length\":").append(length);
         sb.append(",\"storageSize\":").append(storageSize);
-        sb.append(",\"bandwidth\":").append(bandwidth);
         sb.append(",\"thumbnailFileName\":\"")
                 .append(BunnyStreamApiClient.escapeJson(nullToEmpty(item.getString("thumbnailFileName"))))
                 .append('"');
@@ -729,16 +865,45 @@ public final class BunnyStreamRestService implements ApplicationModuleBooter {
         sendJson(ctx, statusCode, "{\"error\":\"" + BunnyStreamApiClient.escapeJson(message == null ? "" : message) + "\"}");
     }
 
-    /** Per-request credential carrier — never shared across threads. */
+    /** Per-request credential carrier — never shared across threads.
+     *
+     *  <p>{@code apiKey} is the value the operator stored in
+     *  {@code Organization.bunnyApiKey}; for the account-level API
+     *  ({@code api.bunny.net}) we use it directly. For the Stream API
+     *  ({@code video.bunnycdn.com}) we use {@code streamApiKey}, which the
+     *  credential loader populates from the account API's library-record
+     *  {@code ApiKey} field. If that resolution fails (e.g. a legacy setup
+     *  where the operator has only a per-library Stream key in
+     *  {@code bunnyApiKey}), {@code streamApiKey} falls back to {@code apiKey}
+     *  so the Stream calls still work. */
     private static final class BunnyCredentials {
         final String libraryId;
         final String pullZoneId;
+        /** User-supplied key from the org row — used for account-level API calls. */
         final String apiKey;
+        /** Per-library Stream API key — used for video.bunnycdn.com calls.
+         *  Resolved by {@link BunnyStreamApiClient#resolveLibraryStreamKey} when
+         *  the user-supplied key is account-level; falls back to {@link #apiKey}
+         *  when resolution fails (legacy setup with a per-library key in DB). */
+        final String streamApiKey;
 
-        BunnyCredentials(String libraryId, String pullZoneId, String apiKey) {
+        BunnyCredentials(String libraryId, String pullZoneId, String apiKey, String streamApiKey) {
             this.libraryId = libraryId;
             this.pullZoneId = pullZoneId;
             this.apiKey = apiKey;
+            this.streamApiKey = streamApiKey;
+        }
+
+        /** Convenience overload — Stream key defaults to the user-supplied key.
+         *  Used during the initial DB load before the account API resolution runs. */
+        BunnyCredentials(String libraryId, String pullZoneId, String apiKey) {
+            this(libraryId, pullZoneId, apiKey, apiKey);
+        }
+
+        /** Return a copy with {@code streamApiKey} replaced — used by the
+         *  credential loader after the account API hands us the per-library key. */
+        BunnyCredentials withStreamApiKey(String resolvedStreamApiKey) {
+            return new BunnyCredentials(libraryId, pullZoneId, apiKey, resolvedStreamApiKey);
         }
 
         boolean isComplete() {
@@ -753,5 +918,25 @@ public final class BunnyStreamRestService implements ApplicationModuleBooter {
             if (pullZoneId == null) out.add(MISSING_PULL_ZONE);
             return out;
         }
+    }
+
+    /**
+     * After the basic DB credentials are loaded, ask Bunny's account API for the
+     * per-library Stream API key and stash it on the carrier. If the user's key
+     * is itself the per-library Stream key (legacy setup, or the account API is
+     * unavailable for some reason), the account call fails and we keep
+     * {@code apiKey} as the Stream key — the existing behaviour from before this
+     * change. The cache inside {@link BunnyStreamApiClient#resolveLibraryStreamKey}
+     * means this round-trip happens at most once per library per process.
+     */
+    private static Future<BunnyCredentials> resolveStreamApiKey(BunnyCredentials creds) {
+        if (!creds.isComplete()) return Future.succeededFuture(creds);
+        return BunnyStreamApiClient.resolveLibraryStreamKey(creds.libraryId, creds.apiKey)
+                .map(creds::withStreamApiKey)
+                .recover(err -> {
+                    Console.log("[BUNNY-STREAM] could not resolve per-library Stream key from account API ("
+                            + err.getMessage() + ") — assuming the user-provided key is itself a Stream key");
+                    return Future.succeededFuture(creds);
+                });
     }
 }

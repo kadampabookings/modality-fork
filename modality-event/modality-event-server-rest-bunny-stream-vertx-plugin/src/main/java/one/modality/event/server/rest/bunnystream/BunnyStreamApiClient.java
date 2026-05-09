@@ -11,6 +11,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Thin wrapper around the Bunny.net Stream HTTP management API.
@@ -118,6 +119,94 @@ public final class BunnyStreamApiClient {
         return JsonFetch.fetchJsonObject(
                 BASE_URL + "/library/" + libraryId + "/statistics",
                 options);
+    }
+
+    /** Account-level (management) API base — used for endpoints that the Stream
+     *  domain {@link #BASE_URL} does not expose, in particular library-level
+     *  storage / bandwidth / video-count totals. Same {@code AccessKey} header
+     *  pattern; the org's account-level API key is reused. */
+    private static final String ACCOUNT_BASE_URL = "https://api.bunny.net";
+
+    /** Cache mapping library id → resolved per-library Stream API key. The Stream
+     *  key is published by the account API as the {@code ApiKey} field on each
+     *  library record; we fetch it once per library per process and reuse it for
+     *  every {@code video.bunnycdn.com} call. The cache lives forever (process
+     *  lifetime) — the per-library Stream key effectively never changes, and
+     *  rotating it from the Bunny dashboard would also require an operator
+     *  restart of the server to take effect anyway. */
+    private static final ConcurrentHashMap<String, String> STREAM_KEY_CACHE = new ConcurrentHashMap<>();
+
+    /** Fetch the full library record from the account-level API.
+     *
+     *  <p>The Stream API's {@code GET https://video.bunnycdn.com/library/{id}} returns
+     *  only library *settings* (transcoding, watermark, name) — the {@code StorageUsage}
+     *  / {@code TrafficUsage} / {@code VideoCount} numbers our stats banner needs come
+     *  back as zero. Those fields live on the account-level endpoint
+     *  {@code GET https://api.bunny.net/videolibrary/{id}}, which returns the same
+     *  {@code Name} field plus the usage counters.
+     *
+     *  <p>This method requires the **account-level** API key (the one that lives at
+     *  the bottom of the Bunny dashboard, NOT a per-library Stream key). Where this
+     *  is the same value we already store as {@code Organization.bunnyApiKey}, both
+     *  endpoints share a key and the call works transparently. If the org has only a
+     *  per-library key, this call returns 401 and the caller falls back to
+     *  {@link #getLibrary}.
+     */
+    public static Future<ReadOnlyAstObject> getVideoLibrary(String libraryId, String apiKey) {
+        FetchOptions options = new FetchOptions()
+                .setMethod("GET")
+                .setHeaders(authHeaders(apiKey, null));
+        return JsonFetch.fetchJsonObject(
+                ACCOUNT_BASE_URL + "/videolibrary/" + libraryId,
+                options);
+    }
+
+    /** Resolve the per-library Stream API key for {@code libraryId} given an
+     *  account-level API key.
+     *
+     *  <p>The Stream API at {@code video.bunnycdn.com} (used for video CRUD,
+     *  list, status, delete, TUS signature) only accepts the per-library
+     *  Stream key — the account-level key is rejected with
+     *  {@code authentication.failed}. Conversely, the account API at
+     *  {@code api.bunny.net} only accepts the account-level key. We bridge the
+     *  two by reading the {@code ApiKey} field of each library record from the
+     *  account API and caching it.
+     *
+     *  <p>The result is cached in {@link #STREAM_KEY_CACHE} for the lifetime of
+     *  the process, so subsequent calls for the same library skip the round
+     *  trip. The cache is keyed only on {@code libraryId}; if the same library
+     *  is reached via different account keys the first one to win populates the
+     *  cache (acceptable — the Stream key is a property of the library, not the
+     *  caller).
+     *
+     *  @param libraryId       Bunny library id (numeric, but treated as opaque string).
+     *  @param accountApiKey   Account-level API key (works against api.bunny.net).
+     *  @return Future resolving to the per-library Stream API key, or failing
+     *          if the account API rejected the key or the response did not
+     *          include an {@code ApiKey} field.
+     */
+    public static Future<String> resolveLibraryStreamKey(String libraryId, String accountApiKey) {
+        String cached = STREAM_KEY_CACHE.get(libraryId);
+        if (cached != null) return Future.succeededFuture(cached);
+        return getVideoLibrary(libraryId, accountApiKey)
+                .compose(json -> {
+                    String errorKey = json.getString("ErrorKey");
+                    if (errorKey != null && !errorKey.isEmpty()) {
+                        return Future.failedFuture("Bunny account API rejected key (" + errorKey + ")");
+                    }
+                    String streamKey = json.getString("ApiKey");
+                    if (streamKey == null || streamKey.isEmpty()) {
+                        return Future.failedFuture("Library response did not include an ApiKey field");
+                    }
+                    STREAM_KEY_CACHE.put(libraryId, streamKey);
+                    return Future.succeededFuture(streamKey);
+                });
+    }
+
+    /** Test-only hook to flush the Stream-key cache (e.g. between integration
+     *  tests so each test starts with no resolved keys). Not used in production. */
+    public static void clearStreamKeyCache() {
+        STREAM_KEY_CACHE.clear();
     }
 
     /** Delete a video — used to clean up after aborted/failed uploads so we don't
