@@ -681,7 +681,7 @@ public class AddOptionPanel {
         if (family == null)
             return "\u25CF"; // ●
 
-        KnownItemFamily knownFamily = family.getItemFamilyType();
+        KnownItemFamily knownFamily = family.getKnownItemFamily();
         if (knownFamily != null) {
             switch (knownFamily) {
                 case ACCOMMODATION:
@@ -735,7 +735,7 @@ public class AddOptionPanel {
         if (family == null)
             return Color.web("#6b7280");
 
-        KnownItemFamily knownFamily = family.getItemFamilyType();
+        KnownItemFamily knownFamily = family.getKnownItemFamily();
         if (knownFamily != null) {
             switch (knownFamily) {
                 case ACCOMMODATION:

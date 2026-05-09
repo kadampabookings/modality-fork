@@ -2337,7 +2337,7 @@ public abstract class AbstractSinglePeriodInPersonBookingForm implements Standar
         List<ScheduledItem> currentlyBookedMeals = workingBooking.getAttendancesAdded(false).stream()
             .map(Attendance::getScheduledItem)
             .filter(Objects::nonNull)
-            .filter(si -> si.getItem() != null && si.getItem().getItemFamilyType() == KnownItemFamily.MEALS)
+            .filter(si -> si.getItem() != null && si.getItem().getKnownItemFamily() == KnownItemFamily.MEALS)
             .distinct()
             .collect(Collectors.toList());
 
@@ -2516,7 +2516,7 @@ public abstract class AbstractSinglePeriodInPersonBookingForm implements Standar
             .filter(Objects::nonNull)
             .filter(si -> si.getItem() != null)
             .filter(si -> {
-                KnownItemFamily family = si.getItem().getItemFamilyType();
+                KnownItemFamily family = si.getItem().getKnownItemFamily();
                 return family == KnownItemFamily.TRANSPORT || family == KnownItemFamily.PARKING;
             })
             .distinct()

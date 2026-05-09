@@ -7,34 +7,34 @@ import one.modality.base.shared.knownitems.KnownItemFamily;
  */
 public interface HasItemFamilyType {
 
-    KnownItemFamily getItemFamilyType();
+    KnownItemFamily getKnownItemFamily();
 
     default boolean isAccommodation() {
-        return getItemFamilyType() == KnownItemFamily.ACCOMMODATION;
+        return getKnownItemFamily() == KnownItemFamily.ACCOMMODATION;
     }
 
     default boolean isMeals() {
-        return getItemFamilyType() == KnownItemFamily.MEALS;
+        return getKnownItemFamily() == KnownItemFamily.MEALS;
     }
 
     default boolean isDiet() {
-        return getItemFamilyType() == KnownItemFamily.DIET;
+        return getKnownItemFamily() == KnownItemFamily.DIET;
     }
 
     default boolean isTeaching() {
-        return getItemFamilyType() == KnownItemFamily.TEACHING;
+        return getKnownItemFamily() == KnownItemFamily.TEACHING;
     }
 
     default boolean isTranslation() {
-        return getItemFamilyType() == KnownItemFamily.TRANSLATION;
+        return getKnownItemFamily() == KnownItemFamily.TRANSLATION;
     }
 
     default boolean isTransport() {
-        return getItemFamilyType() == KnownItemFamily.TRANSPORT;
+        return getKnownItemFamily() == KnownItemFamily.TRANSPORT;
     }
 
     default boolean isTax() {
-        return getItemFamilyType() == KnownItemFamily.TAX;
+        return getKnownItemFamily() == KnownItemFamily.TAX;
     }
 
 }

@@ -1302,7 +1302,7 @@ public class DefaultMealsSelectionSection implements HasMealsSelectionSection {
             if (siteItem == null || siteItem.getItem() == null) continue;
 
             Item item = siteItem.getItem();
-            KnownItemFamily family = item.getItemFamilyType();
+            KnownItemFamily family = item.getKnownItemFamily();
 
             // Only process MEALS family items
             if (family != KnownItemFamily.MEALS) continue;

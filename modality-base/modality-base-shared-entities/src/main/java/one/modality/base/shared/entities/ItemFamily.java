@@ -17,7 +17,7 @@ public interface ItemFamily extends
     String summaryHidden = "summaryHidden";
 
     @Override
-    default KnownItemFamily getItemFamilyType() {
+    default KnownItemFamily getKnownItemFamily() {
         return KnownItemFamily.fromCode(getCode());
     }
 

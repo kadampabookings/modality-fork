@@ -639,7 +639,7 @@ public class DefaultAdditionalOptionsSection implements HasAdditionalOptionsSect
 
         // Process each item
         for (Item item : sortedItems) {
-            KnownItemFamily family = item.getItemFamilyType();
+            KnownItemFamily family = item.getKnownItemFamily();
 
             // Skip items from excluded families (handled by other sections)
             if (EXCLUDED_FAMILIES.contains(family)) {
@@ -710,7 +710,7 @@ public class DefaultAdditionalOptionsSection implements HasAdditionalOptionsSect
             Item item = policy.getItem();
             if (item == null) continue;
 
-            KnownItemFamily family = item.getItemFamilyType();
+            KnownItemFamily family = item.getKnownItemFamily();
 
             // Get price from rate (try fixed rates first, then daily)
             int price = policyAggregate.filterFixedRatesStreamOfSiteAndItem(null, item)

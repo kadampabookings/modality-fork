@@ -264,28 +264,31 @@ public final class PolicyAggregate {
                 .findFirst().orElse(null);
     }
 
-    public List<ItemPolicy> getDietItemPolicies() {
+    public List<ItemPolicy> getItemPolicies(KnownItemFamily knownItemFamily) {
         return getItemPolicies().stream()
-                .filter(ip -> ip.getItem().getItemFamilyType() == KnownItemFamily.DIET)
-                .collect(Collectors.toList());
+            .filter(ip -> ip.getItem().getKnownItemFamily() == knownItemFamily)
+            .collect(Collectors.toList());
+    }
+
+    public List<ItemPolicy> getDietItemPolicies() {
+        return getItemPolicies(KnownItemFamily.DIET);
     }
 
     public List<ItemPolicy> getTranslationItemPolicies() {
-        return getItemPolicies().stream()
-                .filter(ip -> ip.getItem().getItemFamilyType() == KnownItemFamily.TRANSLATION)
-                .collect(Collectors.toList());
+        return getItemPolicies(KnownItemFamily.TRANSLATION);
     }
 
     public ItemPolicy getSharingAccommodationItemPolicy() {
-        return getItemPolicies().stream()
-                .filter(ip -> Booleans.isTrue(ip.getItem().isShare_mate())
-                        && ip.getItem().getItemFamilyType() == KnownItemFamily.ACCOMMODATION)
-                .findFirst().orElse(null);
+        return Collections.findFirst(getItemPolicies(KnownItemFamily.ACCOMMODATION), ip -> Booleans.isTrue(ip.getItem().isShare_mate()));
+    }
+
+    public List<ItemPolicy> getSurveyItemPolicies() {
+        return getItemPolicies(KnownItemFamily.SURVEY);
     }
 
     public ItemFamilyPolicy getItemFamilyPolicy(KnownItemFamily knownItemFamily) {
         return getItemFamilyPolicies().stream()
-                .filter(ifp -> ifp.getItemFamilyType() == knownItemFamily)
+                .filter(ifp -> ifp.getKnownItemFamily() == knownItemFamily)
                 .findFirst().orElse(null);
     }
 

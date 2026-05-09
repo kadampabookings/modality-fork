@@ -20,8 +20,8 @@ public interface HasItemFamily extends HasItemFamilyType {
     }
 
     @Override
-    default KnownItemFamily getItemFamilyType() {
+    default KnownItemFamily getKnownItemFamily() {
         ItemFamily itemFamily = getItemFamily();
-        return itemFamily == null ? KnownItemFamily.UNKNOWN : itemFamily.getItemFamilyType();
+        return itemFamily == null ? KnownItemFamily.UNKNOWN : itemFamily.getKnownItemFamily();
     }
 }

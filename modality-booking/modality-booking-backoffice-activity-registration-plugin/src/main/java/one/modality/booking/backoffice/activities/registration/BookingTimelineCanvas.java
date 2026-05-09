@@ -1597,7 +1597,7 @@ public class BookingTimelineCanvas extends Region {
         }
 
         // Use KnownItemFamily enum for proper categorization
-        KnownItemFamily knownFamily = family.getItemFamilyType();
+        KnownItemFamily knownFamily = family.getKnownItemFamily();
         if (knownFamily == null) {
             knownFamily = KnownItemFamily.UNKNOWN;
         }

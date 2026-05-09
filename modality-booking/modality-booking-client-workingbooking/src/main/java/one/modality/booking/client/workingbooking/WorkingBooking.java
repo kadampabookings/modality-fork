@@ -313,7 +313,7 @@ public final class WorkingBooking {
         }).filter(Objects::nonNull).toArray(Attendance[]::new);
         if (newAttendances.length > 0) {
             // Video access is enabled by default for people attending teaching online
-            boolean videoAccessEnabled = item.getItemFamilyType() == KnownItemFamily.TEACHING && !document.isInPerson();
+            boolean videoAccessEnabled = item.getKnownItemFamily() == KnownItemFamily.TEACHING && !document.isInPerson();
             integrateNewDocumentEvent(new AddAttendancesEvent(newAttendances, videoAccessEnabled), false);
         }
         if (replaceExistingDates) {
