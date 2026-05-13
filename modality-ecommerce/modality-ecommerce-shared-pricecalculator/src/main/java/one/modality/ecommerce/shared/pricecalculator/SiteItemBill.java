@@ -5,9 +5,12 @@ import dev.webfx.platform.util.Objects;
 import dev.webfx.platform.util.collection.Collections;
 import dev.webfx.platform.util.time.Times;
 import one.modality.base.shared.entities.Document;
+import one.modality.base.shared.entities.Item;
 import one.modality.base.shared.entities.Person;
 import one.modality.base.shared.entities.Rate;
+import one.modality.base.shared.entities.Site;
 import one.modality.base.shared.entities.SiteItem;
+import dev.webfx.stack.orm.entity.Entities;
 import one.modality.base.shared.entities.util.Rates;
 import one.modality.ecommerce.document.service.DocumentAggregate;
 import one.modality.ecommerce.document.service.events.registration.documentline.PriceDocumentLineEvent;
@@ -163,7 +166,8 @@ public final class SiteItemBill {
                         if (startDate != null && date.isBefore(startDate) || endDate != null && date.isAfter(endDate) /* || rate.arrivingOrLeaving && date !== firstDay && date !== lastDay*/)
                             continue;
                     }
-                    var quantity = 1; //rate.perPerson && dl.share_owner && dl.capacity ? dl.capacity.capacity : 1;
+                    // For per-person rates, multiply by shareOwnerQuantity from the matching DocumentLine.
+                    var quantity = rate.isPerPerson() ? getShareOwnerQuantity(documentAggregate) : 1;
                     int ratePrice = getRatePrice(rate, documentAggregate) * quantity;
                     int minDay = Objects.coalesce(rate.getMinDay(), 1);
                     int maxDay = rate.isPerDay() ? 1 : Objects.coalesce(rate.getMaxDay(), 10000);
@@ -248,6 +252,18 @@ public final class SiteItemBill {
             }
         }*/
         return price;
+    }
+
+    /** Returns shareOwnerQuantity from the DocumentLine matching this bill's site+item, or 1 if not set. */
+    private int getShareOwnerQuantity(DocumentAggregate documentAggregate) {
+        Site site = siteItem.getSite();
+        Item item = siteItem.getItem();
+        return documentAggregate.getDocumentLines().stream()
+                .filter(dl -> Entities.samePrimaryKey(dl.getSite(), site) && Entities.samePrimaryKey(dl.getItem(), item))
+                .map(dl -> dl.getShareOwnerQuantity())
+                .filter(q -> q != null && q > 0)
+                .findFirst()
+                .orElse(1);
     }
 
     private int getRatePrice(Rate rate, DocumentAggregate documentAggregate) {
