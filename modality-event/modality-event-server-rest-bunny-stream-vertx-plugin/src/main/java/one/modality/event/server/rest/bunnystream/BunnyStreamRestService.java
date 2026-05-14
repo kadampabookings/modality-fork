@@ -164,16 +164,13 @@ public final class BunnyStreamRestService implements ApplicationModuleBooter {
                 return;
             }
             // Same fallback chain as handleLibraryInfo — the account API returns
-            // a non-empty Name, the Stream API often doesn't. Detect Bunny's
-            // 200-with-error-envelope as a failure so the recover triggers.
+            // a non-empty Name, the Stream API often doesn't. The API client's
+            // fetchJsonChecked() already maps HTTP non-2xx AND HTTP-200-with-
+            // {ErrorKey} envelopes into tagged failures (e.g.
+            // "[getVideoLibrary|401] …"), so we just pass the failure message
+            // through to the React side, which routes it via the [endpoint|status]
+            // tag to the right user-facing bucket (badApiKey / libraryNotFound / …).
             BunnyStreamApiClient.getVideoLibrary(creds.libraryId, creds.apiKey)
-                    .compose(json -> {
-                        String errorKey = json.getString("ErrorKey");
-                        if (errorKey != null && !errorKey.isEmpty()) {
-                            return Future.failedFuture("Bunny account API rejected key (" + errorKey + ")");
-                        }
-                        return Future.succeededFuture(json);
-                    })
                     .recover(err -> BunnyStreamApiClient.getLibrary(creds.libraryId, creds.streamApiKey))
                     .onSuccess(json -> {
                         // Bunny library API field is "Name" (capital N); fall back gracefully.
@@ -181,13 +178,7 @@ public final class BunnyStreamRestService implements ApplicationModuleBooter {
                         if (isBlank(name)) name = json.getString("name");
                         sendJson(ctx, OK_200, jsonLibraryOk(creds.libraryId, creds.pullZoneId, name));
                     })
-                    .onFailure(err -> {
-                        String msg = err.getMessage();
-                        sendJson(ctx, OK_200, jsonLibraryError(
-                                msg == null || msg.isEmpty()
-                                        ? "Bunny rejected the credentials (likely 401 Unauthorized)."
-                                        : msg));
-                    });
+                    .onFailure(err -> sendJson(ctx, OK_200, jsonLibraryError(messageOf(err))));
         });
     }
 
@@ -373,19 +364,10 @@ public final class BunnyStreamRestService implements ApplicationModuleBooter {
             // at video.bunnycdn.com returns only library settings, so those counters
             // come back as zero from there. We try the account API first and fall
             // back to the Stream API (with the resolved per-library key) when the
-            // user-supplied key is itself a per-library Stream key — Bunny signals
-            // that with either HTTP 401 OR an HTTP 200 + {ErrorKey, Message} body.
+            // user-supplied key is itself a per-library Stream key — fetchJsonChecked
+            // unifies HTTP 401 and HTTP-200-with-{ErrorKey} into a tagged failure
+            // ("[getVideoLibrary|401] …"), so the .recover triggers in both cases.
             BunnyStreamApiClient.getVideoLibrary(creds.libraryId, creds.apiKey)
-                    .compose(json -> {
-                        String errorKey = json.getString("ErrorKey");
-                        if (errorKey != null && !errorKey.isEmpty()) {
-                            String message = json.getString("Message");
-                            return Future.failedFuture("Bunny account API rejected key (" + errorKey
-                                    + (message == null ? "" : ": " + message)
-                                    + "). Use the account-level API key on Organization.bunnyApiKey.");
-                        }
-                        return Future.succeededFuture(json);
-                    })
                     .recover(err -> {
                         Console.log("[BUNNY-STREAM] account API getVideoLibrary unavailable ("
                                 + err.getMessage() + "); falling back to Stream API getLibrary");
@@ -402,12 +384,9 @@ public final class BunnyStreamRestService implements ApplicationModuleBooter {
                                 storageBytes, bandwidthBytes, videoCount));
                     })
                     .onFailure(err -> {
-                        String msg = err.getMessage();
+                        String msg = messageOf(err);
                         Console.log("[BUNNY-STREAM] library-info both endpoints failed: " + msg);
-                        sendJson(ctx, OK_200, jsonLibraryError(
-                                msg == null || msg.isEmpty()
-                                        ? "Bunny rejected the credentials (likely 401 Unauthorized)."
-                                        : msg));
+                        sendJson(ctx, OK_200, jsonLibraryError(msg));
                     });
         });
     }
@@ -479,6 +458,12 @@ public final class BunnyStreamRestService implements ApplicationModuleBooter {
      * client-side via {@code useChangeSet().delete('Media', …)} so that the existing
      * EventBus authorization + audit path covers the DB write — this route is
      * Bunny-only.
+     *
+     * <p>Uses the fail-open {@link BunnyStreamApiClient#deleteVideo} so that 404s
+     * are silently treated as success: from the operator's perspective, "make
+     * this video go away" is already true if Bunny doesn't have it. Other errors
+     * (auth, network, library not found) propagate with the {@code [deleteVideo|…]}
+     * tag so the React side can render the right banner.
      */
     private void handleLibraryVideoDelete(RoutingContext ctx) {
         Long eventId = parseLong(ctx.request().getParam("eventId"));
@@ -494,7 +479,7 @@ public final class BunnyStreamRestService implements ApplicationModuleBooter {
             return BunnyStreamApiClient.deleteVideo(creds.libraryId, creds.streamApiKey, guid);
         })
         .onSuccess(v -> ctx.response().setStatusCode(NO_CONTENT_204).end())
-        .onFailure(err -> sendError(ctx, INTERNAL_SERVER_ERROR_500, err.getMessage()));
+        .onFailure(err -> sendError(ctx, INTERNAL_SERVER_ERROR_500, messageOf(err)));
     }
 
     // ─── GET /rest/videos/library-video-download ───────────────────────────
@@ -873,6 +858,15 @@ public final class BunnyStreamRestService implements ApplicationModuleBooter {
 
     private static boolean isBlank(String s) { return s == null || s.trim().isEmpty(); }
 
+    /** Pull a non-null, non-empty message out of a Throwable. Used for every
+     *  Bunny-failure JSON envelope so the React side always has something to
+     *  parse for the {@code [endpoint|status]} tag. */
+    private static String messageOf(Throwable err) {
+        if (err == null) return "(no error)";
+        String msg = err.getMessage();
+        return msg == null || msg.isEmpty() ? err.getClass().getSimpleName() : msg;
+    }
+
     private static Long parseLong(String s) {
         if (s == null) return null;
         try { return Long.parseLong(s.trim()); } catch (NumberFormatException e) { return null; }
@@ -1141,8 +1135,19 @@ public final class BunnyStreamRestService implements ApplicationModuleBooter {
         return BunnyStreamApiClient.resolveLibraryStreamKey(creds.libraryId, creds.apiKey)
                 .map(creds::withStreamApiKey)
                 .recover(err -> {
+                    // Only fall back to "the user-provided key is itself a Stream key"
+                    // for auth failures (legacy setups where Organization.bunnyApiKey
+                    // holds a per-library Stream key). When the library id is genuinely
+                    // wrong, falling back would mask the real cause behind a misleading
+                    // 401 from the doomed Stream API call.
+                    if (err instanceof BunnyStreamApiClient.TaggedBunnyException
+                            && ((BunnyStreamApiClient.TaggedBunnyException) err).status == 404) {
+                        Console.log("[BUNNY-STREAM] account API reports library not found ("
+                                + err.getMessage() + ") — propagating error instead of falling back");
+                        return Future.failedFuture(err);
+                    }
                     Console.log("[BUNNY-STREAM] could not resolve per-library Stream key from account API ("
-                            + err.getMessage() + ") — assuming the user-provided key is itself a Stream key");
+                            + messageOf(err) + ") — assuming the user-provided key is itself a Stream key");
                     return Future.succeededFuture(creds);
                 });
     }

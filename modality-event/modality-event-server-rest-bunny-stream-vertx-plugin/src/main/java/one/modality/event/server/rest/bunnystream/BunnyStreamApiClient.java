@@ -7,6 +7,9 @@ import dev.webfx.platform.fetch.Headers;
 import dev.webfx.platform.fetch.json.JsonFetch;
 import dev.webfx.platform.util.Numbers;
 
+import static dev.webfx.platform.util.http.HttpResponseStatus.NOT_FOUND_404;
+import static dev.webfx.platform.util.http.HttpResponseStatus.UNAUTHORIZED_401;
+
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -50,7 +53,7 @@ public final class BunnyStreamApiClient {
                 .setMethod("POST")
                 .setHeaders(authHeaders(apiKey, "application/json"))
                 .setBody("{\"title\":\"" + escapeJson(title) + "\"}");
-        return JsonFetch.fetchJsonObject(BASE_URL + "/library/" + libraryId + "/videos", options)
+        return fetchJsonChecked("createVideo", BASE_URL + "/library/" + libraryId + "/videos", options)
                 .map(json -> json.getString("guid"));
     }
 
@@ -59,7 +62,7 @@ public final class BunnyStreamApiClient {
         FetchOptions options = new FetchOptions()
                 .setMethod("GET")
                 .setHeaders(authHeaders(apiKey, null));
-        return JsonFetch.fetchJsonObject(
+        return fetchJsonChecked("getVideo",
                 BASE_URL + "/library/" + libraryId + "/videos/" + guid,
                 options);
     }
@@ -76,7 +79,7 @@ public final class BunnyStreamApiClient {
         FetchOptions options = new FetchOptions()
                 .setMethod("GET")
                 .setHeaders(authHeaders(apiKey, null));
-        return JsonFetch.fetchJsonObject(
+        return fetchJsonChecked("getLibrary",
                 BASE_URL + "/library/" + libraryId,
                 options);
     }
@@ -97,7 +100,7 @@ public final class BunnyStreamApiClient {
         FetchOptions options = new FetchOptions()
                 .setMethod("GET")
                 .setHeaders(authHeaders(apiKey, null));
-        return JsonFetch.fetchJsonObject(
+        return fetchJsonChecked("listVideos",
                 BASE_URL + "/library/" + libraryId
                         + "/videos?page=" + page
                         + "&itemsPerPage=" + perPage
@@ -117,7 +120,7 @@ public final class BunnyStreamApiClient {
         FetchOptions options = new FetchOptions()
                 .setMethod("GET")
                 .setHeaders(authHeaders(apiKey, null));
-        return JsonFetch.fetchJsonObject(
+        return fetchJsonChecked("getLibraryStatistics",
                 BASE_URL + "/library/" + libraryId + "/statistics",
                 options);
     }
@@ -171,7 +174,7 @@ public final class BunnyStreamApiClient {
         FetchOptions options = new FetchOptions()
                 .setMethod("GET")
                 .setHeaders(authHeaders(apiKey, null));
-        return JsonFetch.fetchJsonObject(
+        return fetchJsonChecked("getVideoLibrary",
                 ACCOUNT_BASE_URL + "/videolibrary/" + libraryId,
                 options);
     }
@@ -203,15 +206,15 @@ public final class BunnyStreamApiClient {
     public static Future<ResolvedLibrary> resolveLibrary(String libraryId, String accountApiKey) {
         ResolvedLibrary cached = LIBRARY_CACHE.get(libraryId);
         if (cached != null) return Future.succeededFuture(cached);
+        // getVideoLibrary() now goes through fetchJsonChecked(), which converts both
+        // non-2xx responses AND HTTP-200-with-{ErrorKey} envelopes into tagged
+        // failures (e.g. "[getVideoLibrary|401] authentication.failed: …") — so no
+        // ErrorKey check is needed here.
         return getVideoLibrary(libraryId, accountApiKey)
                 .compose(json -> {
-                    String errorKey = json.getString("ErrorKey");
-                    if (errorKey != null && !errorKey.isEmpty()) {
-                        return Future.failedFuture("Bunny account API rejected key (" + errorKey + ")");
-                    }
                     String streamKey = json.getString("ApiKey");
                     if (streamKey == null || streamKey.isEmpty()) {
-                        return Future.failedFuture("Library response did not include an ApiKey field");
+                        return Future.failedFuture("[resolveLibrary] Library response did not include an ApiKey field");
                     }
                     long pullZoneId = Numbers.longValue(json.get("PullZoneId"));
                     ResolvedLibrary resolved = new ResolvedLibrary(streamKey, pullZoneId);
@@ -252,7 +255,7 @@ public final class BunnyStreamApiClient {
                 + "&dateTo=" + dateTo
                 + "&pullZone=" + pullZoneId
                 + "&hourly=false";
-        return JsonFetch.fetchJsonObject(url, options);
+        return fetchJsonChecked("getCdnStatistics", url, options);
     }
 
     /** Test-only hook to flush the library cache (e.g. between integration
@@ -262,16 +265,28 @@ public final class BunnyStreamApiClient {
     }
 
     /** Delete a video — used to clean up after aborted/failed uploads so we don't
-     *  leave orphan records in the library. Treats 404 as success. */
+     *  leave orphan records in the library. Treats 404 as success.
+     *
+     *  <p>Note: the {@code .recover()} here intentionally swallows 404s — for an
+     *  abort/cleanup path, "video already gone" is success, not failure. Callers
+     *  that need to discriminate (e.g. the Library Management Delete button) should
+     *  use {@link #deleteVideoStrict} instead, which surfaces 404 as a typed error
+     *  so the React side can render a "video not found" banner. */
     public static Future<Void> deleteVideo(String libraryId, String apiKey, String guid) {
+        return deleteVideoStrict(libraryId, apiKey, guid)
+                .recover(err -> Future.succeededFuture()); // 404 / already-deleted is fine
+    }
+
+    /** Same as {@link #deleteVideo} but propagates failures (incl. 404) verbatim
+     *  so the caller can show the right error to the operator. */
+    public static Future<Void> deleteVideoStrict(String libraryId, String apiKey, String guid) {
         FetchOptions options = new FetchOptions()
                 .setMethod("DELETE")
                 .setHeaders(authHeaders(apiKey, null));
-        return JsonFetch.fetchJsonObject(
+        return fetchJsonChecked("deleteVideo",
                         BASE_URL + "/library/" + libraryId + "/videos/" + guid,
                         options)
-                .<Void>mapEmpty()
-                .recover(err -> Future.succeededFuture()); // 404 / already-deleted is fine
+                .mapEmpty();
     }
 
     /** Compute the TUS authorisation signature Bunny expects on direct browser uploads.
@@ -286,6 +301,101 @@ public final class BunnyStreamApiClient {
         long expires = Instant.now().plus(TUS_AUTH_LIFETIME).getEpochSecond();
         String message = libraryId + apiKey + expires + guid;
         return new TusAuth(sha256Hex(message), expires);
+    }
+
+    /**
+     * Status-aware JSON fetcher. Every failure is wrapped in a
+     * {@link TaggedBunnyException} that carries the originating Bunny endpoint
+     * name and (when known) an HTTP-equivalent status code, so the React
+     * categoriser can discriminate bad API key (401/403) from bad library id /
+     * video guid / pull-zone id (404 on the corresponding endpoint).
+     *
+     * <p>{@link TaggedBunnyException#getMessage()} formats as
+     * {@code "[endpoint|status] detail"} when the status is known, or
+     * {@code "[endpoint] detail"} for transport-level / parse failures.
+     * Bunny's own error envelopes are detected by reading {@code StatusCode}
+     * and {@code ErrorKey} from the JSON body — {@link JsonFetch#fetchJsonObject}
+     * silently returns parsed JSON for non-2xx responses, so the body is the
+     * only place we can recover the status without bypassing JsonFetch.
+     */
+    private static Future<ReadOnlyAstObject> fetchJsonChecked(
+            String endpoint, String url, FetchOptions options) {
+        return JsonFetch.fetchJsonObject(url, options)
+                .compose(BunnyStreamApiClient::interpretBunnyResponse)
+                .recover(err -> Future.failedFuture(new TaggedBunnyException(endpoint, err)));
+    }
+
+    private static Future<ReadOnlyAstObject> interpretBunnyResponse(ReadOnlyAstObject json) {
+        if (json == null) return Future.failedFuture("empty body");
+        int statusCode = Numbers.intValue(json.get("StatusCode"));
+        String errorKey = json.getString("ErrorKey");
+        if (statusCode >= 400) {
+            return Future.failedFuture(new BunnyStatusException(statusCode, formatDetail(errorKey, json.getString("Message"))));
+        }
+        if (errorKey != null && !errorKey.isEmpty()) {
+            int inferred = inferStatusFromErrorKey(errorKey);
+            String detail = formatDetail(errorKey, json.getString("Message"));
+            return inferred > 0
+                    ? Future.failedFuture(new BunnyStatusException(inferred, detail))
+                    : Future.failedFuture(detail);
+        }
+        return Future.succeededFuture(json);
+    }
+
+    private static String formatDetail(String errorKey, String message) {
+        String prefix = errorKey == null || errorKey.isEmpty() ? "" : "ErrorKey=" + errorKey + ": ";
+        String body = message == null || message.isEmpty() ? "(no message)" : message;
+        return prefix + body;
+    }
+
+    /** Map a Bunny {@code ErrorKey} string to the closest HTTP-status equivalent.
+     *  Returns 0 when the key matches no known pattern — the React side then
+     *  surfaces the error in the {@code unknown} bucket rather than misleading
+     *  the operator with a {@code badApiKey} banner. */
+    private static int inferStatusFromErrorKey(String errorKey) {
+        String lower = errorKey.toLowerCase();
+        if (lower.contains("not_found") || lower.contains("notfound")) return NOT_FOUND_404;
+        if (lower.contains("unauthorized") || lower.contains("authentication")) return UNAUTHORIZED_401;
+        return 0;
+    }
+
+    /** Raised by {@link #interpretBunnyResponse} when a Bunny response carries
+     *  a 4xx-equivalent error envelope. Captured by {@link TaggedBunnyException}
+     *  in {@link #fetchJsonChecked}'s recover branch so the endpoint tag can be
+     *  attached without re-parsing the message string downstream. */
+    private static final class BunnyStatusException extends RuntimeException {
+        final int status;
+        BunnyStatusException(int status, String detail) {
+            super(detail);
+            this.status = status;
+        }
+    }
+
+    /** Wraps any Bunny call failure with its originating endpoint so callers
+     *  (e.g. {@code BunnyStreamRestService.resolveStreamApiKey}) can branch on
+     *  the structured {@link #status} field instead of re-parsing the message. */
+    public static final class TaggedBunnyException extends RuntimeException {
+        public final String endpoint;
+        /** HTTP-equivalent status, or 0 when the cause was a transport / parse
+         *  error or an unknown {@code ErrorKey}. */
+        public final int status;
+
+        TaggedBunnyException(String endpoint, Throwable cause) {
+            super(format(endpoint, cause), cause);
+            this.endpoint = endpoint;
+            this.status = cause instanceof BunnyStatusException
+                    ? ((BunnyStatusException) cause).status
+                    : 0;
+        }
+
+        private static String format(String endpoint, Throwable cause) {
+            String detail = cause == null || cause.getMessage() == null
+                    ? "transport error" : cause.getMessage();
+            if (cause instanceof BunnyStatusException) {
+                return "[" + endpoint + "|" + ((BunnyStatusException) cause).status + "] " + detail;
+            }
+            return "[" + endpoint + "] " + detail;
+        }
     }
 
     private static Headers authHeaders(String apiKey, String contentType) {
