@@ -74,7 +74,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                 new Batch<>(new QueryArgument[]{
                     // 0 - Loading event
                     DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
-                        "select name, label, type.bookingForm.code, theme.code, venue.(name,label), startDate, endDate, shortDescriptionLabel, longDescriptionLabel, currency.symbol, organization.(currency.symbol, country.currency.symbol, privacyUrlLabel, timezone), openingDate, bookingProcessStart, timezone, noAccountBooking, inPersonAllowed, onlineAllowed, vodEnabled" +
+                        "select name, label, type.bookingForm.code, theme.code, venue.(name,label,address), startDate, endDate, shortDescriptionLabel, longDescriptionLabel, currency.symbol, organization.(currency.symbol, country.currency.symbol, privacyUrlLabel, timezone), openingDate, bookingProcessStart, timezone, noAccountBooking, inPersonAllowed, onlineAllowed, vodEnabled, teacher.(name,label)" +
                         ", inPersonTermsLabel,onlineTermsLabel,termsUrlEn" +
                         ", date_part('epoch', openingDate - now()) as " + Event.secondsToOpeningDateAtLoadingTime +
                         ", date_part('epoch', coalesce(bookingProcessStart, openingDate) - now()) as " + Event.secondsToBookingProcessStartAtLoadingTime +
