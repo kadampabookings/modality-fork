@@ -13,7 +13,7 @@ public final class EditShareOwnerInfoDocumentLineEventSerialCodec extends Abstra
     private static final String CODEC_ID = "EditShareOwnerInfoDocumentLineEvent";
 
     private static final String MATES_NAMES_KEY = "matesNames";
-    private static final String QUANTITY_KEY    = "qty";
+    private static final String QUANTITY_KEY    = "quantity";
 
     public EditShareOwnerInfoDocumentLineEventSerialCodec() {
         super(EditShareOwnerInfoDocumentLineEvent.class, CODEC_ID);
