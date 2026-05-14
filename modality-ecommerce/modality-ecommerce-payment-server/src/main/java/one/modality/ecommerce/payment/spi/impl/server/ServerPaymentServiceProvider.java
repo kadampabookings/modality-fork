@@ -53,6 +53,11 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
 
     @Override
     public Future<GetPaymentMethodsResult> getPaymentMethods(GetPaymentMethodsArgument argument) {
+        // When an eventPrimaryKey is provided directly (e.g. public-talk pre-booking flow),
+        // skip the document lookup and resolve the event's org/live status in one query.
+        if (argument.eventPrimaryKey() != null) {
+            return getPaymentMethodsForEvent(argument.eventPrimaryKey());
+        }
         // Step 1: Load event state, live flag, and the event primary key from the document.
         // The event state determines live vs test mode (KBS3 way); event.live is the KBS2 fallback.
         return EntityStore.create()
@@ -82,6 +87,51 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
                         " and type.internal and !type.customer" +
                         " order by event=$2 desc, id",
                         organizationPk, eventPk)
+                    .map(accounts -> {
+                        if (accounts.isEmpty())
+                            return new GetPaymentMethodsResult("Unknown", live, new GatewayPaymentMethodInfo[0]);
+                        MoneyAccount moneyAccount = accounts.get(0);
+                        String gatewayName = moneyAccount.getGatewayCompany().getName();
+                        PaymentGateway gateway = findMatchingPaymentGatewayProvider(gatewayName);
+                        if (gateway == null)
+                            return new GetPaymentMethodsResult(gatewayName, live, new GatewayPaymentMethodInfo[0]);
+                        List<GatewayPaymentMethodInfo> supportedPaymentMethods = Collections.filter(
+                            gateway.getSupportedPaymentMethods(),
+                            methodInfo ->
+                                methodInfo.method() == PaymentMethod.GOOGLE_PAY ? moneyAccount.isGooglePayEnabled() :
+                                methodInfo.method() == PaymentMethod.APPLE_PAY ? moneyAccount.isApplePayEnabled() :
+                                true
+                        );
+                        return new GetPaymentMethodsResult(
+                            gateway.getName(),
+                            live,
+                            supportedPaymentMethods.toArray(GatewayPaymentMethodInfo[]::new)
+                        );
+                    });
+            });
+    }
+
+    private Future<GetPaymentMethodsResult> getPaymentMethodsForEvent(Object eventPk) {
+        return EntityStore.create()
+            .<Event>executeQuery(
+                "select state, live, organization from Event where id=$1",
+                eventPk)
+            .compose(events -> {
+                if (events.isEmpty())
+                    return Future.failedFuture("Event not found: " + eventPk);
+                Event event = events.get(0);
+                EventState state = event.getState();
+                boolean live = state != null && state.compareTo(EventState.OPEN) >= 0
+                               || state == null && event.isLive();
+                Object organizationPk = Numbers.toShortestNumber(Entities.getPrimaryKey(event.getOrganizationId()));
+                Object normalizedEventPk = Numbers.toShortestNumber(eventPk);
+                return EntityStore.create()
+                    .<MoneyAccount>executeQuery(
+                        "select gatewayCompany.name,googlePayEnabled,applePayEnabled from MoneyAccount" +
+                        " where organization=$1 and !closed and gatewayCompany!=null" +
+                        " and type.internal and !type.customer" +
+                        " order by event=$2 desc, id",
+                        organizationPk, normalizedEventPk)
                     .map(accounts -> {
                         if (accounts.isEmpty())
                             return new GetPaymentMethodsResult("Unknown", live, new GatewayPaymentMethodInfo[0]);

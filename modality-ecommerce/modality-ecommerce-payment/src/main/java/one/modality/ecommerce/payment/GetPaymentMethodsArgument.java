@@ -10,5 +10,6 @@ package one.modality.ecommerce.payment;
  * @author Bruno Salmon
  */
 public record GetPaymentMethodsArgument(
-    Object documentPrimaryKey
-) {}
+    Object documentPrimaryKey,
+    Object eventPrimaryKey
+) { }

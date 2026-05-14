@@ -252,14 +252,18 @@ public final class DocumentEvents {
     }
 
     private static AbstractDocumentEvent simplifyEditShareOwnerInfoDocumentLineEvent(EditShareOwnerInfoDocumentLineEvent event, List<AbstractDocumentEvent> documentEvents) {
-        // This new event will override all previous events of the same type, so we can get rid of those
-        documentEvents.removeIf(e -> e instanceof EditShareOwnerInfoDocumentLineEvent);
+        // Remove only prior events on the same document line, not all events of this type.
+        DocumentLine documentLine = event.getDocumentLine();
+        documentEvents.removeIf(e -> e instanceof EditShareOwnerInfoDocumentLineEvent other
+                && DocumentLines.sameDocumentLine(other.getDocumentLine(), documentLine));
         return event;
     }
 
     private static AbstractDocumentEvent simplifyEditShareMateInfoDocumentLineEvent(EditShareMateInfoDocumentLineEvent event, List<AbstractDocumentEvent> documentEvents) {
-        // This new event will override all previous events of the same type, so we can get rid of those
-        documentEvents.removeIf(e -> e instanceof EditShareMateInfoDocumentLineEvent);
+        // Remove only prior events on the same document line, not all events of this type.
+        DocumentLine documentLine = event.getDocumentLine();
+        documentEvents.removeIf(e -> e instanceof EditShareMateInfoDocumentLineEvent other
+                && DocumentLines.sameDocumentLine(other.getDocumentLine(), documentLine));
         return event;
     }
 
