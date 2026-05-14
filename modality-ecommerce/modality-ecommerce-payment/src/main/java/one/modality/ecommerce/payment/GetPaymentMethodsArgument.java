@@ -12,14 +12,4 @@ package one.modality.ecommerce.payment;
 public record GetPaymentMethodsArgument(
     Object documentPrimaryKey,
     Object eventPrimaryKey
-) {
-    /** Convenience constructor for the existing document-based path. */
-    public GetPaymentMethodsArgument(Object documentPrimaryKey) {
-        this(documentPrimaryKey, null);
-    }
-
-    /** Factory method for the event-based path (no document required). */
-    public static GetPaymentMethodsArgument forEvent(Object eventPrimaryKey) {
-        return new GetPaymentMethodsArgument(null, eventPrimaryKey);
-    }
-}
+) { }
