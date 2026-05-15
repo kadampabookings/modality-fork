@@ -9,6 +9,7 @@ module modality.ecommerce.shared.pricecalculator {
     requires webfx.platform.console;
     requires webfx.platform.util;
     requires webfx.platform.util.time;
+    requires webfx.stack.orm.entity;
 
     // Exported packages
     exports one.modality.ecommerce.shared.pricecalculator;
