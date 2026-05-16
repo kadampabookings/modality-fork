@@ -142,8 +142,10 @@ public final class SiteItemBill {
             eventZoneId = ZoneOffset.UTC;
         LocalDateTime creationDateTime = LocalDateTime.ofInstant(creationInstant, eventZoneId);
         LocalDate creationDate = creationDateTime.toLocalDate();
+        boolean documentEarlyBird = Booleans.isTrue(documentAggregate.getDocument().isEarlyBird());
         List<Rate> rates = policyAggregate.filterRatesStreamOfSiteAndItem(siteItem.getSite(), siteItem.getItem(), perDayRates)
             .filter(r -> inPerson ? r.isApplicableToInPerson() : r.isApplicableToOnline())
+            .filter(r -> !Booleans.isTrue(r.isEarlyBird()) || (documentEarlyBird && !documentBill.ignoreEarlyBirdRates))
             .filter(r -> Rates.isAndApplicableAtDateAndOverPeriod(r, creationDateTime, firstDay, lastDay))
             //.filter(r -> r.getRateMatchesDocument(bill.getDocument()))
             .collect(Collectors.toList());
@@ -181,7 +183,10 @@ public final class SiteItemBill {
                             continue;
                     }
                     // withItem: rate only applies when the companion item is also booked.
+                    // Skipped entirely when ignoreWithItemRates is set (standard price baseline).
                     Item withItem = rate.getWithItem();
+                    if (withItem != null && documentBill.ignoreWithItemRates)
+                        continue;
                     Set<LocalDate> withItemDates = null;
                     boolean withItemTemporal = false;
                     if (withItem != null) {

@@ -46,6 +46,29 @@ public final class PriceCalculator {
         return Kbs2PriceAlgorithm.computeDocumentBill(documentAggregate, ignoreLongStayDiscounts, false);
     }
 
+    /**
+     * Compute the bill with earlyBird rates excluded but withItem (bundle) rates kept.
+     * Used to determine the "was" price when an earlyBird discount is active, so the
+     * struck-through price shows what the bundle would cost without the earlyBird saving.
+     */
+    public DocumentBill computeDocumentBillWithoutEarlyBird() {
+        DocumentAggregate documentAggregate = getDocumentAggregate();
+        if (documentAggregate == null)
+            return null;
+        return Kbs2PriceAlgorithm.computeDocumentBill(documentAggregate, false, false, true, false);
+    }
+
+    /**
+     * Compute the bill at fully standard rates — no earlyBird rates, no withItem (bundle) rates.
+     * Used as the "was" baseline when no earlyBird discount is active, to highlight any bundle saving.
+     */
+    public DocumentBill computeDocumentBillStandard() {
+        DocumentAggregate documentAggregate = getDocumentAggregate();
+        if (documentAggregate == null)
+            return null;
+        return Kbs2PriceAlgorithm.computeDocumentBill(documentAggregate, false, false, true, true);
+    }
+
     public int calculateTotalPrice() {
         DocumentBill documentBill = computeDocumentBill();
         if (documentBill == null)

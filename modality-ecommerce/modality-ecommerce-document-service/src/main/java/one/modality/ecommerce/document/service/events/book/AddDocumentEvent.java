@@ -15,6 +15,7 @@ public final class AddDocumentEvent extends AbstractDocumentEvent {
 
     private final Object eventPrimaryKey;
     private final boolean inPerson;
+    private final Boolean earlyBird;
     private String personLang;
     // Booking with an account
     private Person person; // not serialized
@@ -32,6 +33,7 @@ public final class AddDocumentEvent extends AbstractDocumentEvent {
         super(document);
         eventPrimaryKey = Entities.getPrimaryKey(document.getEvent());
         inPerson = document.isInPerson();
+        earlyBird = document.isEarlyBird();
         personLang = document.getPersonLang();
         personPrimaryKey = Entities.getPrimaryKey(document.getPerson());
         firstName = document.getFirstName();
@@ -42,10 +44,11 @@ public final class AddDocumentEvent extends AbstractDocumentEvent {
         creationDate = document.isNew() ? Instant.now() : document.getCreationDate();
     }
 
-    public AddDocumentEvent(Object documentPrimaryKey, Object eventPrimaryKey, boolean inPerson, String personLang, Object personPrimaryKey, String firstName, String lastName, String email, Integer age, Integer ref, Instant creationDate) {
+    public AddDocumentEvent(Object documentPrimaryKey, Object eventPrimaryKey, boolean inPerson, Boolean earlyBird, String personLang, Object personPrimaryKey, String firstName, String lastName, String email, Integer age, Integer ref, Instant creationDate) {
         super(documentPrimaryKey);
         this.eventPrimaryKey = eventPrimaryKey;
         this.inPerson = inPerson;
+        this.earlyBird = earlyBird;
         this.personLang = personLang;
         this.personPrimaryKey = personPrimaryKey;
         this.firstName = firstName;
@@ -62,6 +65,10 @@ public final class AddDocumentEvent extends AbstractDocumentEvent {
 
     public boolean isInPerson() {
         return inPerson;
+    }
+
+    public Boolean isEarlyBird() {
+        return earlyBird;
     }
 
     public String getPersonLang() {
@@ -144,6 +151,7 @@ public final class AddDocumentEvent extends AbstractDocumentEvent {
         super.replayEventOnDocument();
         document.setEvent(isForSubmit() ? getEventPrimaryKey() : entityStore.getOrCreateEntity(Event.class, getEventPrimaryKey()));
         document.setInPerson(inPerson);
+        document.setEarlyBird(earlyBird);
         document.setPersonLang(personLang);
         if (person != null)
             document.setPerson(person);

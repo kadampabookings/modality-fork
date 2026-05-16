@@ -145,6 +145,25 @@ public final class WorkingBooking {
         return getLatestBookingPriceCalculator().calculateTotalPrice();
     }
 
+    /**
+     * Total price with earlyBird rates excluded but withItem (bundle) rates kept.
+     * Used as the "was" baseline when an earlyBird discount is active, so the
+     * struck-through price shows the bundle price rather than the fully standard one.
+     */
+    public int calculateTotalWithoutEarlyBird() {
+        DocumentBill bill = getLatestBookingPriceCalculator().computeDocumentBillWithoutEarlyBird();
+        return bill != null ? bill.getTotalPrice() : 0;
+    }
+
+    /**
+     * Total price at fully standard rates — no earlyBird rates, no withItem (bundle) rates.
+     * Used as the "was" baseline when no earlyBird discount is active, to highlight any bundle saving.
+     */
+    public int calculateTotalStandard() {
+        DocumentBill bill = getLatestBookingPriceCalculator().computeDocumentBillStandard();
+        return bill != null ? bill.getTotalPrice() : 0;
+    }
+
     public int calculateNoDiscountTotal() {
         return getLatestBookingPriceCalculator().calculateNoLongStayDiscountTotalPrice();
     }

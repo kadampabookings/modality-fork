@@ -14,6 +14,7 @@ public final class AddDocumentEventSerialCodec extends AbstractDocumentEventSeri
 
     private static final String EVENT_PRIMARY_KEY = "event";
     private static final String IN_PERSON_KEY = "inPerson";
+    private static final String EARLY_BIRD_KEY = "earlyBird";
     private static final String PERSON_LANG_KEY = "lang";
     private static final String PERSON_PRIMARY_KEY = "person";
     private static final String FIRST_NAME_KEY = "firstName";
@@ -32,6 +33,7 @@ public final class AddDocumentEventSerialCodec extends AbstractDocumentEventSeri
         super.encode(o, serial);
         encodeObject( serial,  EVENT_PRIMARY_KEY,  o.getEventPrimaryKey());
         encodeBoolean(serial,  IN_PERSON_KEY,      o.isInPerson());
+        encodeBoolean(serial,  EARLY_BIRD_KEY,     o.isEarlyBird());
         encodeObject( serial,  PERSON_LANG_KEY,    o.getPersonLang());
         encodeObject( serial,  PERSON_PRIMARY_KEY, o.getPersonPrimaryKey());
         encodeString( serial,  FIRST_NAME_KEY,     o.getFirstName());
@@ -48,6 +50,7 @@ public final class AddDocumentEventSerialCodec extends AbstractDocumentEventSeri
             decodeDocumentPrimaryKey(serial),
             decodeObject( serial, EVENT_PRIMARY_KEY),
             decodeBoolean(serial, IN_PERSON_KEY),
+            decodeBoolean(serial, EARLY_BIRD_KEY),
             decodeString( serial, PERSON_LANG_KEY),
             decodeObject( serial, PERSON_PRIMARY_KEY),
             decodeString( serial, FIRST_NAME_KEY),

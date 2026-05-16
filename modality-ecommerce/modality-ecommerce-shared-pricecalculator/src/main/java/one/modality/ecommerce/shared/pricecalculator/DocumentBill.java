@@ -13,15 +13,25 @@ public final class DocumentBill {
     private final DocumentAggregate documentAggregate;
     private final Collection<SiteItemBill> siteItemBills;
     final boolean ignoreLongStayDiscount;
+    /** When true, earlyBird rates are excluded from selection regardless of document.earlyBird. */
+    final boolean ignoreEarlyBirdRates;
+    /** When true, withItem (bundle) rates are excluded from selection regardless of which items are booked. */
+    final boolean ignoreWithItemRates;
     private final boolean update;
 
     private int totalPrice = -1;
     private int minDeposit = -1;
 
     DocumentBill(DocumentAggregate documentAggregate, Collection<SiteItemBill> siteItemBills, boolean ignoreLongStayDiscount, boolean update) {
+        this(documentAggregate, siteItemBills, ignoreLongStayDiscount, update, false, false);
+    }
+
+    DocumentBill(DocumentAggregate documentAggregate, Collection<SiteItemBill> siteItemBills, boolean ignoreLongStayDiscount, boolean update, boolean ignoreEarlyBirdRates, boolean ignoreWithItemRates) {
         this.documentAggregate = documentAggregate;
         this.siteItemBills = siteItemBills;
         this.ignoreLongStayDiscount = ignoreLongStayDiscount;
+        this.ignoreEarlyBirdRates = ignoreEarlyBirdRates;
+        this.ignoreWithItemRates = ignoreWithItemRates;
         this.update = update;
         siteItemBills.forEach(SiteItemBill::sortAttendanceBillsByDate);
     }

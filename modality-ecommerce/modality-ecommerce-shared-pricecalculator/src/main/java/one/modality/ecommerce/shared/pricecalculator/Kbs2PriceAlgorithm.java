@@ -17,10 +17,18 @@ import java.util.stream.Stream;
 final class Kbs2PriceAlgorithm {
 
     public static DocumentBill computeDocumentBill(DocumentAggregate documentAggregate, boolean ignoreLongStayDiscount, boolean update) {
-        return computeDocumentBill(documentAggregate, documentAggregate.getDocumentLinesStream(), ignoreLongStayDiscount, update);
+        return computeDocumentBill(documentAggregate, documentAggregate.getDocumentLinesStream(), ignoreLongStayDiscount, update, false, false);
     }
 
     public static DocumentBill computeDocumentBill(DocumentAggregate documentAggregate, Stream<DocumentLine> documentLineStream, boolean ignoreLongStayDiscount, boolean update) {
+        return computeDocumentBill(documentAggregate, documentLineStream, ignoreLongStayDiscount, update, false, false);
+    }
+
+    public static DocumentBill computeDocumentBill(DocumentAggregate documentAggregate, boolean ignoreLongStayDiscount, boolean update, boolean ignoreEarlyBirdRates, boolean ignoreWithItemRates) {
+        return computeDocumentBill(documentAggregate, documentAggregate.getDocumentLinesStream(), ignoreLongStayDiscount, update, ignoreEarlyBirdRates, ignoreWithItemRates);
+    }
+
+    public static DocumentBill computeDocumentBill(DocumentAggregate documentAggregate, Stream<DocumentLine> documentLineStream, boolean ignoreLongStayDiscount, boolean update, boolean ignoreEarlyBirdRates, boolean ignoreWithItemRates) {
         Map<SiteItem, SiteItemBill> siteItemBills = new HashMap<>();
         documentLineStream.forEach(line -> {
             Site site = line.getSite();
@@ -44,7 +52,7 @@ final class Kbs2PriceAlgorithm {
                 siteItemBill.addAttendanceBill(attendanceBill);
             });
         });
-        return new DocumentBill(documentAggregate, siteItemBills.values(), ignoreLongStayDiscount, update);
+        return new DocumentBill(documentAggregate, siteItemBills.values(), ignoreLongStayDiscount, update, ignoreEarlyBirdRates, ignoreWithItemRates);
     }
 
 }
