@@ -18,7 +18,11 @@ import one.modality.ecommerce.policy.service.PolicyAggregate;
 
 import java.time.*;
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -143,6 +147,16 @@ public final class SiteItemBill {
             .filter(r -> Rates.isAndApplicableAtDateAndOverPeriod(r, creationDateTime, firstDay, lastDay))
             //.filter(r -> r.getRateMatchesDocument(bill.getDocument()))
             .collect(Collectors.toList());
+        boolean thisItemTemporal = Booleans.isTrue(siteItem.getItem().isTemporal());
+        // Pre-compute attendance dates for each withItem referenced by the rates (once, before
+        // the while loop). IdentityHashMap is correct here: within the same policy store, the
+        // same entity always has the same object reference.
+        Map<Item, Set<LocalDate>> withItemDateCache = new IdentityHashMap<>();
+        for (Rate rate : rates) {
+            Item wi = rate.getWithItem();
+            if (wi != null)
+                withItemDateCache.computeIfAbsent(wi, k -> collectAttendanceDates(k, documentBill));
+        }
         int price = Integer.MIN_VALUE;
         if (!rates.isEmpty()) {
             //rates.sort(function (r1, r2) { return (r1.perDay ? 1 : r1.maxDay ) - (r2.perDay ? 1 : r2.maxDay);});
@@ -166,6 +180,20 @@ public final class SiteItemBill {
                         if (startDate != null && date.isBefore(startDate) || endDate != null && date.isAfter(endDate) /* || rate.arrivingOrLeaving && date !== firstDay && date !== lastDay*/)
                             continue;
                     }
+                    // withItem: rate only applies when the companion item is also booked.
+                    Item withItem = rate.getWithItem();
+                    Set<LocalDate> withItemDates = null;
+                    boolean withItemTemporal = false;
+                    if (withItem != null) {
+                        withItemDates = withItemDateCache.get(withItem);
+                        if (withItemDates == null || withItemDates.isEmpty())
+                            continue;
+                        withItemTemporal = Booleans.isTrue(withItem.isTemporal());
+                        if (thisItemTemporal && withItemTemporal) {
+                            if (!withItemDates.contains(bas.get(consumedDays).getDate()))
+                                continue;
+                        }
+                    }
                     // For per-person rates, multiply by shareOwnerQuantity from the matching DocumentLine.
                     var quantity = rate.isPerPerson() ? getShareOwnerQuantity(documentAggregate) : 1;
                     int ratePrice = getRatePrice(rate, documentAggregate) * quantity;
@@ -186,6 +214,21 @@ public final class SiteItemBill {
                         }
                     }
                     int consumableDays = Math.min(remainingDays, maxDay);
+                    // withItem temporal overlap: per-day → cap to consecutive overlap;
+                    // fixed → all-or-nothing (skip if companion doesn't cover all days).
+                    if (withItem != null && thisItemTemporal && withItemTemporal) {
+                        int overlap = 0;
+                        for (int j = consumedDays; j < consumedDays + consumableDays; j++) {
+                            if (withItemDates.contains(bas.get(j).getDate())) overlap++;
+                            else break;
+                        }
+                        if (perDayRates) {
+                            consumableDays = Math.min(consumableDays, overlap);
+                            if (consumableDays == 0) continue;
+                        } else {
+                            if (overlap < consumableDays) continue;
+                        }
+                    }
                     int dailyPrice = ratePrice / consumableDays;
                     // Ugly workaround for Online January retreat 2021 because this price algorithm is not always correct.
                     // Ex: 1 week (actually 8 days): £70, 2 weeks (actually 15 days): £120, 3 weeks (actually 22 days): £180
@@ -252,6 +295,19 @@ public final class SiteItemBill {
             }
         }*/
         return price;
+    }
+
+    /** Collects all attendance dates for the given item across all site/item bills in the document. */
+    private static Set<LocalDate> collectAttendanceDates(Item withItem, DocumentBill documentBill) {
+        Set<LocalDate> dates = new HashSet<>();
+        for (SiteItemBill bill : documentBill.getSiteItemBills()) {
+            if (Entities.samePrimaryKey(bill.getSiteItem().getItem(), withItem)) {
+                for (AttendanceBill ab : bill.getAttendanceBills()) {
+                    dates.add(ab.getDate());
+                }
+            }
+        }
+        return dates;
     }
 
     /** Returns shareOwnerQuantity from the DocumentLine matching this bill's site+item, or 1 if not set. */

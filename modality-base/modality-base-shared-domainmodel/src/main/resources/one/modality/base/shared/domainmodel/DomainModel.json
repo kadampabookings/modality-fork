@@ -1660,6 +1660,7 @@
     "startDate": "Temporal.PlainDate",
     "unemployed_discount": "integer",
     "unemployed_price": "Price",
+    "withItem": "Item",
     "workingVisit_discount": "integer",
     "workingVisit_price": "Price"
   },
