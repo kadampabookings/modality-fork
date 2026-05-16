@@ -209,6 +209,7 @@
     },
     "creationDate": "Temporal.Instant",
     "dates": "string",
+    "earlyBird": "boolean",
     "event": "Event",
     "eventInfo": {
       "expr": "event.<ident>"
@@ -707,6 +708,7 @@
     "currency": "Currency",
     "dateTimeRange": "string",
     "description": "string",
+    "earlyBird": "boolean",
     "endDate": "Temporal.PlainDate",
     "externalLink": "string",
     "facebook_conversionPixelId": "string",
@@ -1616,6 +1618,7 @@
     "discoveryReduced_price": "Price",
     "discovery_discount": "integer",
     "discovery_price": "Price",
+    "earlyBird": "boolean",
     "endDate": "Temporal.PlainDate",
     "event": "Event",
     "eventType": "EventType",

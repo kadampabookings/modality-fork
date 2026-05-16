@@ -31,6 +31,7 @@ public interface Document extends
     String personFacilityFee = "person_facilityFee";
     String request = "request";
     String dates = "dates";
+    String earlyBird = "earlyBird";
     String checkedOut = "checkedOut";
     String groupDocument = "groupDocument";
     String inPerson = "inPerson";
@@ -168,6 +169,14 @@ public interface Document extends
 
     default void setDates(String value) {
         setFieldValue(dates, value);
+    }
+
+    default void setEarlyBird(Boolean value) {
+        setFieldValue(earlyBird, value);
+    }
+
+    default Boolean isEarlyBird() {
+        return getBooleanFieldValue(earlyBird);
     }
 
     default Boolean isCheckedOut() {

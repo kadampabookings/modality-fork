@@ -49,6 +49,7 @@ public interface Rate extends
     String discovery_discount = "discovery_discount";
     String discoveryReduced_price = "discoveryReduced_price";
     String discoveryReduced_discount = "discoveryReduced_discount";
+    String earlyBird = "earlyBird";
     String unemployed_price = "unemployed_price";
     String unemployed_discount = "unemployed_discount";
     String withItem = "withItem";
@@ -333,6 +334,14 @@ public interface Rate extends
 
     default Integer getDiscoveryReducedDiscount() {
         return getIntegerFieldValue(discoveryReduced_discount);
+    }
+
+    default void setEarlyBird(Boolean value) {
+        setFieldValue(earlyBird, value);
+    }
+
+    default Boolean isEarlyBird() {
+        return getBooleanFieldValue(earlyBird);
     }
 
     default void setUnemployedPrice(Integer value) {

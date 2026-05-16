@@ -38,6 +38,7 @@ public interface Event extends Entity,
     String feesBottomLabel = "feesBottomLabel";
     String kbs3 = "kbs3";
     String description = "description";
+    String earlyBird = "earlyBird";
     String shortDescription = "shortDescription";
     String shortDescriptionLabel = "shortDescriptionLabel";
     String longDescriptionLabel = "longDescriptionLabel";
@@ -217,6 +218,14 @@ public interface Event extends Entity,
 
     default String getDescription() {
         return getStringFieldValue(description);
+    }
+
+    default void setEarlyBird(Boolean value) {
+        setFieldValue(earlyBird, value);
+    }
+
+    default Boolean isEarlyBird() {
+        return getBooleanFieldValue(earlyBird);
     }
 
     default void setShortDescription(String value) {
