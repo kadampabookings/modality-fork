@@ -51,6 +51,7 @@ public interface Rate extends
     String discoveryReduced_discount = "discoveryReduced_discount";
     String unemployed_price = "unemployed_price";
     String unemployed_discount = "unemployed_discount";
+    String withItem = "withItem";
     String facilityFee_price = "facilityFee_price";
     String facilityFee_discount = "facilityFee_discount";
 
@@ -348,6 +349,14 @@ public interface Rate extends
 
     default Integer getUnemployedDiscount() {
         return getIntegerFieldValue(unemployed_discount);
+    }
+
+    default void setWithItem(Object value) {
+        setForeignField(withItem, value);
+    }
+
+    default Item getWithItem() {
+        return getForeignEntity(withItem);
     }
 
     default void setFacilityFeePrice(Integer value) {
