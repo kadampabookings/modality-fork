@@ -25,6 +25,15 @@ public interface Organization extends
     String termsUrlLabel = "termsUrlLabel";
     String privacyUrlLabel = "privacyUrlLabel";
     String timezone = "timezone";
+    String metaPixelId = "metaPixelId";
+
+    default String getMetaPixelId() {
+        return getStringFieldValue(metaPixelId);
+    }
+
+    default void setMetaPixelId(String value) {
+        setFieldValue(metaPixelId, value);
+    }
 
     default void setTimezone(String value) {
         setFieldValue(timezone, value);
