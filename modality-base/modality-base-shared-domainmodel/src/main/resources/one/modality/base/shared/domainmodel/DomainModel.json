@@ -489,7 +489,7 @@
       "expr": "person_age = null or person_age >= 18"
     },
     "person_isChild": {
-      "expr": "person_age < 18"
+      "expr": "person_age != null and person_age < 18"
     },
     "person_known": "boolean",
     "person_lang": "string",
@@ -1463,6 +1463,7 @@
     "language": "Language",
     "latitude": "float",
     "longitude": "float",
+    "metaPixelId": "string",
     "name": "string",
     "phone": "string",
     "postCode": "string",
