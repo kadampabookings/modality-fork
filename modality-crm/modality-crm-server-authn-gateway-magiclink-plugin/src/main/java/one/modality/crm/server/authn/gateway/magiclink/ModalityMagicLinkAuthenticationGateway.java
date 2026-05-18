@@ -172,7 +172,7 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
         // 1) Checking the existence of the magic link in the database, and if so, loading it with required info
         return MagicLinkService.loadMagicLinkFromTokenOrVerificationCode(tokenOrVerificationCode, true, dataSourceModel)
             .compose(magicLink -> {
-                // 2) The magic link is valid, so we memorize its usage date and also check if the request comes from
+                // 2) The magic link is valid, so we check if the request comes from
                 // a registered or unregistered user (with or without an account)
                 return MagicLinkService.loadUserPersonFromMagicLink(magicLink)
                     .compose(userPerson -> {
@@ -185,22 +185,23 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
                         }
                         // 4) Pushing the userId to the magic link client which is identified by runId = usageRunId.
                         // Pushing the userId will cause a login, and subsequently a push of the authorizations.
-
                         return PushServerService.pushState(StateAccessor.createUserIdState(userId), usageRunId)
                             .compose(ignored -> { // indicates that the magic link client acknowledged this login push
-                                // 5) Now that we managed to reach the magic link client and have a successful login,
-                                // we mark the magic link as used (to prevent using it again).
+                                // 5) For LOGIN links: mark as used (single-use) and push userId to the original
+                                //    login-page client so both tabs end up authenticated.
+                                //    For BOOKING_ACCESS links: skip both — they are multi-use and were generated
+                                //    server-side with no originating login tab to notify.
+                                if (magicLink.isBookingAccess()) {
+                                    return Future.succeededFuture(magicLink.getRequestedPath());
+                                }
                                 return MagicLinkService.markMagicLinkAsUsed(magicLink, usageRunId)
                                     .map(ignored2 -> magicLink.getRequestedPath())
                                     .onFailure(Console::error)
                                     .onSuccess(ignored2 -> {
-                                        // 6) We also finally push the userId to the original login client here, and
-                                        // this should be followed by a later push of the authorizations to that same
-                                        // client (as explained above).
+                                        // 6) Push userId to the original login client as well.
                                         String loginRunId = magicLink.getLoginRunId();
                                         PushServerService.pushState(StateAccessor.createUserIdState(userId), loginRunId);
-                                    })
-                                    ;
+                                    });
                             });
                     });
             });

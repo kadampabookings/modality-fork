@@ -9,6 +9,7 @@ module modality.ecommerce.document.service {
     requires webfx.platform.service;
     requires webfx.platform.util;
     requires transitive webfx.stack.db.query;
+    requires webfx.stack.orm.domainmodel;
     requires webfx.stack.orm.entity;
 
     // Exported packages

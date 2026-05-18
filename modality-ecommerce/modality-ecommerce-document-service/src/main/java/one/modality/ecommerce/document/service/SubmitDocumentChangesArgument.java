@@ -8,7 +8,10 @@ import one.modality.ecommerce.document.service.events.AbstractDocumentEvent;
 public record SubmitDocumentChangesArgument(
     String historyComment,
     AbstractDocumentEvent[] documentEvents,
-    boolean queueCapable
+    boolean queueCapable,
+    // The frontend origin used by the server to build/ booking-access magic links for guest confirmation emails.
+    // Null for non-web clients and back-office submissions.
+    String clientOrigin
 ) {
 
     // Alternative factory method for simple changes (1 change in most cases but possibly several) that avoids
@@ -19,6 +22,6 @@ public record SubmitDocumentChangesArgument(
     // Note: providing a second constructor instead of a factory method causes a GWT crash
 
     public static SubmitDocumentChangesArgument of(String historyComment, AbstractDocumentEvent... documentEvents) {
-        return new SubmitDocumentChangesArgument(historyComment, documentEvents, false);
+        return new SubmitDocumentChangesArgument(historyComment, documentEvents, false, null);
     }
 }

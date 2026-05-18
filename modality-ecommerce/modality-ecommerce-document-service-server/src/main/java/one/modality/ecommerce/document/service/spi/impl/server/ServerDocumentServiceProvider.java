@@ -9,11 +9,16 @@ import dev.webfx.platform.util.Numbers;
 import dev.webfx.platform.util.Strings;
 import dev.webfx.platform.util.collection.Collections;
 import dev.webfx.stack.com.serial.SerialCodecManager;
+import dev.webfx.platform.util.uuid.Uuid;
+import dev.webfx.stack.orm.datasourcemodel.service.DataSourceModelService;
 import dev.webfx.stack.orm.entity.EntityStore;
 import dev.webfx.stack.orm.entity.EntityStoreQuery;
 import dev.webfx.stack.orm.entity.UpdateStore;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 import one.modality.base.shared.entities.*;
+import one.modality.ecommerce.document.service.GuestBookingAccessService;
+
+import java.util.ServiceLoader;
 import one.modality.base.shared.entities.triggers.Triggers;
 import one.modality.ecommerce.document.service.*;
 import one.modality.ecommerce.document.service.events.AbstractDocumentEvent;
@@ -147,19 +152,27 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
     private Future<DocumentAggregate[]> loadBatchForDocumentPk(Object docPk, LoadDocumentArgument argumentForAccessControl) {
         EntityStoreQuery[] queries = buildBatchQueries(docPk);
         // Frontoffice access control: when loading by document PK only (no person/account
-        // filter), restrict to documents accessible by the authenticated user's account.
+        // filter), restrict to documents accessible by the authenticated user.
+        // Registered users: filtered by account via accountCanAccessPersonOrders().
+        // Guest users (ModalityGuestPrincipal): filtered by person_email match.
         // Back-office callers bypass this check.
         if (argumentForAccessControl != null && docPk != null && !ThreadLocalStateHolder.isBackoffice()) {
             Object userId = ThreadLocalStateHolder.getUserId();
             Object userAccountId = getUserAccountId(userId);
-            if (userAccountId == null) {
+            String guestEmail = getGuestEmail(userId);
+            if (userAccountId == null && guestEmail == null) {
                 return Future.failedFuture("Authentication required to access this document");
             }
-            // Filter document query so only documents belonging to the user's account are returned.
-            // Insert the condition before "order by" since appending would place it after ORDER BY.
             String docQuery = queries[0].getSelect();
-            docQuery = docQuery.replace(" order by ", " and accountCanAccessPersonOrders($2, person) order by ");
-            queries[0] = new EntityStoreQuery(docQuery, docPk, userAccountId);
+            if (userAccountId != null) {
+                // Registered user: filter by account-level access.
+                docQuery = docQuery.replace(" order by ", " and accountCanAccessPersonOrders($2, person) order by ");
+                queries[0] = new EntityStoreQuery(docQuery, docPk, userAccountId);
+            } else {
+                // Guest user: filter to documents whose person_email matches the guest's email.
+                docQuery = docQuery.replace(" order by ", " and lower(person_email)=lower($2) order by ");
+                queries[0] = new EntityStoreQuery(docQuery, docPk, guestEmail);
+            }
         }
         return executeQueryBatchAndMap(queries);
     }
@@ -280,18 +293,56 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
     }
 
     static Future<SubmitDocumentChangesResult> submitDocumentChangesNow(DocumentSubmitRequest request) {
+        // Capture auth state before async work begins (ThreadLocal may not survive Vert.x context switches).
+        Object userId = ThreadLocalStateHolder.getUserId();
+        boolean isGuestBooking = getUserAccountId(userId) == null;
+        String clientOrigin = request.argument().clientOrigin();
+
+        // For guest bookings: pre-generate a UUID token and write it onto the document entity
+        // BEFORE submitChanges() so the DB INSERT carries it. The trigger_document_generate_mails_on_booking
+        // + interpret_brackets() then resolves [bookingUrl] to the magic-link URL using this token.
+        // If request.document() is null here it means the document is resolved later inside history prep —
+        // we handle that case inside the compose lambda below.
+        String preToken = null;
+        if (isGuestBooking && clientOrigin != null && request.document() != null) {
+            preToken = Uuid.randomUuid();
+            request.document().setMagicLinkToken(preToken);
+        }
+        final String earlyToken = preToken;
+
         // Note: At this point, the document may be null, but in that case we at least have documentLine not null
         return HistoryRecorder.prepareDocumentHistoriesBeforeSubmit(request.argument().historyComment(), request.document(), request.documentLine())
-            .compose(histories -> // At this point, history.getDocument() is never null (it has eventually been
-                submitChangesAndPrepareResult(request.updateStore(), histories[0].getDocument()) // resolved through DB reading)
+            .compose(histories -> { // At this point, history.getDocument() is never null (resolved through DB reading)
+                Document document = histories[0].getDocument();
+
+                // Late token assignment: document was null at entry, now resolved.
+                String token = earlyToken;
+                if (token == null && isGuestBooking && clientOrigin != null && document != null) {
+                    token = Uuid.randomUuid();
+                    document.setMagicLinkToken(token);
+                }
+                final String resolvedToken = token;
+
+                return submitChangesAndPrepareResult(request.updateStore(), document)
                     .compose(result -> { // Completing the history recording (changes column with resolved primary keys)
-                            if (result.status() == DocumentChangesStatus.APPROVED)
-                                return HistoryRecorder.completeDocumentHistoriesAfterSubmit(histories, request.argument().documentEvents())
-                                    .map(ignoredVoid -> result);
-                            return Future.succeededFuture(result); // No technical exception, but submit refused by logic (ex: sold-out)
+                        if (result.status() == DocumentChangesStatus.APPROVED) {
+                            // Persist the magic_link record (fire-and-forget). The confirmation email was
+                            // already queued by the DB trigger using document.magic_link_token.
+                            if (resolvedToken != null) {
+                                registerBookingAccessMagicLink(
+                                    resolvedToken,
+                                    result.documentPrimaryKey(),
+                                    document.getEmail(),
+                                    document.getPersonLang(),
+                                    clientOrigin
+                                );
+                            }
+                            return HistoryRecorder.completeDocumentHistoriesAfterSubmit(histories, request.argument().documentEvents())
+                                .map(ignoredVoid -> result);
                         }
-                    )
-            );
+                        return Future.succeededFuture(result); // submit refused by logic (e.g. sold-out)
+                    });
+            });
     }
 
     private static Future<SubmitDocumentChangesResult> submitChangesAndPrepareResult(UpdateStore updateStore, Document document) {
@@ -368,6 +419,47 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
             return userId.getClass().getMethod("getUserAccountId").invoke(userId);
         } catch (Exception e) {
             return null;
+        }
+    }
+
+    /**
+     * Extracts the email from a ModalityGuestPrincipal, or null for any other principal type.
+     * Uses reflection to avoid a direct module dependency on modality.crm.shared.authn.
+     */
+    private static String getGuestEmail(Object userId) {
+        if (userId == null) return null;
+        try {
+            // ModalityGuestPrincipal has getEmail(); ModalityUserPrincipal does not.
+            // If the method exists and the principal has no getUserAccountId, it's a guest.
+            if (userId.getClass().getMethod("getUserAccountId").invoke(userId) != null)
+                return null; // registered user — not a guest
+            return (String) userId.getClass().getMethod("getEmail").invoke(userId);
+        } catch (NoSuchMethodException e) {
+            // getEmail() exists but getUserAccountId() does not — pure guest principal
+            try {
+                return (String) userId.getClass().getMethod("getEmail").invoke(userId);
+            } catch (Exception ignored) {
+                return null;
+            }
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * Persists the magic_link record for a guest booking. Fire-and-forget — failures are
+     * logged but do not affect the booking result already returned to the client.
+     * The confirmation email was already queued by the DB trigger during the document INSERT.
+     */
+    private static void registerBookingAccessMagicLink(String token, Object documentPk, String personEmail, String personLang, String clientOrigin) {
+        if (personEmail == null || clientOrigin == null) return;
+        ServiceLoader<GuestBookingAccessService> loader = ServiceLoader.load(GuestBookingAccessService.class);
+        for (GuestBookingAccessService service : loader) {
+            service.registerBookingAccessMagicLink(
+                token, documentPk, personEmail, personLang, clientOrigin,
+                DataSourceModelService.getDefaultDataSourceModel()
+            ).onFailure(err -> Console.log("GuestBookingAccessService failed for document " + documentPk + ": " + err));
+            break; // use first registered implementation
         }
     }
 

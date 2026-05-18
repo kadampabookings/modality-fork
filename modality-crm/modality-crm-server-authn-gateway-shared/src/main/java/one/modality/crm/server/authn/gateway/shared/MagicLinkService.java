@@ -15,6 +15,7 @@ import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 import one.modality.base.server.mail.ModalityMailMessage;
 import one.modality.base.shared.context.ModalityContext;
 import one.modality.base.shared.entities.MagicLink;
+import one.modality.base.shared.entities.MagicLinkType;
 import one.modality.base.shared.entities.Person;
 import one.modality.base.shared.util.ActivityHashUtil;
 import one.modality.crm.shared.services.authn.ModalityAuthenticationI18nKeys;
@@ -30,6 +31,8 @@ public final class MagicLinkService {
 
     private static final boolean SKIP_LINK_VALIDITY_CHECK = false; // Can be set to true when debugging the magic link client
     private static final Duration LINK_EXPIRATION_DURATION = Duration.ofMinutes(10);
+    // BOOKING_ACCESS links are long-lived so guests can click them days or weeks after booking.
+    private static final Duration BOOKING_ACCESS_EXPIRATION_DURATION = Duration.ofDays(365);
 
     // Designed to be used only from server front calls (not postponed by an async operation) in order to get the loginRunId
     public static Future<Void> createAndSendMagicLink(
@@ -149,12 +152,14 @@ public final class MagicLinkService {
             // Scope by loginRunId: the client that entered the code is the same tab that requested it.
             String loginRunId = ThreadLocalStateHolder.getRunId();
             findFuture = entityStore.<MagicLink>executeQuery(
-                "select loginRunId,email,creationDate,usageDate,requestedPath,oldEmail from MagicLink where verificationCode=$1 and loginRunId=$2 and usageDate is null order by id desc limit 1",
+                "select loginRunId,email,creationDate,usageDate,requestedPath,oldEmail,linkType from MagicLink where verificationCode=$1 and loginRunId=$2 and usageDate is null order by id desc limit 1",
                 tokenOrVerificationCode, loginRunId)
                 .map(Collections::first);
         } else {
+            // BOOKING_ACCESS links are multi-use (usageDate is set after first use), so we do NOT
+            // filter by usageDate=null here; the validity check below uses type-appropriate expiry.
             findFuture = entityStore.<MagicLink>executeQuery(
-                "select loginRunId,email,creationDate,usageDate,requestedPath,oldEmail from MagicLink where token=$1 and usageDate is null order by id desc limit 1",
+                "select loginRunId,email,creationDate,usageDate,requestedPath,oldEmail,linkType from MagicLink where token=$1 order by id desc limit 1",
                 tokenOrVerificationCode)
                 .map(Collections::first);
         }
@@ -162,17 +167,64 @@ public final class MagicLinkService {
             .compose(magicLink -> {
                 if (magicLink == null)
                     return Future.failedFuture("[%s] Magic link not found (token: %s)".formatted(ModalityAuthenticationI18nKeys.LoginLinkUnrecognisedError, tokenOrVerificationCode));
-                // 2) Checking the magic link is still valid (not already used and not expired)
+                // 2) Checking the magic link is still valid. BOOKING_ACCESS links are multi-use and
+                //    have a much longer expiry than single-use LOGIN links.
                 if (checkValidity && !SKIP_LINK_VALIDITY_CHECK) {
-                    if (magicLink.getUsageDate() != null)
+                    boolean isBookingAccess = magicLink.isBookingAccess();
+                    // LOGIN links become invalid once used; BOOKING_ACCESS links tolerate repeated use.
+                    if (!isBookingAccess && magicLink.getUsageDate() != null)
                         return Future.failedFuture("[%s] Magic link already used (token: %s)".formatted(ModalityAuthenticationI18nKeys.LoginLinkAlreadyUsedError, tokenOrVerificationCode));
+                    Duration expiry = isBookingAccess ? BOOKING_ACCESS_EXPIRATION_DURATION : LINK_EXPIRATION_DURATION;
                     Instant now = now();
-                    if (magicLink.getCreationDate() == null || now.isAfter(magicLink.getCreationDate().plus(LINK_EXPIRATION_DURATION))) {
+                    if (magicLink.getCreationDate() == null || now.isAfter(magicLink.getCreationDate().plus(expiry))) {
                         return Future.failedFuture("[%s] Magic link expired (token: %s)".formatted(ModalityAuthenticationI18nKeys.LoginLinkExpiredError, tokenOrVerificationCode));
                     }
                 }
                 return Future.succeededFuture(magicLink);
             });
+    }
+
+    /**
+     * Creates a BOOKING_ACCESS magic link for a guest booking confirmation email.
+     * Unlike LOGIN links this link is long-lived (1 year) and multi-use — the guest can
+     * click it from any device or browser without getting "already used" errors.
+     *
+     * @param email          the guest's email address
+     * @param requestedPath  the path to redirect to after authentication (e.g. "/order/42")
+     * @param clientOrigin   the frontend origin URL (e.g. "https://kbs.kadampa.net")
+     * @param activityPath   the magic-link route pattern (e.g. "/magic-link/:token")
+     * @param lang           the guest's preferred language code
+     * @param dataSourceModel the data source to write to
+     * @return the persisted MagicLink entity with its primary key and link URL set
+     */
+    public static Future<MagicLink> createBookingAccessLink(String email, String requestedPath, String clientOrigin, String activityPath, String lang, DataSourceModel dataSourceModel) {
+        return createBookingAccessLink(Uuid.randomUuid(), email, requestedPath, clientOrigin, activityPath, lang, dataSourceModel);
+    }
+
+    /**
+     * Variant that accepts a pre-generated token. Use this when the token has already been
+     * written onto the document (document.magic_link_token) before the INSERT so the DB
+     * bracket pattern can resolve it at email-generation time.
+     */
+    public static Future<MagicLink> createBookingAccessLink(String token, String email, String requestedPath, String clientOrigin, String activityPath, String lang, DataSourceModel dataSourceModel) {
+        String normalizedOrigin = clientOrigin;
+        if (normalizedOrigin != null && !normalizedOrigin.startsWith("http")) {
+            normalizedOrigin = (normalizedOrigin.contains(":80") ? "http" : "https") + normalizedOrigin.substring(normalizedOrigin.indexOf("://"));
+        }
+        String link = normalizedOrigin + activityPath.replace(":token", token);
+        UpdateStore updateStore = UpdateStore.create(dataSourceModel);
+        MagicLink magicLink = updateStore.insertEntity(MagicLink.class);
+        // loginRunId is required NOT NULL in the DB; for server-generated links there is no
+        // originating client session, so we use a sentinel value.
+        magicLink.setLoginRunId("server-generated");
+        magicLink.setToken(token);
+        magicLink.setEmail(email);
+        magicLink.setLang(lang != null ? lang : "en");
+        magicLink.setLink(link);
+        magicLink.setRequestedPath(requestedPath);
+        magicLink.setLinkType(MagicLinkType.BOOKING_ACCESS);
+        return updateStore.submitChanges()
+            .map(ignored -> magicLink);
     }
 
     public static Future<Void> markMagicLinkAsUsed(MagicLink magicLink, String usageRunId) {

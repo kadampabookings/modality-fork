@@ -17,6 +17,7 @@ public final class SubmitDocumentChangesArgumentSerialCodec extends SerialCodecB
     private static final String HISTORY_COMMENT_KEY = "historyComment";
     private static final String DOCUMENT_EVENTS_KEY = "documentEvents";
     private static final String QUEUE_CAPABLE_KEY = "queueCapable";
+    private static final String CLIENT_ORIGIN_KEY = "clientOrigin";
 
     public SubmitDocumentChangesArgumentSerialCodec() {
         super(SubmitDocumentChangesArgument.class, CODEC_ID);
@@ -27,14 +28,16 @@ public final class SubmitDocumentChangesArgumentSerialCodec extends SerialCodecB
         encodeString( serial, HISTORY_COMMENT_KEY, arg.historyComment());
         encodeArray(  serial, DOCUMENT_EVENTS_KEY, arg.documentEvents());
         encodeBoolean(serial, QUEUE_CAPABLE_KEY,   arg.queueCapable());
+        encodeString( serial, CLIENT_ORIGIN_KEY,   arg.clientOrigin());
     }
 
     @Override
     public SubmitDocumentChangesArgument decode(ReadOnlyAstObject serial) {
         return new SubmitDocumentChangesArgument(
-            decodeString( serial, HISTORY_COMMENT_KEY),
-            decodeArray(  serial, DOCUMENT_EVENTS_KEY, AbstractDocumentEvent.class),
-            decodeBooleanSafe(serial, QUEUE_CAPABLE_KEY)
+            decodeString(     serial, HISTORY_COMMENT_KEY),
+            decodeArray(      serial, DOCUMENT_EVENTS_KEY, AbstractDocumentEvent.class),
+            decodeBooleanSafe(serial, QUEUE_CAPABLE_KEY),
+            decodeString(     serial, CLIENT_ORIGIN_KEY)
         );
     }
 

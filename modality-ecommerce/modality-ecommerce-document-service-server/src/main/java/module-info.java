@@ -22,6 +22,9 @@ module modality.ecommerce.document.service.server {
     // Exported packages
     exports one.modality.ecommerce.document.service.spi.impl.server;
 
+    // Used services
+    uses one.modality.ecommerce.document.service.GuestBookingAccessService;
+
     // Provided services
     provides one.modality.ecommerce.document.service.spi.DocumentServiceProvider with one.modality.ecommerce.document.service.spi.impl.server.ServerDocumentServiceProvider;
 
