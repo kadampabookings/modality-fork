@@ -19,6 +19,7 @@ import dev.webfx.stack.session.state.StateAccessor;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 import one.modality.base.shared.entities.FrontendAccount;
 import one.modality.base.shared.entities.Person;
+import one.modality.crm.server.authn.gateway.shared.GuestPersonLinker;
 import one.modality.crm.server.authn.gateway.shared.LocalizedMailTemplate;
 import one.modality.crm.server.authn.gateway.shared.MagicLinkService;
 import one.modality.crm.shared.services.authn.ModalityAuthenticationI18nKeys;
@@ -125,6 +126,7 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
         username = username.trim(); // Ignoring leading and tailing spaces in username
         if (username.contains("@")) // If the username is an email address, it shouldn't be case-sensitive
             username = username.toLowerCase(); // emails are stored in lowercase in the database
+        final String normalizedUsername = username; // effectively-final copy for lambda capture
         return EntityStore.create(dataSourceModel)
             // Note: accounts are created from the front-office and can first be used only to log in in the front-office,
             // but an admin or superadmin can mark them as back-office and can then be used to log in in the back-office as well.
@@ -142,6 +144,10 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
                 Object personId = userPerson.getPrimaryKey();
                 Object accountId = Entities.getPrimaryKey(userPerson.getForeignEntityId("frontendAccount"));
                 ModalityUserPrincipal modalityUserPrincipal = new ModalityUserPrincipal(personId, accountId);
+                // Link any guest Person records with the same email, in case the user booked
+                // as a guest before logging in. Fire-and-forget.
+                GuestPersonLinker.linkGuestPersonsToAccount(normalizedUsername, accountId, dataSourceModel)
+                    .onFailure(err -> Console.log("GuestPersonLinker failed on login for " + normalizedUsername + ": " + err));
                 return PushServerService.pushState(StateAccessor.createUserIdState(modalityUserPrincipal), runId);
             });
     }
@@ -217,7 +223,14 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
                 fa.setPassword(encryptPassword(credentials.password(), salt));
                 fa.setCorporation(1);
                 return updateStore.submitChanges()
-                    .map(ignored -> fa.getPrimaryKey());
+                    .compose(ignored -> {
+                        // Link any guest Person records (created during guest bookings) that share
+                        // this email to the new account. Fire-and-forget: failures are logged but
+                        // don't block the response.
+                        GuestPersonLinker.linkGuestPersonsToAccount(email, fa.getPrimaryKey(), dataSourceModel)
+                            .onFailure(err -> Console.log("GuestPersonLinker failed on account creation for " + email + ": " + err));
+                        return Future.succeededFuture(fa.getPrimaryKey());
+                    });
             });
     }
 

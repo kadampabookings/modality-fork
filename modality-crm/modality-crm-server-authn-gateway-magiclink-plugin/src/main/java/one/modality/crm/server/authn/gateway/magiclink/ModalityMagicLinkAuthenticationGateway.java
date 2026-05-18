@@ -18,6 +18,7 @@ import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 import one.modality.base.shared.entities.FrontendAccount;
 import one.modality.base.shared.entities.MagicLink;
 import one.modality.base.shared.util.ActivityHashUtil;
+import one.modality.crm.server.authn.gateway.shared.GuestPersonLinker;
 import one.modality.crm.server.authn.gateway.shared.LocalizedMailTemplate;
 import one.modality.crm.server.authn.gateway.shared.MagicLinkService;
 import one.modality.crm.shared.services.authn.ModalityAuthenticationI18nKeys;
@@ -179,7 +180,11 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
                         // 3) Preparing the userId = ModalityUserPrincipal for registered users, ModalityGuestPrincipal for unregistered users
                         Object userId;
                         if (userPerson != null) {
-                            userId = new ModalityUserPrincipal(userPerson.getPrimaryKey(), userPerson.getForeignEntity("frontendAccount").getPrimaryKey());
+                            Object accountId = userPerson.getForeignEntity("frontendAccount").getPrimaryKey();
+                            userId = new ModalityUserPrincipal(userPerson.getPrimaryKey(), accountId);
+                            // Link any guest Person records with the same email. Fire-and-forget.
+                            GuestPersonLinker.linkGuestPersonsToAccount(magicLink.getEmail(), accountId, dataSourceModel)
+                                .onFailure(err -> Console.log("GuestPersonLinker failed on magic-link login for " + magicLink.getEmail() + ": " + err));
                         } else {
                             userId = new ModalityGuestPrincipal(magicLink.getEmail());
                         }

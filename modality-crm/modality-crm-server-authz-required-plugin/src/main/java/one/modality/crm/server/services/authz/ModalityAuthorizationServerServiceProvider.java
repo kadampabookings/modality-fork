@@ -5,6 +5,7 @@ import dev.webfx.platform.async.CompositeFuture;
 import dev.webfx.platform.async.Future;
 import dev.webfx.platform.util.Strings;
 import dev.webfx.stack.authn.AuthenticationService;
+import dev.webfx.stack.authn.UserClaims;
 import dev.webfx.stack.authz.server.spi.AuthorizationServerServiceProvider;
 import dev.webfx.stack.com.bus.DeliveryOptions;
 import dev.webfx.stack.orm.datasourcemodel.service.DataSourceModelService;
@@ -44,15 +45,21 @@ public final class ModalityAuthorizationServerServiceProvider implements Authori
         return AuthenticationService.getUserClaims()
             // Step 2: we load the user authorizations from the database
             .compose(userClaims ->
-                loadAndPushUserAuthorizations(userClaims.email(), backoffice, runId)
+                loadAndPushUserAuthorizations(userClaims, backoffice, runId)
             );
     }
 
-    private <T> Future<T> loadAndPushUserAuthorizations(String userEmail, boolean backoffice, Object runId) {
+    private <T> Future<T> loadAndPushUserAuthorizations(UserClaims userClaims, boolean backoffice, Object runId) {
+        String userEmail = userClaims.email();
+        // A guest principal has no username (only an email). A registered user always has a username.
+        boolean isRegistered = userClaims.username() != null;
         EntityStore entityStore = EntityStore.create(DataSourceModelService.getDefaultDataSourceModel());
         return Future.all(
-            // Loading guest operations granted to everyone who is logged in
-            entityStore.<Operation>executeQuery("select operationCode, grantRoute from Operation op where ($1 and backoffice or !$1 and frontoffice) and guest", backoffice)
+            // Loading operations for logged-in users:
+            //   - guest=true operations  → always (for both guests and registered users)
+            //   - guest=false operations → only for registered users (isRegistered=true)
+            // Merged into a single query: !public AND (guest OR $2)
+            entityStore.<Operation>executeQuery("select operationCode, grantRoute from Operation op where ($1 and backoffice or !$1 and frontoffice) and !public and (guest or $2)", backoffice, isRegistered)
                 .map(operations -> grantOperations(operations, new StringBuilder()).toString()),
             // Loading operations and rules granted to the user
             entityStore.<AuthorizationOrganizationUserAccess>executeQuery(
@@ -105,11 +112,11 @@ public final class ModalityAuthorizationServerServiceProvider implements Authori
                         """;
                 })
         ).compose(compositeFuture -> {
-            String guestGrants = (String) compositeFuture.list().get(0);
-            String userGrants = (String) compositeFuture.list().get(1);
-            String adminGrants = (String) compositeFuture.list().get(2);
+            String loggedInGrants   = (String) compositeFuture.list().get(0);
+            String userGrants       = (String) compositeFuture.list().get(1);
+            String adminGrants      = (String) compositeFuture.list().get(2);
             String superAdminGrants = (String) compositeFuture.list().get(3);
-            return pushAuthorizationsObject(superAdminGrants.isEmpty() ? guestGrants + userGrants + adminGrants : superAdminGrants, runId);
+            return pushAuthorizationsObject(superAdminGrants.isEmpty() ? loggedInGrants + userGrants + adminGrants : superAdminGrants, runId);
         });
     }
 
