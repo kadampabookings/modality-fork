@@ -38,6 +38,7 @@ public interface Document extends
     String carer1Document = "person_carer1Document";
     String carer2Document = "person_carer2Document";
     String creationDate = "creationDate";
+    String magicLinkToken = "magicLinkToken";
 
     default void setCreationDate(Instant value) {
         setFieldValue(creationDate, value);
@@ -61,6 +62,14 @@ public interface Document extends
 
     default String getPersonLang() {
         return getStringFieldValue(personLang);
+    }
+
+    default void setMagicLinkToken(String value) {
+        setFieldValue(magicLinkToken, value);
+    }
+
+    default String getMagicLinkToken() {
+        return getStringFieldValue(magicLinkToken);
     }
 
     default void setCart(Object value) {

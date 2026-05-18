@@ -443,6 +443,7 @@
     "listing_transport": {
       "expr": "(select min(item.code) from DocumentLine where document=d and cancelled=false and item.family.code='transp' group by item order by item.ord limit 1) as Transport"
     },
+    "magicLinkToken": "string",
     "multipleBooking": "MultipleBooking",
     "multipleBookingIcon": {
       "expr": "image(multipleBooking == null ? null : multipleBooking.notCancelled=0 || multipleBooking==notMultipleBooking ? 'images/16/multipleBookings/grayCross.png' : multipleBooking.notCancelled = 1 ? 'images/16/multipleBookings/blueCross.png' : 'images/16/multipleBookings/redCross.png')"
@@ -1185,6 +1186,7 @@
     "email": "string",
     "lang": "string",
     "link": "string",
+    "linkType": "string",
     "loginRunId": "string",
     "oldEmail": "string",
     "requestedPath": "string",
@@ -1775,7 +1777,7 @@
     "groupName": "string",
     "hideDates": "boolean",
     "icon": {
-      "expr": "image('images/16/site.png')"
+      "expr": "image(itemFamily.code='refo' ? 'images/16/website.png' : 'images/16/site.png')"
     },
     "imageUrl": "string",
     "itemFamily": "ItemFamily",

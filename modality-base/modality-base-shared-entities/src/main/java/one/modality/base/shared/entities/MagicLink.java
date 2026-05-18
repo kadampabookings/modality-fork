@@ -19,6 +19,7 @@ public interface MagicLink extends Entity {
     String link = "link";
     String requestedPath = "requestedPath";
     String verificationCode = "verificationCode";
+    String linkType = "linkType";
 
     default void setCreationDate(Instant value) {
         setFieldValue(creationDate, value);
@@ -106,5 +107,23 @@ public interface MagicLink extends Entity {
 
     default String getVerificationCode() {
         return getStringFieldValue(verificationCode);
+    }
+
+    default void setLinkType(MagicLinkType value) {
+        setFieldValue(linkType, value != null ? value.name() : null);
+    }
+
+    default MagicLinkType getLinkType() {
+        String value = getStringFieldValue(linkType);
+        if (value == null) return MagicLinkType.LOGIN;
+        try {
+            return MagicLinkType.valueOf(value);
+        } catch (IllegalArgumentException e) {
+            return MagicLinkType.LOGIN; // safe fallback for unknown future values
+        }
+    }
+
+    default boolean isBookingAccess() {
+        return MagicLinkType.BOOKING_ACCESS == getLinkType();
     }
 }
