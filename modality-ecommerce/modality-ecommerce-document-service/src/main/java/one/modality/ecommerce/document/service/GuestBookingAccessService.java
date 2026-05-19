@@ -25,19 +25,23 @@ import dev.webfx.stack.orm.domainmodel.DataSourceModel;
 public interface GuestBookingAccessService {
 
     /**
-     * Persist the magic_link record for a guest booking.
+     * Persist the magic_link record for a guest booking and link it to the booking cart.
+     * The cart link enables /cart/:cartUuid authentication and invalidation when the
+     * guest later creates an account.
      *
      * @param token          the UUID token already written onto document.magic_link_token
      * @param documentPk     primary key of the newly created Document (used as requestedPath)
+     * @param cartPk         primary key of the booking cart to link to the magic link
      * @param personEmail    guest email address
      * @param personLang     guest preferred language (2-char code, e.g. "en")
      * @param clientOrigin   frontend origin used to compose magic_link.link, e.g. "https://kbs.kadampa.net"
      * @param dataSourceModel data source to write to
-     * @return future that completes when the magic_link record is stored
+     * @return future that completes when the magic_link record is stored and cart linked
      */
     Future<Void> registerBookingAccessMagicLink(
         String token,
         Object documentPk,
+        Object cartPk,
         String personEmail,
         String personLang,
         String clientOrigin,

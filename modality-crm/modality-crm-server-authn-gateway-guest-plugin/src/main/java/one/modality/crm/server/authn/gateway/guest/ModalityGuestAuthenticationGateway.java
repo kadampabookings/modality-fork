@@ -1,27 +1,28 @@
 package one.modality.crm.server.authn.gateway.guest;
 
 import dev.webfx.platform.async.Future;
+import dev.webfx.platform.util.collection.Collections;
 import dev.webfx.stack.authn.UserClaims;
 import dev.webfx.stack.authn.logout.server.LogoutPush;
 import dev.webfx.stack.authn.server.gateway.spi.ServerAuthenticationGateway;
 import dev.webfx.stack.orm.domainmodel.DataSourceModel;
+import dev.webfx.stack.orm.entity.EntityStore;
+import dev.webfx.stack.orm.entity.UpdateStore;
+import dev.webfx.stack.push.server.PushServerService;
+import dev.webfx.stack.session.state.StateAccessor;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
+import one.modality.base.shared.entities.Cart;
+import one.modality.base.shared.entities.MagicLink;
 import one.modality.crm.server.authn.gateway.shared.MagicLinkService;
+import one.modality.crm.shared.services.authn.AuthenticateWithCartCredentials;
 import one.modality.crm.shared.services.authn.ModalityGuestPrincipal;
 import one.modality.ecommerce.document.service.GuestBookingAccessService;
 
 /**
- * Handles authentication verification and claims for ModalityGuestPrincipal sessions,
- * and also implements GuestBookingAccessService to persist the magic_link record after
- * a guest booking is submitted.
- *
- * Without this gateway, every request that carries a ModalityGuestPrincipal userId in its
- * state headers would fail the UserIdCheck in ServerSideStateSessionSyncer: the portal finds
- * no accepting gateway, the failure is recovered to LOGOUT_USER_ID, and that value is written
- * back into the client state headers — wiping the guest session.
- *
- * Guest principals are self-validating: they were created by the magic-link authentication
- * flow and already carry the user's verified email. No further DB round-trip is needed.
+ * Handles authentication verification and claims for ModalityGuestPrincipal sessions.
+ * Also authenticates guests via a cart UUID (AuthenticateWithCartCredentials) and
+ * implements GuestBookingAccessService to persist the magic_link record and link it
+ * to the booking cart after a guest booking is submitted.
  *
  * @author Bruno Salmon
  */
@@ -33,12 +34,44 @@ public final class ModalityGuestAuthenticationGateway implements ServerAuthentic
 
     @Override
     public boolean acceptsUserCredentials(Object userCredentials) {
-        return false; // guests authenticate via the magic-link gateway, not here
+        return userCredentials instanceof AuthenticateWithCartCredentials;
     }
 
     @Override
     public Future<?> authenticate(Object userCredentials) {
-        return Future.failedFuture(getClass().getSimpleName() + ".authenticate() is not supported");
+        if (!(userCredentials instanceof AuthenticateWithCartCredentials cred))
+            return Future.failedFuture(getClass().getSimpleName() + ".authenticate() requires AuthenticateWithCartCredentials");
+        return authenticateWithCart(cred.cartUuid());
+    }
+
+    /**
+     * Looks up the booking cart by UUID, finds its associated BOOKING_ACCESS magic link,
+     * validates it, and authenticates the caller as ModalityGuestPrincipal.
+     */
+    private Future<String> authenticateWithCart(String cartUuid) {
+        String usageRunId = ThreadLocalStateHolder.getRunId();
+        DataSourceModel dataSourceModel = dev.webfx.stack.orm.datasourcemodel.service.DataSourceModelService.getDefaultDataSourceModel();
+        return EntityStore.create(dataSourceModel)
+            .<Cart>executeQuery(
+                "select id, uuid, magicLink.(id,token,email,linkType,creationDate,usageDate) from Cart where uuid=$1 limit 1",
+                cartUuid)
+            .compose(carts -> {
+                Cart cart = Collections.first(carts);
+                if (cart == null)
+                    return Future.failedFuture("Cart not found: " + cartUuid);
+                MagicLink magicLink = cart.getMagicLink();
+                if (magicLink == null)
+                    return Future.failedFuture("No magic link associated with cart: " + cartUuid);
+                // Validate via the shared service (handles BOOKING_ACCESS expiry rules)
+                return MagicLinkService.loadMagicLinkFromTokenOrVerificationCode(
+                        magicLink.getToken(), true, dataSourceModel)
+                    .compose(validMagicLink -> {
+                        ModalityGuestPrincipal guestPrincipal = new ModalityGuestPrincipal(validMagicLink.getEmail());
+                        return PushServerService.pushState(
+                                StateAccessor.createUserIdState(guestPrincipal), usageRunId)
+                            .map(ignored -> "");  // no requestedPath needed — CartPage handles navigation
+                    });
+            });
     }
 
     @Override
@@ -48,7 +81,6 @@ public final class ModalityGuestAuthenticationGateway implements ServerAuthentic
 
     @Override
     public Future<?> verifyAuthenticated() {
-        // Trust the stored guest principal as-is — no DB check needed.
         return Future.succeededFuture(ThreadLocalStateHolder.getUserId());
     }
 
@@ -74,6 +106,7 @@ public final class ModalityGuestAuthenticationGateway implements ServerAuthentic
     public Future<Void> registerBookingAccessMagicLink(
             String token,
             Object documentPk,
+            Object cartPk,
             String personEmail,
             String personLang,
             String clientOrigin,
@@ -86,7 +119,13 @@ public final class ModalityGuestAuthenticationGateway implements ServerAuthentic
                 MAGIC_LINK_ACTIVITY_PATH_FULL,
                 personLang,
                 dataSourceModel)
-            .mapEmpty();
+            .compose(magicLink -> {
+                // Link the magic link to the cart so /cart/:cartUuid can authenticate the guest.
+                UpdateStore updateStore = UpdateStore.create(dataSourceModel);
+                Cart cart = updateStore.updateEntity(Cart.class, cartPk);
+                cart.setMagicLink(magicLink.getPrimaryKey());
+                return updateStore.submitChanges().mapEmpty();
+            });
     }
 
     @Override

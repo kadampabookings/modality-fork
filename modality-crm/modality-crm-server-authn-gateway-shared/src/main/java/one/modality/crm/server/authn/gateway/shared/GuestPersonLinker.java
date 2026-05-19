@@ -4,6 +4,7 @@ import dev.webfx.platform.async.Future;
 import dev.webfx.stack.orm.domainmodel.DataSourceModel;
 import dev.webfx.stack.orm.entity.EntityStore;
 import dev.webfx.stack.orm.entity.UpdateStore;
+import one.modality.base.shared.entities.Cart;
 import one.modality.base.shared.entities.Person;
 
 /**
@@ -44,6 +45,27 @@ public final class GuestPersonLinker {
                 UpdateStore updateStore = UpdateStore.create(dataSourceModel);
                 for (Person person : persons)
                     updateStore.updateEntity(person).setForeignField("frontendAccount", accountPrimaryKey);
+                return updateStore.submitChanges()
+                    .compose(ignored -> clearCartMagicLinksForEmail(email, dataSourceModel));
+            });
+    }
+
+    /**
+     * Clears the magic_link association from all carts belonging to the given email's
+     * guest bookings. This invalidates the long-lived /cart/:cartUuid guest access
+     * after the person has created a registered account — access now requires login.
+     */
+    private static Future<Void> clearCartMagicLinksForEmail(String email, DataSourceModel dataSourceModel) {
+        return EntityStore.create(dataSourceModel)
+            .<Cart>executeQuery(
+                "select id from Cart where magicLink!=null and exists(select Document d where d.cart=Cart and lower(d.person_email)=lower($1))",
+                email)
+            .compose(carts -> {
+                if (carts.isEmpty())
+                    return Future.succeededFuture();
+                UpdateStore updateStore = UpdateStore.create(dataSourceModel);
+                for (Cart cart : carts)
+                    updateStore.updateEntity(cart).setMagicLink(null);
                 return updateStore.submitChanges().mapEmpty();
             });
     }

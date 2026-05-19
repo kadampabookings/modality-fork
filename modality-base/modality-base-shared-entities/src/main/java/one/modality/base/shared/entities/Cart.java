@@ -7,6 +7,7 @@ import dev.webfx.stack.orm.entity.Entity;
  */
 public interface Cart extends Entity {
     String uuid = "uuid";
+    String magicLink = "magicLink";
 
     default void setUuid(String value) {
         setFieldValue(uuid, value);
@@ -14,5 +15,13 @@ public interface Cart extends Entity {
 
     default String getUuid() {
         return getStringFieldValue(uuid);
+    }
+
+    default void setMagicLink(Object value) {
+        setForeignField(magicLink, value);
+    }
+
+    default MagicLink getMagicLink() {
+        return getForeignEntity(magicLink);
     }
 }

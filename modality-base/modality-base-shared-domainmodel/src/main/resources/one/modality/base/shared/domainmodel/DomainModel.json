@@ -127,6 +127,7 @@
   "Cart": {
     "id": 68,
     "forwardToCart": "Cart",
+    "magicLink": "MagicLink",
     "uuid": "string"
   },
   "Channel": {
@@ -443,7 +444,6 @@
     "listing_transport": {
       "expr": "(select min(item.code) from DocumentLine where document=d and cancelled=false and item.family.code='transp' group by item order by item.ord limit 1) as Transport"
     },
-    "magicLinkToken": "string",
     "multipleBooking": "MultipleBooking",
     "multipleBookingIcon": {
       "expr": "image(multipleBooking == null ? null : multipleBooking.notCancelled=0 || multipleBooking==notMultipleBooking ? 'images/16/multipleBookings/grayCross.png' : multipleBooking.notCancelled = 1 ? 'images/16/multipleBookings/blueCross.png' : 'images/16/multipleBookings/redCross.png')"

@@ -298,40 +298,22 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
         boolean isGuestBooking = getUserAccountId(userId) == null;
         String clientOrigin = request.argument().clientOrigin();
 
-        // For guest bookings: pre-generate a UUID token and write it onto the document entity
-        // BEFORE submitChanges() so the DB INSERT carries it. The trigger_document_generate_mails_on_booking
-        // + interpret_brackets() then resolves [bookingUrl] to the magic-link URL using this token.
-        // If request.document() is null here it means the document is resolved later inside history prep —
-        // we handle that case inside the compose lambda below.
-        String preToken = null;
-        if (isGuestBooking && clientOrigin != null && request.document() != null) {
-            preToken = Uuid.randomUuid();
-            request.document().setMagicLinkToken(preToken);
-        }
-        final String earlyToken = preToken;
-
         // Note: At this point, the document may be null, but in that case we at least have documentLine not null
         return HistoryRecorder.prepareDocumentHistoriesBeforeSubmit(request.argument().historyComment(), request.document(), request.documentLine())
             .compose(histories -> { // At this point, history.getDocument() is never null (resolved through DB reading)
                 Document document = histories[0].getDocument();
 
-                // Late token assignment: document was null at entry, now resolved.
-                String token = earlyToken;
-                if (token == null && isGuestBooking && clientOrigin != null && document != null) {
-                    token = Uuid.randomUuid();
-                    document.setMagicLinkToken(token);
-                }
-                final String resolvedToken = token;
-
                 return submitChangesAndPrepareResult(request.updateStore(), document)
                     .compose(result -> { // Completing the history recording (changes column with resolved primary keys)
                         if (result.status() == DocumentChangesStatus.APPROVED) {
-                            // Persist the magic_link record (fire-and-forget). The confirmation email was
-                            // already queued by the DB trigger using document.magic_link_token.
-                            if (resolvedToken != null) {
+                            // For guest bookings: generate the magic link token and link it to the cart.
+                            // The bracket pattern [bookingUrl] no longer needs the token on the document —
+                            // it now derives the cart URL from person.frontend_account_id check.
+                            if (isGuestBooking && clientOrigin != null) {
                                 registerBookingAccessMagicLink(
-                                    resolvedToken,
+                                    Uuid.randomUuid(),
                                     result.documentPrimaryKey(),
+                                    result.cartPrimaryKey(),
                                     document.getEmail(),
                                     document.getPersonLang(),
                                     clientOrigin
@@ -451,12 +433,12 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
      * logged but do not affect the booking result already returned to the client.
      * The confirmation email was already queued by the DB trigger during the document INSERT.
      */
-    private static void registerBookingAccessMagicLink(String token, Object documentPk, String personEmail, String personLang, String clientOrigin) {
+    private static void registerBookingAccessMagicLink(String token, Object documentPk, Object cartPk, String personEmail, String personLang, String clientOrigin) {
         if (personEmail == null || clientOrigin == null) return;
         ServiceLoader<GuestBookingAccessService> loader = ServiceLoader.load(GuestBookingAccessService.class);
         for (GuestBookingAccessService service : loader) {
             service.registerBookingAccessMagicLink(
-                token, documentPk, personEmail, personLang, clientOrigin,
+                token, documentPk, cartPk, personEmail, personLang, clientOrigin,
                 DataSourceModelService.getDefaultDataSourceModel()
             ).onFailure(err -> Console.log("GuestBookingAccessService failed for document " + documentPk + ": " + err));
             break; // use first registered implementation

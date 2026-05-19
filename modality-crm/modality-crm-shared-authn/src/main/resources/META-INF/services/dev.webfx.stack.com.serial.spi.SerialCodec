@@ -1,2 +1,3 @@
 one.modality.crm.shared.services.authn.serial.ModalityUserPrincipalSerialCodec
 one.modality.crm.shared.services.authn.serial.ModalityGuestPrincipalSerialCodec
+one.modality.crm.shared.services.authn.serial.AuthenticateWithCartCredentialsSerialCodec

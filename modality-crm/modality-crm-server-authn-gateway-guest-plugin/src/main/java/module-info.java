@@ -6,14 +6,19 @@
 module modality.crm.server.authn.gateway.guest.plugin {
 
     // Direct dependencies modules
+    requires modality.base.shared.entities;
     requires modality.crm.server.authn.gateway.shared;
     requires modality.crm.shared.authn;
     requires modality.ecommerce.document.service;
     requires webfx.platform.async;
+    requires webfx.platform.util;
     requires webfx.stack.authn;
     requires webfx.stack.authn.logout.server;
     requires webfx.stack.authn.server.gateway;
+    requires webfx.stack.orm.datasourcemodel.service;
     requires webfx.stack.orm.domainmodel;
+    requires webfx.stack.orm.entity;
+    requires webfx.stack.push.server;
     requires webfx.stack.session.state;
 
     // Exported packages
