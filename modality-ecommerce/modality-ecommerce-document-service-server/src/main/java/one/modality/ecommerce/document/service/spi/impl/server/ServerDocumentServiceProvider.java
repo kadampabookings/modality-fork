@@ -303,7 +303,7 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
         String clientOrigin = request.argument().clientOrigin();
 
         // Note: At this point, the document may be null, but in that case we at least have documentLine not null
-        return HistoryRecorder.prepareDocumentHistoriesBeforeSubmit(request.argument().historyComment(), request.document(), request.documentLine())
+        return HistoryRecorder.prepareDocumentHistoriesBeforeSubmit(request.argument().historyComment(), request.document(), request.documentLine(), userId)
             .compose(histories -> { // At this point, history.getDocument() is never null (resolved through DB reading)
                 Document document = histories[0].getDocument();
 
