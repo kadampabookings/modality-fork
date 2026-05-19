@@ -263,6 +263,8 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
         if (paymentGateway == null)
             return gatewayNotFoundFailedFuture(gatewayName);
         SystemUserId gatewayUserId = new SystemUserId(gatewayName);
+        // Capture before the async Future.all() below — ThreadLocal is gone inside compose callbacks.
+        Object userId = ThreadLocalStateHolder.getUserId();
 
         UpdateStore updateStore = UpdateStore.create(DataSourceModelService.getDefaultDataSourceModel());
         MoneyTransfer moneyTransfer = updateStore.updateEntity(MoneyTransfer.class, paymentPrimaryKey);
@@ -308,7 +310,7 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
             // The following code is executed just after the call to the Payment Gateway (which will take a bit of time to
             // finalize the payment and return the status). However, we add a record in the history to indicate that the
             // booker submitted valid cc details.
-            HistoryRecorder.preparePaymentHistoriesBeforeSubmit("Submitted card details to " + gatewayName + " for payment [amount]" + paymentLabel(PaymentFormType.EMBEDDED, paymentMethod), databasePayment)
+            HistoryRecorder.preparePaymentHistoriesBeforeSubmit("Submitted card details to " + gatewayName + " for payment [amount]" + paymentLabel(PaymentFormType.EMBEDDED, paymentMethod), databasePayment, userId)
                     .onFailure(Console::error)
                     .onSuccess(x -> updateStore.submitChanges());
 
