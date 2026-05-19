@@ -17,6 +17,7 @@ import one.modality.ecommerce.document.service.events.AbstractDocumentLineEvent;
 record DocumentSubmitRequest(
     SubmitDocumentChangesArgument argument,
     String runId,
+    Object userId,  // captured at request time — ThreadLocal is gone when the queue processes this later
     UpdateStore updateStore,
     Document document,
     DocumentLine documentLine,
@@ -31,6 +32,7 @@ record DocumentSubmitRequest(
     static DocumentSubmitRequest create(SubmitDocumentChangesArgument argument, Object providedEventPrimaryKey) {
         // Capturing the required client state info from thread local (before it will be wiped out by the async call)
         String runId = ThreadLocalStateHolder.getRunId();
+        Object userId = ThreadLocalStateHolder.getUserId();
 
         UpdateStore updateStore = UpdateStore.create(DataSourceModelService.getDefaultDataSourceModel());
         Document document = null;
@@ -52,7 +54,7 @@ record DocumentSubmitRequest(
         Object eventPrimaryKey = providedEventPrimaryKey != null ? providedEventPrimaryKey : document == null ? null : Entities.getPrimaryKey(document.getEventId());
         Object queueToken = Uuid.randomUuid();
 
-        return new DocumentSubmitRequest(argument, runId, updateStore, document, documentLine, eventPrimaryKey, queueToken);
+        return new DocumentSubmitRequest(argument, runId, userId, updateStore, document, documentLine, eventPrimaryKey, queueToken);
     }
 
 }

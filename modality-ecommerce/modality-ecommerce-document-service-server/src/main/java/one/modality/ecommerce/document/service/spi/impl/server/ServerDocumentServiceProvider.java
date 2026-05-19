@@ -293,8 +293,12 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
     }
 
     static Future<SubmitDocumentChangesResult> submitDocumentChangesNow(DocumentSubmitRequest request) {
-        // Capture auth state before async work begins (ThreadLocal may not survive Vert.x context switches).
-        Object userId = ThreadLocalStateHolder.getUserId();
+        // Use the userId captured at request-creation time (in DocumentSubmitRequest.create) rather than
+        // re-reading ThreadLocalStateHolder here. When a booking is deferred through the event queue and
+        // processed later by DocumentSubmitEventQueue, the Vert.x context has changed and the ThreadLocal
+        // no longer holds the original caller's session — it would return null, incorrectly making every
+        // queued registered-user booking look like a guest booking and generating a spurious magic link.
+        Object userId = request.userId();
         boolean isGuestBooking = getUserAccountId(userId) == null;
         String clientOrigin = request.argument().clientOrigin();
 
