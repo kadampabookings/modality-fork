@@ -25,11 +25,18 @@ record DocumentSubmitRequest(
     Object queueToken
 ) {
 
-    static DocumentSubmitRequest create(SubmitDocumentChangesArgument argument) {
-        return create(argument, null);
+    DocumentSubmitRequest(SubmitDocumentChangesArgument argument, String runId, Object userId, UpdateStore updateStore, Document document, DocumentLine documentLine, Object eventPrimaryKey, Object queueToken) {
+        this.argument = argument;
+        this.runId = runId;
+        this.userId = userId;
+        this.updateStore = updateStore;
+        this.document = document;
+        this.documentLine = documentLine;
+        this.eventPrimaryKey = eventPrimaryKey;
+        this.queueToken = queueToken;
     }
 
-    static DocumentSubmitRequest create(SubmitDocumentChangesArgument argument, Object providedEventPrimaryKey) {
+    static DocumentSubmitRequest create(SubmitDocumentChangesArgument argument) {
         // Capturing the required client state info from thread local (before it will be wiped out by the async call)
         String runId = ThreadLocalStateHolder.getRunId();
         Object userId = ThreadLocalStateHolder.getUserId();
@@ -51,10 +58,19 @@ record DocumentSubmitRequest(
         if (document == null && documentLine != null)
             document = documentLine.getDocument();
 
-        Object eventPrimaryKey = providedEventPrimaryKey != null ? providedEventPrimaryKey : document == null ? null : Entities.getPrimaryKey(document.getEventId());
+        Object eventPrimaryKey = document == null ? null : Entities.getPrimaryKey(document.getEventId());
         Object queueToken = Uuid.randomUuid();
 
         return new DocumentSubmitRequest(argument, runId, userId, updateStore, document, documentLine, eventPrimaryKey, queueToken);
+    }
+
+
+    static DocumentSubmitRequest copyForEvent(DocumentSubmitRequest request, Object providedEventPrimaryKey) {
+        return new DocumentSubmitRequest(
+            request.argument(), request.runId(), request.userId(), request.updateStore(),
+            request.document(), request.documentLine(),
+            providedEventPrimaryKey, request.queueToken()
+        );
     }
 
 }

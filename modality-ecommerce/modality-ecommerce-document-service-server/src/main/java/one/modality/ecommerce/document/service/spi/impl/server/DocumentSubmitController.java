@@ -10,7 +10,6 @@ import one.modality.base.shared.entities.ScheduledItem;
 import one.modality.ecommerce.document.service.SubmitDocumentChangesResult;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -34,10 +33,8 @@ final class DocumentSubmitController {
                 .compose(document -> {
                     // We reuse the same request but with the resolved eventPrimaryKey, to avoid
                     // re-replaying events into a new UpdateStore (which would cause duplicate inserts).
-                    DocumentSubmitRequest resolvedRequest = new DocumentSubmitRequest(
-                        request.argument(), request.runId(), request.userId(), request.updateStore(),
-                        request.document(), request.documentLine(),
-                        Entities.getPrimaryKey(document.getEventId()), request.queueToken()
+                    DocumentSubmitRequest resolvedRequest = DocumentSubmitRequest.copyForEvent(request,
+                        Entities.getPrimaryKey(document.getEventId())
                     );
                     return submitDocumentChanges(resolvedRequest);
                 });
