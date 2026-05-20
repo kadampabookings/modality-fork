@@ -41,6 +41,7 @@ public interface Event extends Entity,
     String earlyBird = "earlyBird";
     String shortDescription = "shortDescription";
     String shortDescriptionLabel = "shortDescriptionLabel";
+    String slug = "slug";
     String longDescriptionLabel = "longDescriptionLabel";
     String externalLink = "externalLink";
     String venue = "venue";
@@ -234,6 +235,14 @@ public interface Event extends Entity,
 
     default String getShortDescription() {
         return getStringFieldValue(shortDescription);
+    }
+
+    default void setSlug(String value) {
+        setFieldValue(slug, value);
+    }
+
+    default String getSlug() {
+        return getStringFieldValue(slug);
     }
 
     default void setShortDescriptionLabel(Object value) {
