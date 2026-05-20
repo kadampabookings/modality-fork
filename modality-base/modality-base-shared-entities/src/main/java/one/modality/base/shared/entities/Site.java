@@ -12,6 +12,7 @@ public interface Site extends
     EntityHasOrd {
 
     String main = "main";
+    String code = "code";
 
     default void setMain(Boolean value) {
         setFieldValue(main, value);
@@ -19,5 +20,13 @@ public interface Site extends
 
     default Boolean isMain() {
         return getBooleanFieldValue(main);
+    }
+
+    default void setCode(String value) {
+        setFieldValue(code, value);
+    }
+
+    default String getCode() {
+        return getStringFieldValue(code);
     }
 }
