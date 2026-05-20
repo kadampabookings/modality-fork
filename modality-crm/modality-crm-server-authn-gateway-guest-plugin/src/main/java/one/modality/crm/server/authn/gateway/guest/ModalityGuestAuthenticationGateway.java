@@ -5,17 +5,23 @@ import dev.webfx.platform.util.collection.Collections;
 import dev.webfx.stack.authn.UserClaims;
 import dev.webfx.stack.authn.logout.server.LogoutPush;
 import dev.webfx.stack.authn.server.gateway.spi.ServerAuthenticationGateway;
+import dev.webfx.stack.mail.MailMessage;
+import dev.webfx.stack.mail.MailService;
 import dev.webfx.stack.orm.domainmodel.DataSourceModel;
 import dev.webfx.stack.orm.entity.EntityStore;
 import dev.webfx.stack.orm.entity.UpdateStore;
 import dev.webfx.stack.push.server.PushServerService;
 import dev.webfx.stack.session.state.StateAccessor;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
+import one.modality.base.server.mail.ModalityMailMessage;
+import one.modality.base.shared.context.ModalityContext;
 import one.modality.base.shared.entities.Cart;
 import one.modality.base.shared.entities.MagicLink;
+import one.modality.crm.server.authn.gateway.shared.LocalizedMailTemplate;
 import one.modality.crm.server.authn.gateway.shared.MagicLinkService;
 import one.modality.crm.shared.services.authn.AuthenticateWithCartCredentials;
 import one.modality.crm.shared.services.authn.ModalityGuestPrincipal;
+import one.modality.crm.shared.services.authn.SendBookingAccessEmailCredentials;
 import one.modality.ecommerce.document.service.GuestBookingAccessService;
 
 /**
@@ -32,16 +38,73 @@ public final class ModalityGuestAuthenticationGateway implements ServerAuthentic
     // duplicated here to avoid a module dependency on the magiclink plugin.
     private static final String MAGIC_LINK_ACTIVITY_PATH_FULL = "/magic-link/:token";
 
+    private static final String MAIL_FROM      = "kbs@kadampa.net";
+    private static final String MAIL_FROM_NAME = "Kadampa Booking System";
+
+    private static final LocalizedMailTemplate RESTORE_MAIL = LocalizedMailTemplate.load(
+        "BookingRestoreMailBody", "BookingRestoreMailMessages",
+        ModalityGuestAuthenticationGateway.class);
+
     @Override
     public boolean acceptsUserCredentials(Object userCredentials) {
-        return userCredentials instanceof AuthenticateWithCartCredentials;
+        return userCredentials instanceof AuthenticateWithCartCredentials
+            || userCredentials instanceof SendBookingAccessEmailCredentials;
     }
 
     @Override
     public Future<?> authenticate(Object userCredentials) {
-        if (!(userCredentials instanceof AuthenticateWithCartCredentials cred))
-            return Future.failedFuture(getClass().getSimpleName() + ".authenticate() requires AuthenticateWithCartCredentials");
-        return authenticateWithCart(cred.cartUuid());
+        if (userCredentials instanceof AuthenticateWithCartCredentials cred)
+            return authenticateWithCart(cred.cartUuid());
+        if (userCredentials instanceof SendBookingAccessEmailCredentials cred)
+            return sendBookingAccessEmail(cred);
+        return Future.failedFuture(getClass().getSimpleName() + ": unsupported credentials type");
+    }
+
+    /**
+     * Finds all booking carts still linked to a magic link for the given email
+     * (i.e. the guest has not yet created a registered account) and sends them
+     * an email containing a /cart/:cartUuid link for each.
+     * Always resolves successfully to avoid email-enumeration.
+     */
+    private Future<Void> sendBookingAccessEmail(SendBookingAccessEmailCredentials cred) {
+        String email      = cred.email();
+        String origin     = cred.clientOrigin();
+        String lang       = cred.lang() != null ? cred.lang() : "en";
+        DataSourceModel ds = dev.webfx.stack.orm.datasourcemodel.service.DataSourceModelService.getDefaultDataSourceModel();
+
+        return EntityStore.create(ds)
+            .<Cart>executeQuery(
+                "select id, uuid from Cart where magicLink!=null and exists(" +
+                "select Document d where d.cart=Cart and lower(d.person_email)=lower($1))",
+                email)
+            .compose(carts -> {
+                if (carts.isEmpty())
+                    return Future.succeededFuture(); // silent — don't reveal whether email has bookings
+
+                // Build CTA buttons for every active cart.
+                StringBuilder buttons = new StringBuilder();
+                for (Cart cart : carts) {
+                    String url = origin + "/cart/" + cart.getUuid();
+                    buttons.append("<div class=\"cta-wrap\">")
+                        .append("<a href=\"").append(url).append("\" class=\"cta-btn\">View my booking</a>")
+                        .append("</div>")
+                        .append("<p class=\"fallback\">Button not working? Copy and paste:<br>")
+                        .append("<a href=\"").append(url).append("\">").append(url).append("</a></p>");
+                }
+
+                String subject = RESTORE_MAIL.renderSubject(lang);
+                String body    = RESTORE_MAIL.renderBody(lang)
+                    .replace("[cartButtons]", buttons.toString());
+
+                return MailService.sendMail(
+                    new ModalityMailMessage(
+                        MailMessage.create(MAIL_FROM, email, subject, body),
+                        new ModalityContext(1, null, null, null),
+                        MAIL_FROM_NAME
+                    )
+                );
+            })
+            .mapEmpty();
     }
 
     /**
