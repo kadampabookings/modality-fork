@@ -779,6 +779,7 @@
     "shortDescription": "string",
     "shortDescriptionLabel": "Label",
     "showSites": "boolean",
+    "slug": "string",
     "startDate": "Temporal.PlainDate",
     "state": "string",
     "supportNoticeLabel": "Label",
