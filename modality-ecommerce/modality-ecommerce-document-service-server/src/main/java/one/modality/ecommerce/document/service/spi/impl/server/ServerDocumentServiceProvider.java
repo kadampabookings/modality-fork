@@ -80,13 +80,15 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
         // to a full 1.26 M-row seq scan on document_line (~8 s).  Two round trips each hitting
         // only an index are far faster in practice.
         Object primaryKey = personProvided ? argument.personPrimaryKey() : argument.accountPrimaryKey();
-        Object eventPk = Numbers.toShortestNumber(argument.eventPrimaryKey());
         // %extra% adds "or id=$3" inside the parentheses when a known docPk must be included
         // alongside the latest doc for this person/event (e.g. the booking confirmation flow).
         String findDocsDql = "select id from Document where !cancelled and (%field%=$1 and event=$2%extra%) order by id desc%limit%"
                 .replace("%field%", personProvided ? "person" : "person.frontendAccount")
                 .replace("%extra%", docPk != null ? " or id=$3" : "")
                 .replace("%limit%", limitTo1 ? " limit 1" : "");
+
+        return resolveEventPk(argument.eventPrimaryKey()).compose(resolvedEventPk -> {
+        Object eventPk = Numbers.toShortestNumber(resolvedEventPk);
         EntityStoreQuery findDocsQuery = docPk != null
                 ? new EntityStoreQuery(findDocsDql, primaryKey, eventPk, docPk)
                 : new EntityStoreQuery(findDocsDql, primaryKey, eventPk);
@@ -120,6 +122,7 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
                     }
                     return combined;
                 });
+        });
     }
 
     /**
@@ -242,12 +245,19 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
     }
 
     private Future<DocumentAggregate> loadDocumentFromHistory(LoadDocumentArgument argument) {
-        String select = "select changes from History where document=$1 and id<=$2 order by id";
-        Object[] parameters = {argument.documentPrimaryKey(), argument.historyPrimaryKey()};
-        if (parameters[0] == null) {
-            parameters = new Object[]{argument.personPrimaryKey(), argument.eventPrimaryKey(), argument.historyPrimaryKey()};
-            select = select.replace("document=$1 and id<=$2", "document=(select Document where person=$1 and event=$2 and !cancelled order by id desc limit 1) and id<=$3");
+        // When loaded by docPk we don't need the event PK at all — execute directly.
+        if (argument.documentPrimaryKey() != null) {
+            return runLoadDocumentFromHistory(
+                "select changes from History where document=$1 and id<=$2 order by id",
+                new Object[]{argument.documentPrimaryKey(), argument.historyPrimaryKey()});
         }
+        // When loaded by person+event, eventPrimaryKey() may be a slug — resolve first.
+        return resolveEventPk(argument.eventPrimaryKey()).compose(resolvedEventPk -> runLoadDocumentFromHistory(
+            "select changes from History where document=(select Document where person=$1 and event=$2 and !cancelled order by id desc limit 1) and id<=$3 order by id",
+            new Object[]{argument.personPrimaryKey(), resolvedEventPk, argument.historyPrimaryKey()}));
+    }
+
+    private static Future<DocumentAggregate> runLoadDocumentFromHistory(String select, Object[] parameters) {
         return EntityStore.create()
             .<History>executeQuery(select, parameters)
             .map(historyList -> {
@@ -264,6 +274,29 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
                 });
                 return new DocumentAggregate(documentEvents);
             });
+    }
+
+    // Resolves a raw event PK that may be either a numeric ID or a slug (URL-friendly
+    // event identifier) to a value usable in DQL `where id=$1`/`event=$1` lookups.
+    // Numeric Strings and Numbers pass through; non-numeric Strings are looked up via
+    // Event.slug. A missing slug results in a failed Future.
+    private static Future<Object> resolveEventPk(Object rawEventPk) {
+        if (rawEventPk == null || rawEventPk instanceof Number) {
+            return Future.succeededFuture(rawEventPk);
+        }
+        if (!(rawEventPk instanceof String)) {
+            return Future.succeededFuture(rawEventPk);
+        }
+        String s = (String) rawEventPk;
+        Long parsedId = Numbers.parseLong(s);
+        if (parsedId != null) {
+            return Future.succeededFuture(parsedId);
+        }
+        return EntityStore.create()
+            .<Event>executeQuery("select id from Event where slug=$1", s)
+            .compose(events -> events.isEmpty()
+                ? Future.failedFuture(new IllegalArgumentException("No event found for slug: " + s))
+                : Future.succeededFuture(events.get(0).getPrimaryKey()));
     }
 
 

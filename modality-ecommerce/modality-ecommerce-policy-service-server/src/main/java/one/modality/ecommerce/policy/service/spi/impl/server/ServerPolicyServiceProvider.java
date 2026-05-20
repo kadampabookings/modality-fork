@@ -65,8 +65,13 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
 
     @Override
     public Future<PolicyAggregate> loadPolicy(LoadPolicyArgument argument) {
+        return resolveEventPk(argument.getEventPk())
+            .compose(resolvedEventPk -> loadPolicyForResolvedEventPk(resolvedEventPk, argument));
+    }
+
+    private Future<PolicyAggregate> loadPolicyForResolvedEventPk(Object resolvedEventPk, LoadPolicyArgument argument) {
         // Managing the case of recurring event only for now
-        Number eventPk = Numbers.toShortestNumber(argument.getEventPk());
+        Number eventPk = Numbers.toShortestNumber(resolvedEventPk);
         LocalDate startDate = argument.getStartDate();
         LocalDate endDate = argument.getEndDate();
         Object accoPk = Numbers.toShortestNumber(argument.getAccommodationItemPk());
@@ -74,7 +79,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                 new Batch<>(new QueryArgument[]{
                     // 0 - Loading event
                     DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
-                        "select name, label, state, type.bookingForm.code, theme.code, venue.(name,label,address), startDate, endDate, shortDescriptionLabel, longDescriptionLabel, currency.symbol, organization.(currency.symbol, country.currency.symbol, privacyUrlLabel, timezone), openingDate, bookingProcessStart, timezone, noAccountBooking, inPersonAllowed, onlineAllowed, vodEnabled, earlyBird, teacher.(name,label)" +
+                        "select name, slug, label, state, type.bookingForm.code, theme.code, venue.(name,label,address), startDate, endDate, shortDescriptionLabel, longDescriptionLabel, currency.symbol, organization.(currency.symbol, country.currency.symbol, privacyUrlLabel, timezone), openingDate, bookingProcessStart, timezone, noAccountBooking, inPersonAllowed, onlineAllowed, vodEnabled, earlyBird, teacher.(name,label)" +
                         ", inPersonTermsLabel,onlineTermsLabel,termsUrlEn" +
                         ", date_part('epoch', openingDate - now()) as " + Event.secondsToOpeningDateAtLoadingTime +
                         ", date_part('epoch', coalesce(bookingProcessStart, openingDate) - now()) as " + Event.secondsToBookingProcessStartAtLoadingTime +
@@ -180,12 +185,36 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
 
     @Override
     public Future<QueryResult> loadAvailabilities(LoadPolicyArgument argument) {
+        return resolveEventPk(argument.getEventPk())
+            .compose(resolvedEventPk -> QueryService.executeQuery(
+                DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
+                    SCHEDULED_ITEMS_DQL_BASE +
+                    " and (si.item.family.code!='acco' or " + ACCO_ITEM_POLICY_EXISTS + " or " + ACCO_POOL_EXISTS + ")" +
+                    SCHEDULED_ITEMS_DQL_ORDER_BY, resolvedEventPk)
+            ));
+    }
+
+    // Resolves a raw event PK that may be either a numeric ID or a slug (URL-friendly
+    // event identifier) to a value usable in DQL `where id=$1` lookups. Numeric Strings
+    // and Numbers pass through; non-numeric Strings are looked up via Event.slug.
+    private static Future<Object> resolveEventPk(Object rawEventPk) {
+        if (rawEventPk == null || rawEventPk instanceof Number) {
+            return Future.succeededFuture(rawEventPk);
+        }
+        if (!(rawEventPk instanceof String)) {
+            return Future.succeededFuture(rawEventPk);
+        }
+        String s = (String) rawEventPk;
+        Long parsedId = Numbers.parseLong(s);
+        if (parsedId != null) {
+            return Future.succeededFuture(parsedId);
+        }
         return QueryService.executeQuery(
-            DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
-                SCHEDULED_ITEMS_DQL_BASE +
-                " and (si.item.family.code!='acco' or " + ACCO_ITEM_POLICY_EXISTS + " or " + ACCO_POOL_EXISTS + ")" +
-                SCHEDULED_ITEMS_DQL_ORDER_BY, argument.getEventPk())
-        );
+                DqlQueries.newQueryArgumentForDefaultDataSource(
+                    "select id from Event where slug=$1", s))
+            .compose(result -> result.getRowCount() == 0
+                ? Future.failedFuture(new IllegalArgumentException("No event found for slug: " + s))
+                : Future.succeededFuture(result.getValue(0, 0)));
     }
 
 }
