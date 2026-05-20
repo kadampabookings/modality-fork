@@ -58,7 +58,7 @@ public final class GuestPersonLinker {
     private static Future<Void> clearCartMagicLinksForEmail(String email, DataSourceModel dataSourceModel) {
         return EntityStore.create(dataSourceModel)
             .<Cart>executeQuery(
-                "select id from Cart where magicLink!=null and exists(select Document d where d.cart=Cart and lower(d.person_email)=lower($1))",
+                "select id from Cart c where magicLink!=null and exists(select Document d where d.cart=c and lower(d.person_email)=lower($1))",
                 email)
             .compose(carts -> {
                 if (carts.isEmpty())

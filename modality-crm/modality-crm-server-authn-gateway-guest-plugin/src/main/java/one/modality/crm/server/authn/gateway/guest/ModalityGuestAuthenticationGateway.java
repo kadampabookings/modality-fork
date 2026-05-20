@@ -74,8 +74,8 @@ public final class ModalityGuestAuthenticationGateway implements ServerAuthentic
 
         return EntityStore.create(ds)
             .<Cart>executeQuery(
-                "select id, uuid from Cart where magicLink!=null and exists(" +
-                "select Document d where d.cart=Cart and lower(d.person_email)=lower($1))",
+                "select id, uuid from Cart c where magicLink!=null and exists(" +
+                "select Document d where d.cart=c and lower(d.person_email)=lower($1))",
                 email)
             .compose(carts -> {
                 if (carts.isEmpty())
