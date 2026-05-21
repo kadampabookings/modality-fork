@@ -17,29 +17,29 @@ import java.time.Instant;
  * <p>The {@code issue} foreign key points to a row in the {@link Issue}
  * catalog table, which itself carries the {@code module} discriminator
  * (livestream / login / audioLibrary / ...) and the issue's {@code code}.
- * The {@code event} / {@code attendance} fields are optional — set for
- * livestream/audio contexts; other modules (and reports unrelated to
- * any specific booking) leave them null.
+ * The {@code event} / {@code scheduledItem} fields are optional — set
+ * for livestream/audio contexts (scheduledItem identifies the specific
+ * session being reported); other modules leave them null.
  *
  * @author Bruno Salmon
  */
 public interface SupportReport extends Entity, EntityHasEvent, EntityHasPerson {
 
-    String attendance = "attendance";
     String issue = "issue";
     String reportedAt = "reportedAt";
+    String scheduledItem = "scheduledItem";
     String undoneAt = "undoneAt";
 
-    default void setAttendance(Object value) {
-        setForeignField(attendance, value);
+    default void setScheduledItem(Object value) {
+        setForeignField(scheduledItem, value);
     }
 
-    default EntityId getAttendanceId() {
-        return getForeignEntityId(attendance);
+    default EntityId getScheduledItemId() {
+        return getForeignEntityId(scheduledItem);
     }
 
-    default Attendance getAttendance() {
-        return getForeignEntity(attendance);
+    default ScheduledItem getScheduledItem() {
+        return getForeignEntity(scheduledItem);
     }
 
     default void setIssue(Object value) {

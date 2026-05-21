@@ -1820,11 +1820,11 @@
   },
   "SupportReport": {
     "id": 164,
-    "attendance": "Attendance",
     "event": "Event",
     "issue": "Issue",
     "person": "Person",
     "reportedAt": "Temporal.Instant",
+    "scheduledItem": "ScheduledItem",
     "undoneAt": "Temporal.Instant"
   },
   "TaskMetrics": {
