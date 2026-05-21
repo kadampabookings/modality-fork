@@ -974,6 +974,14 @@
     "token": "string",
     "usageDate": "Temporal.Instant"
   },
+  "Issue": {
+    "id": 165,
+    "code": "string",
+    "hasFix": "boolean",
+    "label": "Label",
+    "module": "string",
+    "ord": "integer"
+  },
   "Item": {
     "id": 35,
     "capacity": "integer",
@@ -1809,6 +1817,15 @@
     "quota": "SmtpQuota",
     "ssl": "boolean",
     "username": "string"
+  },
+  "SupportReport": {
+    "id": 164,
+    "attendance": "Attendance",
+    "event": "Event",
+    "issue": "Issue",
+    "person": "Person",
+    "reportedAt": "Temporal.Instant",
+    "undoneAt": "Temporal.Instant"
   },
   "TaskMetrics": {
     "id": 129,
