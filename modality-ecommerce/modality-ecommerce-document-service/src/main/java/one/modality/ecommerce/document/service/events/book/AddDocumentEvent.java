@@ -1,5 +1,6 @@
 package one.modality.ecommerce.document.service.events.book;
 
+import dev.webfx.platform.util.Booleans;
 import dev.webfx.stack.orm.entity.Entities;
 import one.modality.base.shared.entities.Document;
 import one.modality.base.shared.entities.Event;
@@ -15,7 +16,7 @@ public final class AddDocumentEvent extends AbstractDocumentEvent {
 
     private final Object eventPrimaryKey;
     private final boolean inPerson;
-    private final Boolean earlyBird;
+    private final boolean earlyBird;
     private String personLang;
     // Booking with an account
     private Person person; // not serialized
@@ -48,7 +49,7 @@ public final class AddDocumentEvent extends AbstractDocumentEvent {
         super(documentPrimaryKey);
         this.eventPrimaryKey = eventPrimaryKey;
         this.inPerson = inPerson;
-        this.earlyBird = earlyBird;
+        this.earlyBird = Booleans.isTrue(earlyBird);
         this.personLang = personLang;
         this.personPrimaryKey = personPrimaryKey;
         this.firstName = firstName;
