@@ -1825,6 +1825,7 @@
     "person": "Person",
     "reportedAt": "Temporal.Instant",
     "scheduledItem": "ScheduledItem",
+    "selfResolved": "boolean",
     "undoneAt": "Temporal.Instant"
   },
   "TaskMetrics": {

@@ -21,6 +21,15 @@ import java.time.Instant;
  * for livestream/audio contexts (scheduledItem identifies the specific
  * session being reported); other modules leave them null.
  *
+ * <p>{@code selfResolved} flips a row from a "viewer needs help" report
+ * into a "viewer self-fixed via the in-wizard tip" log entry. Both
+ * shapes coexist in the same table because they share enough metadata
+ * (person, scheduledItem, issue, time) that a separate event log would
+ * just duplicate fields. The wizard's broadcast subscription filters
+ * {@code !selfResolved} so it only sees active reports; the operator
+ * dashboard reads both kinds to compute the "self-resolved" KPI and
+ * differentiate the activity feed.
+ *
  * @author Bruno Salmon
  */
 public interface SupportReport extends Entity, EntityHasEvent, EntityHasPerson {
@@ -28,6 +37,7 @@ public interface SupportReport extends Entity, EntityHasEvent, EntityHasPerson {
     String issue = "issue";
     String reportedAt = "reportedAt";
     String scheduledItem = "scheduledItem";
+    String selfResolved = "selfResolved";
     String undoneAt = "undoneAt";
 
     default void setScheduledItem(Object value) {
@@ -68,5 +78,13 @@ public interface SupportReport extends Entity, EntityHasEvent, EntityHasPerson {
 
     default Instant getUndoneAt() {
         return getInstantFieldValue(undoneAt);
+    }
+
+    default void setSelfResolved(Boolean value) {
+        setFieldValue(selfResolved, value);
+    }
+
+    default Boolean getSelfResolved() {
+        return getBooleanFieldValue(selfResolved);
     }
 }
