@@ -34,7 +34,7 @@ public final class AddDocumentEvent extends AbstractDocumentEvent {
         super(document);
         eventPrimaryKey = Entities.getPrimaryKey(document.getEvent());
         inPerson = document.isInPerson();
-        earlyBird = document.isEarlyBird();
+        earlyBird = Booleans.isTrue(document.isEarlyBird());
         personLang = document.getPersonLang();
         personPrimaryKey = Entities.getPrimaryKey(document.getPerson());
         firstName = document.getFirstName();
