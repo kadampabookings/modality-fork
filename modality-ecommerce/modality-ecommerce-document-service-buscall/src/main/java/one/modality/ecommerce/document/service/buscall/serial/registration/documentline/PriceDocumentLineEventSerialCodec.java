@@ -12,10 +12,13 @@ public final class PriceDocumentLineEventSerialCodec extends AbstractDocumentLin
 
     private static final String CODEC_ID = "PriceDocumentLineEvent";
 
-    private static final String PRICE_NET_KEY = "net";
-    private static final String PRICE_MIN_DEPOSIT_KEY = "minDeposit";
-    private static final String PRICE_CUSTOM_KEY = "custom";
-    private static final String PRICE_DISCOUNT_KEY = "discount";
+    // Wire keys mirror the underlying DocumentLine domain fields (price_net,
+    // price_minDeposit, etc.) so that consumers can use a single field-name
+    // vocabulary across the entity, the event payload, and the price calculator.
+    private static final String PRICE_NET_KEY = "price_net";
+    private static final String PRICE_MIN_DEPOSIT_KEY = "price_minDeposit";
+    private static final String PRICE_CUSTOM_KEY = "price_custom";
+    private static final String PRICE_DISCOUNT_KEY = "price_discount";
 
     public PriceDocumentLineEventSerialCodec() {
         super(PriceDocumentLineEvent.class, CODEC_ID);
