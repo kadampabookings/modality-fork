@@ -46,4 +46,15 @@
         </library>
     </required-libraries>
 
+    <!-- This server-only plugin compiles to JDK 21 bytecode so it can use Thread.ofVirtual()
+         (StripeAsync runs each Stripe SDK call on a fresh virtual thread, removing the worker-pool
+         sizing concern at peak booking-opening load). The rest of the project stays on JDK 17 for
+         GWT compatibility. Safe because this plugin is server-only and SPI-loaded — nothing
+         compiles against it at compile time, only the Vert.x server loads it via ServiceLoader. -->
+    <maven-pom-manual>
+        <properties>
+            <java.version>21</java.version>
+        </properties>
+    </maven-pom-manual>
+
 </project>

@@ -15,6 +15,11 @@
 
     <description>The SPI payment gateway implementation for making embedded payments with Stripe.</description>
 
+    <!-- Server-only plugin → bumped to JDK 21 to unlock Thread.ofVirtual() in StripeAsync. -->
+    <properties>
+        <java.version>21</java.version>
+    </properties>
+
     <dependencies>
 
         <dependency>

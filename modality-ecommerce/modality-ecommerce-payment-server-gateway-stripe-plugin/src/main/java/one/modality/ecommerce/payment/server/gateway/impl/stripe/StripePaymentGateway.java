@@ -16,8 +16,6 @@ import dev.webfx.platform.async.Future;
 import dev.webfx.platform.console.Console;
 import dev.webfx.platform.resource.Resource;
 import dev.webfx.platform.util.uuid.Uuid;
-import dev.webfx.platform.util.vertx.VertxAsync;
-import dev.webfx.platform.util.vertx.VertxInstance;
 import one.modality.ecommerce.payment.GatewayPaymentMethodInfo;
 import one.modality.ecommerce.payment.PaymentFailureReason;
 import one.modality.ecommerce.payment.PaymentFormType;
@@ -28,8 +26,9 @@ import one.modality.ecommerce.payment.server.gateway.*;
 import one.modality.ecommerce.payment.server.gateway.impl.util.RestApiOneTimeHtmlResponsesCache;
 
 import java.util.List;
-import java.util.concurrent.Callable;
 
+import static one.modality.ecommerce.payment.server.gateway.impl.stripe.StripeAsync.executeBlocking;
+import static one.modality.ecommerce.payment.server.gateway.impl.stripe.StripeAsync.retryingRequestOptions;
 import static one.modality.ecommerce.payment.server.gateway.impl.stripe.StripeRestApiJob.STRIPE_PAYMENT_FORM_ENDPOINT;
 
 /**
@@ -204,9 +203,9 @@ public final class StripePaymentGateway implements PaymentGateway {
                 paramsBuilder.setCancelUrl(argument.cancelUrl());
             else if (argument.returnUrl() != null)
                 paramsBuilder.setCancelUrl(argument.returnUrl()); // Stripe rejects sessions without cancel_url, so reuse the return URL
-            RequestOptions requestOptions = RequestOptions.builder()
-                .setIdempotencyKey(argument.paymentId() + "-session")
-                .build();
+            // Idempotent + retries: a 429 here would otherwise leave the user with a broken
+            // redirect button on the front-end during a booking-opening spike.
+            RequestOptions requestOptions = retryingRequestOptions(argument.paymentId() + "-session");
             Session session = client.v1().checkout().sessions().create(paramsBuilder.build(), requestOptions);
             if (DEBUG_LOG)
                 Console.log("[Stripe][DEBUG] initiatePaymentRedirect - sessionId=" + session.getId() + ", url=" + session.getUrl());
@@ -227,11 +226,9 @@ public final class StripePaymentGateway implements PaymentGateway {
             // The reference is what links the Stripe-side payment back to our MoneyTransfer
             // when the webhook delivers payment_intent.succeeded.
             .putMetadata("modality_paymentId", paymentId);
-        RequestOptions requestOptions = RequestOptions.builder()
-            // Use the paymentId as the idempotency key so retries from the front-office don't
-            // create duplicate PaymentIntents for the same MoneyTransfer.
-            .setIdempotencyKey(paymentId + "-intent")
-            .build();
+        // Idempotency key (paymentId-derived) prevents the front-office retry / refresh from
+        // creating duplicate PaymentIntents. setMaxNetworkRetries makes 429 + 5xx self-healing.
+        RequestOptions requestOptions = retryingRequestOptions(paymentId + "-intent");
         return client.v1().paymentIntents().create(paramsBuilder.build(), requestOptions);
     }
 
@@ -248,10 +245,11 @@ public final class StripePaymentGateway implements PaymentGateway {
 
             StripeClient client = new StripeClient(apiSecretKey);
             return executeBlocking(() -> {
+                // Read-only call — no idempotency key, but still benefit from network retries.
                 PaymentIntent paymentIntent = client.v1().paymentIntents().retrieve(
                     paymentIntentId,
                     PaymentIntentRetrieveParams.builder().build(),
-                    null);
+                    retryingRequestOptions(null));
                 return buildResultFromPaymentIntent(paymentIntent);
             }).recover(ex -> {
                 Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
@@ -349,11 +347,6 @@ public final class StripePaymentGateway implements PaymentGateway {
             case "processing_error"                        -> PaymentFailureReason.GATEWAY_ERROR;
             default                                        -> PaymentFailureReason.UNKNOWN_REASON;
         };
-    }
-
-    /** Runs a synchronous Stripe SDK call on a Vert.x worker thread and bridges the result to a WebFX Future. */
-    private static <T> Future<T> executeBlocking(Callable<T> task) {
-        return VertxAsync.toWebfxFuture(VertxInstance.getVertx().executeBlocking(task));
     }
 
     private static String generateErrorMessage(Throwable ex, String method) {

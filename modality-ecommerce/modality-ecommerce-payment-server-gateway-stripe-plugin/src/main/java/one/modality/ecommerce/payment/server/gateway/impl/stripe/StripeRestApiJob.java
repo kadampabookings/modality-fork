@@ -12,7 +12,6 @@ import dev.webfx.platform.console.Console;
 import dev.webfx.platform.util.Numbers;
 import dev.webfx.platform.util.collection.Collections;
 import dev.webfx.platform.util.http.HttpResponseStatus;
-import dev.webfx.platform.util.vertx.VertxAsync;
 import dev.webfx.platform.util.vertx.VertxInstance;
 import io.vertx.core.http.HttpHeaders;
 import io.vertx.ext.web.Router;
@@ -29,7 +28,8 @@ import one.modality.ecommerce.payment.server.gateway.impl.util.RestApiOneTimeHtm
 import dev.webfx.stack.orm.entity.EntityStore;
 import dev.webfx.stack.session.state.SystemUserId;
 
-import java.util.concurrent.Callable;
+import static one.modality.ecommerce.payment.server.gateway.impl.stripe.StripeAsync.executeBlocking;
+import static one.modality.ecommerce.payment.server.gateway.impl.stripe.StripeAsync.retryingRequestOptions;
 
 /**
  * Vert.x router bindings for the Stripe gateway:
@@ -237,7 +237,8 @@ public final class StripeRestApiJob implements ApplicationJob {
         StripeClient client = new StripeClient(apiSecretKey);
         // For a Checkout-session event with no payment_intent yet, target.paymentIntentId() may be
         // null — but callers only reach this method when we have a paymentIntentId to query.
-        return client.v1().paymentIntents().retrieve(target.paymentIntentId());
+        // Read-only retrieve — no idempotency key needed, but we want network retries on 429/5xx.
+        return client.v1().paymentIntents().retrieve(target.paymentIntentId(), retryingRequestOptions(null));
     }
 
     private static Future<Void> updatePaymentStatus(MoneyTransfer payment, PaymentIntent paymentIntent, String textPayload, PaymentFormType formType, String logPrefix) {
@@ -287,10 +288,6 @@ public final class StripeRestApiJob implements ApplicationJob {
     private static void respond(RoutingContext ctx, int statusCode) {
         if (ctx == null) return; // direct unit-test entry
         ctx.response().setStatusCode(statusCode).end();
-    }
-
-    private static <T> Future<T> executeBlocking(Callable<T> task) {
-        return VertxAsync.toWebfxFuture(VertxInstance.getVertx().executeBlocking(task));
     }
 
     /** A webhook event resolved to enough info to find the matching MoneyTransfer in our DB. */
