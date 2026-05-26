@@ -1,0 +1,49 @@
+* {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+}
+
+#stripe-payment-form {
+    max-width: 550px;
+    min-width: 300px;
+}
+
+#stripe-payment-element {
+    /* Stripe's Payment Element manages its own internal layout — no min-height needed. */
+}
+
+#stripe-payment-status-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(0, 0, 0, 0.05);
+    box-sizing: border-box;
+    border-radius: 50px;
+    margin: 8px auto 0;
+    width: 225px;
+    visibility: hidden;
+    padding: 6px 10px;
+}
+
+#stripe-payment-status-container.missing-credentials {
+    width: 350px;
+}
+
+#stripe-payment-status-container.is-success {
+    color: #00b23b;
+}
+
+#stripe-payment-status-container.is-failure,
+#stripe-payment-status-container.missing-credentials {
+    color: #cc0023;
+}
+
+#stripe-payment-status-container.is-success:after  { content: 'Payment successful'; }
+#stripe-payment-status-container.is-failure:after  { content: 'Payment failed'; }
+#stripe-payment-status-container.missing-credentials:after {
+    content: 'publishable key and/or client secret is incorrect';
+}

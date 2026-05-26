@@ -15,6 +15,35 @@
 
     <providers>
         <provider interface="one.modality.ecommerce.payment.server.gateway.PaymentGateway">one.modality.ecommerce.payment.server.gateway.impl.stripe.StripePaymentGateway</provider>
+        <provider interface="dev.webfx.platform.boot.spi.ApplicationJob">one.modality.ecommerce.payment.server.gateway.impl.stripe.StripeRestApiJob</provider>
     </providers>
+
+    <required-libraries>
+        <!-- Stripe Java SDK 32.x — see https://github.com/stripe/stripe-java -->
+        <library name="com.stripe"> <!-- module name changed in stripe-java v32 (was 'stripe.java') -->
+            <groupId>com.stripe</groupId>
+            <artifactId>stripe-java</artifactId>
+            <version>32.1.0</version>
+            <exported-packages> <!-- Explicit list of packages (automatic discovery was not working on the staging server) -->
+                <package>com.stripe</package>
+                <package>com.stripe.exception</package>
+                <package>com.stripe.model</package>
+                <package>com.stripe.model.checkout</package>
+                <package>com.stripe.net</package>
+                <package>com.stripe.param</package>
+                <package>com.stripe.param.checkout</package>
+                <package>com.stripe.service</package>
+                <package>com.stripe.service.checkout</package>
+            </exported-packages>
+        </library>
+        <library name="gson">
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
+            <version>2.11.0</version>
+            <exported-packages>
+                <package>com.google.gson</package>
+            </exported-packages>
+        </library>
+    </required-libraries>
 
 </project>
