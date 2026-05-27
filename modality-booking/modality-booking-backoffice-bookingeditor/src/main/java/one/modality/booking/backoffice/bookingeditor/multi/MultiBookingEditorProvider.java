@@ -29,6 +29,13 @@ public final class MultiBookingEditorProvider implements BookingEditorProvider {
     public BookingEditor createBookingEditor(WorkingBooking workingBooking) {
         List<BookingEditor> bookingEditors = Collections.map(bookingEditorProviders,
             bookingEditorProvider -> bookingEditorProvider.createBookingEditor(workingBooking));
+        // Workaround to fix issue for Pre-Summer Festival Volunteers event where the booking form is showing the
+        // teachings for Friday introduction (we don't want that)
+        BookingEditor teachingBookingEditor = Collections.findFirst(bookingEditors, be -> be.getClass().getSimpleName().equals("TeachingBookingEditor"));
+        BookingEditor volunteerBookingEditor = Collections.findFirst(bookingEditors, be -> be.getClass().getSimpleName().equals("VolunteerBookingEditor"));
+        if (teachingBookingEditor != null && volunteerBookingEditor != null)
+            bookingEditors.remove(teachingBookingEditor);
+        // End of workaround
         bookingEditors.sort((be1, be2) -> {
             if (be1 instanceof FamilyBookingEditorBase fbe1 && be2 instanceof FamilyBookingEditorBase fbe2) {
                 KnownItemFamily family1 = fbe1.getFamily();
