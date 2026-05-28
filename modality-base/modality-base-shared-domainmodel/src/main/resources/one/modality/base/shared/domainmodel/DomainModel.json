@@ -1603,6 +1603,26 @@
     "quantity": "integer",
     "resource": "Resource"
   },
+  "PushSubscription": {
+    "id": 166,
+    "authKey": "string",
+    "createdAt": "Temporal.Instant",
+    "endpoint": "string",
+    "lastSeenAt": "Temporal.Instant",
+    "p256dhKey": "string"
+  },
+  "PushSubscriptionRecipient": {
+    "id": 167,
+    "context": "string",
+    "createdAt": "Temporal.Instant",
+    "document": "Document",
+    "email": "string",
+    "event": "Event",
+    "organization": "Organization",
+    "person": "Person",
+    "subscription": "PushSubscription",
+    "userAgent": "string"
+  },
   "Rate": {
     "id": 41,
     "age1_discount": "integer",
