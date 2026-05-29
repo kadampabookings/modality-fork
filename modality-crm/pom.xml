@@ -54,6 +54,7 @@
         <module>modality-crm-server-authz-required-plugin</module>
         <module>modality-crm-server-max-plugin</module>
         <module>modality-crm-server-min-plugin</module>
+        <module>modality-crm-server-webpush-plugin</module>
         <module>modality-crm-shared-authn</module>
     </modules>
 

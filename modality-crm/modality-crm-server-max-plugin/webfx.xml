@@ -11,7 +11,9 @@
         <used-by-source-modules/>
 
         <plugin-module>modality-crm-server-min-plugin</plugin-module>
-        <!-- Nothing more than min for now... -->
+
+        <!-- Web Push -->
+        <plugin-module>modality-crm-server-webpush-plugin</plugin-module>
 
     </dependencies>
 
