@@ -1605,11 +1605,16 @@
   },
   "PushSubscription": {
     "id": 166,
+    "appTimestamp": "string",
     "authKey": "string",
     "createdAt": "Temporal.Instant",
+    "displayMode": "string",
     "endpoint": "string",
+    "lang": "string",
     "lastSeenAt": "Temporal.Instant",
-    "p256dhKey": "string"
+    "p256dhKey": "string",
+    "timezone": "string",
+    "userAgent": "string"
   },
   "PushSubscriptionRecipient": {
     "id": 167,
@@ -1620,8 +1625,7 @@
     "event": "Event",
     "organization": "Organization",
     "person": "Person",
-    "subscription": "PushSubscription",
-    "userAgent": "string"
+    "subscription": "PushSubscription"
   },
   "Rate": {
     "id": 41,
