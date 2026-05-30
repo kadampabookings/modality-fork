@@ -85,8 +85,12 @@ public final class ModalityWebPushSubscriptionStore implements WebPushSubscripti
         // multiple recipient rows for the same context (e.g., two bookings on
         // the same device both linked to the same event) — without it, that
         // device would receive the push twice for one broadcast.
+        // vapidPublicKey is loaded so the executor can drop subscriptions
+        // whose server identity doesn't match the current VAPID keypair
+        // (env crossover after a prod→staging copy, or post-rotation cleanup).
         StringBuilder dql = new StringBuilder(
-                "select distinct subscription.endpoint, subscription.p256dhKey, subscription.authKey"
+                "select distinct subscription.endpoint, subscription.p256dhKey, subscription.authKey,"
+                + " subscription.vapidPublicKey"
                 + " from PushSubscriptionRecipient where event=?");
         Object[] params;
         if (emailFilter != null) {
@@ -103,7 +107,8 @@ public final class ModalityWebPushSubscriptionStore implements WebPushSubscripti
                     for (PushSubscriptionRecipient r : recipients) {
                         PushSubscription s = r.getSubscription();
                         subs.add(new WebPushSubscription(
-                                s.getEndpoint(), s.getP256dhKey(), s.getAuthKey()));
+                                s.getEndpoint(), s.getP256dhKey(), s.getAuthKey(),
+                                s.getVapidPublicKey()));
                     }
                     return subs;
                 });

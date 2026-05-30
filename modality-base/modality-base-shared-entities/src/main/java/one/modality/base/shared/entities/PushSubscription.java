@@ -30,6 +30,13 @@ public interface PushSubscription extends Entity {
     String appTimestamp = "appTimestamp";
     String createdAt = "createdAt";
     String lastSeenAt = "lastSeenAt";
+    /**
+     * The VAPID public key the browser was subscribed with. Captured at
+     * subscribe time and used at send time to skip subscriptions whose
+     * server identity no longer matches (different environment after a
+     * prod→staging DB copy, or a rotated VAPID keypair).
+     */
+    String vapidPublicKey = "vapidPublicKey";
 
     default String getEndpoint() { return getStringFieldValue(endpoint); }
     default void setEndpoint(String value) { setFieldValue(endpoint, value); }
@@ -59,4 +66,7 @@ public interface PushSubscription extends Entity {
 
     default Instant getLastSeenAt() { return getInstantFieldValue(lastSeenAt); }
     default void setLastSeenAt(Instant value) { setFieldValue(lastSeenAt, value); }
+
+    default String getVapidPublicKey() { return getStringFieldValue(vapidPublicKey); }
+    default void setVapidPublicKey(String value) { setFieldValue(vapidPublicKey, value); }
 }

@@ -1614,7 +1614,8 @@
     "lastSeenAt": "Temporal.Instant",
     "p256dhKey": "string",
     "timezone": "string",
-    "userAgent": "string"
+    "userAgent": "string",
+    "vapidPublicKey": "string"
   },
   "PushSubscriptionRecipient": {
     "id": 167,
