@@ -2,6 +2,9 @@ package one.modality.crm.server.webpush;
 
 import dev.webfx.platform.async.Future;
 import dev.webfx.platform.console.Console;
+import dev.webfx.stack.db.submit.SubmitArgument;
+import dev.webfx.stack.db.submit.SubmitService;
+import dev.webfx.stack.orm.datasourcemodel.service.DataSourceModelService;
 import dev.webfx.stack.orm.entity.EntityStore;
 import dev.webfx.stack.orm.entity.UpdateStore;
 import dev.webfx.stack.webpush.WebPushSubscription;
@@ -23,6 +26,10 @@ import java.util.List;
  *       {@code target} object (which the executor passes through verbatim) as
  *       a {@link ModalityWebPushTarget} and translates the populated FK field
  *       into a DSQL filter on {@code PushSubscriptionRecipient}.</li>
+ *   <li>{@link #unsubscribeByEmail} — used by the
+ *       {@code UnsubscribePushNotifications} FO operation. Soft-deletes by
+ *       stamping {@code unsubscribed_at = now()} on every active row matching
+ *       the email (no DELETE — keeps the row for opt-out-rate statistics).</li>
  * </ul>
  *
  * @author Bruno Salmon
@@ -35,7 +42,7 @@ public final class ModalityWebPushSubscriptionStore implements WebPushSubscripti
                                   String userAgent, Instant lastSeenAt) {
         EntityStore loadStore = EntityStore.create();
         return loadStore.<PushSubscription>executeQuery(
-                        "select id from PushSubscription where endpoint=?", oldEndpoint)
+                        "select id from PushSubscription where endpoint=$1", oldEndpoint)
                 .compose(rows -> {
                     if (rows.isEmpty()) {
                         // No subscription with that endpoint — likely a stale
@@ -88,13 +95,16 @@ public final class ModalityWebPushSubscriptionStore implements WebPushSubscripti
         // vapidPublicKey is loaded so the executor can drop subscriptions
         // whose server identity doesn't match the current VAPID keypair
         // (env crossover after a prod→staging copy, or post-rotation cleanup).
+        // unsubscribedAt is null filters out rows the user soft-deleted via
+        // the FO /unsubscribe page — they stay in the DB for stats but must
+        // not receive further pushes.
         StringBuilder dql = new StringBuilder(
                 "select distinct subscription.endpoint, subscription.p256dhKey, subscription.authKey,"
                 + " subscription.vapidPublicKey"
-                + " from PushSubscriptionRecipient where event=?");
+                + " from PushSubscriptionRecipient where event=$1 and unsubscribedAt is null");
         Object[] params;
         if (emailFilter != null) {
-            dql.append(" and email=?");
+            dql.append(" and email=$2");
             params = new Object[]{t.event(), emailFilter};
         } else {
             params = new Object[]{t.event()};
@@ -111,6 +121,32 @@ public final class ModalityWebPushSubscriptionStore implements WebPushSubscripti
                                 s.getVapidPublicKey()));
                     }
                     return subs;
+                });
+    }
+
+    @Override
+    public Future<Integer> unsubscribeByEmail(String email) {
+        if (email == null || email.isBlank()) {
+            return Future.succeededFuture(0);
+        }
+        // Bulk soft-delete via DQL — much lighter than loading every row into
+        // an EntityStore + UpdateStore. The `unsubscribedAt is null` guard
+        // makes the operation idempotent (re-running on already-unsubscribed
+        // rows is a no-op, and the row count reflects only newly-disabled
+        // opt-ins, which is what surfaces to the user).
+        String dql = "update PushSubscriptionRecipient"
+                + " set unsubscribedAt = now()"
+                + " where lower(email) = lower($1) and unsubscribedAt is null";
+        return SubmitService.executeSubmit(SubmitArgument.builder()
+                        .setLanguage("DQL")
+                        .setStatement(dql)
+                        .setParameters(email)
+                        .setDataSourceId(DataSourceModelService.getDefaultDataSourceId())
+                        .build())
+                .map(result -> {
+                    int n = result.getRowCount();
+                    Console.log("[webpush] unsubscribed " + n + " recipient row(s) for email=" + email);
+                    return n;
                 });
     }
 }

@@ -32,6 +32,12 @@ public interface PushSubscriptionRecipient extends Entity,
     String context = "context";
     String email = "email";
     String createdAt = "createdAt";
+    /**
+     * Set to the moment the user clicked unsubscribe; null on active opt-ins.
+     * Soft-delete rather than DELETE so we can track opt-out rates over time.
+     * All send-side queries must filter {@code unsubscribedAt is null}.
+     */
+    String unsubscribedAt = "unsubscribedAt";
 
     default PushSubscription getSubscription() { return getForeignEntity(subscription); }
     default EntityId getSubscriptionId() { return getForeignEntityId(subscription); }
@@ -44,4 +50,7 @@ public interface PushSubscriptionRecipient extends Entity,
     default void setEmail(String value) { setFieldValue(email, value); }
 
     default Instant getCreatedAt() { return getInstantFieldValue(createdAt); }
+
+    default Instant getUnsubscribedAt() { return getInstantFieldValue(unsubscribedAt); }
+    default void setUnsubscribedAt(Instant value) { setFieldValue(unsubscribedAt, value); }
 }

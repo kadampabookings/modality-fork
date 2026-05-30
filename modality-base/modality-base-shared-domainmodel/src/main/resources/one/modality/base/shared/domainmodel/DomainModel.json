@@ -1626,7 +1626,8 @@
     "event": "Event",
     "organization": "Organization",
     "person": "Person",
-    "subscription": "PushSubscription"
+    "subscription": "PushSubscription",
+    "unsubscribedAt": "Temporal.Instant"
   },
   "Rate": {
     "id": 41,

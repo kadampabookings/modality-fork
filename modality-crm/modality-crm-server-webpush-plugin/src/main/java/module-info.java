@@ -20,6 +20,8 @@ module modality.crm.server.webpush.plugin {
     requires webfx.platform.async;
     requires webfx.platform.console;
     requires webfx.stack.com.serial;
+    requires webfx.stack.db.submit;
+    requires webfx.stack.orm.datasourcemodel.service;
     requires webfx.stack.orm.entity;
     requires webfx.stack.webpush.server;
 
