@@ -13,6 +13,19 @@ var stripe_paymentIntentId = '${stripe_paymentIntentId}';
 var stripe_returnUrl = '${stripe_returnUrl}';
 var stripe_countryCode = '${stripe_countryCode}';
 
+// Billing details pre-filled from the booking (server side). Any non-empty value here means
+// (a) the Payment Element will hide that field and (b) we'll send the value at confirmPayment()
+// time. Empty string = we don't have it, fall back to whatever the user types in the form.
+var modality_billingFirstName   = '${modality_billingFirstName}';
+var modality_billingLastName    = '${modality_billingLastName}';
+var modality_billingEmail       = '${modality_billingEmail}';
+var modality_billingPhone       = '${modality_billingPhone}';
+var modality_billingAddress     = '${modality_billingAddress}';
+var modality_billingCity        = '${modality_billingCity}';
+var modality_billingState       = '${modality_billingState}';
+var modality_billingPostCode    = '${modality_billingPostCode}';
+var modality_billingCountryCode = '${modality_billingCountryCode}';
+
 // Parameter injected by WebPaymentForm java class on the client side (to allow JS -> Java callbacks)
 var modality_javaPaymentForm;
 
@@ -163,7 +176,51 @@ function loadStripeJs() {
 
 async function initializeCard() {
     stripe_elements = stripe_stripeInstance.elements({ clientSecret: stripe_clientSecret });
-    stripe_paymentElement = stripe_elements.create('payment');
+    // Hide each billing-details input the server pre-filled — 'never' tells the Payment Element
+    // we'll supply the value ourselves at confirmPayment() time. We keep 'auto' for missing
+    // values so the user can fill them in. Address stays 'auto' regardless — Stripe requires
+    // a full address when set to 'never' and our customer data may be partial.
+    //
+    // wallets.link='never' disables Onelink's "save my info for faster checkout" CTA, which
+    // would otherwise render its own Email / Mobile / Full name inputs inside the form — these
+    // are NOT controlled by fields.billingDetails (Link is a separate Stripe feature) and they
+    // also can't be suppressed via payment_method_types on the PaymentIntent. Without this,
+    // hiding billing details has no visible effect because Link re-introduces equivalent fields.
+    //
+    // wallets.applePay/googlePay='never' suppresses the wallet shortcut buttons at the top of
+    // the card form — in our gateway, Apple Pay / Google Pay are surfaced as discrete methods
+    // upstream and use the Payment Request Button widget instead, so they shouldn't double up
+    // inside the card flow.
+    // Pre-fill the visible address inputs (Country + Postal code, plus line1/city/state if
+    // Stripe chooses to render them based on currency / country). User can still edit if
+    // their saved profile is wrong, and a pre-filled postal code helps with card AVS checks.
+    var addressDefaults = {};
+    if (modality_billingAddress)     addressDefaults.line1       = modality_billingAddress;
+    if (modality_billingCity)        addressDefaults.city        = modality_billingCity;
+    if (modality_billingState)       addressDefaults.state       = modality_billingState;
+    if (modality_billingPostCode)    addressDefaults.postal_code = modality_billingPostCode;
+    if (modality_billingCountryCode) addressDefaults.country     = modality_billingCountryCode.toUpperCase();
+
+    var paymentElementOptions = {
+        fields: {
+            billingDetails: {
+                name:  (modality_billingFirstName || modality_billingLastName) ? 'never' : 'auto',
+                email: modality_billingEmail ? 'never' : 'auto',
+                phone: modality_billingPhone ? 'never' : 'auto',
+            }
+        },
+        wallets: {
+            applePay:  'never',
+            googlePay: 'never',
+            link:      'never',
+        }
+    };
+    if (Object.keys(addressDefaults).length) {
+        paymentElementOptions.defaultValues = {
+            billingDetails: { address: addressDefaults }
+        };
+    }
+    stripe_paymentElement = stripe_elements.create('payment', paymentElementOptions);
     await stripe_paymentElement.mount('#' + stripe_paymentElementContainerId);
 }
 
@@ -207,20 +264,34 @@ async function handleCardSubmission(billing) {
     }
 }
 
-// Only includes billing details if the user provided enough data — Stripe rejects empty objects.
+// Builds the billing_details object sent to Stripe at confirmPayment() time. Merges values
+// in this order of precedence: React-provided billing > server-injected modality_billing_*
+// defaults. Whatever we send here MUST cover any field set to 'never' in fields.billingDetails
+// (otherwise Stripe rejects the confirm) — and the modality_billing_* defaults are exactly
+// what we keyed the 'never' decision on, so coverage is guaranteed.
 function buildBillingDetails(b) {
-    if (!b) return undefined;
-    var name = ((b.firstName || '') + ' ' + (b.lastName || '')).trim();
+    b = b || {};
+    var firstName   = b.firstName   || modality_billingFirstName;
+    var lastName    = b.lastName    || modality_billingLastName;
+    var email       = b.email       || modality_billingEmail;
+    var phone       = b.phone       || modality_billingPhone;
+    var address     = b.address     || modality_billingAddress;
+    var city        = b.city        || modality_billingCity;
+    var state       = b.state       || modality_billingState;
+    var postCode    = b.postCode    || modality_billingPostCode;
+    var countryCode = b.countryCode || modality_billingCountryCode;
+
+    var name = ((firstName || '') + ' ' + (lastName || '')).trim();
     var bd = {};
-    if (name)     bd.name  = name;
-    if (b.email)  bd.email = b.email;
-    if (b.phone)  bd.phone = b.phone;
+    if (name)  bd.name  = name;
+    if (email) bd.email = email;
+    if (phone) bd.phone = phone;
     var addr = {};
-    if (b.address)    addr.line1       = b.address;
-    if (b.city)       addr.city        = b.city;
-    if (b.state)      addr.state       = b.state;
-    if (b.postCode)   addr.postal_code = b.postCode;
-    if (b.countryCode) addr.country    = b.countryCode.toUpperCase();
+    if (address)     addr.line1       = address;
+    if (city)        addr.city        = city;
+    if (state)       addr.state       = state;
+    if (postCode)    addr.postal_code = postCode;
+    if (countryCode) addr.country     = countryCode.toUpperCase();
     if (Object.keys(addr).length) bd.address = addr;
     if (!Object.keys(bd).length) return undefined;
     return { billing_details: bd };

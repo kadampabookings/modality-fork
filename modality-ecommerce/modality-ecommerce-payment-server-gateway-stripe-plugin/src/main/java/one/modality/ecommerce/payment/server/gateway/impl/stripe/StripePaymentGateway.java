@@ -139,6 +139,10 @@ public final class StripePaymentGateway implements PaymentGateway {
         String paymentMethodId = (argument.paymentMethod() != null ? argument.paymentMethod() : PaymentMethod.CARD).name();
         boolean seamless = argument.favorSeamless();
 
+        // Billing details we already know from the booking — injected into the JS so the Payment
+        // Element can hide the corresponding input fields ('fields.billingDetails = never') and
+        // we still satisfy Stripe's requirement to supply them at confirmPayment() time.
+        GatewayCustomer customer = argument.customer();
         return executeBlocking(() -> createPaymentIntent(client, order, currencyCode, argument.paymentId()))
             .map(paymentIntent -> {
                 String paymentFormContent = (seamless ? SCRIPT_TEMPLATE : HTML_TEMPLATE)
@@ -150,7 +154,16 @@ public final class StripePaymentGateway implements PaymentGateway {
                     .replace("${stripe_clientSecret}", paymentIntent.getClientSecret())
                     .replace("${stripe_paymentIntentId}", paymentIntent.getId())
                     .replace("${stripe_returnUrl}", nullToEmpty(argument.returnUrl()))
-                    .replace("${stripe_countryCode}", merchantCountryCodeOrDefault(argument));
+                    .replace("${stripe_countryCode}", merchantCountryCodeOrDefault(argument))
+                    .replace("${modality_billingFirstName}",   jsStringEscape(customer == null ? null : customer.firstName()))
+                    .replace("${modality_billingLastName}",    jsStringEscape(customer == null ? null : customer.lastName()))
+                    .replace("${modality_billingEmail}",       jsStringEscape(customer == null ? null : customer.email()))
+                    .replace("${modality_billingPhone}",       jsStringEscape(customer == null ? null : customer.phone()))
+                    .replace("${modality_billingAddress}",     jsStringEscape(customer == null ? null : customer.address()))
+                    .replace("${modality_billingCity}",        jsStringEscape(customer == null ? null : customer.city()))
+                    .replace("${modality_billingState}",       jsStringEscape(customer == null ? null : customer.state()))
+                    .replace("${modality_billingPostCode}",    jsStringEscape(customer == null ? null : customer.zipCode()))
+                    .replace("${modality_billingCountryCode}", jsStringEscape(customer == null ? null : customer.countryCode()));
                 if (DEBUG_LOG)
                     Console.log("[Stripe][DEBUG] initiatePaymentEmbedded - paymentIntentId=" + paymentIntent.getId() + ", seamless=" + seamless);
                 SandboxCard[] sandboxCards = live ? null : SANDBOX_CARDS;
@@ -213,15 +226,23 @@ public final class StripePaymentGateway implements PaymentGateway {
         });
     }
 
-    /** Creates a PaymentIntent with automatic payment methods enabled (Card, wallets, Link, etc.). */
+    /**
+     * Creates a card-only PaymentIntent. We restrict payment_method_types to {@code ['card']}
+     * (rather than using {@code automatic_payment_methods}) because our gateway already exposes
+     * CARD / GOOGLE_PAY / APPLE_PAY as discrete user-selectable methods upstream — by the time
+     * we reach here the user has explicitly picked one. Restricting types keeps the embedded
+     * Payment Element clean: no extra method tabs (MB WAY, Satispay, Bancontact, etc.) and no
+     * Link "save my info for faster checkout" CTA, which would otherwise re-introduce email /
+     * phone / full-name fields we just told Stripe to hide via fields.billingDetails.
+     *
+     * <p>Wallet flows (GOOGLE_PAY / APPLE_PAY) still work fine with {@code ['card']} because the
+     * Payment Request Button tokenizes a card under the hood.
+     */
     private static PaymentIntent createPaymentIntent(StripeClient client, GatewayOrder order, String currencyCode, String paymentId) throws StripeException {
         PaymentIntentCreateParams.Builder paramsBuilder = PaymentIntentCreateParams.builder()
             .setAmount(order.amount())
             .setCurrency(currencyCode.toLowerCase())
-            .setAutomaticPaymentMethods(
-                PaymentIntentCreateParams.AutomaticPaymentMethods.builder()
-                    .setEnabled(true)
-                    .build())
+            .addPaymentMethodType("card")
             .setDescription(truncate(order.longName(), 1000))
             // The reference is what links the Stripe-side payment back to our MoneyTransfer
             // when the webhook delivers payment_intent.succeeded.
@@ -376,5 +397,30 @@ public final class StripePaymentGateway implements PaymentGateway {
     private static String truncate(String value, int maxLength) {
         if (value == null) return null;
         return value.length() <= maxLength ? value : value.substring(0, maxLength);
+    }
+
+    /**
+     * Escapes a value for safe embedding inside a single-quoted JS string literal in the
+     * Stripe payment form script. Null becomes empty string so the JS variable evaluates as
+     * falsy (which the JS uses to decide whether to keep the input field visible). The
+     * {@code <} escape prevents a customer name containing {@code </script>} from breaking
+     * out of the surrounding {@code <script>} block in the iframe HTML.
+     */
+    private static String jsStringEscape(String value) {
+        if (value == null) return "";
+        StringBuilder sb = new StringBuilder(value.length() + 8);
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            switch (c) {
+                case '\\' -> sb.append("\\\\");
+                case '\'' -> sb.append("\\'");
+                case '\n' -> sb.append("\\n");
+                case '\r' -> sb.append("\\r");
+                case '\t' -> sb.append("\\t");
+                case '<'  -> sb.append("\\u003c");
+                default   -> sb.append(c);
+            }
+        }
+        return sb.toString();
     }
 }
