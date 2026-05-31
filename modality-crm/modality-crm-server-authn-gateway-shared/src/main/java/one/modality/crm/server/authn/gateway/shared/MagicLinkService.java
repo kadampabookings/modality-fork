@@ -149,12 +149,36 @@ public final class MagicLinkService {
         // Map each branch immediately to Future<MagicLink> to avoid EntityList/List type mismatch.
         Future<MagicLink> findFuture;
         if (isVerificationCode) {
-            // Scope by loginRunId: the client that entered the code is the same tab that requested it.
+            // Two flavours of verification codes coexist:
+            //
+            //  LOGIN codes — short-lived (10 min), single-use. Scoped by the
+            //    originating tab's loginRunId so the entry tab MUST be the
+            //    request tab (prevents cross-user collisions while two users
+            //    happen to share a 6-digit value in the same window).
+            //
+            //  BOOKING_ACCESS codes — long-lived (1 year), multi-use. Generated
+            //    server-side without an originating tab (loginRunId is the
+            //    sentinel "server-generated"). Redemption from any subsequent
+            //    tab (e.g. the freshly-installed PWA after the user noted
+            //    the code in Safari) must work, so neither loginRunId nor
+            //    usageDate is filtered.
+            //
+            // We look up by code only and apply type-appropriate scoping in
+            // Java rather than fork the SQL — keeps the query trivial and
+            // the type-specific rules co-located with their justification.
             String loginRunId = ThreadLocalStateHolder.getRunId();
             findFuture = entityStore.<MagicLink>executeQuery(
-                "select loginRunId,email,creationDate,usageDate,requestedPath,oldEmail,linkType from MagicLink where verificationCode=$1 and loginRunId=$2 and usageDate is null order by id desc limit 1",
-                tokenOrVerificationCode, loginRunId)
-                .map(Collections::first);
+                "select loginRunId,email,creationDate,usageDate,requestedPath,oldEmail,linkType from MagicLink where verificationCode=$1 order by id desc limit 1",
+                tokenOrVerificationCode)
+                .map(Collections::first)
+                .map(ml -> {
+                    if (ml == null) return null;
+                    if (ml.isBookingAccess()) return ml;
+                    // LOGIN path: enforce the original strict scoping.
+                    if (ml.getUsageDate() != null) return null;
+                    if (loginRunId == null || !loginRunId.equals(ml.getLoginRunId())) return null;
+                    return ml;
+                });
         } else {
             // BOOKING_ACCESS links are multi-use (usageDate is set after first use), so we do NOT
             // filter by usageDate=null here; the validity check below uses type-appropriate expiry.
@@ -205,6 +229,10 @@ public final class MagicLinkService {
      * Variant that accepts a pre-generated token. Use this when the token has already been
      * written onto the document (document.magic_link_token) before the INSERT so the DB
      * bracket pattern can resolve it at email-generation time.
+     * <p>
+     * Always assigns a 6-digit verification code alongside the token, so the same link
+     * can be redeemed either via URL (token) or via code entry (verification code) on
+     * the post-install PWA login screen.
      */
     public static Future<MagicLink> createBookingAccessLink(String token, String email, String requestedPath, String clientOrigin, String activityPath, String lang, DataSourceModel dataSourceModel) {
         String normalizedOrigin = clientOrigin;
@@ -218,6 +246,7 @@ public final class MagicLinkService {
         // originating client session, so we use a sentinel value.
         magicLink.setLoginRunId("server-generated");
         magicLink.setToken(token);
+        magicLink.setVerificationCode(generateVerificationCode());
         magicLink.setEmail(email);
         magicLink.setLang(lang != null ? lang : "en");
         magicLink.setLink(link);
@@ -225,6 +254,35 @@ public final class MagicLinkService {
         magicLink.setLinkType(MagicLinkType.BOOKING_ACCESS);
         return updateStore.submitChanges()
             .map(ignored -> magicLink);
+    }
+
+    /**
+     * Returns a valid BOOKING_ACCESS magic link for the given email + requestedPath,
+     * reusing an existing one if found and still within its 1-year expiry, otherwise
+     * creating a new one. Lets the success page re-render without minting a new code
+     * each time (which would confuse a user who refreshed and saw the displayed code
+     * change).
+     */
+    public static Future<MagicLink> getOrCreateBookingAccessLink(String email, String requestedPath, String clientOrigin, String activityPath, String lang, DataSourceModel dataSourceModel) {
+        // Look up the most recent BOOKING_ACCESS link for this email+path. We don't filter
+        // out used links here because BOOKING_ACCESS links are multi-use; their `usageDate`
+        // just records the most recent successful redeem, not a finality.
+        return EntityStore.create(dataSourceModel)
+            .<MagicLink>executeQuery(
+                "select loginRunId,email,creationDate,usageDate,requestedPath,oldEmail,linkType,verificationCode,token,link,lang"
+                + " from MagicLink where lower(email)=lower($1) and requestedPath=$2 and linkType=$3"
+                + " order by id desc limit 1",
+                email, requestedPath, MagicLinkType.BOOKING_ACCESS.name())
+            .map(Collections::first)
+            .compose(existing -> {
+                if (existing != null
+                    && existing.getCreationDate() != null
+                    && now().isBefore(existing.getCreationDate().plus(BOOKING_ACCESS_EXPIRATION_DURATION))
+                    && existing.getVerificationCode() != null) {
+                    return Future.succeededFuture(existing);
+                }
+                return createBookingAccessLink(email, requestedPath, clientOrigin, activityPath, lang, dataSourceModel);
+            });
     }
 
     public static Future<Void> markMagicLinkAsUsed(MagicLink magicLink, String usageRunId) {

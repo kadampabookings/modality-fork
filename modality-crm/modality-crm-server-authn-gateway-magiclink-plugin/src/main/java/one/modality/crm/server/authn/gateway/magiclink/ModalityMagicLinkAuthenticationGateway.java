@@ -79,6 +79,7 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
     @Override
     public boolean acceptsUserCredentials(Object userCredentials) {
         return userCredentials instanceof SendMagicLinkCredentials
+               || userCredentials instanceof IssueBookingAccessMagicLinkCredentials
                || userCredentials instanceof RenewMagicLinkCredentials
                || userCredentials instanceof AuthenticateWithMagicLinkCredentials
                || userCredentials instanceof AuthenticateWithVerificationCodeCredentials
@@ -89,6 +90,8 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
     public Future<?> authenticate(Object userCredentials) {
         if (userCredentials instanceof SendMagicLinkCredentials sendMagicLinkCredentials)
             return createAndSendMagicLink(sendMagicLinkCredentials);
+        if (userCredentials instanceof IssueBookingAccessMagicLinkCredentials issueCredentials)
+            return issueBookingAccessMagicLink(issueCredentials);
         if (userCredentials instanceof RenewMagicLinkCredentials renewMagicLinkCredentials)
             return renewAndSendMagicLink(renewMagicLinkCredentials);
         if (userCredentials instanceof AuthenticateWithMagicLinkCredentials authenticateWithMagicLinkCredentials)
@@ -96,6 +99,28 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
         if (userCredentials instanceof AuthenticateWithVerificationCodeCredentials authenticateWithVerificationCodeCredentials)
             return authenticateWithVerificationCode(authenticateWithVerificationCodeCredentials);
         return Future.failedFuture("%s.authenticate() requires a %s, %s or %s argument".formatted(getClass().getSimpleName(), SendMagicLinkCredentials.class.getSimpleName(), RenewMagicLinkCredentials.class.getSimpleName(), AuthenticateWithMagicLinkCredentials.class.getSimpleName()));
+    }
+
+    /**
+     * Server-side creation of a BOOKING_ACCESS magic link with NO email sent.
+     * Returns the 6-digit verification code to the caller so the success
+     * page can display it for the user to copy. The PWA's standard
+     * verification-code login screen accepts it just like any other code.
+     * <p>
+     * Dedupe is delegated to {@code MagicLinkService.getOrCreateBookingAccessLink}
+     * — re-rendering the success page (or returning to it later) yields the
+     * same code, not a new one.
+     */
+    private Future<String> issueBookingAccessMagicLink(IssueBookingAccessMagicLinkCredentials request) {
+        String lang = Strings.toSafeString(request.getLanguage());
+        return MagicLinkService.getOrCreateBookingAccessLink(
+                request.getEmail(),
+                request.getRequestedPath(),
+                request.getClientOrigin(),
+                MAGIC_LINK_ACTIVITY_PATH_FULL,
+                lang,
+                dataSourceModel)
+            .map(MagicLink::getVerificationCode);
     }
 
     private Future<Void> createAndSendMagicLink(SendMagicLinkCredentials request) {
