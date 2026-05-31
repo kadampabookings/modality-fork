@@ -373,6 +373,24 @@ async function initializeWallet(method) {
 
     // Wallet button is self-contained — hide the host Pay button.
     modality_notifyGatewayHasSelfContainedPayment();
+
+    // Expose a programmatic trigger for the wallet sheet so the React Pay button can open it
+    // from inside its own click handler — mirrors the Square gateway's same-named function so
+    // the React side works identically across gateways. paymentRequest.show() opens the Apple
+    // Pay / Google Pay sheet; the existing paymentRequest.on('paymentmethod') listener picks
+    // up the result and runs the confirmCardPayment + completion flow.
+    //
+    // Must be invoked from inside a live user-gesture (click/tap) — iOS Safari rejects
+    // paymentRequest.show() otherwise. The React Pay button click handler is fine; calling
+    // this from a setTimeout/promise continuation is not.
+    window.modality_triggerWalletPayment = function () {
+        try {
+            stripe_paymentRequest.show();
+        } catch (e) {
+            console.error('Stripe paymentRequest.show() threw:', e);
+            modality_notifyGatewayCardVerificationFailure(e.message);
+        }
+    };
 }
 
 // status is either SUCCESS or FAILURE
