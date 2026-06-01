@@ -371,6 +371,14 @@ async function initializeWallet(method) {
         }
     });
 
+    // User dismissed the Apple Pay / Google Pay sheet without completing — Stripe fires
+    // 'cancel' (the 'paymentmethod' event NEVER fires in this case), so we need a separate
+    // listener to unblock React's Pay button. Without this, the spinner runs forever waiting
+    // for a verification result that will never come.
+    stripe_paymentRequest.on('cancel', function () {
+        modality_notifyGatewayCardVerificationFailure('Payment cancelled by user');
+    });
+
     // Wallet button is self-contained — hide the host Pay button.
     modality_notifyGatewayHasSelfContainedPayment();
 
