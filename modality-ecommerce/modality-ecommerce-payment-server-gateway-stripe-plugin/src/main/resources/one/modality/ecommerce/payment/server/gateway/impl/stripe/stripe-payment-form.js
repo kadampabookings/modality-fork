@@ -322,12 +322,35 @@ async function initializeWallet(method) {
         modality_notifyGatewayInitFailure('__METHOD_UNSUPPORTED__:Apple Pay is not available on this device/browser');
         return;
     }
+    // Re-acquire the container by ID. The reference captured back in onLoaded()
+    // may now point to a DETACHED node — React (or any host that wraps this
+    // script) can unmount/remount the container div during the long await on
+    // canMakePayment() above. Apple Pay's canMakePayment() round-trips with the
+    // OS Wallet and is noticeably slower on Safari Mac than the Google Pay path
+    // is on Chrome, which is why this only manifests on Safari Mac. Writing
+    // innerHTML to a detached node + then mounting via document-wide selector
+    // produces the misleading "selector applies to no DOM elements" error
+    // because the live container (the freshly-mounted React node) is empty.
+    if (modality_seamless) {
+        var fresh = document.getElementById(modality_seamlessContainerId);
+        if (!fresh) {
+            modality_notifyGatewayInitFailure('Payment form container disappeared during async init');
+            return;
+        }
+        modality_containerElement = fresh;
+    }
     modality_containerElement.innerHTML =
         '<div id="stripe-wallet-button" style="padding: 4px 0;"></div>' +
         '<div id="stripe-payment-status-container"></div>';
     var elements = stripe_stripeInstance.elements();
     var prButton = elements.create('paymentRequestButton', { paymentRequest: stripe_paymentRequest });
-    prButton.mount('#stripe-wallet-button');
+    // Mount using the actual DOM node rather than a CSS selector. Stripe's
+    // selector-based mount runs `document.querySelector` against the global
+    // document — if React reconciles between the innerHTML write above and
+    // this call, the selector may match a stale or missing node. Passing the
+    // node we just wrote into avoids that race entirely.
+    var walletButtonEl = modality_containerElement.querySelector('#stripe-wallet-button');
+    prButton.mount(walletButtonEl);
 
     stripe_paymentRequest.on('paymentmethod', async function (ev) {
         try {
