@@ -176,11 +176,31 @@ import(square_webPaymentsSDKUrl)
             });
             const googlePay = await payments.googlePay(paymentRequest);
 
+            // Re-acquire the container by ID. The reference captured before
+            // this function was called may point to a detached node — React
+            // (or any host wrapping this script) can unmount/remount the
+            // container div during the awaits above. Writing innerHTML to
+            // a detached node + then attaching via document-wide selector
+            // produces a misleading "selector not found" error because the
+            // live container (the freshly-mounted node) is empty. See the
+            // matching fix in stripe-payment-form.js for the same race.
+            if (modality_seamless) {
+                var freshGp = document.getElementById(modality_seamlessContainerId);
+                if (!freshGp) {
+                    modality_notifyGatewayInitFailure('Payment form container disappeared during async init');
+                    return;
+                }
+                modality_containerElement = freshGp;
+            }
             modality_containerElement.innerHTML = `
                 <div id="square-google-pay-button" style="padding: 4px 0;"></div>
                 <div id="square-payment-status-container"></div>
             `;
-            await googlePay.attach('#square-google-pay-button');
+            // Pass the actual DOM node rather than a CSS selector — selector
+            // lookups use document.querySelector and can match a stale node
+            // if reconciliation happens between innerHTML and attach.
+            var gpButtonEl = modality_containerElement.querySelector('#square-google-pay-button');
+            await googlePay.attach(gpButtonEl);
             console.log("Square Google Pay: button attached");
 
             // Primary path: ontokenization event (Square SDK fires this after the user approves
@@ -266,6 +286,20 @@ import(square_webPaymentsSDKUrl)
             });
             const applePay = await payments.applePay(paymentRequest);
 
+            // Re-acquire the container by ID after the await — see the
+            // matching comment in initializeGooglePay above for the
+            // detached-reference race. Even though Apple Pay below doesn't
+            // use a selector-based attach, writing innerHTML to a detached
+            // node would leave the button rendered off-document where
+            // click handlers never fire.
+            if (modality_seamless) {
+                var freshAp = document.getElementById(modality_seamlessContainerId);
+                if (!freshAp) {
+                    modality_notifyGatewayInitFailure('Payment form container disappeared during async init');
+                    return;
+                }
+                modality_containerElement = freshAp;
+            }
             // Render a CSS-styled Apple Pay button (no attach() needed — clicking the button
             // calls tokenize() which internally opens the Apple Pay sheet).
             modality_containerElement.innerHTML = `

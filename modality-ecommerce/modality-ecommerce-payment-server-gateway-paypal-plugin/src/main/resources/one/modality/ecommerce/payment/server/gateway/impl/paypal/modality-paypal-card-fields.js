@@ -167,6 +167,22 @@ async function onLoaded() {
             console.log("PayPal Card Fields: eligible — rendering fields directly");
             modality_cardFields = cardFields;
 
+            // Re-acquire the container by ID. The reference captured back in
+            // onLoaded() may now point to a DETACHED node — React (or any
+            // host wrapping this script) can unmount/remount the container
+            // div during the SDK-load + CardFields() awaits above. Writing
+            // innerHTML to a detached node would leave the placeholders
+            // off-document so the document-wide selectors used by the
+            // render() calls below would find nothing. Matches the fix in
+            // stripe-payment-form.js and square-payment-form.js for the same
+            // race; only manifests reliably on slower-await browsers
+            // (Safari is the usual culprit).
+            var freshCf = document.getElementById(modality_seamlessContainerId);
+            if (!freshCf) {
+                modality_notifyGatewayInitFailure('Payment form container disappeared during async init');
+                return;
+            }
+            modality_containerElement = freshCf;
             // Render placeholders for the three card field iframes PayPal will inject
             modality_containerElement.innerHTML = `
                 <form id="paypal-card-form">
@@ -200,6 +216,13 @@ async function onLoaded() {
     // ── Buttons fallback (card method) — shown when Card Fields is not eligible ──
     // The React Pay button is hidden via onGatewayHasSelfContainedPayment because the PayPal
     // Buttons widget is in a cross-origin iframe and cannot be triggered programmatically.
+    // Re-acquire container — see matching comment in the eligible branch above.
+    var freshBtn = document.getElementById(modality_seamlessContainerId);
+    if (!freshBtn) {
+        modality_notifyGatewayInitFailure('Payment form container disappeared during async init');
+        return;
+    }
+    modality_containerElement = freshBtn;
     modality_containerElement.innerHTML = `<div id="paypal-card-button"></div>`;
     try {
         await paypal.Buttons({
