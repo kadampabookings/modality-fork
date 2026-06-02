@@ -125,14 +125,14 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                     " order by id", eventPk) // Will introduce an ord later
                     // 7 - Loading item family policy (of this event or of the repeated event if set)
                     , DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
-                    "with e as (select coalesce(repeatedEvent,id) as finalEvent,coalesce(repeatedEvent?.type,type) as finalEventType,organization from Event where id=$1)" +
+                    "with e as (select coalesce(repeatedEvent,id) as finalEvent,coalesce(repeatedEvent?.type,type) as finalEventType,organization,venue.organization as venue_organization from Event where id=$1)" +
                     " select scope.(organization,site,eventType,event)" +
                     ",itemFamily.ord" +
                     ",applicableToInPerson,applicableToOnline,includedByDefault" +
                     ",eventPhaseCoverage1,eventPhaseCoverage2,eventPhaseCoverage3,eventPhaseCoverage4" +
                     ",noticeLabel,prerequisiteDescriptionLabel,prerequisiteConfirmationLabel" +
                     " from ItemFamilyPolicy ifp, e where ifp.scope.(" +
-                    " organization = e.organization" +
+                    " (organization = e.organization or organization=e.venue_organization)" +
                     " and (site = null or site?.event = null or site?.event = e.finalEvent)" +
                     " and (eventType = null or eventType = e.finalEventType)" +
                     " and (event = null or event = e.finalEvent)" +
@@ -140,12 +140,12 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                     " order by itemFamily.ord,id", eventPk)
                     // 8 - Loading item policies (of this event or of the repeated event if set)
                     , DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
-                    "with e as (select coalesce(repeatedEvent,id) as finalEvent,coalesce(repeatedEvent?.type,type) as finalEventType,organization from Event where id=$1)" +
+                    "with e as (select coalesce(repeatedEvent,id) as finalEvent,coalesce(repeatedEvent?.type,type) as finalEventType,organization,venue.organization as venue_organization from Event where id=$1)" +
                     " select scope.(organization,site,eventType,event)" +
                     ",item.(name,label,code,temporal,family.(code,name,label,ord),capacity,share_mate,ord)" +
                     ",applicableToInPerson,applicableToOnline,descriptionLabel,noticeLabel,minDay,default,genderInfoRequired,earlyAccommodationAllowed,lateAccommodationAllowed,minOccupancy,forceSoldOut" +
                     " from ItemPolicy ip, e where ip.scope.(" +
-                    " organization = e.organization" +
+                    " (organization = e.organization or organization=e.venue_organization)" +
                     " and (site = null or site?.event = null or site?.event = e.finalEvent)" +
                     " and (eventType = null or eventType = e.finalEventType)" +
                     " and (event = null or event = e.finalEvent)" +
@@ -153,7 +153,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                     " order by item.family.ord,item.ord,id", eventPk)
                     // 9 - Loading rates (of this event or of the repeated event if set)
                     , DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
-                    "with e as (select coalesce(repeatedEvent,id) as finalEvent,coalesce(repeatedEvent?.type,type) as finalEventType,organization,startDate,endDate,venue from Event where id=$1)" +
+                    "with e as (select coalesce(repeatedEvent,id) as finalEvent,coalesce(repeatedEvent?.type,type) as finalEventType,organization,startDate,endDate,venue,venue.organization as venue_organization from Event where id=$1)" +
                     " select site,item,withItem,earlyBird,price,perDay,perPerson,applicableToInPerson,applicableToOnline,facilityFee_price,facilityFee_discount,startDate,endDate,onDate,offDate,minDeposit" +
                     ",cutoffDate,minDeposit2" +
                     ",age1_max,age1_price,age1_discount,age2_max,age2_price,age2_discount" +
@@ -162,7 +162,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                     // Sites dedicated to this event
                     "r.site.event = e.finalEvent" +
                     // or global sites of the organization with scheduled items over the period of the event
-                    " or r.site.(event = null and (id=e.venue or organization=e.organization) and (!r.item.temporal and !r.perDay or exists(select ScheduledItem si where si.site=r.site and si.item=r.item and si.date>=e.startDate and si.date<=e.endDate)))" +
+                    " or r.site.(event = null and (id=e.venue or organization=e.organization or organization=e.venue_organization) and (!r.item.temporal and !r.perDay or exists(select ScheduledItem si where si.site=r.site and si.item=r.item and si.date>=e.startDate and si.date<=e.endDate)))" +
                     "    and (r.event = null or r.event = e.finalEvent)" +
                     "    and (r.eventType = null or r.eventType = e.finalEventType)" +
                     ")" +
