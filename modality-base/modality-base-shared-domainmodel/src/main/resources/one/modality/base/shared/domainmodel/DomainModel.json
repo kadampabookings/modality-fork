@@ -1768,6 +1768,7 @@
   },
   "ScheduledItem": {
     "id": 114,
+    "arrivalSite": "Site",
     "available": "boolean",
     "bookableScheduledItem": "ScheduledItem",
     "buddha": "Buddha",
@@ -1807,6 +1808,7 @@
     "branch": "boolean",
     "code": "string",
     "country": "Country",
+    "dailyTransport": "boolean",
     "event": "Event",
     "forceSoldout": "boolean",
     "groupName": "string",
