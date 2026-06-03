@@ -26,7 +26,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
     private static final String SCHEDULED_ITEMS_DQL_BASE =
             "with e as (select coalesce(repeatedEvent,id) as finalEvent,startDate,endDate,preDate,postDate,venue from Event where id=$1)" +
             ", ep as (select startBoundary,endBoundary from EventPart where event=(select e.finalEvent from e))" +
-            " select name,label,comment,site.(name,dailyTransport),arrivalSite.(name,dailyTransport),item.(name,label,perResourceLabel,code,temporal,family.(code,name,label,ord),capacity,share_mate,ord),date,startTime,endTime,timeline?.(site,item,startTime,endTime),cancelled,resource,buddha.hyt" +
+            " select name,label,comment,site.(name,terminal),arrivalSite.(name,terminal),item.(name,label,perResourceLabel,code,temporal,family.(code,name,label,ord),capacity,share_mate,ord),date,startTime,endTime,timeline?.(site,item,startTime,endTime),cancelled,resource,buddha.hyt" +
             // Availability: for each ScheduledResource sr, LATERAL computes availability once, then distributes to 4 categories
             ",(select [" +
             "sum(!sr.configuration.(allowsMale and allowsLay) ? 0 : lat.avail)," +       // lay male

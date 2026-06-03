@@ -1808,7 +1808,6 @@
     "branch": "boolean",
     "code": "string",
     "country": "Country",
-    "dailyTransport": "boolean",
     "event": "Event",
     "forceSoldout": "boolean",
     "groupName": "string",
@@ -1824,6 +1823,7 @@
     "online": "boolean",
     "ord": "integer",
     "organization": "Organization",
+    "terminal": "boolean",
     "topLabel": "Label"
   },
   "SiteItemFamily": {
