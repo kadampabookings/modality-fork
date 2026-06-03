@@ -161,6 +161,11 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                     " from Rate r, e where (" +
                     // Sites dedicated to this event
                     "r.site.event = e.finalEvent" +
+                    // or rates explicitly bound to this event. These are intentionally event-specific
+                    // (e.g. post-event tour transport dated on the event's postDate, the day after endDate),
+                    // so they must load regardless of site and of the in-event-date guard below — which only
+                    // spans startDate..endDate and would otherwise drop them.
+                    " or r.event = e.finalEvent" +
                     // or global sites of the organization with scheduled items over the period of the event
                     " or r.site.(event = null and (id=e.venue or organization=e.organization or organization=e.venue_organization) and (!r.item.temporal and !r.perDay or exists(select ScheduledItem si where si.site=r.site and si.item=r.item and si.date>=e.startDate and si.date<=e.endDate)))" +
                     "    and (r.event = null or r.event = e.finalEvent)" +
