@@ -282,8 +282,8 @@ public final class PolicyAggregate {
         return Collections.findFirst(getItemPolicies(KnownItemFamily.ACCOMMODATION), ip -> Booleans.isTrue(ip.getItem().isShare_mate()));
     }
 
-    public List<ItemPolicy> getSurveyItemPolicies() {
-        return getItemPolicies(KnownItemFamily.SURVEY);
+    public List<ItemPolicy> getDiscoveryItemPolicies() {
+        return getItemPolicies(KnownItemFamily.DISCOVERY);
     }
 
     public ItemFamilyPolicy getItemFamilyPolicy(KnownItemFamily knownItemFamily) {

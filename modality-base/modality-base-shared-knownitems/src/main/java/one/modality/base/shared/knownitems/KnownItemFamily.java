@@ -19,7 +19,8 @@ public enum KnownItemFamily {
     CEREMONY("cerem", 16, null),
     EXAM("exam", 4, null),
     DAY_VISITOR_FEE("dayfee", 5, null),
-    SURVEY("survey", 22, null),
+    DISCOVERY("survey", 22, null),
+    TOUR("tour", 19, null),
     UNKNOWN(null, -1, null);
 
     private final String code;
