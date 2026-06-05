@@ -21,6 +21,7 @@ public interface ItemPolicy extends Entity,
     String genderInfoRequired = "genderRequired";
     String minOccupancy = "minOccupancy";
     String forceSoldOut = "forceSoldOut";
+    String autoBookItem = "autoBookItem";
 
     default void setScope(Object value) {
         setForeignField(scope, value);
@@ -112,6 +113,24 @@ public interface ItemPolicy extends Entity,
 
     default Boolean isSoldOutForced() {
         return getBooleanFieldValue(forceSoldOut);
+    }
+
+    default void setAutoBookItem(Object value) {
+        setForeignField(autoBookItem, value);
+    }
+
+    default EntityId getAutoBookItemId() {
+        return getForeignEntityId(autoBookItem);
+    }
+
+    /**
+     * Returns the item that is automatically booked whenever this policy's item is booked (ex: a
+     * pre-erected tent or campervan-sharing option auto-books a Camping pitch). The booking form
+     * adds it on the same nights; pricing then treats both lines normally. Note the direction: this
+     * is "booking me also books X", not the precondition sense of {@link Rate#getWithItem()}.
+     */
+    default Item getAutoBookItem() {
+        return getForeignEntity(autoBookItem);
     }
 
 }
