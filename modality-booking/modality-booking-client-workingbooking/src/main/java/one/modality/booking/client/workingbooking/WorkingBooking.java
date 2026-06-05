@@ -90,7 +90,7 @@ public final class WorkingBooking {
 
     // This is the constructor to call for working on existing bookings in the context of payments (ex: /pay-order/:docId)
     public WorkingBooking(PolicyAggregate policyAggregate, DocumentAggregate initialDocumentAggregate, Object paymentRequestedByUserDocumentId) {
-        this(policyAggregate, initialDocumentAggregate, null, paymentRequestedByUserDocumentId);
+        this(policyAggregate, initialDocumentAggregate, AttendanceMode.ONLINE, paymentRequestedByUserDocumentId);
     }
 
     private WorkingBooking(PolicyAggregate policyAggregate, DocumentAggregate initialDocumentAggregate, AttendanceMode attendanceMode, Object paymentRequestedByUserDocumentId) {
@@ -258,10 +258,28 @@ public final class WorkingBooking {
             documentLine.setSite(site);
             documentLine.setItem(item);
             documentLine.setPool(pool);
+            documentLine.setBreakfastIncluded(computeBreakfastIncluded(site, item)); // captured for the breakfast credit
             integrateNewDocumentEvent(new AddDocumentLineEvent(documentLine, allocate), false);
             lastestDocumentAggregate = null;
         }
         return documentLine;
+    }
+
+    /**
+     * Computes the effective "breakfast included" flag to capture (read-only) on a freshly booked line.
+     * Sharing options carry it on the item (set explicitly to true or false); a charged accommodation
+     * (room owner) leaves the item null and derives it from whether any of its rates include breakfast.
+     * Returns false for non-accommodation items (it doesn't apply). The price algorithm later reads
+     * documentLine.breakfastIncluded to forgive prepaid breakfasts.
+     */
+    private Boolean computeBreakfastIncluded(Site site, Item item) {
+        Boolean itemFlag = item.isBreakfastIncluded();
+        if (itemFlag != null)
+            return itemFlag; // sharing option (true = sharing room, false = sharing tent)
+        if (item.getKnownItemFamily() == KnownItemFamily.ACCOMMODATION && policyAggregate != null)
+            return policyAggregate.filterRatesStreamOfSiteAndItem(site, item)
+                .anyMatch(r -> Boolean.TRUE.equals(r.isBreakfastIncluded())); // room owner: ask the rate
+        return false;
     }
 
     public void unbookItem(Site site, Item item) {

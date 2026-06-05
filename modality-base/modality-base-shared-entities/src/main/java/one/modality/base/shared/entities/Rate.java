@@ -50,6 +50,7 @@ public interface Rate extends
     String discoveryReduced_price = "discoveryReduced_price";
     String discoveryReduced_discount = "discoveryReduced_discount";
     String earlyBird = "earlyBird";
+    String breakfastIncluded = "breakfastIncluded";
     String unemployed_price = "unemployed_price";
     String unemployed_discount = "unemployed_discount";
     String withItem = "withItem";
@@ -342,6 +343,20 @@ public interface Rate extends
 
     default Boolean isEarlyBird() {
         return getBooleanFieldValue(earlyBird);
+    }
+
+    default void setBreakfastIncluded(Boolean value) {
+        setFieldValue(breakfastIncluded, value);
+    }
+
+    /**
+     * Returns whether the price of this (charged) accommodation rate includes a breakfast for its
+     * holder — the room owner case. Sharing options carry this on {@link Item#isBreakfastIncluded()}
+     * instead (they have no rate). The effective value is captured onto
+     * {@link DocumentLine#isBreakfastIncluded()} when the line is booked.
+     */
+    default Boolean isBreakfastIncluded() {
+        return getBooleanFieldValue(breakfastIncluded);
     }
 
     default void setUnemployedPrice(Integer value) {

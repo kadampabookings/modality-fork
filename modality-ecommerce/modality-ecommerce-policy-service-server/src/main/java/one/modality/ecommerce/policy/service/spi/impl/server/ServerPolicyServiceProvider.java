@@ -26,7 +26,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
     private static final String SCHEDULED_ITEMS_DQL_BASE =
             "with e as (select coalesce(repeatedEvent,id) as finalEvent,startDate,endDate,preDate,postDate,venue from Event where id=$1)" +
             ", ep as (select startBoundary,endBoundary from EventPart where event=(select e.finalEvent from e))" +
-            " select name,label,comment,site.(name,terminal),arrivalSite.(name,terminal),item.(name,label,perResourceLabel,code,temporal,family.(code,name,label,ord),capacity,share_mate,ord),date,startTime,endTime,timeline?.(site,item,startTime,endTime),cancelled,resource,buddha.hyt" +
+            " select name,label,comment,site.(name,terminal),arrivalSite.(name,terminal),item.(name,label,perResourceLabel,code,temporal,family.(code,name,label,ord),capacity,share_mate,breakfastIncluded,ord),date,startTime,endTime,timeline?.(site,item,startTime,endTime),cancelled,resource,buddha.hyt" +
             // Availability: for each ScheduledResource sr, LATERAL computes availability once, then distributes to 4 categories
             ",(select [" +
             "sum(!sr.configuration.(allowsMale and allowsLay) ? 0 : lat.avail)," +       // lay male
@@ -142,7 +142,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                     , DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
                     "with e as (select coalesce(repeatedEvent,id) as finalEvent,coalesce(repeatedEvent?.type,type) as finalEventType,organization,venue.organization as venue_organization from Event where id=$1)" +
                     " select scope.(organization,site,eventType,event)" +
-                    ",item.(name,label,code,temporal,family.(code,name,label,ord),capacity,share_mate,ord)" +
+                    ",item.(name,label,code,temporal,family.(code,name,label,ord),capacity,share_mate,breakfastIncluded,ord)" +
                     ",applicableToInPerson,applicableToOnline,descriptionLabel,noticeLabel,minDay,default,genderInfoRequired,earlyAccommodationAllowed,lateAccommodationAllowed,minOccupancy,forceSoldOut" +
                     " from ItemPolicy ip, e where ip.scope.(" +
                     " (organization = e.organization or organization=e.venue_organization)" +
@@ -154,7 +154,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                     // 9 - Loading rates (of this event or of the repeated event if set)
                     , DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
                     "with e as (select coalesce(repeatedEvent,id) as finalEvent,coalesce(repeatedEvent?.type,type) as finalEventType,organization,startDate,endDate,venue,venue.organization as venue_organization from Event where id=$1)" +
-                    " select site,item,withItem,earlyBird,price,perDay,perPerson,applicableToInPerson,applicableToOnline,facilityFee_price,facilityFee_discount,startDate,endDate,onDate,offDate,minDeposit" +
+                    " select site,item,withItem,earlyBird,breakfastIncluded,price,perDay,perPerson,applicableToInPerson,applicableToOnline,facilityFee_price,facilityFee_discount,startDate,endDate,onDate,offDate,minDeposit" +
                     ",cutoffDate,minDeposit2" +
                     ",age1_max,age1_price,age1_discount,age2_max,age2_price,age2_discount" +
                     ",resident_price,resident_discount,resident2_price,resident2_discount" +

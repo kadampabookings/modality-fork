@@ -25,6 +25,7 @@ public interface Item extends
     String imageUrl = "imageUrl";
     String language = "language";
     String temporal = "temporal";
+    String breakfastIncluded = "breakfastIncluded";
 
     default void setFamily(Object value) {
         setForeignField(family, value);
@@ -108,6 +109,22 @@ public interface Item extends
      */
     default Boolean isTemporal() {
         return getBooleanFieldValue(temporal);
+    }
+
+    default void setBreakfastIncluded(Boolean value) {
+        setFieldValue(breakfastIncluded, value);
+    }
+
+    /**
+     * Returns whether this accommodation item's price includes a breakfast for its holder.
+     * Used by the price algorithm: a breakfast is granted (free) per accommodation night whose
+     * item has breakfastIncluded = true. Defaults to true for accommodation; set to false for
+     * sharing items that don't include breakfast (ex: sharing tent, as opposed to sharing room).
+     *
+     * @return true if the accommodation price includes the holder's breakfast
+     */
+    default Boolean isBreakfastIncluded() {
+        return getBooleanFieldValue(breakfastIncluded);
     }
 
 

@@ -16,6 +16,10 @@ public final class AddDocumentLineEvent extends AbstractDocumentLineEvent {
     private final Object itemPrimaryKey;
     private final Object poolPrimaryKey;
     private final boolean allocate; // must be set to true to ask the database raising a sold-out exception when no resource is available
+    // Effective "breakfast included" captured when the line is booked (see WorkingBooking.bookItem):
+    // the item value for sharing options, else the room owner's rate value. Read-only, drives the
+    // breakfast credit in the price algorithm. Null for lines where it doesn't apply (ex: non-accommodation).
+    private final Boolean breakfastIncluded;
 
     public AddDocumentLineEvent(DocumentLine documentLine, boolean allocate) {
         super(documentLine);
@@ -23,14 +27,16 @@ public final class AddDocumentLineEvent extends AbstractDocumentLineEvent {
         itemPrimaryKey = Entities.getPrimaryKey(documentLine.getItem());
         poolPrimaryKey = Entities.getPrimaryKey(documentLine.getPool());
         this.allocate = allocate;
+        this.breakfastIncluded = documentLine.isBreakfastIncluded();
     }
 
-    public AddDocumentLineEvent(Object documentPrimaryKey, Object documentLinePrimaryKey, Object sitePrimaryKey, Object itemPrimaryKey, Object poolPrimaryKey, boolean allocate) {
+    public AddDocumentLineEvent(Object documentPrimaryKey, Object documentLinePrimaryKey, Object sitePrimaryKey, Object itemPrimaryKey, Object poolPrimaryKey, boolean allocate, Boolean breakfastIncluded) {
         super(documentPrimaryKey, documentLinePrimaryKey);
         this.sitePrimaryKey = sitePrimaryKey;
         this.itemPrimaryKey = itemPrimaryKey;
         this.poolPrimaryKey = poolPrimaryKey;
         this.allocate = allocate;
+        this.breakfastIncluded = breakfastIncluded;
     }
 
     public Object getItemPrimaryKey() {
@@ -47,6 +53,10 @@ public final class AddDocumentLineEvent extends AbstractDocumentLineEvent {
 
     public boolean isAllocate() {
         return allocate;
+    }
+
+    public Boolean isBreakfastIncluded() {
+        return breakfastIncluded;
     }
 
     @Override
@@ -67,5 +77,6 @@ public final class AddDocumentLineEvent extends AbstractDocumentLineEvent {
         documentLine.setItem(isForSubmit() ? itemPrimaryKey : entityStore.getOrCreateEntity(Item.class, itemPrimaryKey, true)); // Should be found from PolicyAggregate
         documentLine.setPool(isForSubmit() ? poolPrimaryKey : entityStore.getOrCreateEntity(Pool.class, poolPrimaryKey, true));
         documentLine.setAllocate(allocate);
+        documentLine.setBreakfastIncluded(breakfastIncluded);
     }
 }

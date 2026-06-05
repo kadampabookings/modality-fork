@@ -549,6 +549,7 @@
     "allocate": "boolean",
     "arrivalSite": "Site",
     "backend_released": "boolean",
+    "breakfastIncluded": "boolean",
     "cancellationDate": "Temporal.Instant",
     "cancelled": "boolean",
     "cleaned": "boolean",
@@ -984,6 +985,7 @@
   },
   "Item": {
     "id": 35,
+    "breakfastIncluded": "boolean",
     "capacity": "integer",
     "code": "string",
     "deprecated": "boolean",
@@ -1645,6 +1647,7 @@
     "applicableToOnline": "boolean",
     "arrivalSite": "Site",
     "arrivingOrLeaving": "boolean",
+    "breakfastIncluded": "boolean",
     "comment": "string",
     "commentLabel": "Label",
     "currency": "Currency",

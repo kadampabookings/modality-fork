@@ -5,6 +5,7 @@ import dev.webfx.platform.util.Objects;
 import dev.webfx.platform.util.collection.Collections;
 import dev.webfx.platform.util.time.Times;
 import one.modality.base.shared.entities.Document;
+import one.modality.base.shared.entities.DocumentLine;
 import one.modality.base.shared.entities.Item;
 import one.modality.base.shared.entities.Person;
 import one.modality.base.shared.entities.Rate;
@@ -108,11 +109,48 @@ public final class SiteItemBill {
             if (price_custom != null)
                 price = Math.min(price, price_custom.intValue());
         }
+        // KBS3 breakfast credit: when this is the breakfast bill, forgive the breakfasts already
+        // paid for through accommodation nights that include breakfast (general rule + room/tent sharing).
+        price = applyBreakfastCredit(documentBill, price);
         if (minDeposit)
             this.minDeposit = price;
         else
             this.totalPrice = price;
         return price;
+    }
+
+    /**
+     * Applies the breakfast credit to this bill's computed price when this is the breakfast bill
+     * (item code "BKF"). A breakfast is free for each accommodation night whose booking includes
+     * breakfast: we forgive min(B, N), where B is the number of breakfasts in this bill and N the
+     * number of accommodation nights in the document whose line was captured with breakfastIncluded
+     * (see {@link DocumentLine#isBreakfastIncluded()}, set at booking from the item or the owner's rate).
+     * <p>
+     * No event gating is needed: KBS2 bookings capture breakfastIncluded = false (their rates and
+     * sharing items are false), so N stays 0 and nothing is forgiven. The reduction is proportional
+     * to B, so with the usual uniform breakfast price it forgives exactly `forgiven` breakfasts.
+     */
+    private int applyBreakfastCredit(DocumentBill documentBill, int price) {
+        if (price <= 0 || attendanceBills.isEmpty())
+            return price;
+        Item breakfastItem = attendanceBills.get(0).getDocumentLine().getItem();
+        if (breakfastItem == null || !"BKF".equals(breakfastItem.getCode())) // not the breakfast bill
+            return price;
+        int breakfasts = attendanceBills.size();
+        int forgiven = Math.min(breakfasts, countBreakfastIncludedNights(documentBill));
+        if (forgiven <= 0)
+            return price;
+        return price - price * forgiven / breakfasts; // proportional credit (integer arithmetic)
+    }
+
+    /** Counts the document's nights whose line was captured with breakfastIncluded = true. */
+    private static int countBreakfastIncludedNights(DocumentBill documentBill) {
+        int nights = 0;
+        for (SiteItemBill bill : documentBill.getSiteItemBills())
+            for (AttendanceBill ab : bill.getAttendanceBills())
+                if (Booleans.isTrue(ab.getDocumentLine().isBreakfastIncluded()))
+                    nights++;
+        return nights;
     }
 
     private int computeBlockPriceWithRates(DocumentBill documentBill, boolean minDeposit, boolean perDayRates) {

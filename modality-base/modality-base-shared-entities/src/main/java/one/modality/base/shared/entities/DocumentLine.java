@@ -41,6 +41,7 @@ public interface DocumentLine extends
     String cleaned = "cleaned";
     String bedNumber = "bedNumber";
     String pool = "pool";
+    String breakfastIncluded = "breakfastIncluded";
 
     default void setStartDate(LocalDate value) {
         setFieldValue(startDate, value);
@@ -261,6 +262,23 @@ public interface DocumentLine extends
 
     default Pool getPool() {
         return getForeignEntity(pool);
+    }
+
+    default void setBreakfastIncluded(Boolean value) {
+        setFieldValue(breakfastIncluded, value);
+    }
+
+    /**
+     * Returns the effective "breakfast included" value for this accommodation line, captured from
+     * item.breakfastIncluded when the item is set, and frozen by the share-linking action (which
+     * swaps a sharing item for the booker's accommodation item for allocation purposes only, and
+     * must NOT recapture this flag). The price algorithm reads this (falling back to
+     * item.breakfastIncluded when null) to count how many breakfasts an attendee has pre-paid.
+     *
+     * @return true if this booked accommodation line includes the holder's breakfast
+     */
+    default Boolean isBreakfastIncluded() {
+        return getBooleanFieldValue(breakfastIncluded);
     }
 
 }
