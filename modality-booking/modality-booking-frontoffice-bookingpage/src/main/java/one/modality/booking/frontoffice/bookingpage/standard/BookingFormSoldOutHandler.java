@@ -364,44 +364,43 @@ public class BookingFormSoldOutHandler {
                 o.getAvailability() == HasAccommodationSelectionSection.AvailabilityStatus.SOLD_OUT ? 1 : 0)
             .thenComparingInt(HasAccommodationSelectionSection.AccommodationOption::getPricePerNight));
 
-        // Add Share Accommodation option if configured in the policy
-        ItemPolicy sharingAccommodationItemPolicy = policy.getSharingAccommodationItemPolicy();
-        if (sharingAccommodationItemPolicy != null) {
+        // Add a Share Accommodation option per share-mate accommodation type configured
+        // in the policy (one card each, e.g. "Sharing a room" vs "Sharing a tent").
+        for (ItemPolicy sharingAccommodationItemPolicy : policy.getSharingAccommodationItemPolicies()) {
             Item sharingItem = sharingAccommodationItemPolicy.getItem();
-            if (sharingItem != null) {
-                // Get rate for pricing
-                Rate shareRate = policy.filterDailyRatesStreamOfSiteAndItem(null, sharingItem)
-                    .findFirst()
-                    .orElse(null);
-                int sharePricePerNight = shareRate != null && shareRate.getPrice() != null ? shareRate.getPrice() : 0;
+            if (sharingItem == null) continue;
+            // Get rate for pricing
+            Rate shareRate = policy.filterDailyRatesStreamOfSiteAndItem(null, sharingItem)
+                .findFirst()
+                .orElse(null);
+            int sharePricePerNight = shareRate != null && shareRate.getPrice() != null ? shareRate.getPrice() : 0;
 
-                // Read early/late arrival restrictions from the sharing item policy
-                boolean shareEarlyAllowed = !Boolean.FALSE.equals(sharingAccommodationItemPolicy.isEarlyAccommodationAllowed());
-                boolean shareLateAllowed = !Boolean.FALSE.equals(sharingAccommodationItemPolicy.isLateAccommodationAllowed());
+            // Read early/late arrival restrictions from the sharing item policy
+            boolean shareEarlyAllowed = !Boolean.FALSE.equals(sharingAccommodationItemPolicy.isEarlyAccommodationAllowed());
+            boolean shareLateAllowed = !Boolean.FALSE.equals(sharingAccommodationItemPolicy.isLateAccommodationAllowed());
 
-                // Pre-calculate sharing accommodation price using WorkingBooking engine
-                int sharePreCalculatedPrice = PreviewPriceCalculator.calculateAccommodationPrice(
-                    policy, sharingItem, arrivalDate, departureDate, AttendanceMode.IN_PERSON);
+            // Pre-calculate sharing accommodation price using WorkingBooking engine
+            int sharePreCalculatedPrice = PreviewPriceCalculator.calculateAccommodationPrice(
+                policy, sharingItem, arrivalDate, departureDate, AttendanceMode.IN_PERSON);
 
-                HasAccommodationSelectionSection.AccommodationOption shareAccommodation = new HasAccommodationSelectionSection.AccommodationOption(
-                    sharingItem.getPrimaryKey(),
-                    sharingItem,
-                    sharingItem.getName() != null ? sharingItem.getName() : I18n.getI18nText(BookingPageI18nKeys.ShareAccommodation),
-                    I18n.getI18nText(BookingPageI18nKeys.ShareAccommodationDescription),
-                    sharePricePerNight,
-                    HasAccommodationSelectionSection.AvailabilityStatus.AVAILABLE,
-                    HasAccommodationSelectionSection.ConstraintType.NONE,
-                    null,
-                    0,
-                    false,          // isDayVisitor = false
-                    null,
-                    true,           // perPerson
-                    sharePreCalculatedPrice,
-                    shareEarlyAllowed,
-                    shareLateAllowed
-                );
-                options.add(shareAccommodation);
-            }
+            HasAccommodationSelectionSection.AccommodationOption shareAccommodation = new HasAccommodationSelectionSection.AccommodationOption(
+                sharingItem.getPrimaryKey(),
+                sharingItem,
+                sharingItem.getName() != null ? sharingItem.getName() : I18n.getI18nText(BookingPageI18nKeys.ShareAccommodation),
+                I18n.getI18nText(BookingPageI18nKeys.ShareAccommodationDescription),
+                sharePricePerNight,
+                HasAccommodationSelectionSection.AvailabilityStatus.AVAILABLE,
+                HasAccommodationSelectionSection.ConstraintType.NONE,
+                null,
+                0,
+                false,          // isDayVisitor = false
+                null,
+                true,           // perPerson
+                sharePreCalculatedPrice,
+                shareEarlyAllowed,
+                shareLateAllowed
+            );
+            options.add(shareAccommodation);
         }
 
         // Always add Day Visitor option at the end as a fallback

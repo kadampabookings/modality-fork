@@ -282,6 +282,18 @@ public final class PolicyAggregate {
         return Collections.findFirst(getItemPolicies(KnownItemFamily.ACCOMMODATION), ip -> Booleans.isTrue(ip.getItem().isShare_mate()));
     }
 
+    /**
+     * All share-mate accommodation ItemPolicies (item.share_mate == true), in policy
+     * order. The booking form surfaces one "Share Accommodation" option per entry, so a
+     * sharer can pick the type they're joining (e.g. "Sharing a room" vs "Sharing a
+     * pre-erected tent"), each with its own rate/constraints.
+     */
+    public List<ItemPolicy> getSharingAccommodationItemPolicies() {
+        return getItemPolicies(KnownItemFamily.ACCOMMODATION).stream()
+            .filter(ip -> Booleans.isTrue(ip.getItem().isShare_mate()))
+            .collect(Collectors.toList());
+    }
+
     public List<ItemPolicy> getDiscoveryItemPolicies() {
         return getItemPolicies(KnownItemFamily.DISCOVERY);
     }

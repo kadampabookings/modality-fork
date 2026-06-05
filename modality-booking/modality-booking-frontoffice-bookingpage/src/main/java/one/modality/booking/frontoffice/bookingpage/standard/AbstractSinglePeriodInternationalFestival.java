@@ -1434,58 +1434,60 @@ public abstract class AbstractSinglePeriodInternationalFestival implements Stand
     protected void addShareAccommodationOption(PolicyAggregate policyAggregate, LocalDate arrivalDate, LocalDate departureDate) {
         if (accommodationSection == null) return;
 
-        ItemPolicy sharingItemPolicy = policyAggregate.getSharingAccommodationItemPolicy();
-        if (sharingItemPolicy == null) return;
+        // One Share Accommodation option per share-mate accommodation ItemPolicy — each
+        // represents joining someone else's <room/tent/…> booking, with its own
+        // rate/constraints. (Previously only the first share-mate item was promoted.)
+        for (ItemPolicy sharingItemPolicy : policyAggregate.getSharingAccommodationItemPolicies()) {
+            Item sharingItem = sharingItemPolicy.getItem();
+            if (sharingItem == null) continue;
 
-        Item sharingItem = sharingItemPolicy.getItem();
-        if (sharingItem == null) return;
+            // Calculate price with breakdown
+            AccommodationPriceResult priceResult = calculateShareAccommodationPriceWithBreakdown(policyAggregate, sharingItem, arrivalDate, departureDate);
 
-        // Calculate price with breakdown
-        AccommodationPriceResult priceResult = calculateShareAccommodationPriceWithBreakdown(policyAggregate, sharingItem, arrivalDate, departureDate);
+            // Store the breakdown
+            accommodationSection.setBreakdownForOption(sharingItem.getPrimaryKey(), priceResult.breakdown);
 
-        // Store the breakdown
-        accommodationSection.setBreakdownForOption(sharingItem.getPrimaryKey(), priceResult.breakdown);
-
-        // Try to find rate for this item
-        Rate itemRate = policyAggregate.filterDailyRatesStreamOfSiteAndItem(null, sharingItem)
-            .findFirst()
-            .orElseGet(() -> policyAggregate.getDailyRatesStream()
-                .filter(r -> r.getItem() != null && Entities.samePrimaryKey(r.getItem(), sharingItem))
+            // Try to find rate for this item
+            Rate itemRate = policyAggregate.filterDailyRatesStreamOfSiteAndItem(null, sharingItem)
                 .findFirst()
-                .orElse(null));
-        int pricePerNight = itemRate != null && itemRate.getPrice() != null ? itemRate.getPrice() : 0;
+                .orElseGet(() -> policyAggregate.getDailyRatesStream()
+                    .filter(r -> r.getItem() != null && Entities.samePrimaryKey(r.getItem(), sharingItem))
+                    .findFirst()
+                    .orElse(null));
+            int pricePerNight = itemRate != null && itemRate.getPrice() != null ? itemRate.getPrice() : 0;
 
-        HasAccommodationSelectionSection.ConstraintType constraintType = HasAccommodationSelectionSection.ConstraintType.NONE;
-        String constraintLabel = null;
-        int minNights = 0;
-        if (sharingItemPolicy.getMinDay() != null && sharingItemPolicy.getMinDay() > 0) {
-            constraintType = HasAccommodationSelectionSection.ConstraintType.MIN_NIGHTS;
-            minNights = sharingItemPolicy.getMinDay();
-            constraintLabel = I18n.getI18nText(BookingPageI18nKeys.MinNights, minNights);
+            HasAccommodationSelectionSection.ConstraintType constraintType = HasAccommodationSelectionSection.ConstraintType.NONE;
+            String constraintLabel = null;
+            int minNights = 0;
+            if (sharingItemPolicy.getMinDay() != null && sharingItemPolicy.getMinDay() > 0) {
+                constraintType = HasAccommodationSelectionSection.ConstraintType.MIN_NIGHTS;
+                minNights = sharingItemPolicy.getMinDay();
+                constraintLabel = I18n.getI18nText(BookingPageI18nKeys.MinNights, minNights);
+            }
+
+            boolean earlyArrivalAllowed = !Boolean.FALSE.equals(sharingItemPolicy.isEarlyAccommodationAllowed());
+            boolean lateDepartureAllowed = !Boolean.FALSE.equals(sharingItemPolicy.isLateAccommodationAllowed());
+
+            HasAccommodationSelectionSection.AccommodationOption option = new HasAccommodationSelectionSection.AccommodationOption(
+                sharingItem.getPrimaryKey(),
+                sharingItem,
+                sharingItem.getName() != null ? sharingItem.getName() : I18n.getI18nText(BookingPageI18nKeys.ShareAccommodation),
+                "",
+                pricePerNight,
+                HasAccommodationSelectionSection.AvailabilityStatus.AVAILABLE,
+                constraintType,
+                constraintLabel,
+                minNights,
+                false,
+                null,
+                true,
+                priceResult.totalPrice,
+                earlyArrivalAllowed,
+                lateDepartureAllowed
+            );
+
+            accommodationSection.addAccommodationOption(option);
         }
-
-        boolean earlyArrivalAllowed = !Boolean.FALSE.equals(sharingItemPolicy.isEarlyAccommodationAllowed());
-        boolean lateDepartureAllowed = !Boolean.FALSE.equals(sharingItemPolicy.isLateAccommodationAllowed());
-
-        HasAccommodationSelectionSection.AccommodationOption option = new HasAccommodationSelectionSection.AccommodationOption(
-            sharingItem.getPrimaryKey(),
-            sharingItem,
-            sharingItem.getName() != null ? sharingItem.getName() : I18n.getI18nText(BookingPageI18nKeys.ShareAccommodation),
-            "",
-            pricePerNight,
-            HasAccommodationSelectionSection.AvailabilityStatus.AVAILABLE,
-            constraintType,
-            constraintLabel,
-            minNights,
-            false,
-            null,
-            true,
-            priceResult.totalPrice,
-            earlyArrivalAllowed,
-            lateDepartureAllowed
-        );
-
-        accommodationSection.addAccommodationOption(option);
     }
 
     /**
