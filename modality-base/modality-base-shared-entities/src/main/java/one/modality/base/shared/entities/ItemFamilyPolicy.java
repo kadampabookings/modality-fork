@@ -22,6 +22,9 @@ public interface ItemFamilyPolicy extends Entity,
     String prerequisiteDescriptionLabel = "prerequisiteDescriptionLabel";
     String prerequisiteConfirmationLabel = "prerequisiteConfirmationLabel";
     String includedByDefault = "includedByDefault";
+    String childAllowed = "childAllowed";
+    String youngAdultAllowed = "youngAdultAllowed";
+    String adultAllowed = "adultAllowed";
 
     default void setScope(Object value) {
         setForeignField(scope, value);
@@ -133,6 +136,35 @@ public interface ItemFamilyPolicy extends Entity,
 
     default Boolean isIncludedByDefault() {
         return getBooleanFieldValue(includedByDefault);
+    }
+
+    // Age eligibility — who may book this family's options. Nullable: an explicit value is an admin
+    // override; null means the booking app applies a hardcoded per-family default (e.g. only adults
+    // book Parking). The app maps the booker's age to a category (child 0-15, young adult 16-17,
+    // adult 18+) and hides this option family when the resolved value for that category is false.
+
+    default void setChildAllowed(Boolean value) {
+        setFieldValue(childAllowed, value);
+    }
+
+    default Boolean isChildAllowed() {
+        return getBooleanFieldValue(childAllowed);
+    }
+
+    default void setYoungAdultAllowed(Boolean value) {
+        setFieldValue(youngAdultAllowed, value);
+    }
+
+    default Boolean isYoungAdultAllowed() {
+        return getBooleanFieldValue(youngAdultAllowed);
+    }
+
+    default void setAdultAllowed(Boolean value) {
+        setFieldValue(adultAllowed, value);
+    }
+
+    default Boolean isAdultAllowed() {
+        return getBooleanFieldValue(adultAllowed);
     }
 
 }

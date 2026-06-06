@@ -1021,8 +1021,10 @@
   },
   "ItemFamilyPolicy": {
     "id": 149,
+    "adultAllowed": "boolean",
     "applicableToInPerson": "boolean",
     "applicableToOnline": "boolean",
+    "childAllowed": "boolean",
     "dayVisitorDinnerAllowed": "boolean",
     "eventPhaseCoverage1": "EventPhaseCoverage",
     "eventPhaseCoverage2": "EventPhaseCoverage",
@@ -1033,7 +1035,8 @@
     "noticeLabel": "Label",
     "prerequisiteConfirmationLabel": "Label",
     "prerequisiteDescriptionLabel": "Label",
-    "scope": "PolicyScope"
+    "scope": "PolicyScope",
+    "youngAdultAllowed": "boolean"
   },
   "ItemPolicy": {
     "id": 143,
