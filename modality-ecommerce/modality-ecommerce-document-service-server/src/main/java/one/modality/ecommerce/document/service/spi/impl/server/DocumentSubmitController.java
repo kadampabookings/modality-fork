@@ -6,6 +6,7 @@ import dev.webfx.stack.orm.entity.Entities;
 import dev.webfx.stack.orm.entity.EntityStore;
 import one.modality.base.shared.entities.Document;
 import one.modality.base.shared.entities.Event;
+import one.modality.base.shared.entities.EventState;
 import one.modality.base.shared.entities.ScheduledItem;
 import one.modality.ecommerce.document.service.SubmitDocumentChangesResult;
 
@@ -43,6 +44,30 @@ final class DocumentSubmitController {
         // Getting the event queue if already exists
         DocumentSubmitEventQueue eventQueue = eventQueues.get(eventPrimaryKey);
         if (eventQueue != null) // If the event queue already exists, we can proceed with the request right now
+            return executeOrEnqueueSubmitDocumentChanges(request, eventQueue);
+
+        // No event queue exists yet for this event (an event queue is only ever created for OPEN
+        // events — see below). Before creating one, we check the event state: the booking queue is
+        // only relevant while the event is OPEN (managing the booking-opening rush). For any other
+        // state (e.g. TESTING), we bypass the queue entirely and process the submission immediately —
+        // no bookingProcessStart wait, no serialization, and no queue is created. This lets testers
+        // book freely while the event is still being prepared, without interfering with (or
+        // prematurely creating) the real booking-opening queue.
+        return request.updateStore().getOrCreateEntity(Event.class, eventPrimaryKey)
+            .<Event>onExpressionLoaded(Event.state)
+            .compose(event -> {
+                if (event.getState() != EventState.OPEN) {
+                    Console.log("Event " + eventPrimaryKey + " is not OPEN (state = " + event.getState() + ") - bypassing event queue, processing submission immediately");
+                    return ServerDocumentServiceProvider.submitDocumentChangesNow(request);
+                }
+                return createOrGetEventQueueAndProcess(request, eventPrimaryKey);
+            });
+    }
+
+    private static Future<SubmitDocumentChangesResult> createOrGetEventQueueAndProcess(DocumentSubmitRequest request, Object eventPrimaryKey) {
+        // A queue may have been created concurrently between our state check and now.
+        DocumentSubmitEventQueue eventQueue = eventQueues.get(eventPrimaryKey);
+        if (eventQueue != null)
             return executeOrEnqueueSubmitDocumentChanges(request, eventQueue);
 
         // Otherwise, we first need to create the event queue (or wait if it's already being created)
