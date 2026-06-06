@@ -792,6 +792,7 @@
     "termsUrlFr": "string",
     "termsUrlPt": "string",
     "theme": "EventTheme",
+    "themeBaseColor": "string",
     "timezone": "string",
     "type": "EventType",
     "uri": "string",
