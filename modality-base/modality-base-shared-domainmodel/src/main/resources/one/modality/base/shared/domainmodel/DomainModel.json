@@ -792,7 +792,10 @@
     "termsUrlFr": "string",
     "termsUrlPt": "string",
     "theme": "EventTheme",
+    "themeAccentColor": "string",
     "themeBaseColor": "string",
+    "themeBorderColor": "string",
+    "themeStrongBackground": "boolean",
     "timezone": "string",
     "type": "EventType",
     "uri": "string",
@@ -845,9 +848,12 @@
   },
   "EventTheme": {
     "id": 163,
+    "accentColor": "string",
     "baseColor": "string",
+    "borderColor": "string",
     "code": "string",
-    "name": "string"
+    "name": "string",
+    "strongBackground": "boolean"
   },
   "EventType": {
     "id": 95,
