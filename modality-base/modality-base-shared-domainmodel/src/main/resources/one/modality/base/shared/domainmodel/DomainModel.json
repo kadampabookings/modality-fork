@@ -844,6 +844,7 @@
   },
   "EventTheme": {
     "id": 163,
+    "baseColor": "string",
     "code": "string",
     "name": "string"
   },
