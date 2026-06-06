@@ -22,6 +22,9 @@ public interface ItemPolicy extends Entity,
     String minOccupancy = "minOccupancy";
     String forceSoldOut = "forceSoldOut";
     String autoBookItem = "autoBookItem";
+    String childAllowed = "childAllowed";
+    String youngAdultAllowed = "youngAdultAllowed";
+    String adultAllowed = "adultAllowed";
 
     default void setScope(Object value) {
         setForeignField(scope, value);
@@ -131,6 +134,34 @@ public interface ItemPolicy extends Entity,
      */
     default Item getAutoBookItem() {
         return getForeignEntity(autoBookItem);
+    }
+
+    // Age eligibility — who may book this policy's item. All default true (null = allowed). The
+    // booking form maps the booker's age to a category (child 0-15, young adult 16-17, adult 18+)
+    // and hides options whose flag for that category is false.
+
+    default void setChildAllowed(Boolean value) {
+        setFieldValue(childAllowed, value);
+    }
+
+    default Boolean isChildAllowed() {
+        return getBooleanFieldValue(childAllowed);
+    }
+
+    default void setYoungAdultAllowed(Boolean value) {
+        setFieldValue(youngAdultAllowed, value);
+    }
+
+    default Boolean isYoungAdultAllowed() {
+        return getBooleanFieldValue(youngAdultAllowed);
+    }
+
+    default void setAdultAllowed(Boolean value) {
+        setFieldValue(adultAllowed, value);
+    }
+
+    default Boolean isAdultAllowed() {
+        return getBooleanFieldValue(adultAllowed);
     }
 
 }

@@ -1037,9 +1037,11 @@
   },
   "ItemPolicy": {
     "id": 143,
+    "adultAllowed": "boolean",
     "applicableToInPerson": "boolean",
     "applicableToOnline": "boolean",
     "autoBookItem": "Item",
+    "childAllowed": "boolean",
     "default": "boolean",
     "descriptionLabel": "Label",
     "earlyAccommodationAllowed": "boolean",
@@ -1050,7 +1052,8 @@
     "minDay": "integer",
     "minOccupancy": "integer",
     "noticeLabel": "Label",
-    "scope": "PolicyScope"
+    "scope": "PolicyScope",
+    "youngAdultAllowed": "boolean"
   },
   "KdmCenter": {
     "id": 121,
