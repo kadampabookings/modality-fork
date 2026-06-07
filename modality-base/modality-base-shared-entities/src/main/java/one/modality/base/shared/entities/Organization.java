@@ -26,9 +26,22 @@ public interface Organization extends
     String privacyUrlLabel = "privacyUrlLabel";
     String timezone = "timezone";
     String metaPixelId = "metaPixelId";
+    String includeTeachingsInAccommodationPricesByDefault = "includeTeachingsInAccommodationPricesByDefault";
 
     default String getMetaPixelId() {
         return getStringFieldValue(metaPixelId);
+    }
+
+    default void setIncludeTeachingsInAccommodationPricesByDefault(Boolean value) {
+        setFieldValue(includeTeachingsInAccommodationPricesByDefault, value);
+    }
+
+    /** Per-centre default for the accommodation pricing-view toggle: when true (the default),
+     *  accommodation cards start with teachings included in the price (combined); when false they
+     *  start showing the accommodation-only price. The booker can flip the toggle either way, and the
+     *  setting applies to all the organisation's events. */
+    default Boolean isIncludeTeachingsInAccommodationPricesByDefault() {
+        return getBooleanFieldValue(includeTeachingsInAccommodationPricesByDefault);
     }
 
     default void setMetaPixelId(String value) {

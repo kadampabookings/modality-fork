@@ -1487,6 +1487,7 @@
       "expr": "id=1 ? image('images/16/organizations/nkt.png') : id=263 ? image('images/16/organizations/isc.png') : type.icon"
     },
     "importIssue": "string",
+    "includeTeachingsInAccommodationPricesByDefault": "boolean",
     "kdmCenter": "KdmCenter",
     "language": "Language",
     "latitude": "float",
