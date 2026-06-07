@@ -30,7 +30,20 @@ final class Kbs2PriceAlgorithm {
 
     public static DocumentBill computeDocumentBill(DocumentAggregate documentAggregate, Stream<DocumentLine> documentLineStream, boolean ignoreLongStayDiscount, boolean update, boolean ignoreEarlyBirdRates, boolean ignoreWithItemRates) {
         Map<SiteItem, SiteItemBill> siteItemBills = new HashMap<>();
+        // Cancelled/abandoned lines are NOT recomputed from attendances (they have none → £0). The
+        // server already set their price_net to the non-refundable charge (compute_document_prices:
+        // "net becomes non refundable"), so use that loaded value directly, keyed by item, and add it
+        // to the total via the DocumentBill. (Restores the KBS2 cancelled-lines pricing.)
+        Map<Object, Integer> cancelledLinesPricesByItem = new HashMap<>();
         documentLineStream.forEach(line -> {
+            if (Boolean.TRUE.equals(line.isCancelled()) || Boolean.TRUE.equals(line.getBooleanFieldValue("abandoned"))) {
+                Item cancelledItem = line.getItem();
+                if (cancelledItem != null) {
+                    Integer priceNet = line.getPriceNet();
+                    cancelledLinesPricesByItem.merge(cancelledItem.getPrimaryKey(), priceNet == null ? 0 : priceNet, Integer::sum);
+                }
+                return;
+            }
             Site site = line.getSite();
             Item item = line.getItem();
             if (item.getRateAliasItem() != null)
@@ -52,7 +65,7 @@ final class Kbs2PriceAlgorithm {
                 siteItemBill.addAttendanceBill(attendanceBill);
             });
         });
-        return new DocumentBill(documentAggregate, siteItemBills.values(), ignoreLongStayDiscount, update, ignoreEarlyBirdRates, ignoreWithItemRates);
+        return new DocumentBill(documentAggregate, siteItemBills.values(), ignoreLongStayDiscount, update, ignoreEarlyBirdRates, ignoreWithItemRates, cancelledLinesPricesByItem);
     }
 
 }
