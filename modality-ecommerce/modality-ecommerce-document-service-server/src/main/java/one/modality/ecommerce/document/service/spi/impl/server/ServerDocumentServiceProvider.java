@@ -26,6 +26,7 @@ import one.modality.ecommerce.document.service.events.book.*;
 import one.modality.ecommerce.document.service.events.registration.MarkDocumentAsArrivedEvent;
 import one.modality.ecommerce.document.service.events.registration.MarkDocumentAsCheckedOutEvent;
 import one.modality.ecommerce.document.service.events.registration.documentline.AllocateDocumentLineEvent;
+import one.modality.ecommerce.document.service.events.registration.documentline.CancelDocumentLineEvent;
 import one.modality.ecommerce.document.service.events.registration.documentline.LinkMateToOwnerDocumentLineEvent;
 import one.modality.ecommerce.document.service.events.registration.documentline.PriceDocumentLineEvent;
 import one.modality.ecommerce.document.service.spi.DocumentServiceProvider;
@@ -138,7 +139,7 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
             new EntityStoreQuery("select document,site,item,price_net,price_minDeposit,price_custom,price_discount" +
                                  ",share_owner,share_owner_mate1Name,share_owner_mate2Name,share_owner_mate3Name,share_owner_mate4Name,share_owner_mate5Name,share_owner_mate6Name,share_owner_mate7Name" +
                                  ",share_mate,share_mate_ownerName,share_mate_ownerDocumentLine,share_mate_ownerPerson" +
-                                 ",resourceConfiguration,pool,allocate,breakfastIncluded" +
+                                 ",resourceConfiguration,pool,allocate,breakfastIncluded,cancelled,read" +
                                  " from DocumentLine where document=$1 and site!=null order by id", docPk),
             // 2 - Loading attendances
             new EntityStoreQuery("select documentLine,date,scheduledItem,videoAccessEnabled from Attendance where present and documentLine.document=$1 order by id", docPk),
@@ -208,6 +209,12 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
                     if (documentEvents == null) return; // document was filtered by access control
                     documentEvents.add(new AddDocumentLineEvent(documentLine, documentLine.isAllocate()));
                     documentEvents.add(new PriceDocumentLineEvent(documentLine));
+                    // Rebuild the cancelled state so the client knows which lines are cancelled (e.g.
+                    // in-person options cancelled when a booking switched to online). Without this the
+                    // client treats them as active and recomputes them to £0; with it, the loaded
+                    // price_net (the non-refundable charge) is used instead.
+                    if (Boolean.TRUE.equals(documentLine.isCancelled()))
+                        documentEvents.add(new CancelDocumentLineEvent(documentLine, true, Boolean.TRUE.equals(documentLine.isRead())));
                     if (documentLine.isShareOwner()) {
                         documentEvents.add(new EditShareOwnerInfoDocumentLineEvent(documentLine, documentLine.getShareOwnerMatesNames()));
                     }
