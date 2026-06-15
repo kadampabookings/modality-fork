@@ -80,7 +80,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                     // 0 - Loading event
                     DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
                         "select name, slug, label, state, type.bookingForm.code, themeBaseColor, themeAccentColor, themeBorderColor, themeStrongBackground, theme.(baseColor,accentColor,borderColor,strongBackground), venue.(name,label,address), startDate, endDate, shortDescriptionLabel, longDescriptionLabel, currency.symbol, organization.(includeTeachingsInAccommodationPricesByDefault, currency.symbol, country.currency.symbol, privacyUrlLabel, timezone), openingDate, bookingProcessStart, timezone, noAccountBooking, inPersonAllowed, onlineAllowed, vodEnabled, earlyBird, teacher.(name,label)" +
-                        ", inPersonTermsLabel,onlineTermsLabel,termsUrlEn" +
+                        ", inPersonTermsLabel.(de,el,en,es,fr,pt,vi,zhs,zht),onlineTermsLabel.(de,el,en,es,fr,pt,vi,zhs,zht),termsUrlEn" +
                         ", date_part('epoch', openingDate - now()) as " + Event.secondsToOpeningDateAtLoadingTime +
                         ", date_part('epoch', coalesce(bookingProcessStart, openingDate) - now()) as " + Event.secondsToBookingProcessStartAtLoadingTime +
                         " from Event" + " where id=$1", eventPk),
