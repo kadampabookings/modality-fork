@@ -25,7 +25,8 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
     // Per-language Label columns to expand wherever a label is shown to the public booker, so the
     // client can localise the text instead of falling back to the raw (English) name. Matches the
     // LABEL_I18N_FIELDS set in kbs3-react/shared/src/utils/label-utils.ts.
-    private static final String LABEL_I18N = "label.(de,el,en,es,fr,pt,vi,zhs,zht)";
+    private static final String LABEL_I18N_COLS = "de,el,en,es,fr,pt,vi,zhs,zht";
+    private static final String LABEL_I18N = "label.(" + LABEL_I18N_COLS + ")"; // for an FK literally named "label"
 
     // CTEs + SELECT fields + availability subquery (via LATERAL) + FROM + common WHERE conditions
     private static final String SCHEDULED_ITEMS_DQL_BASE =
@@ -84,8 +85,8 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                 new Batch<>(new QueryArgument[]{
                     // 0 - Loading event
                     DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
-                        "select name, slug, label, state, type.bookingForm.code, themeBaseColor, themeAccentColor, themeBorderColor, themeStrongBackground, theme.(baseColor,accentColor,borderColor,strongBackground), venue.(name,label,address), startDate, endDate, shortDescriptionLabel, longDescriptionLabel, currency.symbol, organization.(includeTeachingsInAccommodationPricesByDefault, currency.symbol, country.currency.symbol, privacyUrlLabel, timezone), openingDate, bookingProcessStart, timezone, noAccountBooking, inPersonAllowed, onlineAllowed, vodEnabled, earlyBird, teacher.(name,label)" +
-                        ", inPersonTermsLabel,onlineTermsLabel,termsUrlEn" +
+                        "select name, slug, " + LABEL_I18N + ", state, type.bookingForm.code, themeBaseColor, themeAccentColor, themeBorderColor, themeStrongBackground, theme.(baseColor,accentColor,borderColor,strongBackground), venue.(name," + LABEL_I18N + ",address), startDate, endDate, shortDescriptionLabel.(" + LABEL_I18N_COLS + "), longDescriptionLabel.(" + LABEL_I18N_COLS + "), currency.symbol, organization.(includeTeachingsInAccommodationPricesByDefault, currency.symbol, country.currency.symbol, privacyUrlLabel, timezone), openingDate, bookingProcessStart, timezone, noAccountBooking, inPersonAllowed, onlineAllowed, vodEnabled, earlyBird, teacher.(name," + LABEL_I18N + ")" +
+                        ", inPersonTermsLabel.(" + LABEL_I18N_COLS + "),onlineTermsLabel.(" + LABEL_I18N_COLS + "),termsUrlEn" +
                         ", date_part('epoch', openingDate - now()) as " + Event.secondsToOpeningDateAtLoadingTime +
                         ", date_part('epoch', coalesce(bookingProcessStart, openingDate) - now()) as " + Event.secondsToBookingProcessStartAtLoadingTime +
                         " from Event" + " where id=$1", eventPk),
