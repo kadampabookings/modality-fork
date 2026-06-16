@@ -188,9 +188,28 @@ public final class WorkingBooking {
         return getPreviousBookingPriceCalculator().calculateBalance();
     }
 
+    // A booking counts as an adult — never a "child rate" — from this age, whatever the rate config.
+    // Matches the canonical age category (CHILD 0–15, YOUNG_ADULT 16–17, ADULT 18+).
+    private static final int ADULT_MIN_AGE = 18;
+
     public boolean isChildRateApplied() {
         DocumentBill documentBill = getLatestBookingPriceCalculator().computeDocumentBill();
-        return documentBill != null && documentBill.isChildRateApplied();
+        if (documentBill == null || !documentBill.isChildRateApplied())
+            return false;
+        // Never label an adult's discount a "child rate". An age-based discount can be configured at any
+        // age (age1/2/3_max), and in particular the early-bird discount is an age-tiered cap on the ADULT
+        // price — so an adult booking an early-bird rate trips the per-line child flag (e.g. age 49). The
+        // *child* label only makes sense for a child / young-adult, so suppress it when the booking's age
+        // is known to be an adult. Age read like SiteItemBill (document age, then person age); when it is
+        // unknown we keep the flag (a null age can't match an age tier anyway).
+        Document document = getLastestDocumentAggregate().getDocument();
+        Integer age = document == null ? null : document.getAge();
+        if (age == null && document != null) {
+            Person person = document.getPerson();
+            if (person != null)
+                age = person.getAge();
+        }
+        return age == null || age < ADULT_MIN_AGE;
     }
 
     public int getVersion() {
