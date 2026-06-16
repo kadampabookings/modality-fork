@@ -1249,6 +1249,7 @@
   },
   "MailAccount": {
     "id": 63,
+    "awsSesVerified": "boolean",
     "default": "boolean",
     "email": "string",
     "event": "Event",
@@ -1842,6 +1843,7 @@
     "online": "boolean",
     "ord": "integer",
     "organization": "Organization",
+    "selfArranged": "boolean",
     "terminal": "boolean",
     "topLabel": "Label"
   },
@@ -1854,6 +1856,7 @@
   },
   "SmtpAccount": {
     "id": 58,
+    "email": "string",
     "host": "string",
     "icon": {
       "expr": "image('images/16/smtp.png')"
