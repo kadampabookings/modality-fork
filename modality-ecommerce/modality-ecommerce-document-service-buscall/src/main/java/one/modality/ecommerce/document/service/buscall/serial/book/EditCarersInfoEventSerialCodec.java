@@ -10,7 +10,7 @@ import one.modality.ecommerce.document.service.events.book.EditCarersInfoEvent;
  */
 public final class EditCarersInfoEventSerialCodec extends AbstractDocumentEventSerialCodec<EditCarersInfoEvent> {
 
-    private static final String CODEC_ID = "EditCarersInfoEventSerialCodec";
+    private static final String CODEC_ID = "EditCarersInfoEvent";
 
     private static final String CARER1_NAME_KEY = "carer1Name";
     private static final String CARER1_DOCUMENT_PRIMARY_KEY_KEY = "carer1DocumentPk";
