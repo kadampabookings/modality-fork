@@ -22,11 +22,16 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
 
     // ── Shared DQL fragments for scheduled items queries (loadPolicy & loadAvailabilities) ──
 
+    // Per-language Label columns to expand wherever a label is shown to the public booker, so the
+    // client can localise the text instead of falling back to the raw (English) name. Matches the
+    // LABEL_I18N_FIELDS set in kbs3-react/shared/src/utils/label-utils.ts.
+    private static final String LABEL_I18N = "label.(de,el,en,es,fr,pt,vi,zhs,zht)";
+
     // CTEs + SELECT fields + availability subquery (via LATERAL) + FROM + common WHERE conditions
     private static final String SCHEDULED_ITEMS_DQL_BASE =
             "with e as (select coalesce(repeatedEvent,id) as finalEvent,startDate,endDate,preDate,postDate,venue from Event where id=$1)" +
             ", ep as (select startBoundary,endBoundary from EventPart where event=(select e.finalEvent from e))" +
-            " select name,label,comment,site.(name,terminal),arrivalSite.(name,terminal),item.(name,label,perResourceLabel,code,temporal,family.(code,name,label,ord),capacity,share_mate,breakfastIncluded,ord),date,startTime,endTime,timeline?.(site,item,startTime,endTime),cancelled,resource,buddha.hyt" +
+            " select name," + LABEL_I18N + ",comment,site.(name,terminal," + LABEL_I18N + "),arrivalSite.(name,terminal," + LABEL_I18N + "),item.(name," + LABEL_I18N + ",perResourceLabel,code,temporal,family.(code,name,label,ord),capacity,share_mate,breakfastIncluded,ord),date,startTime,endTime,timeline?.(site,item,startTime,endTime),cancelled,resource,buddha.hyt" +
             // Availability: for each ScheduledResource sr, LATERAL computes availability once, then distributes to 4 categories
             ",(select [" +
             "sum(!sr.configuration.(allowsMale and allowsLay) ? 0 : lat.avail)," +       // lay male
@@ -142,7 +147,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                     , DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
                     "with e as (select coalesce(repeatedEvent,id) as finalEvent,coalesce(repeatedEvent?.type,type) as finalEventType,organization,venue.organization as venue_organization from Event where id=$1)" +
                     " select scope.(organization,site,eventType,event)" +
-                    ",item.(name,label,code,temporal,family.(code,name,label,ord),capacity,share_mate,breakfastIncluded,ord)" +
+                    ",item.(name," + LABEL_I18N + ",code,temporal,family.(code,name,label,ord),capacity,share_mate,breakfastIncluded,ord)" +
                     ",applicableToInPerson,applicableToOnline,descriptionLabel,noticeLabel,minDay,default,genderInfoRequired,earlyAccommodationAllowed,lateAccommodationAllowed,minOccupancy,forceSoldOut,autoBookItem,childAllowed,youngAdultAllowed,adultAllowed" +
                     " from ItemPolicy ip, e where ip.scope.(" +
                     " (organization = e.organization or organization=e.venue_organization)" +
