@@ -116,7 +116,8 @@ public final class ModalityAuthorizationServerServiceProvider implements Authori
             String userGrants       = (String) compositeFuture.list().get(1);
             String adminGrants      = (String) compositeFuture.list().get(2);
             String superAdminGrants = (String) compositeFuture.list().get(3);
-            return pushAuthorizationsObject(superAdminGrants.isEmpty() ? loggedInGrants + userGrants + adminGrants : superAdminGrants, runId);
+            String pushObject = superAdminGrants.isEmpty() ? loggedInGrants + userGrants + adminGrants : superAdminGrants;
+            return pushAuthorizationsObject(pushObject, runId);
         });
     }
 
