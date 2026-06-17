@@ -217,6 +217,7 @@
     },
     "expenditure": "boolean",
     "flagged": "boolean",
+    "forceLivePayment": "boolean",
     "genderIcon": {
       "expr": "image('images/16/' + (person_ordained ? (person_male ? 'monk' : 'nun') : (person_male == null ? 'noGender' : person_male? 'male' : 'female')) + '.png')"
     },

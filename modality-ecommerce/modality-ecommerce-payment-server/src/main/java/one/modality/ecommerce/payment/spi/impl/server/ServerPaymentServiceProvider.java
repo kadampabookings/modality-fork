@@ -51,6 +51,26 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
         return Future.failedFuture("'" + gatewayName + "' payment gateway not found! (none of the registered payment gateways matches this name)");
     }
 
+    /**
+     * Determines whether a payment should use the gateway's live environment (vs sandbox).
+     *
+     * <p>Three rules combine with OR:
+     * <ol>
+     *   <li><b>KBS3 way</b> — the event has reached {@link EventState#OPEN} or later.</li>
+     *   <li><b>KBS2 fallback</b> — when the event has no state, the explicit {@code event.live} flag.</li>
+     *   <li><b>Per-booking override</b> — {@code document.forceLivePayment=true} forces live mode
+     *       regardless of event state, so staff can test real payments on an event that is still
+     *       in DRAFT / PREPARATION before opening it to the public.</li>
+     * </ol>
+     */
+    private static boolean isLivePayment(Document document) {
+        Event event = document.getEvent();
+        EventState state = event.getState();
+        return (state != null && state.compareTo(EventState.OPEN) >= 0)  /* KBS3 way */
+               || (state == null && event.isLive())                       /* KBS2 fallback */
+               || Boolean.TRUE.equals(document.isForceLivePayment());     /* per-booking override */
+    }
+
     @Override
     public Future<GetPaymentMethodsResult> getPaymentMethods(GetPaymentMethodsArgument argument) {
         // When an eventPrimaryKey is provided directly (e.g. public-talk pre-booking flow),
@@ -59,19 +79,18 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
             return getPaymentMethodsForEvent(argument.eventPrimaryKey());
         }
         // Step 1: Load event state, live flag, and the event primary key from the document.
-        // The event state determines live vs test mode (KBS3 way); event.live is the KBS2 fallback.
+        // The event state determines live vs test mode (KBS3 way); event.live is the KBS2 fallback;
+        // document.forceLivePayment is a per-booking override for testing live payments before opening.
         return EntityStore.create()
             .<Document>executeQuery(
-                "select event.(state, live, organization) from Document where id=$1",
+                "select forceLivePayment, event.(state, live, organization) from Document where id=$1",
                 argument.documentPrimaryKey())
             .compose(documents -> {
                 if (documents.isEmpty())
                     return Future.failedFuture("Document not found: " + argument.documentPrimaryKey());
                 Document document = documents.get(0);
                 Event event = document.getEvent();
-                EventState state = event.getState();
-                boolean live = state != null && state.compareTo(EventState.OPEN) >= 0  /* KBS3 way */
-                               || state == null && event.isLive();                     /* KBS2 way */
+                boolean live = isLivePayment(document);
                 Object organizationPk = Numbers.toShortestNumber(Entities.getPrimaryKey(event.getOrganizationId()));
                 Object eventPk        = Numbers.toShortestNumber(event.getPrimaryKey());
                 // Step 2: Find the destination MoneyAccount for an online payment from this event's
@@ -171,10 +190,8 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
                         if (paymentGateway == null)
                             return gatewayNotFoundFailedFuture(gatewayName);
                         // Step 4: Loading the relevant payment gateway parameters (depending on the event state)
-                        Event event = getDatabasePaymentPrimaryDocument(databasePayment).getEvent();
-                        EventState state = event.getState();
-                        boolean live = state != null && state.compareTo(EventState.OPEN) >= 0 /* KBS3 way */
-                                       || state == null && event.isLive(); /* KBS2 way */
+                        Document primaryDoc = getDatabasePaymentPrimaryDocument(databasePayment);
+                        boolean live = isLivePayment(primaryDoc);
                         String moneyTransferId = totalTransfer.getPrimaryKey().toString();
                         String returnUrl = Strings.replaceAll(argument.returnUrl(), ":moneyTransferId", moneyTransferId);
                         String cancelUrl = Strings.replaceAll(argument.cancelUrl(), ":moneyTransferId", moneyTransferId);
@@ -182,7 +199,6 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
                             .compose(parameters -> {
                                 // Step 5: Calling the payment gateway with all the data collected
                                 String currencyCode = totalTransfer.getToMoneyAccount().getCurrency().getCode();
-                                Document primaryDoc = getDatabasePaymentPrimaryDocument(databasePayment);
                                 String merchantCountryCode = primaryDoc.evaluate("event.organization.country.iso_alpha2");
                                 return paymentGateway.initiatePayment(new GatewayInitiatePaymentArgument(
                                     moneyTransferId,
@@ -221,7 +237,7 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
 
     private Future<Void> loadDatabasePaymentDocuments(DatabasePayment databasePayment) {
         return databasePayment.totalTransfer().getStore()
-            .executeQuery("select toMoneyAccount.(currency.code, gatewayCompany.name), document.(ref,person_name,person_firstName,person_lastName,person_email,person_phone,person_street,person_postCode,person_cityName,person_admin1Name,person_country.(name,iso_alpha2),person_countryName,event.(state,live,organization.country.iso_alpha2)) from MoneyTransfer where id=$1 or parent=$1", databasePayment.totalTransfer())
+            .executeQuery("select toMoneyAccount.(currency.code, gatewayCompany.name), document.(ref,person_name,person_firstName,person_lastName,person_email,person_phone,person_street,person_postCode,person_cityName,person_admin1Name,person_country.(name,iso_alpha2),person_countryName,forceLivePayment,event.(state,live,organization.country.iso_alpha2)) from MoneyTransfer where id=$1 or parent=$1", databasePayment.totalTransfer())
             .mapEmpty();
     }
 

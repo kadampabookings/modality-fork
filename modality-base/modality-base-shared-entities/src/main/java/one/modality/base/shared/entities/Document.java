@@ -35,6 +35,7 @@ public interface Document extends
     String checkedOut = "checkedOut";
     String groupDocument = "groupDocument";
     String inPerson = "inPerson";
+    String forceLivePayment = "forceLivePayment";
     String carer1Document = "person_carer1Document";
     String carer2Document = "person_carer2Document";
     String creationDate = "creationDate";
@@ -205,6 +206,14 @@ public interface Document extends
 
     default void setInPerson(Boolean value) {
         setFieldValue(inPerson, value);
+    }
+
+    default Boolean isForceLivePayment() {
+        return getBooleanFieldValue(forceLivePayment);
+    }
+
+    default void setForceLivePayment(Boolean value) {
+        setFieldValue(forceLivePayment, value);
     }
 
     default AttendanceMode getAttendanceMode() {
