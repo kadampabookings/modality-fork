@@ -6,7 +6,6 @@ import dev.webfx.stack.orm.entity.Entities;
 import dev.webfx.stack.orm.entity.EntityStore;
 import one.modality.base.shared.entities.Document;
 import one.modality.base.shared.entities.Event;
-import one.modality.base.shared.entities.EventState;
 import one.modality.base.shared.entities.ScheduledItem;
 import one.modality.ecommerce.document.service.SubmitDocumentChangesResult;
 
@@ -56,10 +55,12 @@ final class DocumentSubmitController {
         return request.updateStore().getOrCreateEntity(Event.class, eventPrimaryKey)
             .<Event>onExpressionLoaded(Event.state)
             .compose(event -> {
+/* Commented as bulk booking submit process immediately in TESTING state has issues.
                 if (event.getState() != EventState.OPEN) {
                     Console.log("Event " + eventPrimaryKey + " is not OPEN (state = " + event.getState() + ") - bypassing event queue, processing submission immediately");
                     return ServerDocumentServiceProvider.submitDocumentChangesNow(request);
                 }
+*/
                 return createOrGetEventQueueAndProcess(request, eventPrimaryKey);
             });
     }

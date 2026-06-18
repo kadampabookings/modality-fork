@@ -11,6 +11,7 @@ import dev.webfx.stack.com.bus.DeliveryOptions;
 import dev.webfx.stack.orm.entity.Entities;
 import dev.webfx.stack.push.server.PushServerService;
 import one.modality.base.shared.entities.Event;
+import one.modality.base.shared.entities.EventState;
 import one.modality.base.shared.entities.ScheduledItem;
 import one.modality.base.shared.entities.SiteItem;
 import one.modality.ecommerce.document.service.SubmitDocumentChangesArgument;
@@ -48,7 +49,7 @@ final class DocumentSubmitEventQueue {
         }
         log("Resource-managed SiteItems: " + resourceManagedSiteItems.size());
         LocalDateTime bookingProcessStart = event.getBookingProcessStart();
-        if (bookingProcessStart == null)
+        if (bookingProcessStart == null && event.getState() != EventState.TESTING) // While testing, we don't wait the opening date to process the booking
             bookingProcessStart = event.getOpeningDate();
         long delayMs = bookingProcessStart == null ? 0 : bookingProcessStart.atZone(event.getEventZoneId()).toInstant().toEpochMilli() - System.currentTimeMillis();
         ready = delayMs <= 0;
