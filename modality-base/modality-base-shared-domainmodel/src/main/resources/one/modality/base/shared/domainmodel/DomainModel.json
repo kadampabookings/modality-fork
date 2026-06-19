@@ -1065,6 +1065,7 @@
     "minOccupancy": "integer",
     "noticeLabel": "Label",
     "scope": "PolicyScope",
+    "titleLabel": "Label",
     "youngAdultAllowed": "boolean"
   },
   "KdmCenter": {

@@ -149,7 +149,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                     "with e as (select coalesce(repeatedEvent,id) as finalEvent,coalesce(repeatedEvent?.type,type) as finalEventType,organization,venue.organization as venue_organization from Event where id=$1)" +
                     " select scope.(organization,site,eventType,event)" +
                     ",item.(name," + LABEL_I18N + ",code,temporal,family.(code,name,label,ord),capacity,share_mate,breakfastIncluded,ord)" +
-                    ",applicableToInPerson,applicableToOnline,descriptionLabel,noticeLabel,minDay,default,genderInfoRequired,earlyAccommodationAllowed,lateAccommodationAllowed,minOccupancy,forceSoldOut,autoBookItem,childAllowed,youngAdultAllowed,adultAllowed" +
+                    ",applicableToInPerson,applicableToOnline,descriptionLabel,titleLabel,noticeLabel,minDay,default,genderInfoRequired,earlyAccommodationAllowed,lateAccommodationAllowed,minOccupancy,forceSoldOut,autoBookItem,childAllowed,youngAdultAllowed,adultAllowed" +
                     " from ItemPolicy ip, e where ip.scope.(" +
                     " (organization = e.organization or organization=e.venue_organization)" +
                     " and (site = null or site?.event = null or site?.event = e.finalEvent)" +
