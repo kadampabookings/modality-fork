@@ -797,6 +797,7 @@
     "themeBaseColor": "string",
     "themeBorderColor": "string",
     "themeStrongBackground": "boolean",
+    "themeSurfaceColor": "string",
     "timezone": "string",
     "type": "EventType",
     "uri": "string",
@@ -854,7 +855,8 @@
     "borderColor": "string",
     "code": "string",
     "name": "string",
-    "strongBackground": "boolean"
+    "strongBackground": "boolean",
+    "surfaceColor": "string"
   },
   "EventType": {
     "id": 95,
