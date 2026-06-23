@@ -40,15 +40,29 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
             "sum(!sr.configuration.(allowsMale and allowsOrdained) ? 0 : lat.avail)," +  // monk
             "sum(!sr.configuration.(allowsFemale and allowsOrdained) ? 0 : lat.avail)" + // nun
             "] from ScheduledResource sr" +
-            ", lateral (select coalesce(" +
+            // avail per scheduled resource:
+            //  • pool-managed resource (a public PoolAllocation exists, global or event-specific): quantity of the
+            //    best-matching public pool (event-specific preferred over global) less the bookings already made in
+            //    that pool (documentLine.pool = that pool) — unchanged behaviour.
+            //  • unmanaged resource (no public PoolAllocation at all): considered fully available at
+            //    resourceConfiguration.max, less the bookings already made with no pool (documentLine.pool=null).
+            ", lateral (select exists(select PoolAllocation where resource=sr.configuration.resource and pool.allowsPublic and (event=null or event=$1))" +
+            " ? coalesce(" +
             "(select pa.quantity" +
             " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledResource=sr and present and documentLine.(!frontend_released and pool=pa.pool)), 0)" +
             " from PoolAllocation pa" +
             " where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and (event=$1 or event=null)" +
             " order by event desc nulls last" +
             " limit 1)" +
-            ", 0) as avail) lat" +
-            " where scheduledItem=si and exists(select PoolAllocation where resource=sr.configuration.resource and pool.allowsPublic and (event = null or event=$1))" +
+            ", 0)" +
+            // Fallback wrapped in a correlated sub-SELECT: the LATERAL body has no FROM (null domain class), so the
+            // resourceConfiguration.max reference must live inside a sub-SELECT (rooted on ScheduledResource, correlated
+            // via id=sr) to resolve — a bare sr.* path here fails translation with "Domain class 'null' not found".
+            " : (select configuration.max" +
+            " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledResource=sr and present and documentLine.(!frontend_released and pool=null)), 0)" +
+            " from ScheduledResource where id=sr)" +
+            " as avail) lat" +
+            " where scheduledItem=si" +
             " group by scheduledItem)" +
             " as " + ScheduledItem.maleFemaleAvailabilities +
             " from ScheduledItem si, e" +
