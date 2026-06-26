@@ -48,13 +48,13 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
         //    best-matching public pool (event-specific preferred over global) less the bookings already made in
         //    that pool (documentLine.pool = that pool).
         //  • unmanaged resource (no public PoolAllocation at all): considered fully available at rc.max, less
-        //    the bookings already made with no pool (documentLine.pool=null).
+        //    the bookings already made.
         // Bookings are counted via (scheduledItem=si and documentLine.resourceConfiguration=rc) — exactly
         // equivalent to the former Attendance.scheduledResource pointer, but without the scheduled_resource table.
         ", lateral (select exists(select PoolAllocation where resource=rc.resource and event=$1)" +
         " ? coalesce(" +
         "(select pa.quantity" +
-        " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledItem=si and documentLine.resourceConfiguration=rc and present and documentLine.(!frontend_released and pool=pa.pool)), 0)" +
+        " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledItem=si and present and documentLine.(resourceConfiguration=rc and !frontend_released and pool=pa.pool)), 0)" +
         " from PoolAllocation pa" +
         " where resource=rc.resource and publicBookingEnabled and pool.allowsPublic and event=$1" +
         " order by event desc nulls last" +
@@ -64,7 +64,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
         // rc.max reference resolves — the LATERAL body has no FROM (null domain class), which otherwise fails
         // translation with "Domain class 'null' not found".
         " : (select !rc.online ? 0 : max" +
-        " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledItem=si and documentLine.resourceConfiguration=rc and present and documentLine.(!frontend_released and pool=null)), 0)" +
+        " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledItem=si and present and documentLine.(resourceConfiguration=rc and !frontend_released)), 0)" +
         " from ResourceConfiguration where id=rc)" +
         " as avail) lat" +
         // Configurations applicable to this scheduled item: same site & item.
