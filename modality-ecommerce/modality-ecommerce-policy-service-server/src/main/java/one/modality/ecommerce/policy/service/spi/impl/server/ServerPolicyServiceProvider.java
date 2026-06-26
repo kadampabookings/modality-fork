@@ -63,6 +63,11 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
             " from ScheduledResource where id=sr)" +
             " as avail) lat" +
             " where scheduledItem=si" +
+            // Event config wins over global: for the same resource & item on this scheduled item, when both an
+            // event-specific resource configuration (event=$1) and a global one (event=null) exist, keep only the
+            // event one in the availability sum (drop the global duplicate).
+            " and sr.configuration.(event=$1" +
+            " or event=null and !exists(select ResourceConfiguration where resource=sr.configuration.resource and event=$1))" +
             " group by scheduledItem)" +
             " as " + ScheduledItem.maleFemaleAvailabilities +
             " from ScheduledItem si, e" +
