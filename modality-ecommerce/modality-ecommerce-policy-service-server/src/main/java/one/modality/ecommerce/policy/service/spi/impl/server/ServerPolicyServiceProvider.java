@@ -30,58 +30,77 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
 
     // CTEs + SELECT fields + availability subquery (via LATERAL) + FROM + common WHERE conditions
     private static final String SCHEDULED_ITEMS_DQL_BASE =
-            "with e as (select coalesce(repeatedEvent,id) as finalEvent,startDate,endDate,preDate,postDate,venue from Event where id=$1)" +
-            ", ep as (select startBoundary,endBoundary from EventPart where event=(select e.finalEvent from e))" +
-            " select name," + LABEL_I18N + ",comment,site.(name,terminal,selfArranged," + LABEL_I18N + "),arrivalSite.(name,terminal,selfArranged," + LABEL_I18N + "),item.(name," + LABEL_I18N + ",perResourceLabel,code,temporal,family.(code,name,label,ord),capacity,share_mate,breakfastIncluded,ord),date,startTime,endTime,timeline?.(site,item,startTime,endTime),cancelled,resource,buddha.hyt" +
-            // Availability: for each ScheduledResource sr, LATERAL computes availability once, then distributes to 4 categories
-            ",(select [" +
-            "sum(!sr.configuration.(allowsMale and allowsLay) ? 0 : lat.avail)," +       // lay male
-            "sum(!sr.configuration.(allowsFemale and allowsLay) ? 0 : lat.avail)," +     // lay female
-            "sum(!sr.configuration.(allowsMale and allowsOrdained) ? 0 : lat.avail)," +  // monk
-            "sum(!sr.configuration.(allowsFemale and allowsOrdained) ? 0 : lat.avail)" + // nun
-            "] from ScheduledResource sr" +
-            // avail per scheduled resource:
-            //  • pool-managed resource (a public PoolAllocation exists, global or event-specific): quantity of the
-            //    best-matching public pool (event-specific preferred over global) less the bookings already made in
-            //    that pool (documentLine.pool = that pool) — unchanged behaviour.
-            //  • unmanaged resource (no public PoolAllocation at all): considered fully available at
-            //    resourceConfiguration.max, less the bookings already made with no pool (documentLine.pool=null).
-            ", lateral (select exists(select PoolAllocation where resource=sr.configuration.resource and pool.allowsPublic and (event=null or event=$1))" +
-            " ? coalesce(" +
-            "(select pa.quantity" +
-            " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledResource=sr and present and documentLine.(!frontend_released and pool=pa.pool)), 0)" +
-            " from PoolAllocation pa" +
-            " where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and (event=$1 or event=null)" +
-            " order by event desc nulls last" +
-            " limit 1)" +
-            ", 0)" +
-            // Fallback wrapped in a correlated sub-SELECT: the LATERAL body has no FROM (null domain class), so the
-            // resourceConfiguration.max reference must live inside a sub-SELECT (rooted on ScheduledResource, correlated
-            // via id=sr) to resolve — a bare sr.* path here fails translation with "Domain class 'null' not found".
-            " : (select configuration.max" +
-            " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledResource=sr and present and documentLine.(!frontend_released and pool=null)), 0)" +
-            " from ScheduledResource where id=sr)" +
-            " as avail) lat" +
-            " where scheduledItem=si" +
-            " group by scheduledItem)" +
-            " as " + ScheduledItem.maleFemaleAvailabilities +
-            " from ScheduledItem si, e" +
-            " where bookableScheduledItem=id" +
-            // bound to this event (or its repeatedEvent), or unbound but happening at the event venue during the event period
-            " and (si.event = e.finalEvent" +
-            "      or si.event=null and si.site = e.venue and (si.date >= coalesce(e.preDate, e.startDate) and si.date <= coalesce(e.postDate, e.endDate) or exists(select ep where si.date>=coalesce(ep.startBoundary.date, ep.startBoundary.scheduledItem.date) and si.date<=coalesce(ep.endBoundary.date, ep.endBoundary.scheduledItem.date))))";
-            // Accommodation filter appended by each caller
+        "with e as (select coalesce(repeatedEvent,id) as finalEvent,startDate,endDate,preDate,postDate,venue from Event where id=$1)" +
+        ", ep as (select startBoundary,endBoundary from EventPart where event=(select e.finalEvent from e))" +
+        " select name," + LABEL_I18N + ",comment,site.(name,terminal,selfArranged," + LABEL_I18N + "),arrivalSite.(name,terminal,selfArranged," + LABEL_I18N + "),item.(name," + LABEL_I18N + ",perResourceLabel,code,temporal,family.(code,name,label,ord),capacity,share_mate,breakfastIncluded,ord),date,startTime,endTime,timeline?.(site,item,startTime,endTime),cancelled,resource,buddha.hyt" +
+        // Availability: for each applicable ResourceConfiguration rc (resolved on the fly by matching the
+        // scheduled item's site & item, with the event config winning over the global one), LATERAL computes
+        // availability once, then distributes it to 4 categories. This replaces the former scheduled_resource
+        // grid: rc is joined to the scheduled item directly, so no scheduled_resource rows need to exist.
+        ",(select [" +
+        "sum(!rc.(allowsMale and allowsLay) ? 0 : lat.avail)," +       // lay male
+        "sum(!rc.(allowsFemale and allowsLay) ? 0 : lat.avail)," +     // lay female
+        "sum(!rc.(allowsMale and allowsOrdained) ? 0 : lat.avail)," +  // monk
+        "sum(!rc.(allowsFemale and allowsOrdained) ? 0 : lat.avail)" + // nun
+        "] from ResourceConfiguration rc" +
+        // avail per resource configuration:
+        //  • pool-managed resource (a public PoolAllocation exists, global or event-specific): quantity of the
+        //    best-matching public pool (event-specific preferred over global) less the bookings already made in
+        //    that pool (documentLine.pool = that pool).
+        //  • unmanaged resource (no public PoolAllocation at all): considered fully available at rc.max, less
+        //    the bookings already made with no pool (documentLine.pool=null).
+        // Bookings are counted via (scheduledItem=si and documentLine.resourceConfiguration=rc) — exactly
+        // equivalent to the former Attendance.scheduledResource pointer, but without the scheduled_resource table.
+        ", lateral (select exists(select PoolAllocation where resource=rc.resource and event=$1)" +
+        " ? coalesce(" +
+        "(select pa.quantity" +
+        " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledItem=si and documentLine.resourceConfiguration=rc and present and documentLine.(!frontend_released and pool=pa.pool)), 0)" +
+        " from PoolAllocation pa" +
+        " where resource=rc.resource and publicBookingEnabled and pool.allowsPublic and event=$1" +
+        " order by event desc nulls last" +
+        " limit 1)" +
+        ", 0)" +
+        // Fallback wrapped in a correlated sub-SELECT (rooted on ResourceConfiguration via id=rc) so the bare
+        // rc.max reference resolves — the LATERAL body has no FROM (null domain class), which otherwise fails
+        // translation with "Domain class 'null' not found".
+        " : (select !rc.online ? 0 : max" +
+        " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledItem=si and documentLine.resourceConfiguration=rc and present and documentLine.(!frontend_released and pool=null)), 0)" +
+        " from ResourceConfiguration where id=rc)" +
+        " as avail) lat" +
+        // Configurations applicable to this scheduled item: same site & item.
+        " where rc.resource.site=si.site and rc.item=si.item" +
+        // Event config overrides global: an event configuration (event=$1) replaces the resource's global config
+        // for the event's duration — and may change the resource's item and/or capacity (e.g. a 'Cabin' offered as
+        // a 'Standard twin' during the event). So a global config (event=null) is dropped whenever the resource has
+        // ANY event config for this event, regardless of item (resource-scoped, NOT resource+item): a resource is a
+        // single physical unit with only one applicable config per day. Matches the original SR-based behaviour.
+        " and (rc.event=$1" +
+        " or rc.event=null and !exists(select ResourceConfiguration where resource=rc.resource and event=$1))" +
+        // Date scope: global configs start/stop over time; event configs are time-scoped by the event itself (no
+        // dates → the null-open-ended test below always passes). Mirrors kbs_overlaps(si.date,si.date,start,end).
+        " and (rc.startDate=null or rc.startDate<=si.date) and (rc.endDate=null or rc.endDate>=si.date)" +
+        // group by rc.item → exactly one group when configs exist for this item, and zero groups (→ null array,
+        // meaning "not resource-managed") for items that have no resource configuration.
+        " group by rc.item)" +
+        " as " + ScheduledItem.maleFemaleAvailabilities +
+        " from ScheduledItem si, e" +
+        " where bookableScheduledItem=id" +
+        // bound to this event (or its repeatedEvent), or unbound but happening at the event venue during the event period
+        " and (si.event = e.finalEvent" +
+        "      or si.event=null and si.site = e.venue and (si.date >= coalesce(e.preDate, e.startDate) and si.date <= coalesce(e.postDate, e.endDate) or exists(select ep where si.date>=coalesce(ep.startBoundary.date, ep.startBoundary.scheduledItem.date) and si.date<=coalesce(ep.endBoundary.date, ep.endBoundary.scheduledItem.date))))";
+    // Accommodation filter appended by each caller
 
     // ItemPolicy exists check (shared by both acco filters)
     private static final String ACCO_ITEM_POLICY_EXISTS =
-            "exists(select ItemPolicy ip where item=si.item and scope.(site=si.site and (event=null or event=$1) and (eventType=null or (select type=ip.scope.eventType from Event where id=$1))))";
+        "exists(select ItemPolicy ip where item=si.item and scope.(site=si.site and (event=null or event=$1) and (eventType=null or (select type=ip.scope.eventType from Event where id=$1))))";
 
-    // Pool allocation exists check (shared by both acco filters)
+    // Pool allocation exists check (shared by both acco filters) — resolved on the fly from ResourceConfiguration
+    // (matched to the scheduled item by site & item), so it no longer depends on scheduled_resource rows existing.
     private static final String ACCO_POOL_EXISTS =
-            "exists(select ScheduledResource sr where scheduledItem=si and exists(select PoolAllocation where resource=sr.configuration.resource and publicBookingEnabled and pool.allowsPublic and event=$1))";
+        "exists(select ResourceConfiguration rc where rc.resource.site=si.site and rc.item=si.item and exists(select PoolAllocation where resource=rc.resource and publicBookingEnabled and pool.allowsPublic and event=$1))";
 
     private static final String SCHEDULED_ITEMS_DQL_ORDER_BY =
-            " order by site?.ord,site.id,item.family.id,item?.ord,item.id,date";
+        " order by site?.ord,site.id,item.family.id,item?.ord,item.id,date";
 
     @Override
     public Future<PolicyAggregate> loadPolicy(LoadPolicyArgument argument) {
