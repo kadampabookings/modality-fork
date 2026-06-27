@@ -95,9 +95,11 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
         "exists(select ItemPolicy ip where item=si.item and scope.(site=si.site and (event=null or event=$1) and (eventType=null or (select type=ip.scope.eventType from Event where id=$1))))";
 
     // Pool allocation exists check (shared by both acco filters) — resolved on the fly from ResourceConfiguration
-    // (matched to the scheduled item by site & item), so it no longer depends on scheduled_resource rows existing.
+    // (matched to the scheduled item by site & item, and only configs applicable to this event: bound to it, or a
+    // global config whose date range covers the scheduled item's date — other events' configs are ignored), so it no
+    // longer depends on scheduled_resource rows existing.
     private static final String ACCO_POOL_EXISTS =
-        "exists(select ResourceConfiguration rc where rc.resource.site=si.site and rc.item=si.item and exists(select PoolAllocation where resource=rc.resource and publicBookingEnabled and pool.allowsPublic and event=$1))";
+        "exists(select ResourceConfiguration rc where rc.resource.site=si.site and rc.item=si.item and (rc.event=$1 or rc.event=null and (rc.startDate=null or rc.startDate<=si.date) and (rc.endDate=null or rc.endDate>=si.date)) and exists(select PoolAllocation where resource=rc.resource and publicBookingEnabled and pool.allowsPublic and event=$1))";
 
     private static final String SCHEDULED_ITEMS_DQL_ORDER_BY =
         " order by site?.ord,site.id,item.family.id,item?.ord,item.id,date";

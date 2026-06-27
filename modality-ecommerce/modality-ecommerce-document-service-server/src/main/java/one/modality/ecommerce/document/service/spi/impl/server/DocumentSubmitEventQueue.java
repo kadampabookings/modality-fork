@@ -29,7 +29,7 @@ import java.util.*;
 final class DocumentSubmitEventQueue {
 
     private final Event event; // Keeping reference for debugging purpose
-    private final Set<SiteItem> resourceManagedSiteItems; // SiteItems that require resource management (have ScheduledResources)
+    private final Set<SiteItem> resourceManagedSiteItems; // SiteItems that require resource management (have ResourceConfigurations)
     private boolean ready;
     private Scheduled scheduled;
     private DocumentSubmitRequest processingRequest;
