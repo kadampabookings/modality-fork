@@ -6,7 +6,6 @@ import javafx.beans.property.SimpleBooleanProperty;
 import javafx.collections.ObservableList;
 import javafx.scene.paint.Color;
 import one.modality.base.shared.entities.ResourceConfiguration;
-import one.modality.base.shared.entities.ScheduledResource;
 
 /**
  * @author Bruno Salmon
@@ -17,12 +16,12 @@ public abstract class ScheduledResourceGantt extends AccommodationGantt<Schedule
     // blocks, but simply map each block to a 1-day-long bar, so the user will see all these blocks)
     private final BooleanProperty blocksGroupingProperty = new SimpleBooleanProperty();
 
-    public ScheduledResourceGantt(AccommodationPresentationModel pm, ObservableList<ScheduledResource> scheduledResources, ObservableList<ResourceConfiguration> providedParentRooms) {
+    public ScheduledResourceGantt(AccommodationPresentationModel pm, ObservableList<ResourceDay> resourceDays, ObservableList<ResourceConfiguration> providedParentRooms) {
         super(pm, null, providedParentRooms, 13);
         TimeBarUtil.convertToBlocksThenGroupToBars(
-                scheduledResources, // the observable list of ScheduledResource entities to take as input
-                ScheduledResource::getDate, // the entity date reader that will be used to date each block
-                ScheduledResourceBlock::new, // the factory that creates blocks, initially 1 instance per entity, but then grouped into bars
+                resourceDays, // the observable list of ResourceDay cells (config × date) to take as input
+                ResourceDay::getDate, // the date reader that will be used to date each block
+                ScheduledResourceBlock::new, // the factory that creates blocks, initially 1 instance per cell, but then grouped into bars
                 ganttLayout.getChildren(), // the final list of bars that will receive the result of grouping blocks
                 blocksGroupingProperty); // optional property to eventually disable the blocks grouping (=> 1 bar per block if disabled)
         ganttLayout.setChildFixedHeight(40);

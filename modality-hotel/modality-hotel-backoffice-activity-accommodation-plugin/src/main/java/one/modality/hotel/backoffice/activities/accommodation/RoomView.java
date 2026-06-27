@@ -26,7 +26,7 @@ public final class RoomView {
     public RoomView(AccommodationPresentationModel pm) {
         resourceConfigurationLoader = ResourceConfigurationLoader.getOrCreate(pm);
         scheduledResourceLoader = ScheduledResourceLoader.getOrCreate(pm);
-        scheduledResourceGantt = new ScheduledResourceGantt(pm, scheduledResourceLoader.getScheduledResources(), resourceConfigurationLoader.getResourceConfigurations()) {
+        scheduledResourceGantt = new ScheduledResourceGantt(pm, scheduledResourceLoader.getResourceDays(), resourceConfigurationLoader.getResourceConfigurations()) {
             @Override
             protected void drawBar(LocalDateBar<ScheduledResourceBlock> bar, Bounds b, GraphicsContext gc) {
                 // The bar wraps a block over 1 or several days (or always 1 day if the user hasn't ticked the grouping block
