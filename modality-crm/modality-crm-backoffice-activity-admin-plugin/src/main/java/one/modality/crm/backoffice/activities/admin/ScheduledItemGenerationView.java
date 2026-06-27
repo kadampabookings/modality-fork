@@ -48,9 +48,6 @@ public class ScheduledItemGenerationView {
     private List<Resource> availableResources = new ArrayList<>();
     private Map<Item, List<Resource>> accommodationItemsWithResources = new LinkedHashMap<>();
     private final VBox resourcesDisplayBox = new VBox(5);
-    private final Button viewDetailsButton = new Button("📋 View Generation Details");
-    private LocalDate lastGenerationFrom;
-    private LocalDate lastGenerationTo;
 
     public ScheduledItemGenerationView() {
         initUi();
@@ -110,13 +107,7 @@ public class ScheduledItemGenerationView {
         progressBar.setVisible(false);
         statusLabel.setVisible(false);
 
-        // View Details button (hidden by default)
-        viewDetailsButton.setStyle("-fx-background-color: #3498db; -fx-text-fill: white; -fx-padding: 8 16 8 16; -fx-background-radius: 4; -fx-cursor: hand;");
-        viewDetailsButton.setVisible(false);
-        viewDetailsButton.setManaged(false);
-        viewDetailsButton.setOnAction(e -> showGenerationDetailsDialog());
-
-        HBox statusRow = new HBox(15, statusLabel, viewDetailsButton);
+        HBox statusRow = new HBox(15, statusLabel);
         statusRow.setAlignment(Pos.CENTER_LEFT);
 
         VBox allContent = new VBox(10, organizationNameLabel, dangerMessageBox, timelinesGrid, resourcesDisplayBox, controls, progressBar, statusRow, statusPane);
@@ -294,11 +285,10 @@ public class ScheduledItemGenerationView {
         LocalDate start = LocalDate.of(2022, 1, 1);
         LocalDate end = LocalDate.now().plusYears(2).withDayOfYear(1);
 
-        Console.log("refreshStatus: Fetching ScheduledItems and ScheduledResources from " + start + " to " + end + " for organization "
+        Console.log("refreshStatus: Fetching ScheduledItems from " + start + " to " + end + " for organization "
                 + organizationId);
 
         String siDql = "select date, item.family.code from ScheduledItem where site.organization.id=$1 and date >= $2 and date < $3 order by date";
-        String srDql = "select date from ScheduledResource sr where sr.configuration.resource.site.organization.id=$1 and date >= $2 and date < $3 order by date";
 
         EntityStore entityStore = EntityStore.create();
 
@@ -312,46 +302,22 @@ public class ScheduledItemGenerationView {
                 .onSuccess(siResult -> {
                     Console.log("refreshStatus: Successfully fetched " + siResult.size() + " ScheduledItems.");
 
-                    // Fetch ScheduledResources
-                    entityStore.executeQuery(srDql, organizationId, start, end)
-                            .onFailure(e -> {
-                                Console.error("refreshStatus: Error loading ScheduledResources", e);
-                                Platform.runLater(() -> {
-                                    statusPane.getChildren().setAll(new Label("Error loading status: " + e.getMessage()));
-                                });
-                            })
-                            .onSuccess(srResult -> {
-                                Console.log("refreshStatus: Successfully fetched " + srResult.size() + " ScheduledResources.");
+                    Map<YearMonth, Map<String, Long>> counts = new TreeMap<>();
 
-                                Map<YearMonth, Map<String, Long>> counts = new TreeMap<>();
+                    // Process ScheduledItems
+                    for (Object entity : siResult) {
+                        ScheduledItem si = (ScheduledItem) entity;
+                        LocalDate date = si.getDate();
+                        if (date == null)
+                            continue;
+                        String familyCode = si.getItem().getFamily().getCode();
 
-                                // Process ScheduledItems
-                                for (Object entity : siResult) {
-                                    ScheduledItem si = (ScheduledItem) entity;
-                                    LocalDate date = si.getDate();
-                                    if (date == null)
-                                        continue;
-                                    String familyCode = si.getItem().getFamily().getCode();
+                        YearMonth ym = YearMonth.from(date);
+                        counts.computeIfAbsent(ym, k -> new HashMap<>())
+                                .merge(familyCode, 1L, Long::sum);
+                    }
 
-                                    YearMonth ym = YearMonth.from(date);
-                                    counts.computeIfAbsent(ym, k -> new HashMap<>())
-                                            .merge(familyCode, 1L, Long::sum);
-                                }
-
-                                // Process ScheduledResources
-                                for (Object entity : srResult) {
-                                    ScheduledResource sr = (ScheduledResource) entity;
-                                    LocalDate date = sr.getDate();
-                                    if (date == null)
-                                        continue;
-
-                                    YearMonth ym = YearMonth.from(date);
-                                    counts.computeIfAbsent(ym, k -> new HashMap<>())
-                                            .merge("resources", 1L, Long::sum);
-                                }
-
-                                Platform.runLater(() -> displayStatus(counts));
-                            });
+                    Platform.runLater(() -> displayStatus(counts));
                 });
     }
 
@@ -368,7 +334,6 @@ public class ScheduledItemGenerationView {
         grid.add(new Label("Month"), 0, 0);
         grid.add(new Label("Kitchen (Meals)"), 1, 0);
         grid.add(new Label("Accommodation"), 2, 0);
-        grid.add(new Label("Resources"), 3, 0);
 
         int row = 1;
         DateTimeFormatter monthFormatter = DateTimeFormatter.ofPattern("MMMM yyyy");
@@ -380,12 +345,10 @@ public class ScheduledItemGenerationView {
             Label monthLabel = new Label(ym.format(monthFormatter));
             Label mealsLabel = new Label(String.valueOf(familyCounts.getOrDefault("meals", 0L)));
             Label accoLabel = new Label(String.valueOf(familyCounts.getOrDefault("acco", 0L)));
-            Label resourcesLabel = new Label(String.valueOf(familyCounts.getOrDefault("resources", 0L)));
 
             grid.add(monthLabel, 0, row);
             grid.add(mealsLabel, 1, row);
             grid.add(accoLabel, 2, row);
-            grid.add(resourcesLabel, 3, row);
 
             row++;
         }
@@ -515,24 +478,14 @@ public class ScheduledItemGenerationView {
             return;
         }
 
-        // Store generation dates for View Details
-        lastGenerationFrom = from;
-        lastGenerationTo = to;
-
-        Platform.runLater(() -> {
-            statusLabel.setText("Starting generation for " + familyCode + "...");
-            // Hide view details button during generation
-            viewDetailsButton.setVisible(false);
-            viewDetailsButton.setManaged(false);
-        });
+        Platform.runLater(() -> statusLabel.setText("Starting generation for " + familyCode + "..."));
 
         // Use SQL bulk insert for better performance
-        boolean generateResources = "acco".equals(familyCode);
-        generateWithSql(itemList, itemToTimeline, from, to, generateResources);
+        generateWithSql(itemList, itemToTimeline, from, to);
     }
 
     private void generateWithSql(List<Item> items, Map<Object, Timeline> itemToTimeline,
-                                 LocalDate from, LocalDate to, boolean generateResources) {
+                                 LocalDate from, LocalDate to) {
         Console.log("generateWithSql: Starting SQL-based generation for " + items.size() + " items");
         Console.log("generateWithSql: Date range: " + from + " to " + to);
 
@@ -579,27 +532,18 @@ public class ScheduledItemGenerationView {
         Platform.runLater(() -> statusLabel.setText("Generating " + items.size() + " items..."));
 
         // Execute all statements
-        executeNextSqlStatement(sqlStatements, 0, generateResources);
+        executeNextSqlStatement(sqlStatements, 0);
     }
 
-    private void executeNextSqlStatement(List<String> sqlStatements, int index, boolean generateResources) {
+    private void executeNextSqlStatement(List<String> sqlStatements, int index) {
         if (index >= sqlStatements.size()) {
             // All done with scheduled items
             Console.log("generateWithSql: All scheduled items generated");
-
-            if (generateResources) {
-                // Now generate scheduled resources
-                generateScheduledResourcesWithSql();
-            } else {
-                Platform.runLater(() -> {
-                    progressBar.setVisible(false);
-                    statusLabel.setText("Generation complete!");
-                    // Show View Details button for scheduled items
-                    viewDetailsButton.setVisible(true);
-                    viewDetailsButton.setManaged(true);
-                    refreshStatus();
-                });
-            }
+            Platform.runLater(() -> {
+                progressBar.setVisible(false);
+                statusLabel.setText("Generation complete!");
+                refreshStatus();
+            });
             return;
         }
 
@@ -621,70 +565,7 @@ public class ScheduledItemGenerationView {
                 })
                 .onSuccess(result -> {
                     Console.log("generateWithSql: Statement " + current + "/" + total + " executed");
-                    executeNextSqlStatement(sqlStatements, index + 1, generateResources);
-                });
-    }
-
-    private void generateScheduledResourcesWithSql() {
-        Console.log("generateScheduledResourcesWithSql: Starting scheduled resource generation");
-        Platform.runLater(() -> statusLabel.setText("Generating scheduled resources..."));
-
-        // Check if we have resources to generate
-        if (availableResources.isEmpty()) {
-            Console.log("generateScheduledResourcesWithSql: No resources available, skipping");
-            Platform.runLater(() -> {
-                progressBar.setVisible(false);
-                statusLabel.setText("Generation complete! (No resources to generate)");
-                refreshStatus();
-            });
-            return;
-        }
-
-        // Build resource ID list for IN clause
-        String resourceIds = availableResources.stream()
-                .map(r -> String.valueOf(r.getPrimaryKey()))
-                .collect(Collectors.joining(","));
-
-        Console.log("generateScheduledResourcesWithSql: Generating for " + availableResources.size() + " resources");
-
-        // SQL for scheduled_resource - only for resources linked to the global site
-        // Uses DISTINCT ON to select one config per (date, resource), prioritizing configs with event_id
-        String sql = "INSERT INTO scheduled_resource (date, configuration_id, scheduled_item_id, max, online, available) " +
-                "SELECT DISTINCT ON (si.date, r.id) si.date, rc.id, si.id, NULL, COALESCE(rc.online, true), true " +
-                "FROM scheduled_item si " +
-                "JOIN resource_configuration rc ON rc.item_id = si.item_id " +
-                "JOIN resource r ON r.id = rc.resource_id " +
-                "WHERE si.site_id = " + globalSite.getPrimaryKey() + " " +
-                "AND r.id IN (" + resourceIds + ") " +
-                "AND si.resource = true " +
-                "AND (rc.start_date IS NULL OR rc.start_date <= si.date) " +
-                "AND (rc.end_date IS NULL OR rc.end_date >= si.date) " +
-                "AND NOT EXISTS (" +
-                "  SELECT 1 FROM scheduled_resource sr " +
-                "  JOIN resource_configuration rc2 ON rc2.id = sr.configuration_id " +
-                "  WHERE sr.date = si.date AND rc2.resource_id = r.id" +
-                ") " +
-                "ORDER BY si.date, r.id, rc.event_id DESC NULLS LAST";
-
-        SubmitService.executeSubmit(SubmitArgument.builder()
-                        .setLanguage("SQL")
-                        .setStatement(sql)
-                        .setDataSourceId(DataSourceModelService.getDefaultDataSourceId())
-                        .build())
-                .onFailure(e -> {
-                    Console.error("Error generating scheduled resources", e);
-                    handleError("Error generating scheduled resources", e);
-                })
-                .onSuccess(result -> {
-                    Console.log("generateScheduledResourcesWithSql: Scheduled resources generated");
-                    Platform.runLater(() -> {
-                        progressBar.setVisible(false);
-                        statusLabel.setText("Generation complete!");
-                        // Show View Details button
-                        viewDetailsButton.setVisible(true);
-                        viewDetailsButton.setManaged(true);
-                        refreshStatus();
-                    });
+                    executeNextSqlStatement(sqlStatements, index + 1);
                 });
     }
 
@@ -958,369 +839,4 @@ public class ScheduledItemGenerationView {
         }
     }
 
-    /**
-     * Shows a modal dialog with generation details per month.
-     * Data is loaded lazily when user selects a month.
-     */
-    private void showGenerationDetailsDialog() {
-        if (globalSite == null || lastGenerationFrom == null || lastGenerationTo == null) {
-            return;
-        }
-
-        VBox dialogContent = new VBox(15);
-        dialogContent.setPadding(new Insets(20));
-        dialogContent.setMinWidth(700);
-        dialogContent.setPrefWidth(900);
-        dialogContent.setMaxWidth(1100);
-
-        // Title
-        Label titleLabel = new Label("📋 Generation Details");
-        titleLabel.setStyle("-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: #2c3e50;");
-
-        // Info row
-        Label infoLabel = new Label("Date range: " + lastGenerationFrom + " to " + lastGenerationTo);
-        infoLabel.setStyle("-fx-text-fill: #666; -fx-font-size: 12px;");
-
-        // Month selector
-        HBox monthSelectorRow = new HBox(10);
-        monthSelectorRow.setAlignment(Pos.CENTER_LEFT);
-        Label monthLabel = new Label("Select Month:");
-        monthLabel.setStyle("-fx-font-weight: bold;");
-
-        // Create month dropdown (ComboBox-like)
-        List<YearMonth> months = new ArrayList<>();
-        YearMonth startMonth = YearMonth.from(lastGenerationFrom);
-        YearMonth endMonth = YearMonth.from(lastGenerationTo);
-        for (YearMonth ym = startMonth; !ym.isAfter(endMonth); ym = ym.plusMonths(1)) {
-            months.add(ym);
-        }
-
-        // Use buttons for month navigation (more GWT-compatible than ComboBox)
-        Button prevMonthBtn = new Button("◀");
-        prevMonthBtn.setStyle("-fx-padding: 5 10 5 10;");
-        Button nextMonthBtn = new Button("▶");
-        nextMonthBtn.setStyle("-fx-padding: 5 10 5 10;");
-
-        Label currentMonthLabel = new Label("");
-        currentMonthLabel.setStyle("-fx-font-size: 14px; -fx-font-weight: bold; -fx-min-width: 120; -fx-alignment: center;");
-
-        monthSelectorRow.getChildren().addAll(monthLabel, prevMonthBtn, currentMonthLabel, nextMonthBtn);
-
-        // Content area for lazy-loaded data
-        VBox detailsContent = new VBox(10);
-        detailsContent.setPadding(new Insets(10));
-
-        Label loadingLabel = new Label("Select a month to view details...");
-        loadingLabel.setStyle("-fx-text-fill: #888; -fx-font-style: italic;");
-        detailsContent.getChildren().add(loadingLabel);
-
-        ScrollPane scrollPane = new ScrollPane(detailsContent);
-        scrollPane.setFitToWidth(true);
-        scrollPane.setPrefHeight(400);
-        scrollPane.setMaxHeight(500);
-        scrollPane.setStyle("-fx-background-color: #fafafa; -fx-border-color: #e0e0e0;");
-
-        // Track current month index
-        final int[] currentMonthIndex = {0};
-
-        Runnable updateMonthDisplay = () -> {
-            if (months.isEmpty()) return;
-            YearMonth ym = months.get(currentMonthIndex[0]);
-            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("MMMM yyyy");
-            currentMonthLabel.setText(ym.format(formatter));
-            prevMonthBtn.setDisable(currentMonthIndex[0] == 0);
-            nextMonthBtn.setDisable(currentMonthIndex[0] >= months.size() - 1);
-            loadMonthDetails(ym, detailsContent);
-        };
-
-        prevMonthBtn.setOnAction(e -> {
-            if (currentMonthIndex[0] > 0) {
-                currentMonthIndex[0]--;
-                updateMonthDisplay.run();
-            }
-        });
-
-        nextMonthBtn.setOnAction(e -> {
-            if (currentMonthIndex[0] < months.size() - 1) {
-                currentMonthIndex[0]++;
-                updateMonthDisplay.run();
-            }
-        });
-
-        // Close button
-        HBox footer = new HBox();
-        footer.setAlignment(Pos.CENTER_RIGHT);
-        footer.setPadding(new Insets(10, 0, 0, 0));
-
-        Button closeButton = new Button("Close");
-        closeButton.setStyle("-fx-background-color: #3498db; -fx-text-fill: white; -fx-padding: 8 20 8 20; -fx-background-radius: 4; -fx-cursor: hand;");
-        footer.getChildren().add(closeButton);
-
-        dialogContent.getChildren().addAll(titleLabel, infoLabel, monthSelectorRow, scrollPane, footer);
-
-        // Show dialog
-        BorderPane dialogPane = new BorderPane(dialogContent);
-        dialogPane.setStyle("-fx-background-color: white; -fx-background-radius: 8;");
-        DialogCallback dialogCallback = DialogUtil.showModalNodeInGoldLayout(dialogPane, FXMainFrameDialogArea.getDialogArea());
-
-        closeButton.setOnAction(e -> dialogCallback.closeDialog());
-
-        // Load initial month
-        if (!months.isEmpty()) {
-            updateMonthDisplay.run();
-        }
-    }
-
-    /**
-     * Loads details for a specific month (lazy loading).
-     * Shows date ranges per room with configuration info.
-     */
-    private void loadMonthDetails(YearMonth yearMonth, VBox detailsContent) {
-        Platform.runLater(() -> {
-            detailsContent.getChildren().clear();
-            Label loadingLabel = new Label("Loading data for " + yearMonth + "...");
-            loadingLabel.setStyle("-fx-text-fill: #666; -fx-font-style: italic;");
-            detailsContent.getChildren().add(loadingLabel);
-        });
-
-        LocalDate monthStart = yearMonth.atDay(1);
-        LocalDate monthEnd = yearMonth.atEndOfMonth();
-
-        // Clamp to generation range
-        if (monthStart.isBefore(lastGenerationFrom)) monthStart = lastGenerationFrom;
-        if (monthEnd.isAfter(lastGenerationTo)) monthEnd = lastGenerationTo;
-
-        Console.log("loadMonthDetails: Loading for " + monthStart + " to " + monthEnd);
-
-        // Query scheduled_resource with configuration details for this month
-        String dql = "select sr.id, sr.date, sr.available, sr.online, sr.max, " +
-                "sr.configuration, sr.configuration.id, sr.configuration.name, " +
-                "sr.configuration.resource, sr.configuration.resource.id, sr.configuration.resource.name, " +
-                "sr.configuration.resource.building, sr.configuration.resource.building.name, " +
-                "sr.configuration.item, sr.configuration.item.name, " +
-                "sr.configuration.event, sr.configuration.event.id, sr.configuration.event.name " +
-                "from ScheduledResource sr " +
-                "where sr.configuration.resource.site.id=$1 " +
-                "and sr.date >= $2 and sr.date <= $3 " +
-                "order by sr.configuration.resource.building.name, sr.configuration.resource.name, sr.date";
-
-        EntityStore.create().executeQuery(dql, globalSite.getPrimaryKey(), monthStart, monthEnd)
-                .onFailure(e -> {
-                    Console.error("Error loading month details", e);
-                    Platform.runLater(() -> {
-                        detailsContent.getChildren().clear();
-                        Label errorLabel = new Label("Error loading data: " + e.getMessage());
-                        errorLabel.setStyle("-fx-text-fill: #c0392b;");
-                        detailsContent.getChildren().add(errorLabel);
-                    });
-                })
-                .onSuccess(result -> {
-                    Console.log("loadMonthDetails: Loaded " + result.size() + " scheduled resources");
-                    Platform.runLater(() -> displayMonthDetails(result, detailsContent, yearMonth));
-                });
-    }
-
-    /**
-     * Displays monthly details with date ranges per room.
-     */
-    private void displayMonthDetails(List<?> scheduledResources, VBox detailsContent, YearMonth yearMonth) {
-        detailsContent.getChildren().clear();
-
-        if (scheduledResources.isEmpty()) {
-            Label noDataLabel = new Label("No scheduled resources for this month.");
-            noDataLabel.setStyle("-fx-text-fill: #888; -fx-font-style: italic;");
-            detailsContent.getChildren().add(noDataLabel);
-            return;
-        }
-
-        // Group by resource, then find date ranges with same configuration
-        // Map: Resource -> List of (date, config info)
-        Map<Object, List<ScheduledResourceInfo>> resourceDates = new LinkedHashMap<>();
-
-        for (Object o : scheduledResources) {
-            ScheduledResource sr = (ScheduledResource) o;
-            ResourceConfiguration config = sr.getResourceConfiguration();
-            if (config == null) continue;
-
-            Resource resource = config.getResource();
-            if (resource == null) continue;
-
-            Object resourceId = resource.getPrimaryKey();
-            resourceDates.computeIfAbsent(resourceId, k -> new ArrayList<>())
-                    .add(new ScheduledResourceInfo(sr, config, resource));
-        }
-
-        // Build UI - group by building
-        Map<String, List<Map.Entry<Object, List<ScheduledResourceInfo>>>> byBuilding = new LinkedHashMap<>();
-        for (Map.Entry<Object, List<ScheduledResourceInfo>> entry : resourceDates.entrySet()) {
-            if (entry.getValue().isEmpty()) continue;
-            ScheduledResourceInfo first = entry.getValue().get(0);
-            String buildingName = first.buildingName != null ? first.buildingName : "No Building";
-            byBuilding.computeIfAbsent(buildingName, k -> new ArrayList<>()).add(entry);
-        }
-
-        // Summary
-        Label summaryLabel = new Label("📊 " + resourceDates.size() + " rooms, " + scheduledResources.size() + " scheduled resource entries");
-        summaryLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #2c3e50;");
-        detailsContent.getChildren().add(summaryLabel);
-
-        // Display each building
-        for (Map.Entry<String, List<Map.Entry<Object, List<ScheduledResourceInfo>>>> buildingEntry : byBuilding.entrySet()) {
-            String buildingName = buildingEntry.getKey();
-            List<Map.Entry<Object, List<ScheduledResourceInfo>>> rooms = buildingEntry.getValue();
-
-            VBox buildingBox = new VBox(5);
-            buildingBox.setStyle("-fx-background-color: #f8f9fa; -fx-padding: 10; -fx-background-radius: 6; -fx-border-color: #e9ecef; -fx-border-radius: 6;");
-
-            Label buildingLabel = new Label("🏢 " + buildingName + " (" + rooms.size() + " rooms)");
-            buildingLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 13px; -fx-text-fill: #495057;");
-            buildingBox.getChildren().add(buildingLabel);
-
-            // Each room in this building
-            for (Map.Entry<Object, List<ScheduledResourceInfo>> roomEntry : rooms) {
-                List<ScheduledResourceInfo> dates = roomEntry.getValue();
-                if (dates.isEmpty()) continue;
-
-                String roomName = dates.get(0).resourceName;
-
-                VBox roomBox = new VBox(3);
-                roomBox.setPadding(new Insets(5, 0, 5, 15));
-
-                Label roomLabel = new Label("🛏 " + roomName);
-                roomLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #212529;");
-                roomBox.getChildren().add(roomLabel);
-
-                // Calculate date ranges with same config
-                List<DateRangeInfo> ranges = calculateDateRanges(dates);
-
-                FlowPane rangesPane = new FlowPane();
-                rangesPane.setHgap(8);
-                rangesPane.setVgap(4);
-                rangesPane.setPadding(new Insets(3, 0, 0, 10));
-
-                for (DateRangeInfo range : ranges) {
-                    String rangeText;
-                    if (range.startDate.equals(range.endDate)) {
-                        rangeText = range.startDate.toString();
-                    } else {
-                        rangeText = range.startDate + " → " + range.endDate;
-                    }
-
-                    String tooltip = range.configName != null ? range.configName : "Default config";
-                    if (range.hasEvent) {
-                        tooltip += " (Event: " + range.eventName + ")";
-                    }
-
-                    Label rangeLabel = new Label(rangeText);
-                    String bgColor = range.hasEvent ? "#d4edda" : "#e7f3ff";
-                    String borderColor = range.hasEvent ? "#28a745" : "#007bff";
-                    rangeLabel.setStyle("-fx-background-color: " + bgColor + "; -fx-text-fill: #212529; " +
-                            "-fx-padding: 2 6 2 6; -fx-background-radius: 3; " +
-                            "-fx-border-color: " + borderColor + "; -fx-border-radius: 3; -fx-font-size: 11px;");
-
-                    // Show config info on hover-like tooltip via label
-                    if (range.hasEvent) {
-                        Label eventIcon = new Label("🎯");
-                        eventIcon.setStyle("-fx-font-size: 10px;");
-                        HBox rangeBox = new HBox(3, rangeLabel, eventIcon);
-                        rangeBox.setAlignment(Pos.CENTER_LEFT);
-                        rangesPane.getChildren().add(rangeBox);
-                    } else {
-                        rangesPane.getChildren().add(rangeLabel);
-                    }
-                }
-
-                roomBox.getChildren().add(rangesPane);
-                buildingBox.getChildren().add(roomBox);
-            }
-
-            detailsContent.getChildren().add(buildingBox);
-        }
-    }
-
-    /**
-     * Helper class to hold scheduled resource info.
-     */
-    private static class ScheduledResourceInfo {
-        final LocalDate date;
-        final String resourceName;
-        final String buildingName;
-        final String configName;
-        final Object configId;
-        final boolean hasEvent;
-        final String eventName;
-
-        ScheduledResourceInfo(ScheduledResource sr, ResourceConfiguration config, Resource resource) {
-            this.date = sr.getDate();
-            this.resourceName = resource.getName();
-            Building building = resource.getBuilding();
-            this.buildingName = building != null ? building.getName() : null;
-            this.configName = config.getName();
-            this.configId = config.getPrimaryKey();
-            Event event = config.getEvent();
-            this.hasEvent = event != null;
-            this.eventName = event != null ? event.getName() : null;
-        }
-    }
-
-    /**
-     * Helper class to represent a date range with configuration info.
-     */
-    private static class DateRangeInfo {
-        LocalDate startDate;
-        LocalDate endDate;
-        String configName;
-        boolean hasEvent;
-        String eventName;
-        Object configId;
-
-        DateRangeInfo(LocalDate date, String configName, boolean hasEvent, String eventName, Object configId) {
-            this.startDate = date;
-            this.endDate = date;
-            this.configName = configName;
-            this.hasEvent = hasEvent;
-            this.eventName = eventName;
-            this.configId = configId;
-        }
-
-        boolean canExtend(ScheduledResourceInfo info) {
-            return Objects.equals(configId, info.configId) &&
-                    info.date.equals(endDate.plusDays(1));
-        }
-
-        void extend(ScheduledResourceInfo info) {
-            this.endDate = info.date;
-        }
-    }
-
-    /**
-     * Calculates date ranges from a list of scheduled resources with same room.
-     * Consecutive dates with the same config are merged into ranges.
-     */
-    private List<DateRangeInfo> calculateDateRanges(List<ScheduledResourceInfo> dates) {
-        if (dates.isEmpty()) return Collections.emptyList();
-
-        // Sort by date
-        dates.sort(Comparator.comparing(d -> d.date));
-
-        List<DateRangeInfo> ranges = new ArrayList<>();
-        DateRangeInfo currentRange = null;
-
-        for (ScheduledResourceInfo info : dates) {
-            if (currentRange == null) {
-                currentRange = new DateRangeInfo(info.date, info.configName, info.hasEvent, info.eventName, info.configId);
-            } else if (currentRange.canExtend(info)) {
-                currentRange.extend(info);
-            } else {
-                ranges.add(currentRange);
-                currentRange = new DateRangeInfo(info.date, info.configName, info.hasEvent, info.eventName, info.configId);
-            }
-        }
-
-        if (currentRange != null) {
-            ranges.add(currentRange);
-        }
-
-        return ranges;
-    }
 }
