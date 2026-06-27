@@ -94,13 +94,6 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
     private static final String ACCO_ITEM_POLICY_EXISTS =
         "exists(select ItemPolicy ip where item=si.item and scope.(site=si.site and (event=null or event=$1) and (eventType=null or (select type=ip.scope.eventType from Event where id=$1))))";
 
-    // Pool allocation exists check (shared by both acco filters) — resolved on the fly from ResourceConfiguration
-    // (matched to the scheduled item by site & item, and only configs applicable to this event: bound to it, or a
-    // global config whose date range covers the scheduled item's date — other events' configs are ignored), so it no
-    // longer depends on scheduled_resource rows existing.
-    private static final String ACCO_POOL_EXISTS =
-        "exists(select ResourceConfiguration rc where rc.resource.site=si.site and rc.item=si.item and (rc.event=$1 or rc.event=null and (rc.startDate=null or rc.startDate<=si.date) and (rc.endDate=null or rc.endDate>=si.date)) and exists(select PoolAllocation where resource=rc.resource and publicBookingEnabled and pool.allowsPublic and event=$1))";
-
     private static final String SCHEDULED_ITEMS_DQL_ORDER_BY =
         " order by site?.ord,site.id,item.family.id,item?.ord,item.id,date";
 
@@ -130,7 +123,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                     DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
                         SCHEDULED_ITEMS_DQL_BASE +
                         // Accommodation filter: when $4 provided use the specific item, else fall back to pool allocation check
-                        " and (si.item.family.code!='acco' or " + ACCO_ITEM_POLICY_EXISTS + " or ($4::int=null ? " + ACCO_POOL_EXISTS + " : si.item=$4))" +
+                        " and (si.item.family.code!='acco' or " + ACCO_ITEM_POLICY_EXISTS + " or si.item=$4)" +
                         // Date range filter: limit to volunteer's stay dates when $2/$3 provided
                         " and ($2::date=null or si.date>=$2) and ($3::date=null or si.date<=$3)" +
                         SCHEDULED_ITEMS_DQL_ORDER_BY, eventPk, startDate, endDate, accoPk)
@@ -235,7 +228,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
             .compose(resolvedEventPk -> QueryService.executeQuery(
                 DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
                     SCHEDULED_ITEMS_DQL_BASE +
-                    " and (si.item.family.code!='acco' or " + ACCO_ITEM_POLICY_EXISTS + " or " + ACCO_POOL_EXISTS + ")" +
+                    " and (si.item.family.code!='acco' or " + ACCO_ITEM_POLICY_EXISTS + ")" +
                     SCHEDULED_ITEMS_DQL_ORDER_BY, resolvedEventPk)
             ));
     }
@@ -247,10 +240,9 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
         if (rawEventPk == null || rawEventPk instanceof Number) {
             return Future.succeededFuture(rawEventPk);
         }
-        if (!(rawEventPk instanceof String)) {
+        if (!(rawEventPk instanceof String s)) {
             return Future.succeededFuture(rawEventPk);
         }
-        String s = (String) rawEventPk;
         Long parsedId = Numbers.parseLong(s);
         if (parsedId != null) {
             return Future.succeededFuture(parsedId);
