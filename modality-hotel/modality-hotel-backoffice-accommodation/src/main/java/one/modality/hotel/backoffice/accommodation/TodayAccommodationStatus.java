@@ -11,7 +11,6 @@ import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.GridPane;
 import one.modality.base.client.gantt.fx.today.FXToday;
 import one.modality.base.client.time.BackOfficeTimeFormats;
-import one.modality.base.shared.entities.ScheduledResource;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -31,24 +30,23 @@ public final class TodayAccommodationStatus {
         todayScheduledResourceLoader.startLogic(mixin);
     }
 
-    private ObservableList<ScheduledResource> todayScheduledResources() {
-        return todayScheduledResourceLoader.getTodayScheduledResources();
+    private ObservableList<ResourceDay> todayResourceDays() {
+        return todayScheduledResourceLoader.getTodayResourceDays();
     }
 
     private long countRoomsOccupied() {
-        // The "booked" field is an extra computed fields added by the ReactiveEntitiesMapper in TodayScheduledResourceLoader
-        return todayScheduledResources().stream()
-                .filter(scheduledResource -> scheduledResource.getIntegerFieldValue("booked") > 0)
+        return todayResourceDays().stream()
+                .filter(resourceDay -> resourceDay.getBooked() > 0)
                 .count();
     }
 
     private long countAllRooms() {
-        return todayScheduledResources().size();
+        return todayResourceDays().size();
     }
 
     private int countAllBeds() {
-        return todayScheduledResources().stream()
-                .mapToInt(ScheduledResource::getMax)
+        return todayResourceDays().stream()
+                .mapToInt(ResourceDay::getMax)
                 .sum();
     }
 
@@ -57,9 +55,8 @@ public final class TodayAccommodationStatus {
     }
 
     private long countGuests() {
-        // The "booked" field is an extra computed fields added by the ReactiveEntitiesMapper in TodayScheduledResourceLoader
-        return todayScheduledResources().stream()
-                .mapToInt(scheduledResource -> scheduledResource.getIntegerFieldValue("booked"))
+        return todayResourceDays().stream()
+                .mapToInt(ResourceDay::getBooked)
                 .sum();
     }
 
@@ -67,7 +64,7 @@ public final class TodayAccommodationStatus {
         GridPane statusBar = new GridPane();
         statusBar.setAlignment(Pos.CENTER); // Makes a difference for the Web version (otherwise children appears on top)
         FXProperties.runNowAndOnPropertyChange(() -> updateStatusBar(statusBar), FXToday.todayProperty());
-        ObservableLists.runOnListChange(c -> updateStatusBar(statusBar), todayScheduledResources());
+        ObservableLists.runOnListChange(c -> updateStatusBar(statusBar), todayResourceDays());
         return statusBar;
     }
 

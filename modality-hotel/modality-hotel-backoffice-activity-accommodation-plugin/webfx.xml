@@ -10,6 +10,7 @@
     <dependencies>
         <used-by-source-modules>
             <undetected-module>javafx-controls</undetected-module>
+            <undetected-module>modality-base-shared-entities</undetected-module>
         </used-by-source-modules>
     </dependencies>
 

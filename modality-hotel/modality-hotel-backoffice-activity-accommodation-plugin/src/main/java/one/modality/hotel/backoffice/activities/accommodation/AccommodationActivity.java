@@ -20,7 +20,6 @@ final class AccommodationActivity extends OrganizationDependentViewDomainActivit
     private final RoomView roomView = new RoomView(pm);
     private final GuestView guestView = new GuestView(pm);
 
-    private final RoomsAlterationView roomsAlterationView = new RoomsAlterationView(pm, this);
     private final TodayAccommodationStatus todayAccommodationStatus = new TodayAccommodationStatus(pm);
     final BorderPane container = new BorderPane();
     private final TabsBar<Node> headerTabsBar = new TabsBar<>(this, container::setCenter);
@@ -34,8 +33,7 @@ final class AccommodationActivity extends OrganizationDependentViewDomainActivit
         // Creating the tabs buttons that will appear in the main frame header tabs bar (see onResume())
         headerTabsBar.setTabs(
                 headerTabsBar.createTab("Rooms", this::buildRoomView),
-                headerTabsBar.createTab("Guests", this::buildGuestView),
-                headerTabsBar.createTab("Rooms alteration", this::buildRoomsAlterationView)
+                headerTabsBar.createTab("Guests", this::buildGuestView)
         );
         // returning the container
         return container;
@@ -51,10 +49,6 @@ final class AccommodationActivity extends OrganizationDependentViewDomainActivit
 
     private Node buildGuestView() {
         return AccommodationBorderPane.createAccommodationBorderPane(guestView.getAttendanceGantt(), todayAccommodationStatus);
-    }
-
-    private Node buildRoomsAlterationView() {
-        return RoomsAlterationBorderPane.createAccommodationBorderPane(roomsAlterationView, this);
     }
 
     @Override
@@ -82,7 +76,6 @@ final class AccommodationActivity extends OrganizationDependentViewDomainActivit
         roomView.startLogic(this);
         guestView.startLogic(this);
         todayAccommodationStatus.startLogic(this);
-        roomsAlterationView.startLogic(this);
     }
 
     @Override

@@ -1,7 +1,6 @@
 package one.modality.hotel.backoffice.accommodation;
 
 import one.modality.base.shared.entities.ResourceConfiguration;
-import one.modality.base.shared.entities.ScheduledResource;
 
 /**
  * @author Bruno Salmon
@@ -12,14 +11,12 @@ public final class ScheduledResourceBlock implements AccommodationBlock {
     private final boolean online;
     private final int remaining;
 
-    public ScheduledResourceBlock(ScheduledResource sr) {
-        resourceConfiguration = sr.getResourceConfiguration();
-        available = sr.isAvailable();
-        online = sr.isOnline();
-        int max = sr.getMax();
-        // The "booked" field is an extra computed fields added by the ReactiveEntitiesMapper in RoomCalendarGanttCanvas
-        int booked = sr.getIntegerFieldValue("booked");
-        remaining = max - booked;
+    public ScheduledResourceBlock(ResourceDay resourceDay) {
+        resourceConfiguration = resourceDay.getConfiguration();
+        // Per-date availability override dropped (was always true in scheduled_resource).
+        available = true;
+        online = resourceDay.isOnline();
+        remaining = resourceDay.getMax() - resourceDay.getBooked();
     }
 
     @Override

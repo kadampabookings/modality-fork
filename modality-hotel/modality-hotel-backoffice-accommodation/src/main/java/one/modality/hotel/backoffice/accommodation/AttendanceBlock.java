@@ -22,7 +22,8 @@ public final class AttendanceBlock implements AccommodationBlock {
 
     public AttendanceBlock(Attendance attendance) {
         this.attendance = attendance;
-        this.resourceConfiguration = attendance.getScheduledResource().getResourceConfiguration();
+        // The allocated room config, read via the document line (the allocation) — no scheduled_resource.
+        this.resourceConfiguration = attendance.getDocumentLine().getResourceConfiguration();
         attendeeCategory = AttendeeCategory.fromDocument(getDocument());
      }
 
