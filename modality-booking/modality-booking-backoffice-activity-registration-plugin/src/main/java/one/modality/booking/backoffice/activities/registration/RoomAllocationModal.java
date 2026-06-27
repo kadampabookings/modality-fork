@@ -249,9 +249,9 @@ public class RoomAllocationModal {
 
             entityStore.<Attendance>executeQuery(
                 "{class: 'Attendance', alias: 'a', " +
-                "columns: ['date', 'resourceConfiguration.id', 'documentLine.document.person_firstName', 'documentLine.document.person_lastName', 'documentLine.document.id'], " +
-                "where: 'date>=$1 and date<$2 and resourceConfiguration!=null', " +
-                "orderBy: 'resourceConfiguration.id,date'}",
+                "columns: ['date', 'documentLine.resourceConfiguration.id', 'documentLine.document.person_firstName', 'documentLine.document.person_lastName', 'documentLine.document.id'], " +
+                "where: 'date>=$1 and date<$2 and documentLine.resourceConfiguration!=null', " +
+                "orderBy: 'documentLine.resourceConfiguration.id,date'}",
                 queryStart, queryEnd
             ).onFailure(error -> {
                 showError("Failed to load occupancies: " + error.getMessage());
@@ -268,9 +268,8 @@ public class RoomAllocationModal {
         // Group attendances by resource configuration to build occupancy data
         Map<Object, List<Attendance>> attendancesByRoom = new HashMap<>();
         for (Attendance att : attendances) {
-            // Attendance -> ScheduledResource -> ResourceConfiguration
-            ScheduledResource sr = att.getScheduledResource();
-            ResourceConfiguration rc = sr != null ? sr.getResourceConfiguration() : null;
+            // Attendance -> DocumentLine -> ResourceConfiguration (the allocated room) — no scheduled_resource
+            ResourceConfiguration rc = att.getDocumentLine() != null ? att.getDocumentLine().getResourceConfiguration() : null;
             if (rc != null) {
                 attendancesByRoom.computeIfAbsent(rc.getPrimaryKey(), k -> new ArrayList<>()).add(att);
             }

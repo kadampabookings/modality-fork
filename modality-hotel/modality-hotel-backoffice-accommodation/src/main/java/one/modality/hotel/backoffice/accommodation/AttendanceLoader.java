@@ -53,10 +53,13 @@ public final class AttendanceLoader {
         if (rem == null) { // first call
             rem = ReactiveEntitiesMapper.<Attendance>createPushReactiveChain(mixin)
                     .always( // language=JSON5
-                        "{class: 'Attendance', alias: 'a', fields: 'date,documentLine.document.(arrived,person_firstName,person_lastName,event.id),scheduledResource.configuration.(name,item.name),documentLine.document.event.name'}")
-                    .always(where("scheduledResource is not null"))
+                        "{class: 'Attendance', alias: 'a', fields: 'date,documentLine.document.(arrived,person_firstName,person_lastName,event.id),documentLine.resourceConfiguration.(name,item.name),documentLine.document.event.name'}")
+                    // Accommodation guests = attendances whose document line is allocated to an acco resource
+                    // configuration. Read via documentLine.resourceConfiguration (the allocation, set by the
+                    // allocation trigger) instead of the former attendance.scheduledResource — no scheduled_resource.
+                    .always(where("documentLine.resourceConfiguration.item.family.code='acco'"))
                     // Order is important for TimeBarUtil
-                    .always(orderBy("scheduledResource.configuration.item.ord,scheduledResource.configuration.name,documentLine.document.person_lastName,documentLine.document.person_firstName,date"))
+                    .always(orderBy("documentLine.resourceConfiguration.item.ord,documentLine.resourceConfiguration.name,documentLine.document.person_lastName,documentLine.document.person_firstName,date"))
                     // Returning events for the selected organization only (or returning an empty set if no organization is selected)
                     .ifNotNullOtherwiseEmpty(pm.organizationIdProperty(), o -> where("documentLine.document.event.organization=$1", o))
                     // Restricting events to those appearing in the time window
