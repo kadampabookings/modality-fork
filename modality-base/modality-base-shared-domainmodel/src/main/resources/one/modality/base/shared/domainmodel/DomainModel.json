@@ -344,7 +344,7 @@
       "expr": "(select coalesce(site.groupName, item.code) + (exists(select Attendance a where documentLine.(document=d and !cancelled and item.code='TOC') and exists(select DocumentLine dl where !cancelled and document=d and item.family.code='transp' and item.code in ('HS', 'OS') and !exists(select Attendance where date=a.date and documentLine.(document=d and !cancelled and (item.code in ('HS', 'OS') or item.family.code='park'))))) ? ' *' : '') from DocumentLine where document=d and !cancelled and item.family.code='transp' and item.(code='HS' or lower(name) like '%shuttle' and lower(name) not like '%airport%') limit 1) as HS"
     },
     "listing_inwardAirportShuttle": {
-      "expr": "(select item.code from DocumentLine where document=d and !cancelled and item.family.code='transp' and (item.name like '%=>%KMC%' or item.name like '%=>%Festival%') limit 1) as IAS"
+      "expr": "(select item.code from DocumentLine where document=d and !cancelled and item.family.code='transp' and (item.name like '%→%KMC%' or item.name like '%→%Festival%') limit 1) as IAS"
     },
     "listing_inwardTrip": {
       "expr": "(select site.code + '  ' + dates from DocumentLine where document=d and !cancelled and item.(family.code='transp' and code='IT') limit 1) as IT"
@@ -386,7 +386,7 @@
       "expr": "(array_to_string(array(select (site.main ? 'ON ' : 'OFF ') + item.code from DocumentLine where document=d and !cancelled and item.family.code='park' order by item.ord), ' ') + (exists(select Attendance a where documentLine.(document=d and !cancelled and item.code='TOC') and exists(select DocumentLine dl where !cancelled and document=d and item.family.code='park' and !exists(select Attendance where date=a.date and documentLine.(document=d and !cancelled and item.family.code='park')))) ? ' *' : '') ) as Parking"
     },
     "listing_returnAirportShuttle": {
-      "expr": "(select item.code from DocumentLine where document=d and !cancelled and item.family.code='transp' and item.name like '%KMC%=>%' limit 1) as RAS"
+      "expr": "(select item.code from DocumentLine where document=d and !cancelled and item.family.code='transp' and item.name like '%KMC%→%' limit 1) as RAS"
     },
     "listing_returnTrip": {
       "expr": "(select site.code + '  ' + dates from DocumentLine where document=d and !cancelled and item.(family.code='transp' and code='RT') limit 1) as RT"
@@ -594,13 +594,13 @@
       "expr": "coalesce((select 'RED' from DocumentLine where document=dl.document and cancelled=false and item.family.code='transl' group by item order by item.ord limit 1), (select 'YLW' from Document where id=dl.document.id and person_ordained)) as Entrance"
     },
     "listing_inwardAirport": {
-      "expr": "(select item.name from DocumentLine where document=dl.document and !cancelled and item.family.code='transp' and item.name like '% => KMC%' limit 1) as IA"
+      "expr": "(select item.name from DocumentLine where document=dl.document and !cancelled and item.family.code='transp' and item.name like '% → KMC%' limit 1) as IA"
     },
     "listing_inwardTrip": {
       "expr": "(select 'IT' from DocumentLine where document=dl.document and !cancelled and item.family.code='transp' and item.name='Inward Trip' limit 1) as IT"
     },
     "listing_returnAirport": {
-      "expr": "(select item.name from DocumentLine where document=dl.document and !cancelled and item.family.code='transp' and item.name like '%KMC => %' limit 1) as RA"
+      "expr": "(select item.name from DocumentLine where document=dl.document and !cancelled and item.family.code='transp' and item.name like '%KMC → %' limit 1) as RA"
     },
     "listing_returnTrip": {
       "expr": "(select 'RT' from DocumentLine where document=dl.document and !cancelled and item.family.code='transp' and item.name='Return Trip' limit 1) as RT"
@@ -1035,6 +1035,7 @@
     "adultAllowed": "boolean",
     "applicableToInPerson": "boolean",
     "applicableToOnline": "boolean",
+    "askDietForBreakfast": "boolean",
     "childAllowed": "boolean",
     "dayVisitorDinnerAllowed": "boolean",
     "eventPhaseCoverage1": "EventPhaseCoverage",

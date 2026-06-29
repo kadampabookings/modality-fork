@@ -22,6 +22,7 @@ public interface ItemFamilyPolicy extends Entity,
     String prerequisiteDescriptionLabel = "prerequisiteDescriptionLabel";
     String prerequisiteConfirmationLabel = "prerequisiteConfirmationLabel";
     String includedByDefault = "includedByDefault";
+    String askDietForBreakfast = "askDietForBreakfast";
     String childAllowed = "childAllowed";
     String youngAdultAllowed = "youngAdultAllowed";
     String adultAllowed = "adultAllowed";
@@ -136,6 +137,20 @@ public interface ItemFamilyPolicy extends Entity,
 
     default Boolean isIncludedByDefault() {
         return getBooleanFieldValue(includedByDefault);
+    }
+
+    // Whether the dietary preference question is asked when only breakfast is booked. Nullable: an
+    // explicit value is an admin override; null means the booking app applies its default (ask diet
+    // for any booked meal, breakfast included). Set to false on the DIET ItemFamilyPolicy for
+    // organisations that only need diet info for lunch and dinner — a breakfast-only booking then
+    // skips the dietary question.
+
+    default void setAskDietForBreakfast(Boolean value) {
+        setFieldValue(askDietForBreakfast, value);
+    }
+
+    default Boolean isAskDietForBreakfast() {
+        return getBooleanFieldValue(askDietForBreakfast);
     }
 
     // Age eligibility — who may book this family's options. Nullable: an explicit value is an admin
