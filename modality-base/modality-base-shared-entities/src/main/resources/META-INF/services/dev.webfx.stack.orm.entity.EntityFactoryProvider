@@ -67,7 +67,6 @@ one.modality.base.shared.entities.impl.ResourceImpl$ProvidedFactory
 one.modality.base.shared.entities.impl.RateImpl$ProvidedFactory
 one.modality.base.shared.entities.impl.ScheduledBoundaryImpl$ProvidedFactory
 one.modality.base.shared.entities.impl.ScheduledItemImpl$ProvidedFactory
-one.modality.base.shared.entities.impl.ScheduledResourceImpl$ProvidedFactory
 one.modality.base.shared.entities.impl.SiteImpl$ProvidedFactory
 one.modality.base.shared.entities.impl.SiteItemFamilyImpl$ProvidedFactory
 one.modality.base.shared.entities.impl.SnapshotImpl$ProvidedFactory

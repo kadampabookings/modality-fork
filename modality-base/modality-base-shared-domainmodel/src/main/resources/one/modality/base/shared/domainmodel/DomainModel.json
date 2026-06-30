@@ -36,7 +36,6 @@
     "present": "boolean",
     "rate": "Rate",
     "scheduledItem": "ScheduledItem",
-    "scheduledResource": "ScheduledResource",
     "time": "Temporal.PlainDate",
     "videoAccessEnabled": "boolean"
   },
@@ -1816,15 +1815,6 @@
     "teacher": "Teacher",
     "timeline": "Timeline",
     "vodDelayed": "boolean"
-  },
-  "ScheduledResource": {
-    "id": 115,
-    "available": "boolean",
-    "configuration": "ResourceConfiguration",
-    "date": "Temporal.PlainDate",
-    "max": "integer",
-    "online": "boolean",
-    "scheduledItem": "ScheduledItem"
   },
   "Site": {
     "id": 42,
