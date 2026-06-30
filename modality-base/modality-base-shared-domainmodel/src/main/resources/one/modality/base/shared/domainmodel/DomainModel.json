@@ -861,6 +861,7 @@
     "id": 95,
     "background": "string",
     "bookingForm": "BookingForm",
+    "category": "string",
     "deprecated": "boolean",
     "label": "Label",
     "name": "string",
