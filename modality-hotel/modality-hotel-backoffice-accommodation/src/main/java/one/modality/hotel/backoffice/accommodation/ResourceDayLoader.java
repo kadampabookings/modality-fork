@@ -27,7 +27,7 @@ import static dev.webfx.stack.orm.dql.DqlStatement.where;
  * {@link ResourceDay} per room per day in the window (the synthetic equivalent of the former
  * ScheduledResource rows), which the Gantt then groups into bars.
  */
-public final class ScheduledResourceLoader {
+public final class ResourceDayLoader {
 
     // The presentation model used by the logic code to query the server.
     private final AccommodationPresentationModel pm;
@@ -45,17 +45,17 @@ public final class ScheduledResourceLoader {
     // sending the exact same query and parameters to the server) run on the same client => the issue is that the push
     // notifications are sent to only 1 instance at a time. The workaround is to keep a single instance of the loader.
     // TODO: remove this workaround when the WebFX push notification issue is fixed
-    private static ScheduledResourceLoader INSTANCE;
+    private static ResourceDayLoader INSTANCE;
     private ObservableValue<Boolean> activeProperty;
     private boolean started;
-    public static ScheduledResourceLoader getOrCreate(AccommodationPresentationModel pm) {
+    public static ResourceDayLoader getOrCreate(AccommodationPresentationModel pm) {
         // Creating the instance on first call only (assuming the presentation model is identical on subsequent calls)
         if (INSTANCE == null)
-            INSTANCE = new ScheduledResourceLoader(pm);
+            INSTANCE = new ResourceDayLoader(pm);
         return INSTANCE;
     }
 
-    private ScheduledResourceLoader(AccommodationPresentationModel pm) {
+    private ResourceDayLoader(AccommodationPresentationModel pm) {
         this.pm = pm;
     }
 

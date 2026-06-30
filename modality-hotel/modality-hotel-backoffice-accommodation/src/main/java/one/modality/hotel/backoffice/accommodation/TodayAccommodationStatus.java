@@ -20,18 +20,18 @@ import java.util.List;
  */
 public final class TodayAccommodationStatus {
 
-    private final TodayScheduledResourceLoader todayScheduledResourceLoader;
+    private final TodayResourceDayLoader todayResourceDayLoader;
 
     public TodayAccommodationStatus(AccommodationPresentationModel pm) {
-        todayScheduledResourceLoader = TodayScheduledResourceLoader.getOrCreate(pm);
+        todayResourceDayLoader = TodayResourceDayLoader.getOrCreate(pm);
     }
 
     public void startLogic(Object mixin) {
-        todayScheduledResourceLoader.startLogic(mixin);
+        todayResourceDayLoader.startLogic(mixin);
     }
 
     private ObservableList<ResourceDay> todayResourceDays() {
-        return todayScheduledResourceLoader.getTodayResourceDays();
+        return todayResourceDayLoader.getTodayResourceDays();
     }
 
     private long countRoomsOccupied() {

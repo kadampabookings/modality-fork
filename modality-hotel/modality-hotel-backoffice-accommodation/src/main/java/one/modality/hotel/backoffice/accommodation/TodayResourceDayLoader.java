@@ -24,7 +24,7 @@ import static dev.webfx.stack.orm.dql.DqlStatement.where;
  * accommodation room configurations + a grouped attendance occupancy count for today, combined into one
  * {@link ResourceDay} per room (dated today) carrying its booked count.
  */
-public final class TodayScheduledResourceLoader {
+public final class TodayResourceDayLoader {
 
     // The presentation model used by the logic code to query the server.
     private final AccommodationPresentationModel pm;
@@ -41,17 +41,17 @@ public final class TodayScheduledResourceLoader {
     // sending the exact same query and parameters to the server) run on the same client => the issue is that the push
     // notifications are sent to only 1 instance at a time. The workaround is to keep a single instance of the loader.
     // TODO: remove this workaround when the WebFX push notification issue is fixed
-    private static TodayScheduledResourceLoader INSTANCE;
+    private static TodayResourceDayLoader INSTANCE;
     private ObservableValue<Boolean> activeProperty;
     private boolean started;
-    public static TodayScheduledResourceLoader getOrCreate(AccommodationPresentationModel pm) {
+    public static TodayResourceDayLoader getOrCreate(AccommodationPresentationModel pm) {
         // Creating the instance on first call only (assuming the presentation model is identical on subsequent calls)
         if (INSTANCE == null)
-            INSTANCE = new TodayScheduledResourceLoader(pm);
+            INSTANCE = new TodayResourceDayLoader(pm);
         return INSTANCE;
     }
 
-    private TodayScheduledResourceLoader(AccommodationPresentationModel pm) {
+    private TodayResourceDayLoader(AccommodationPresentationModel pm) {
         this.pm = pm;
     }
 
@@ -114,7 +114,7 @@ public final class TodayScheduledResourceLoader {
         // One ResourceDay (dated today) per room whose config range covers today.
         List<ResourceDay> days = new ArrayList<>();
         for (ResourceConfiguration rc : configurations) {
-            if (!ScheduledResourceLoader.configurationCoversDate(rc, today))
+            if (!ResourceDayLoader.configurationCoversDate(rc, today))
                 continue;
             Integer maxValue = rc.getMax();
             int max = maxValue == null ? 0 : maxValue;

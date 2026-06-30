@@ -5,13 +5,13 @@ import one.modality.base.shared.entities.ResourceConfiguration;
 /**
  * @author Bruno Salmon
  */
-public final class ScheduledResourceBlock implements AccommodationBlock {
+public final class ResourceDayBlock implements AccommodationBlock {
     private final ResourceConfiguration resourceConfiguration;
     private final boolean available;
     private final boolean online;
     private final int remaining;
 
-    public ScheduledResourceBlock(ResourceDay resourceDay) {
+    public ResourceDayBlock(ResourceDay resourceDay) {
         resourceConfiguration = resourceDay.getConfiguration();
         // Per-date availability override dropped (was always true in scheduled_resource).
         available = true;
@@ -41,7 +41,7 @@ public final class ScheduledResourceBlock implements AccommodationBlock {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
 
-        ScheduledResourceBlock that = (ScheduledResourceBlock) o;
+        ResourceDayBlock that = (ResourceDayBlock) o;
 
         if (available != that.available) return false;
         if (online != that.online) return false;

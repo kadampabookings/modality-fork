@@ -8,7 +8,7 @@ import java.time.LocalDate;
  * A synthetic per-(resource configuration, date) cell for the accommodation Gantt, computed on the fly
  * from {@link ResourceConfiguration} + the booking occupancy — replacing the former scheduled_resource
  * row. One instance per room per day; consecutive identical instances (same config + remaining) are
- * grouped into bars by TimeBarUtil (see {@code ScheduledResourceGantt}).
+ * grouped into bars by TimeBarUtil (see {@code ResourceDayGantt}).
  *
  * @author Bruno Salmon
  */
