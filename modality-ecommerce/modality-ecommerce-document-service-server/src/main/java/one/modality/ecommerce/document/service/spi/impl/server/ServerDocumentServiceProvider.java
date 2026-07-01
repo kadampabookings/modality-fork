@@ -137,7 +137,7 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
             new EntityStoreQuery("select creationDate,event,person,ref,inPerson,earlyBird,person_lang,person_firstName,person_lastName,person_email,person_age,person_facilityFee,request,person_carer1Name, person_carer1Document, person_carer2Name, person_carer2Document, arrived, checkedOut from Document where id=$1 order by id", docPk),
             // 1 - Loading document lines
             new EntityStoreQuery("select document,site,item,price_net,price_minDeposit,price_custom,price_discount" +
-                                 ",share_owner,share_owner_mate1Name,share_owner_mate2Name,share_owner_mate3Name,share_owner_mate4Name,share_owner_mate5Name,share_owner_mate6Name,share_owner_mate7Name" +
+                                 ",share_owner,share_owner_quantity,share_owner_mate1Name,share_owner_mate2Name,share_owner_mate3Name,share_owner_mate4Name,share_owner_mate5Name,share_owner_mate6Name,share_owner_mate7Name" +
                                  ",share_mate,share_mate_ownerName,share_mate_ownerDocumentLine,share_mate_ownerPerson" +
                                  ",resourceConfiguration,pool,allocate,breakfastIncluded,cancelled,read" +
                                  " from DocumentLine where document=$1 and site!=null order by id", docPk),
