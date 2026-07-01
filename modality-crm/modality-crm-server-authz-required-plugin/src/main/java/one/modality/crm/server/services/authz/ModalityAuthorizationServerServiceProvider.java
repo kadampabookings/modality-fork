@@ -58,8 +58,8 @@ public final class ModalityAuthorizationServerServiceProvider implements Authori
             // Loading operations for logged-in users:
             //   - guest=true operations  → always (for both guests and registered users)
             //   - guest=false operations → only for registered users (isRegistered=true)
-            // Merged into a single query: !public AND (guest OR $2)
-            entityStore.<Operation>executeQuery("select operationCode, grantRoute from Operation op where ($1 and backoffice or !$1 and frontoffice) and !public and (guest or $2)", backoffice, isRegistered)
+            // Merged into a single query: guest OR $2
+            entityStore.<Operation>executeQuery("select operationCode, grantRoute from Operation op where ($1 and backoffice or !$1 and frontoffice) and (public or guest or $2)", backoffice, isRegistered)
                 .map(operations -> grantOperations(operations, new StringBuilder()).toString()),
             // Loading operations and rules granted to the user
             entityStore.<AuthorizationOrganizationUserAccess>executeQuery(
