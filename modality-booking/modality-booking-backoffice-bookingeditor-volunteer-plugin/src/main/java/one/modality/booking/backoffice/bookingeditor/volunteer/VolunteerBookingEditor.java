@@ -140,7 +140,9 @@ final class VolunteerBookingEditor extends FamilyBookingEditorBase {
 
     @Override
     protected void initiateUiAndSyncFromWorkingBooking() {
-        boxScheduledItemsSelector.setSelectableScheduledItems(getPolicyFamilyScheduledItems(), false);
+        List<ScheduledItem> accommodationScheduledItems = getPolicyFamilyScheduledItems();
+        List<ScheduledItem> dormitoryScheduledItems = Collections.filter(accommodationScheduledItems, si -> Entities.samePrimaryKey(si.getItem(), 398));
+        boxScheduledItemsSelector.setSelectableScheduledItems(dormitoryScheduledItems, false);
         boxScheduledItemsSelector.getSelectedDates().setAll(attendanceDates);
         // We keep the working booking in sync with the selected dates - this keeps hasChangesProperty up to date in
         // WorkingBookingProperties which is used to reflect the user changes and enable the Save button.
