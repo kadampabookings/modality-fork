@@ -54,6 +54,7 @@ public interface Rate extends
     String unemployed_price = "unemployed_price";
     String unemployed_discount = "unemployed_discount";
     String withItem = "withItem";
+    String withAccommodation = "withAccommodation";
     String facilityFee_price = "facilityFee_price";
     String facilityFee_discount = "facilityFee_discount";
 
@@ -343,6 +344,20 @@ public interface Rate extends
 
     default Boolean isEarlyBird() {
         return getBooleanFieldValue(earlyBird);
+    }
+
+    default void setWithAccommodation(Boolean value) {
+        setFieldValue(withAccommodation, value);
+    }
+
+    /**
+     * Residential/non-residential audience filter: null = applies to all, true = applies only when
+     * the document also has a live accommodation booking (onsite), false = applies only when it has
+     * none (offsite). Same shape as applicableToInPerson/applicableToOnline; "has accommodation"
+     * uses the with_item same-cancelled-state rule server-side.
+     */
+    default Boolean isWithAccommodation() {
+        return getBooleanFieldValue(withAccommodation);
     }
 
     default void setBreakfastIncluded(Boolean value) {

@@ -197,6 +197,8 @@ public final class SiteItemBill {
             if (wi != null)
                 withItemDateCache.computeIfAbsent(wi, k -> collectAttendanceDates(k, documentBill));
         }
+        // Accommodation night dates for the per-day withAccommodation residency match (see loop below).
+        Set<LocalDate> accoNights = collectAccommodationNights(documentBill);
         int price = Integer.MIN_VALUE;
         if (!rates.isEmpty()) {
             //rates.sort(function (r1, r2) { return (r1.perDay ? 1 : r1.maxDay ) - (r2.perDay ? 1 : r2.maxDay);});
@@ -236,6 +238,23 @@ public final class SiteItemBill {
                             if (!withItemDates.contains(bas.get(consumedDays).getDate()))
                                 continue;
                         }
+                    }
+                    // withAccommodation: residential/non-residential per-day match. null = applies to all;
+                    // true = only when resident this day; false = only when not. Resident on teaching day D
+                    // when a live accommodation night was booked on D or D-1 (a night dated N covers the
+                    // evening of N and the morning of N+1). Non-temporal items have no day, so they fall
+                    // back to document-level accommodation existence.
+                    Boolean withAcco = rate.isWithAccommodation();
+                    if (withAcco != null) {
+                        boolean resident;
+                        if (thisItemTemporal) {
+                            LocalDate d = bas.get(consumedDays).getDate();
+                            resident = accoNights.contains(d) || accoNights.contains(d.minusDays(1));
+                        } else {
+                            resident = !accoNights.isEmpty();
+                        }
+                        if (withAcco != resident)
+                            continue;
                     }
                     // For per-person rates, multiply by shareOwnerQuantity from the matching DocumentLine.
                     var quantity = rate.isPerPerson() ? getShareOwnerQuantity(documentAggregate) : 1;
@@ -351,6 +370,25 @@ public final class SiteItemBill {
             }
         }
         return dates;
+    }
+
+    /**
+     * Accommodation night dates (each dated by its check-in day N) across all live 'acco'-family
+     * bills, for the per-day withAccommodation residency match. Cancelled lines never become bills
+     * (Kbs2PriceAlgorithm), so these are all live nights. The "acco" literal matches
+     * KnownItemFamily.ACCOMMODATION and the SQL engine's 'acco' check, avoiding a module dependency
+     * on modality-base-shared-knownitems.
+     */
+    private static Set<LocalDate> collectAccommodationNights(DocumentBill documentBill) {
+        Set<LocalDate> nights = new HashSet<>();
+        for (SiteItemBill bill : documentBill.getSiteItemBills()) {
+            Item item = bill.getSiteItem().getItem();
+            if (item != null && item.getFamily() != null && "acco".equals(item.getFamily().getCode())) {
+                for (AttendanceBill ab : bill.getAttendanceBills())
+                    nights.add(ab.getDate());
+            }
+        }
+        return nights;
     }
 
     /** Returns shareOwnerQuantity from the DocumentLine matching this bill's site+item, or 1 if not set. */
