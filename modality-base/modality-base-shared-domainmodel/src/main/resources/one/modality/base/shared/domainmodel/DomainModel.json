@@ -635,6 +635,7 @@
     "rate": "Rate",
     "read": "boolean",
     "rentYearMonth": "Temporal.PlainYearMonth",
+    "reserved": "boolean",
     "resource": "Resource",
     "resourceConfiguration": "ResourceConfiguration",
     "share_mate": "boolean",
@@ -1778,9 +1779,12 @@
     },
     "item": "Item",
     "max": "integer",
+    "maxReserved": "integer",
     "name": {
       "expr": "resource.name"
     },
+    "online": "boolean",
+    "pool": "Pool",
     "resource": "Resource",
     "startDate": "Temporal.PlainDate"
   },

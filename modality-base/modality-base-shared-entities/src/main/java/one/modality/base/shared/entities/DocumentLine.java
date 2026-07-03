@@ -41,6 +41,7 @@ public interface DocumentLine extends
     String cleaned = "cleaned";
     String bedNumber = "bedNumber";
     String pool = "pool";
+    String reserved = "reserved";
     String breakfastIncluded = "breakfastIncluded";
 
     default void setStartDate(LocalDate value) {
@@ -262,6 +263,17 @@ public interface DocumentLine extends
 
     default Pool getPool() {
         return getForeignEntity(pool);
+    }
+
+    // Partition marker: true = this line consumes a RESERVED bed (the maxReserved partition) of its
+    // resourceConfiguration; false = a public bed. Not the booking-status sense of "reserved".
+    // pool above is the informative reason (may be null on reserved lines — rc.pool is optional).
+    default Boolean isReserved() {
+        return getBooleanFieldValue(reserved);
+    }
+
+    default void setReserved(Boolean value) {
+        setFieldValue(reserved, value);
     }
 
     default void setBreakfastIncluded(Boolean value) {
