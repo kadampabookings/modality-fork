@@ -90,7 +90,7 @@ public final class WorkingBooking {
 
     // This is the constructor to call for working on existing bookings in the context of payments (ex: /pay-order/:docId)
     public WorkingBooking(PolicyAggregate policyAggregate, DocumentAggregate initialDocumentAggregate, Object paymentRequestedByUserDocumentId) {
-        this(policyAggregate, initialDocumentAggregate, AttendanceMode.ONLINE, paymentRequestedByUserDocumentId);
+        this(policyAggregate, initialDocumentAggregate, AttendanceMode.IN_PERSON, paymentRequestedByUserDocumentId);
     }
 
     private WorkingBooking(PolicyAggregate policyAggregate, DocumentAggregate initialDocumentAggregate, AttendanceMode attendanceMode, Object paymentRequestedByUserDocumentId) {

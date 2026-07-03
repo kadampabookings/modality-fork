@@ -10,16 +10,15 @@ import dev.webfx.stack.orm.entity.Entities;
 import dev.webfx.stack.orm.entity.EntityStore;
 import javafx.geometry.HPos;
 import javafx.scene.Node;
-import javafx.scene.control.CheckBox;
-import javafx.scene.control.Label;
-import javafx.scene.control.RadioButton;
-import javafx.scene.control.TextArea;
-import javafx.scene.control.ToggleGroup;
+import javafx.scene.control.*;
 import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
-import one.modality.base.shared.entities.*;
+import one.modality.base.shared.entities.Event;
+import one.modality.base.shared.entities.Item;
+import one.modality.base.shared.entities.ItemFamily;
+import one.modality.base.shared.entities.ScheduledItem;
 import one.modality.base.shared.entities.util.Attendances;
 import one.modality.base.shared.entities.util.ScheduledItems;
 import one.modality.base.shared.knownitems.KnownItemFamily;
@@ -78,7 +77,7 @@ final class VolunteerBookingEditor extends FamilyBookingEditorBase {
         veganWheatFreeItem = createDietItem("Vegan/Wheat-free", 872);
         if (workingBooking.isNewBooking()) {
             Event event = policyAggregate.getEvent();
-            setAttendanceDates(ScheduledItems.toDates(Collections.filter(getPolicyFamilyScheduledItems(),si -> Times.isBetween(si.getDate(), event.getStartDate(), event.getEndDate()))));
+            setAttendanceDates(ScheduledItems.toDates(Collections.filter(getDormitoryScheduledItems(),si -> Times.isBetween(si.getDate(), event.getStartDate(), event.getEndDate()))));
             arrivalTime = ArrivalDepartureTime.DINNER;
             departureTime = ArrivalDepartureTime.LUNCH;
             bookAccommodation(true);
@@ -93,6 +92,11 @@ final class VolunteerBookingEditor extends FamilyBookingEditorBase {
         }
         // Final subclasses should call this method
         initiateUiAndSyncFromWorkingBooking();
+    }
+
+    private List<ScheduledItem> getDormitoryScheduledItems() {
+        List<ScheduledItem> accommodationScheduledItems = getPolicyFamilyScheduledItems();
+        return Collections.filter(accommodationScheduledItems, si -> Entities.samePrimaryKey(si.getItem(), 398));
     }
 
     @Override
@@ -140,9 +144,7 @@ final class VolunteerBookingEditor extends FamilyBookingEditorBase {
 
     @Override
     protected void initiateUiAndSyncFromWorkingBooking() {
-        List<ScheduledItem> accommodationScheduledItems = getPolicyFamilyScheduledItems();
-        List<ScheduledItem> dormitoryScheduledItems = Collections.filter(accommodationScheduledItems, si -> Entities.samePrimaryKey(si.getItem(), 398));
-        boxScheduledItemsSelector.setSelectableScheduledItems(dormitoryScheduledItems, false);
+        boxScheduledItemsSelector.setSelectableScheduledItems(getDormitoryScheduledItems(), false);
         boxScheduledItemsSelector.getSelectedDates().setAll(attendanceDates);
         // We keep the working booking in sync with the selected dates - this keeps hasChangesProperty up to date in
         // WorkingBookingProperties which is used to reflect the user changes and enable the Save button.
@@ -229,7 +231,7 @@ final class VolunteerBookingEditor extends FamilyBookingEditorBase {
     }
 
      private void bookAccommodation(boolean book) {
-        List<ScheduledItem> dormitoryScheduledItems = getPolicyFamilyScheduledItems();
+        List<ScheduledItem> dormitoryScheduledItems = getDormitoryScheduledItems();
         workingBooking.bookAccommodation(book, dormitoryScheduledItems, attendanceDates, arrivalTime, departureTime);
     }
 
