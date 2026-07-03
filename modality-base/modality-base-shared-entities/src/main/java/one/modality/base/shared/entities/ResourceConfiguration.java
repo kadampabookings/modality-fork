@@ -1,6 +1,7 @@
 package one.modality.base.shared.entities;
 
 import dev.webfx.stack.orm.entity.Entity;
+import dev.webfx.stack.orm.entity.EntityId;
 import one.modality.base.shared.entities.markers.*;
 
 import java.time.LocalDate;
@@ -23,6 +24,8 @@ public interface ResourceConfiguration extends Entity,
     String allowsResident = "allowsResident";
     String allowsResidentFamily = "allowsResidentFamily";
     String max = "max";
+    String maxReserved = "maxReserved";
+    String pool = "pool";
     String comment = "comment";
 
     @Override
@@ -113,6 +116,30 @@ public interface ResourceConfiguration extends Entity,
 
     default void setMax(int value) {
         setFieldValue(max, value);
+    }
+
+    // Reserved beds: withheld from public booking (public beds = max - maxReserved, bookable iff
+    // online). Bookings consuming a reserved bed carry documentLine.pool as the partition marker.
+    default Integer getMaxReserved() {
+        return getIntegerFieldValue(maxReserved);
+    }
+
+    default void setMaxReserved(Integer value) {
+        setFieldValue(maxReserved, value);
+    }
+
+    // Reason the reserved beds are held (informative; drives pool-targeted allocation for
+    // volunteer-style events). Meaningful only when maxReserved > 0.
+    default void setPool(Object value) {
+        setForeignField(pool, value);
+    }
+
+    default EntityId getPoolId() {
+        return getForeignEntityId(pool);
+    }
+
+    default Pool getPool() {
+        return getForeignEntity(pool);
     }
 
     default String getComment() {

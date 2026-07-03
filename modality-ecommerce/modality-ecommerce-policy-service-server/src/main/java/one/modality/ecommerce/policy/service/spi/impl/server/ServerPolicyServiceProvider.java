@@ -43,28 +43,23 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
         "sum(!rc.(allowsMale and allowsOrdained) ? 0 : lat.avail)," +  // monk
         "sum(!rc.(allowsFemale and allowsOrdained) ? 0 : lat.avail)" + // nun
         "] from ResourceConfiguration rc" +
-        // avail per resource configuration:
-        //  • pool-managed resource (a public PoolAllocation exists, global or event-specific): quantity of the
-        //    best-matching public pool (event-specific preferred over global) less the bookings already made in
-        //    that pool (documentLine.pool = that pool).
-        //  • unmanaged resource (no public PoolAllocation at all): considered fully available at rc.max, less
-        //    the bookings already made.
+        // avail per resource configuration — reserved-partition model (docs/pool-allocation-removal-plan.md,
+        // replaces PoolAllocation):
+        //  • public beds = rc.max − rc.maxReserved, bookable online iff rc.online. documentLine.reserved
+        //    is the partition marker: reserved-bed bookings (reserved=true) never count against the
+        //    public partition. documentLine.pool is informative only (the reason, mirroring rc.pool).
+        //  • least(...) caps by physical occupancy (max − ALL live lines): an overbooked reserved
+        //    partition can never push public availability above the room's real free beds.
         // Bookings are counted via (scheduledItem=si and documentLine.resourceConfiguration=rc) — exactly
         // equivalent to the former Attendance.scheduledResource pointer, but without the scheduled_resource table.
-        ", lateral (select exists(select PoolAllocation where resource=rc.resource and event=$1)" +
-        " ? coalesce(" +
-        "(select pa.quantity" +
-        " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledItem=si and present and documentLine.(resourceConfiguration=rc and !frontend_released and pool=pa.pool)), 0)" +
-        " from PoolAllocation pa" +
-        " where resource=rc.resource and publicBookingEnabled and pool.allowsPublic and event=$1" +
-        " order by event desc nulls last" +
-        " limit 1)" +
-        ", 0)" +
-        // Fallback wrapped in a correlated sub-SELECT (rooted on ResourceConfiguration via id=rc) so the bare
-        // rc.max reference resolves — the LATERAL body has no FROM (null domain class), which otherwise fails
-        // translation with "Domain class 'null' not found".
-        " : (select !rc.online ? 0 : max" +
-        " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledItem=si and present and documentLine.(resourceConfiguration=rc and !frontend_released)), 0)" +
+        // The whole expression is wrapped in a correlated sub-SELECT (rooted on ResourceConfiguration via
+        // id=rc) so bare field references resolve — the LATERAL body has no FROM (null domain class), which
+        // otherwise fails translation with "Domain class 'null' not found".
+        ", lateral (select (select !online ? 0 : least(" +
+        "max - coalesce(maxReserved,0)" +
+        " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledItem=si and present and documentLine.(resourceConfiguration=rc and !frontend_released and !reserved)), 0)" +
+        ", max" +
+        " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledItem=si and present and documentLine.(resourceConfiguration=rc and !frontend_released)), 0))" +
         " from ResourceConfiguration where id=rc)" +
         " as avail) lat" +
         // Configurations applicable to this scheduled item: same site & item.
@@ -119,10 +114,10 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                         ", date_part('epoch', coalesce(bookingProcessStart, openingDate) - now()) as " + Event.secondsToBookingProcessStartAtLoadingTime +
                         " from Event" + " where id=$1", eventPk),
                     // 1 - Loading scheduled items (of this event or of the repeated event if set)
-                    // $1=eventPk, $2=startDate (null → no date filter), $3=endDate, $4=accommodationItemPk (null → pool allocation check)
+                    // $1=eventPk, $2=startDate (null → no date filter), $3=endDate, $4=accommodationItemPk (null → item-policy check)
                     DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
                         SCHEDULED_ITEMS_DQL_BASE +
-                        // Accommodation filter: when $4 provided use the specific item, else fall back to pool allocation check
+                        // Accommodation filter: when $4 provided use the specific item, else fall back to the item-policy check
                         " and (si.item.family.code!='acco' or " + ACCO_ITEM_POLICY_EXISTS + " or si.item=$4)" +
                         // Date range filter: limit to volunteer's stay dates when $2/$3 provided
                         " and ($2::date=null or si.date>=$2) and ($3::date=null or si.date<=$3)" +
