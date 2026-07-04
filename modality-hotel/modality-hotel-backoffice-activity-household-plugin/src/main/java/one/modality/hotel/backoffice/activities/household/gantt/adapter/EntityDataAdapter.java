@@ -7,7 +7,6 @@ import one.modality.base.shared.entities.Document;
 import one.modality.base.shared.entities.DocumentLine;
 import one.modality.base.shared.entities.Item;
 import one.modality.base.shared.entities.CleaningState;
-import one.modality.base.shared.entities.PoolAllocation;
 import one.modality.base.shared.entities.Resource;
 import one.modality.base.shared.entities.ResourceConfiguration;
 import one.modality.hotel.backoffice.activities.household.gantt.model.DateSegment;
@@ -89,14 +88,12 @@ public final class EntityDataAdapter {
      * @param resourceConfigurations List of room configurations from the database
      * @param documentLines List of document lines (bookings) for the time window
      * @param attendancesForGaps Attendance records for bookings with gaps (hasAttendanceGap=true)
-     * @param poolAllocations Pool allocations for default pool assignments (event IS NULL)
      * @return List of GanttRoomData ready for display
      */
     public static List<GanttRoomData> adaptRooms(
             List<ResourceConfiguration> resourceConfigurations,
             List<DocumentLine> documentLines,
-            List<Attendance> attendancesForGaps,
-            List<PoolAllocation> poolAllocations) {
+            List<Attendance> attendancesForGaps) {
 
         // Build lookup map for attendance gaps: DocumentLine PK -> List<Attendance>
         Map<Object, List<Attendance>> attendanceMap = new HashMap<>();
@@ -110,13 +107,15 @@ public final class EntityDataAdapter {
         // Store in thread-local for use by adaptBooking
         attendancesByDocumentLine.set(attendanceMap);
 
-        // Build lookup map for pools: Resource ID -> Set of Pool IDs
+        // Build lookup map for pools: Resource ID -> Set of Pool IDs. The reserved-bed model
+        // (docs/pool-allocation-removal-plan.md) carries the reason pool on the configuration
+        // itself, so the badge/filter pool comes straight from the displayed configurations.
         Map<Object, Set<Object>> poolMap = new HashMap<>();
-        for (PoolAllocation pa : poolAllocations) {
-            Resource resource = pa.getResource();
-            if (resource != null && pa.getPool() != null) {
+        for (ResourceConfiguration rc : resourceConfigurations) {
+            Resource resource = rc.getResource();
+            if (resource != null && rc.getPool() != null) {
                 Object resourceId = resource.getPrimaryKey();
-                Object poolId = pa.getPool().getPrimaryKey();
+                Object poolId = rc.getPool().getPrimaryKey();
                 poolMap.computeIfAbsent(resourceId, k -> new HashSet<>()).add(poolId);
             }
         }

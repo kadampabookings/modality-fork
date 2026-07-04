@@ -6,7 +6,6 @@ import javafx.collections.ObservableList;
 import one.modality.base.shared.entities.Attendance;
 import one.modality.base.shared.entities.DocumentLine;
 import one.modality.base.shared.entities.Pool;
-import one.modality.base.shared.entities.PoolAllocation;
 import one.modality.base.shared.entities.ResourceConfiguration;
 import one.modality.hotel.backoffice.accommodation.AccommodationPresentationModel;
 
@@ -48,7 +47,6 @@ public final class HouseholdGanttDataLoader {
     private final ObservableList<DocumentLine> documentLines = FXCollections.observableArrayList();
     private final ObservableList<Attendance> attendancesForGaps = FXCollections.observableArrayList();
     private final ObservableList<Pool> sourcePools = FXCollections.observableArrayList();
-    private final ObservableList<PoolAllocation> poolAllocations = FXCollections.observableArrayList();
     private Object mixin; // Keep reference for reloading
 
     /**
@@ -93,13 +91,6 @@ public final class HouseholdGanttDataLoader {
         return sourcePools;
     }
 
-    /**
-     * Gets the observable list of pool allocations (default assignments where event = null).
-     * Used to determine which rooms belong to which pools for filtering.
-     */
-    public ObservableList<PoolAllocation> getPoolAllocations() {
-        return poolAllocations;
-    }
 
     /**
      * Starts the reactive data loading logic.
@@ -113,7 +104,6 @@ public final class HouseholdGanttDataLoader {
         startDocumentLineQuery();
         startAttendanceGapQuery();
         startSourcePoolQuery();
-        startPoolAllocationQuery();
     }
 
     /**
@@ -134,7 +124,7 @@ public final class HouseholdGanttDataLoader {
         // Query 1: Load all ResourceConfigurations (room configurations) for this organization
         // ResourceConfiguration has: resource (room with cleaning/inspection dates), item (room type), max (bed count)
         ReactiveEntitiesMapper.<ResourceConfiguration>createPushReactiveChain(mixin)
-            .always("{class: 'ResourceConfiguration', alias: 'rc', fields: 'name,comment,event.id,resource.(id,name,cleaningState,lastCleaningDate,lastInspectionDate,buildingZone.name,kbs2ToKbs3GlobalResource.id),item.(name,ord,family.name),max', orderBy: 'item.ord,item.name,name'}")
+            .always("{class: 'ResourceConfiguration', alias: 'rc', fields: 'name,comment,event.id,resource.(id,name,cleaningState,lastCleaningDate,lastInspectionDate,buildingZone.name,kbs2ToKbs3GlobalResource.id),item.(name,ord,family.name),max,pool.(id,name)', orderBy: 'item.ord,item.name,name'}")
             // Filter by organization and optional site ID
             // Only get current configurations (no end date or future configs)
             .always(pm.organizationIdProperty(), org -> where("resource.site.organization=$1 and resource.site=$2 and (endDate is null or endDate >= current_date())", org, SITE_ID_FILTER))
@@ -228,22 +218,6 @@ public final class HouseholdGanttDataLoader {
                 "where: 'eventPool = false', " +
                 "orderBy: 'ord,name'}")
             .storeEntitiesInto(sourcePools)
-            .start();
-    }
-
-    /**
-     * Starts the query to load pool allocations (default room-to-pool mappings).
-     * Only loads allocations where event IS NULL (default configuration, not event-specific).
-     */
-    private void startPoolAllocationQuery() {
-        ReactiveEntitiesMapper.<PoolAllocation>createPushReactiveChain(mixin)
-            .always("{class: 'PoolAllocation', alias: 'pa', " +
-                "fields: 'resource.id,pool.(id,name)', " +
-                "where: 'event is null'}")
-            // Filter by organization via resource.site
-            .always(pm.organizationIdProperty(), org ->
-                where("resource.site.organization=$1", org))
-            .storeEntitiesInto(poolAllocations)
             .start();
     }
 }

@@ -158,7 +158,6 @@ public class HouseholdCanvasGanttView {
 
         // Listen to pool data changes to update filter buttons
         dataLoader.getSourcePools().addListener((ListChangeListener<Pool>) c -> updatePoolFilterButtons(dataLoader.getSourcePools()));
-        dataLoader.getPoolAllocations().addListener((ListChangeListener<Object>) c -> refreshDisplay());
 
         // Initial display refresh (will be empty until data loads, but sets up the canvas)
         // Subsequent refreshes will be triggered by data change listeners
@@ -1223,8 +1222,7 @@ public class HouseholdCanvasGanttView {
         List<GanttRoomData> allRooms = EntityDataAdapter.adaptRooms(
             dataLoader.getResourceConfigurations(),
             dataLoader.getDocumentLines(),
-            dataLoader.getAttendancesForGaps(),
-            dataLoader.getPoolAllocations()
+            dataLoader.getAttendancesForGaps()
         );
 
         // Step 1.5: Update category filter buttons dynamically from available data
