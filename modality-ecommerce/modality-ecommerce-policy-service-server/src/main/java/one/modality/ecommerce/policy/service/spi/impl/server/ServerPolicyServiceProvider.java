@@ -48,22 +48,24 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
         //  • public beds = rc.max − rc.maxReserved, bookable online iff rc.online. documentLine.reserved
         //    is the partition marker: reserved-bed bookings (reserved=true) never count against the
         //    public partition. documentLine.pool is informative only (the reason, mirroring rc.pool).
-        //  • least(...) caps by physical occupancy (max − ALL live lines): an overbooked reserved
-        //    partition can never push public availability above the room's real free beds.
-        //  • greatest(..., 0) floors each room at 0 before the category sums: a room whose reserved
+        //  • greatest(..., 0) floors the reserved-partition arithmetic at 0: a room whose reserved
         //    partition overlaps an unreserved booking (e.g. maxReserved=1 + 1 public booking on a
         //    1-bed room) must not go negative and cancel out other rooms' availability (found on the
         //    staging rehearsal: ITTP female availability summed to 0 because of two such rooms).
+        //  • least(...) then caps by physical occupancy (max − ALL live lines), deliberately NOT
+        //    floored: a physically overbooked room contributes negatively so that its overflow
+        //    guests consume the pool's remaining free beds (US NEDC twins: 3 free rooms + 1 room
+        //    overbooked by 2 → 4 bookable beds, not 6 — matches the former PoolAllocation figures).
         // Bookings are counted via (scheduledItem=si and documentLine.resourceConfiguration=rc) — exactly
         // equivalent to the former Attendance.scheduledResource pointer, but without the scheduled_resource table.
         // The whole expression is wrapped in a correlated sub-SELECT (rooted on ResourceConfiguration via
         // id=rc) so bare field references resolve — the LATERAL body has no FROM (null domain class), which
         // otherwise fails translation with "Domain class 'null' not found".
-        ", lateral (select (select !online ? 0 : greatest(least(" +
+        ", lateral (select (select !online ? 0 : least(greatest(" +
         "max - coalesce(maxReserved,0)" +
         " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledItem=si and present and documentLine.(resourceConfiguration=rc and !frontend_released and !reserved)), 0)" +
-        ", max" +
-        " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledItem=si and present and documentLine.(resourceConfiguration=rc and !frontend_released)), 0)), 0)" +
+        ", 0), max" +
+        " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledItem=si and present and documentLine.(resourceConfiguration=rc and !frontend_released)), 0))" +
         " from ResourceConfiguration where id=rc)" +
         " as avail) lat" +
         // Configurations applicable to this scheduled item: same site & item.
