@@ -76,24 +76,6 @@ public final class EntityDataAdapter {
             List<ResourceConfiguration> resourceConfigurations,
             List<DocumentLine> documentLines,
             List<Attendance> attendancesForGaps) {
-        return adaptRooms(resourceConfigurations, documentLines, attendancesForGaps, Collections.emptyList());
-    }
-
-    /**
-     * Adapts a list of ResourceConfiguration entities to GanttRoomData with pool information.
-     * <p>
-     * POOL FILTERING SUPPORT: Builds a lookup map from pool allocations to enable
-     * filtering rooms by their assigned pools.
-     *
-     * @param resourceConfigurations List of room configurations from the database
-     * @param documentLines List of document lines (bookings) for the time window
-     * @param attendancesForGaps Attendance records for bookings with gaps (hasAttendanceGap=true)
-     * @return List of GanttRoomData ready for display
-     */
-    public static List<GanttRoomData> adaptRooms(
-            List<ResourceConfiguration> resourceConfigurations,
-            List<DocumentLine> documentLines,
-            List<Attendance> attendancesForGaps) {
 
         // Build lookup map for attendance gaps: DocumentLine PK -> List<Attendance>
         Map<Object, List<Attendance>> attendanceMap = new HashMap<>();
