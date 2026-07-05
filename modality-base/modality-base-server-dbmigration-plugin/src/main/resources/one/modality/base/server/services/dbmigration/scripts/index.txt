@@ -6,3 +6,6 @@
 # - only statements that can run inside a transaction (CREATE INDEX CONCURRENTLY, VACUUM, ...
 #   must be applied manually via the aggregate repo's scripts/ folder instead)
 V0001__db_migration_baseline.sql
+V0002__fix_volunteering_event_1858_pools.sql
+V0003__pool_allocation_to_reserved_beds.sql
+V0004__rewrite_deferred_allocate_document_line.sql
