@@ -846,7 +846,8 @@
     "online": "boolean",
     "part1": "EventPart",
     "part2": "EventPart",
-    "part3": "EventPart"
+    "part3": "EventPart",
+    "part4": "EventPart"
   },
   "EventTheme": {
     "id": 163,
