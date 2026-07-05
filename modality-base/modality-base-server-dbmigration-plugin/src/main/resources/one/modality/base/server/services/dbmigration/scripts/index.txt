@@ -1,0 +1,8 @@
+# DB migration scripts applied automatically at server boot (see webfx-stack-db-migration).
+# One file per line, in strictly ascending version order.
+# Rules:
+# - never edit or remove a shipped script — ship a new version instead
+# - no BEGIN/COMMIT: all pending scripts already run in one transaction
+# - only statements that can run inside a transaction (CREATE INDEX CONCURRENTLY, VACUUM, ...
+#   must be applied manually via the aggregate repo's scripts/ folder instead)
+V0001__db_migration_baseline.sql

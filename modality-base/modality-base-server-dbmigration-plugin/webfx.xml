@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project>
+
+    <description>
+        Contributes Modality's bundled DB migration scripts, applied automatically at server boot by
+        webfx-stack-db-migration (all pending scripts in a single transaction, gating /health readiness).
+        The scripts live in this module's resources, next to an index.txt listing them in version order.
+    </description>
+
+    <exported-packages>
+        <source-packages/>
+        <resource-packages/>
+    </exported-packages>
+
+    <providers>
+        <provider interface="dev.webfx.stack.db.migration.spi.MigrationScriptsProvider">one.modality.base.server.services.dbmigration.ModalityDbMigrationScriptsProvider</provider>
+    </providers>
+
+    <dependencies>
+        <used-by-source-modules/>
+    </dependencies>
+
+</project>
