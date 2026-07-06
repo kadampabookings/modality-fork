@@ -24,6 +24,7 @@ public interface EventSelection extends Entity,
     String part2 = "part2";
     String part3 = "part3";
     String part4 = "part4";
+    String part5 = "part5";
 
     default void setInPerson(Object value) {
         setFieldValue(inPerson, value);
@@ -87,6 +88,18 @@ public interface EventSelection extends Entity,
 
     default EventPart getPart4() {
         return getForeignEntity(part4);
+    }
+
+    default void setPart5(Object value) {
+        setForeignField(part5, value);
+    }
+
+    default EntityId getPart5Id() {
+        return getForeignEntityId(part5);
+    }
+
+    default EventPart getPart5() {
+        return getForeignEntity(part5);
     }
 
     List<EventPart> getParts(); // implemented in EventSelectionImpl

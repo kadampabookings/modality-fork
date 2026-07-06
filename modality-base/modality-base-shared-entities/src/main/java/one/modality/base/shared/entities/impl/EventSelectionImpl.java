@@ -24,7 +24,7 @@ public final class EventSelectionImpl extends DynamicEntity implements EventSele
     @Override
     public List<EventPart> getParts() {
         if (parts == null)
-            parts = Collections.removeNulls(Collections.listOf(getPart1(), getPart2(), getPart3(), getPart4()));
+            parts = Collections.removeNulls(Collections.listOf(getPart1(), getPart2(), getPart3(), getPart4(), getPart5()));
         return parts;
     }
 
@@ -35,6 +35,7 @@ public final class EventSelectionImpl extends DynamicEntity implements EventSele
         setPart2(Collections.get(parts, 1));
         setPart3(Collections.get(parts, 2));
         setPart4(Collections.get(parts, 3));
+        setPart5(Collections.get(parts, 4));
     }
 
     public static final class ProvidedFactory extends EntityFactoryProviderImpl<EventSelection> {

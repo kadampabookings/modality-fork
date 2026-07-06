@@ -847,7 +847,8 @@
     "part1": "EventPart",
     "part2": "EventPart",
     "part3": "EventPart",
-    "part4": "EventPart"
+    "part4": "EventPart",
+    "part5": "EventPart"
   },
   "EventTheme": {
     "id": 163,

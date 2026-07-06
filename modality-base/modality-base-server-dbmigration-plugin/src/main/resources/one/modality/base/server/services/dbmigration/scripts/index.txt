@@ -10,3 +10,4 @@ V0002__fix_volunteering_event_1858_pools.sql
 V0003__pool_allocation_to_reserved_beds.sql
 V0004__rewrite_deferred_allocate_document_line.sql
 V0005__event_selection_part4.sql
+V0006__event_selection_part5.sql

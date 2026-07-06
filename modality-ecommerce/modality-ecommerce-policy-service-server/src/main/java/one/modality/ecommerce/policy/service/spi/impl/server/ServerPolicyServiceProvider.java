@@ -143,7 +143,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                     // 4 - Loading event selections (of this event or of the repeated event if set)
                     , DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
                     "with e as (select coalesce(repeatedEvent,id) as finalEvent from Event where id=$1)" +
-                    " select event,name,label,inPerson,online,part1,part2,part3,part4" +
+                    " select event,name,label,inPerson,online,part1,part2,part3,part4,part5" +
                     " from EventSelection es, e where es.event = e.finalEvent" +
                     " order by id", eventPk) // Will introduce an ord later
                     // 5 - Loading event phases (of this event or of the repeated event if set)
