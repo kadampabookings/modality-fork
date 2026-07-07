@@ -12,3 +12,4 @@ V0004__rewrite_deferred_allocate_document_line.sql
 V0005__event_selection_part4.sql
 V0006__event_selection_part5.sql
 V0007__index_document_line_dates.sql
+V0008__ignore_public_pools_in_allocation.sql
