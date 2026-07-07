@@ -18,6 +18,7 @@ record DocumentSubmitRequest(
     SubmitDocumentChangesArgument argument,
     String runId,
     Object userId,  // captured at request time — ThreadLocal is gone when the queue processes this later
+    boolean backoffice, // captured at request time too — drives the DB transaction parameters (back-office allocation semantics)
     UpdateStore updateStore,
     Document document,
     DocumentLine documentLine,
@@ -25,21 +26,11 @@ record DocumentSubmitRequest(
     Object queueToken
 ) {
 
-    DocumentSubmitRequest(SubmitDocumentChangesArgument argument, String runId, Object userId, UpdateStore updateStore, Document document, DocumentLine documentLine, Object eventPrimaryKey, Object queueToken) {
-        this.argument = argument;
-        this.runId = runId;
-        this.userId = userId;
-        this.updateStore = updateStore;
-        this.document = document;
-        this.documentLine = documentLine;
-        this.eventPrimaryKey = eventPrimaryKey;
-        this.queueToken = queueToken;
-    }
-
     static DocumentSubmitRequest create(SubmitDocumentChangesArgument argument) {
         // Capturing the required client state info from thread local (before it will be wiped out by the async call)
         String runId = ThreadLocalStateHolder.getRunId();
         Object userId = ThreadLocalStateHolder.getUserId();
+        boolean backoffice = ThreadLocalStateHolder.isBackoffice();
 
         UpdateStore updateStore = UpdateStore.create(DataSourceModelService.getDefaultDataSourceModel());
         Document document = null;
@@ -61,13 +52,13 @@ record DocumentSubmitRequest(
         Object eventPrimaryKey = document == null ? null : Entities.getPrimaryKey(document.getEventId());
         Object queueToken = Uuid.randomUuid();
 
-        return new DocumentSubmitRequest(argument, runId, userId, updateStore, document, documentLine, eventPrimaryKey, queueToken);
+        return new DocumentSubmitRequest(argument, runId, userId, backoffice, updateStore, document, documentLine, eventPrimaryKey, queueToken);
     }
 
 
     static DocumentSubmitRequest copyForEvent(DocumentSubmitRequest request, Object providedEventPrimaryKey) {
         return new DocumentSubmitRequest(
-            request.argument(), request.runId(), request.userId(), request.updateStore(),
+            request.argument(), request.runId(), request.userId(), request.backoffice(), request.updateStore(),
             request.document(), request.documentLine(),
             providedEventPrimaryKey, request.queueToken()
         );

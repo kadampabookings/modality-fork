@@ -139,7 +139,7 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
             new EntityStoreQuery("select document,site,item,price_net,price_minDeposit,price_custom,price_discount" +
                                  ",share_owner,share_owner_quantity,share_owner_mate1Name,share_owner_mate2Name,share_owner_mate3Name,share_owner_mate4Name,share_owner_mate5Name,share_owner_mate6Name,share_owner_mate7Name" +
                                  ",share_mate,share_mate_ownerName,share_mate_ownerDocumentLine,share_mate_ownerPerson" +
-                                 ",resourceConfiguration,pool,allocate,breakfastIncluded,cancelled,read" +
+                                 ",resourceConfiguration,pool,reserved,allocate,breakfastIncluded,cancelled,read" +
                                  " from DocumentLine where document=$1 and site!=null order by id", docPk),
             // 2 - Loading attendances
             new EntityStoreQuery("select documentLine,date,scheduledItem,videoAccessEnabled from Attendance where present and documentLine.document=$1 order by id", docPk),
@@ -231,7 +231,11 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
                     }
                     ResourceConfiguration resourceConfiguration = documentLine.getResourceConfiguration();
                     if (resourceConfiguration != null) {
-                        documentEvents.add(new AllocateDocumentLineEvent(documentLine, resourceConfiguration));
+                        // Synthesized events stay faithful to the row: the line's item and
+                        // partition markers (reserved/pool) ride along so replay reconstructs
+                        // them (they may differ from older events in the History stream).
+                        documentEvents.add(new AllocateDocumentLineEvent(documentLine, resourceConfiguration,
+                            documentLine.getItem(), documentLine.isReserved(), documentLine.getPool()));
                     }
                 });
                 // Aggregating attendances by adding AddAttendancesEvent for each document line
@@ -350,7 +354,7 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
             .compose(histories -> { // At this point, history.getDocument() is never null (resolved through DB reading)
                 Document document = histories[0].getDocument();
 
-                return submitChangesAndPrepareResult(request.updateStore(), document)
+                return submitChangesAndPrepareResult(request.updateStore(), document, request.backoffice())
                     .compose(result -> { // Completing the history recording (changes column with resolved primary keys)
                         if (result.status() == DocumentChangesStatus.APPROVED) {
                             // For guest bookings: generate the magic link token and link it to the cart.
@@ -374,8 +378,15 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
             });
     }
 
-    private static Future<SubmitDocumentChangesResult> submitChangesAndPrepareResult(UpdateStore updateStore, Document document) {
-        return updateStore.submitChanges(Triggers.frontOfficeTransaction(updateStore))
+    private static Future<SubmitDocumentChangesResult> submitChangesAndPrepareResult(UpdateStore updateStore, Document document, boolean backoffice) {
+        // The transaction parameters drive the allocation semantics in
+        // deferred_allocate_document_line(): a FRONT-office submit is subject to
+        // the frontend gates (online/gender/partition/capacity — the client is
+        // not trusted), while a BACK-office submit is authoritative (explicit
+        // resource_configuration/reserved/pool honoured — the "back-office drop"
+        // mode). The origin comes from the session state captured at request
+        // time (see DocumentSubmitRequest), NOT from the argument.
+        return updateStore.submitChanges(backoffice ? Triggers.backOfficeTransaction(updateStore) : Triggers.frontOfficeTransaction(updateStore))
             .compose(batch -> {
                 Object documentPk = document.getPrimaryKey();
                 Object documentRef = document.getRef();
