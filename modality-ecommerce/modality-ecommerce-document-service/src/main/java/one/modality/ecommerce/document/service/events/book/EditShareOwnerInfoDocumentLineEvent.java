@@ -24,6 +24,18 @@ public final class EditShareOwnerInfoDocumentLineEvent extends AbstractDocumentL
         this.quantity = 0;
     }
 
+    /**
+     * Load-path constructor — rebuilds the event from a stored line, carrying its persisted
+     * quantity so quantity-based bookings (e.g. public-talk headcount) survive the round trip.
+     * Without it the loaded event serializes quantity 0 and the client re-derives the count
+     * from the (empty) mates list, i.e. always 1.
+     */
+    public EditShareOwnerInfoDocumentLineEvent(DocumentLine documentLine, String[] matesNames, int quantity) {
+        super(documentLine);
+        this.matesNames = matesNames;
+        this.quantity = quantity;
+    }
+
     /** Quantity-only constructor — for bookings where mates are not named (e.g. public talk). */
     public EditShareOwnerInfoDocumentLineEvent(Object documentPrimaryKey, Object documentLinePrimaryKey, int quantity) {
         super(documentPrimaryKey, documentLinePrimaryKey);

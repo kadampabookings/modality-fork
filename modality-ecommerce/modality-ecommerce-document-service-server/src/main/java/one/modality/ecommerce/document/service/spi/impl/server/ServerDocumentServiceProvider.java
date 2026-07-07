@@ -216,7 +216,10 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
                     if (Boolean.TRUE.equals(documentLine.isCancelled()))
                         documentEvents.add(new CancelDocumentLineEvent(documentLine, true, Boolean.TRUE.equals(documentLine.isRead())));
                     if (documentLine.isShareOwner()) {
-                        documentEvents.add(new EditShareOwnerInfoDocumentLineEvent(documentLine, documentLine.getShareOwnerMatesNames()));
+                        // Carry the persisted quantity (e.g. public-talk headcount) — the 2-arg
+                        // constructor serializes quantity 0 and the client re-derives 1 + mates = 1.
+                        Integer shareOwnerQuantity = documentLine.getShareOwnerQuantity();
+                        documentEvents.add(new EditShareOwnerInfoDocumentLineEvent(documentLine, documentLine.getShareOwnerMatesNames(), shareOwnerQuantity != null ? shareOwnerQuantity : 0));
                     }
                     if (documentLine.isShareMate()) {
                         documentEvents.add(new EditShareMateInfoDocumentLineEvent(documentLine, documentLine.getShareMateOwnerName()));
