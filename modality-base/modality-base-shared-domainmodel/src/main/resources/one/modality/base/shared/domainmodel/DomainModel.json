@@ -1621,15 +1621,6 @@
     "ord": "integer",
     "webColor": "string"
   },
-  "PoolAllocation": {
-    "id": 141,
-    "event": "Event",
-    "person": "Person",
-    "pool": "Pool",
-    "publicBookingEnabled": "boolean",
-    "quantity": "integer",
-    "resource": "Resource"
-  },
   "PushSubscription": {
     "id": 166,
     "appTimestamp": "string",
