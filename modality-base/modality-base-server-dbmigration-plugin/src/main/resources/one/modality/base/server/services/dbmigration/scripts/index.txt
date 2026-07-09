@@ -15,3 +15,4 @@ V0007__index_document_line_dates.sql
 V0008__ignore_public_pools_in_allocation.sql
 V0009__drop_pool_allocation.sql
 V0010__index_document_line_active_dates.sql
+V0011__unlink_kbs2_zero_booking_duplicates.sql
