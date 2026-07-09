@@ -1610,6 +1610,7 @@
     "description": "string",
     "descriptionLabel": "Label",
     "eventPool": "boolean",
+    "hiddenWhenOffline": "boolean",
     "icon": {
       "expr": "eventPool ? image('images/16/event/liveEvent.png') : null"
     },

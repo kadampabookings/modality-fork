@@ -19,3 +19,4 @@ V0011__unlink_kbs2_zero_booking_duplicates.sql
 V0012__unlink_kbs2_all_zero_booking_duplicates.sql
 V0013__unlink_kbs2_ambiguous_dominant_duplicates.sql
 V0014__drop_pool_tier2_columns.sql
+V0015__add_pool_hidden_when_offline.sql
