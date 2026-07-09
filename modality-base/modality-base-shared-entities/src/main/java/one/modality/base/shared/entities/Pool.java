@@ -14,7 +14,6 @@ public interface Pool extends
     String descriptionLabel = "descriptionLabel";
     String webColor = "webColor";
     String eventPool = "eventPool";
-    String allowsPublic = "allowsPublic";
     String hiddenWhenOffline = "hiddenWhenOffline";
 
     default void setDescription(String value) {
@@ -51,14 +50,6 @@ public interface Pool extends
 
     default Boolean isEventPool() {
         return getBooleanFieldValue(eventPool);
-    }
-
-    default void setAllowsPublic(Boolean value) {
-        setFieldValue(allowsPublic, value);
-    }
-
-    default Boolean allowsPublic() {
-        return getBooleanFieldValue(allowsPublic);
     }
 
     default void setHiddenWhenOffline(Boolean value) {

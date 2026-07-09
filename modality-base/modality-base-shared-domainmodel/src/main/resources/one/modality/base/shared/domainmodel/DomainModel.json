@@ -1606,7 +1606,6 @@
   },
   "Pool": {
     "id": 140,
-    "allowsPublic": "boolean",
     "description": "string",
     "descriptionLabel": "Label",
     "eventPool": "boolean",
