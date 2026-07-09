@@ -1607,12 +1607,9 @@
   "Pool": {
     "id": 140,
     "allowsPublic": "boolean",
-    "bookable": "boolean",
     "description": "string",
     "descriptionLabel": "Label",
     "eventPool": "boolean",
-    "eventType": "EventType",
-    "graphic": "string",
     "icon": {
       "expr": "eventPool ? image('images/16/event/liveEvent.png') : null"
     },

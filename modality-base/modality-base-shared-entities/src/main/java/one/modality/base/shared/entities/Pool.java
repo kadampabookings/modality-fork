@@ -1,7 +1,6 @@
 package one.modality.base.shared.entities;
 
 import dev.webfx.stack.orm.entity.EntityId;
-import one.modality.base.shared.entities.markers.EntityHasEventType;
 import one.modality.base.shared.entities.markers.EntityHasLabel;
 import one.modality.base.shared.entities.markers.EntityHasName;
 import one.modality.base.shared.entities.markers.EntityHasOrd;
@@ -9,15 +8,12 @@ import one.modality.base.shared.entities.markers.EntityHasOrd;
 public interface Pool extends
     EntityHasName,
     EntityHasLabel,
-    EntityHasEventType,
     EntityHasOrd {
 
     String description = "description";
     String descriptionLabel = "descriptionLabel";
     String webColor = "webColor";
-    String graphic = "graphic";
     String eventPool = "eventPool";
-    String bookable = "bookable";
     String allowsPublic = "allowsPublic";
 
     default void setDescription(String value) {
@@ -48,28 +44,12 @@ public interface Pool extends
         return getStringFieldValue(webColor);
     }
 
-    default void setGraphic(String value) {
-        setFieldValue(graphic, value);
-    }
-
-    default String getGraphic() {
-        return getStringFieldValue(graphic);
-    }
-
     default void setEventPool(Boolean value) {
         setFieldValue(eventPool, value);
     }
 
     default Boolean isEventPool() {
         return getBooleanFieldValue(eventPool);
-    }
-
-    default void setBookable(Boolean value) {
-        setFieldValue(bookable, value);
-    }
-
-    default Boolean isBookable() {
-        return getBooleanFieldValue(bookable);
     }
 
     default void setAllowsPublic(Boolean value) {
