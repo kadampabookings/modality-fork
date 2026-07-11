@@ -1040,6 +1040,7 @@
     "applicableToOnline": "boolean",
     "askDietForBreakfast": "boolean",
     "childAllowed": "boolean",
+    "dayVisitorBreakfastAllowed": "boolean",
     "dayVisitorDinnerAllowed": "boolean",
     "eventPhaseCoverage1": "EventPhaseCoverage",
     "eventPhaseCoverage2": "EventPhaseCoverage",

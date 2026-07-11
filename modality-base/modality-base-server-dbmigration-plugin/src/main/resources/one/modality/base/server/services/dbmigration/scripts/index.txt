@@ -21,3 +21,5 @@ V0013__unlink_kbs2_ambiguous_dominant_duplicates.sql
 V0014__drop_pool_tier2_columns.sql
 V0015__add_pool_hidden_when_offline.sql
 V0016__drop_pool_allows_public.sql
+V0017__registration_mail_account.sql
+V0018__item_family_policy_day_visitor_breakfast_allowed.sql
