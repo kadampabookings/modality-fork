@@ -24,6 +24,7 @@ public interface Rate extends
     String perPerson = "perPerson";
     String applicableToInPerson = "applicableToInPerson";
     String applicableToOnline = "applicableToOnline";
+    String arrivingOrLeaving = "arrivingOrLeaving";
     String price = "price";
     String minDeposit = "minDeposit";
     String cutoffDate = "cutoffDate";
@@ -136,6 +137,15 @@ public interface Rate extends
 
     default Boolean isApplicableToOnline() {
         return getBooleanFieldValue(applicableToOnline);
+    }
+
+    default void setArrivingOrLeaving(Boolean value) {
+        setFieldValue(arrivingOrLeaving, value);
+    }
+
+    /** When true, this rate applies only on the arrival/departure edge of a contiguous stay. */
+    default Boolean isArrivingOrLeaving() {
+        return getBooleanFieldValue(arrivingOrLeaving);
     }
 
     default void setPrice(Object value) {

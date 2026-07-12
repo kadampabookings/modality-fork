@@ -219,7 +219,20 @@ public final class SiteItemBill {
                     LocalDate endDate = rate.getEndDate();
                     if (startDate != null || endDate != null) {
                         LocalDate date = bas.get(consumedDays).getDate();
-                        if (startDate != null && date.isBefore(startDate) || endDate != null && date.isAfter(endDate) /* || rate.arrivingOrLeaving && date !== firstDay && date !== lastDay*/)
+                        if (startDate != null && date.isBefore(startDate) || endDate != null && date.isAfter(endDate))
+                            continue;
+                    }
+                    // arrivingOrLeaving: rate applies only on the arrival/departure edge of a contiguous
+                    // run of this item's attendances (mirrors compute_document_prices). An interior day -
+                    // same document line and a <=1 day gap on both sides - is skipped; the first and last
+                    // attendance are always edges.
+                    if (Booleans.isTrue(rate.isArrivingOrLeaving()) && consumedDays > 0 && consumedDays < bas.size() - 1) {
+                        AttendanceBill prev = bas.get(consumedDays - 1), cur = bas.get(consumedDays), next = bas.get(consumedDays + 1);
+                        boolean edge = !Entities.samePrimaryKey(prev.getDocumentLine(), cur.getDocumentLine())
+                                    || !Entities.samePrimaryKey(next.getDocumentLine(), cur.getDocumentLine())
+                                    || cur.getDate().toEpochDay() - prev.getDate().toEpochDay() > 1
+                                    || next.getDate().toEpochDay() - cur.getDate().toEpochDay() > 1;
+                        if (!edge)
                             continue;
                     }
                     // withItem: rate only applies when the companion item is also booked.
