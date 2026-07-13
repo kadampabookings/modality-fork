@@ -18,6 +18,7 @@ public interface EventType extends Entity,
 
     String bookingForm = "bookingForm";
     String recurringItem = "recurringItem";
+    String registrationMailAccount = "registrationMailAccount";
     String ord = "ord";
 
     default void setBookingForm(Object value) {
@@ -42,6 +43,20 @@ public interface EventType extends Entity,
 
     default Item getRecurringItem() {
         return getForeignEntity(recurringItem);
+    }
+
+    /** Mail account used as the "from" sender for letters/mails of events of this type, when the letter
+     *  itself has no associated account. Takes precedence over the organization's registrationMailAccount. */
+    default void setRegistrationMailAccount(Object value) {
+        setForeignField(registrationMailAccount, value);
+    }
+
+    default EntityId getRegistrationMailAccountId() {
+        return getForeignEntityId(registrationMailAccount);
+    }
+
+    default MailAccount getRegistrationMailAccount() {
+        return getForeignEntity(registrationMailAccount);
     }
 
 

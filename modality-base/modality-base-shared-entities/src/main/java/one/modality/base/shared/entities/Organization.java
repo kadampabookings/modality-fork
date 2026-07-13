@@ -24,6 +24,7 @@ public interface Organization extends
     String globalSite = "globalSite";
     String termsUrlLabel = "termsUrlLabel";
     String privacyUrlLabel = "privacyUrlLabel";
+    String registrationMailAccount = "registrationMailAccount";
     String timezone = "timezone";
     String metaPixelId = "metaPixelId";
     String includeTeachingsInAccommodationPricesByDefault = "includeTeachingsInAccommodationPricesByDefault";
@@ -164,6 +165,20 @@ public interface Organization extends
 
     default Label getPrivacyUrlLabel() {
         return getForeignEntity(privacyUrlLabel);
+    }
+
+    /** Mail account used as the "from" sender for letters/mails of this organization's events, when the
+     *  letter has no associated account and the event type has no registrationMailAccount of its own. */
+    default void setRegistrationMailAccount(Object value) {
+        setForeignField(registrationMailAccount, value);
+    }
+
+    default EntityId getRegistrationMailAccountId() {
+        return getForeignEntityId(registrationMailAccount);
+    }
+
+    default MailAccount getRegistrationMailAccount() {
+        return getForeignEntity(registrationMailAccount);
     }
 
 }

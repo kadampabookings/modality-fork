@@ -870,7 +870,8 @@
     "name": "string",
     "ord": "integer",
     "organization": "Organization",
-    "recurringItem": "Item"
+    "recurringItem": "Item",
+    "registrationMailAccount": "MailAccount"
   },
   "Filter": {
     "id": 110,
@@ -1507,6 +1508,7 @@
     "phone": "string",
     "postCode": "string",
     "privacyUrlLabel": "Label",
+    "registrationMailAccount": "MailAccount",
     "residentEvent": "Event",
     "street": "string",
     "teachingsDayTicketItem": "Item",
