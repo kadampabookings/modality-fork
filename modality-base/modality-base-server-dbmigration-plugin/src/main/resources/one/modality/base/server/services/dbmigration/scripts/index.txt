@@ -23,3 +23,5 @@ V0015__add_pool_hidden_when_offline.sql
 V0016__drop_pool_allows_public.sql
 V0017__registration_mail_account.sql
 V0018__item_family_policy_day_visitor_breakfast_allowed.sql
+V0019__chat_conversations.sql
+V0020__support_chats_route_operation.sql

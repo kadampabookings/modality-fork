@@ -135,6 +135,20 @@
     "name": "string",
     "organisation": "Organization"
   },
+  "ChatMessage": {
+    "id": 170,
+    "content": "string",
+    "conversation": "Conversation",
+    "createdAt": "Temporal.Instant",
+    "kind": "string",
+    "person": "Person"
+  },
+  "ChatPresence": {
+    "id": 171,
+    "event": "Event",
+    "lastSeenAt": "Temporal.Instant",
+    "person": "Person"
+  },
   "Continent": {
     "id": 27,
     "code": "string",
@@ -142,6 +156,29 @@
       "expr": "image('images/16/continents/' + code + '.png')"
     },
     "name": "string"
+  },
+  "Conversation": {
+    "id": 168,
+    "assignee": "Person",
+    "closedAt": "Temporal.Instant",
+    "createdAt": "Temporal.Instant",
+    "event": "Event",
+    "issue": "Issue",
+    "organization": "Organization",
+    "scheduledItem": "ScheduledItem",
+    "status": "string",
+    "title": "string",
+    "type": "string",
+    "viewerDevice": "string",
+    "viewerPerson": "Person"
+  },
+  "ConversationParticipant": {
+    "id": 169,
+    "conversation": "Conversation",
+    "joinedAt": "Temporal.Instant",
+    "lastReadAt": "Temporal.Instant",
+    "person": "Person",
+    "role": "string"
   },
   "Country": {
     "id": 26,

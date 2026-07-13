@@ -12,6 +12,10 @@ one.modality.base.shared.entities.impl.BuildingImpl$ProvidedFactory
 one.modality.base.shared.entities.impl.BuildingZoneImpl$ProvidedFactory
 one.modality.base.shared.entities.impl.CartImpl$ProvidedFactory
 one.modality.base.shared.entities.impl.ChannelImpl$ProvidedFactory
+one.modality.base.shared.entities.impl.ChatMessageImpl$ProvidedFactory
+one.modality.base.shared.entities.impl.ChatPresenceImpl$ProvidedFactory
+one.modality.base.shared.entities.impl.ConversationImpl$ProvidedFactory
+one.modality.base.shared.entities.impl.ConversationParticipantImpl$ProvidedFactory
 one.modality.base.shared.entities.impl.CountryImpl$ProvidedFactory
 one.modality.base.shared.entities.impl.CurrencyImpl$ProvidedFactory
 one.modality.base.shared.entities.impl.DayTemplateImpl$ProvidedFactory
