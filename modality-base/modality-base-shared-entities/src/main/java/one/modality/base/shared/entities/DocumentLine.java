@@ -43,6 +43,9 @@ public interface DocumentLine extends
     String pool = "pool";
     String reserved = "reserved";
     String breakfastIncluded = "breakfastIncluded";
+    String backend_released = "backend_released";
+    String frontend_released = "frontend_released";
+    String systemAllocated = "systemAllocated";
 
     default void setStartDate(LocalDate value) {
         setFieldValue(startDate, value);
@@ -291,6 +294,36 @@ public interface DocumentLine extends
      */
     default Boolean isBreakfastIncluded() {
         return getBooleanFieldValue(breakfastIncluded);
+    }
+
+    // Release flags: a cancelled line keeps HOLDING its bed until released
+    // (both flags together = KBS2's "Release (backend and frontend)"); the
+    // availability engine reads them directly (a released line counts 0).
+    default Boolean isBackendReleased() {
+        return getBooleanFieldValue(backend_released);
+    }
+
+    default void setBackendReleased(Boolean value) {
+        setFieldValue(backend_released, value);
+    }
+
+    default Boolean isFrontendReleased() {
+        return getBooleanFieldValue(frontend_released);
+    }
+
+    default void setFrontendReleased(Boolean value) {
+        setFieldValue(frontend_released, value);
+    }
+
+    // Provisional marker: the allocation engine stamps its random room picks;
+    // cleared when the registration team confirms the pick in place, or by a
+    // manual room move (DB trigger on_not_system_allocated).
+    default Boolean isSystemAllocated() {
+        return getBooleanFieldValue(systemAllocated);
+    }
+
+    default void setSystemAllocated(Boolean value) {
+        setFieldValue(systemAllocated, value);
     }
 
 }

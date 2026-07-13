@@ -17,6 +17,8 @@ one.modality.ecommerce.document.service.buscall.serial.registration.documentline
 one.modality.ecommerce.document.service.buscall.serial.registration.documentline.EditShareMateInfoDocumentLineEventSerialCodec
 one.modality.ecommerce.document.service.buscall.serial.registration.documentline.EditShareOwnerInfoDocumentLineEventSerialCodec
 one.modality.ecommerce.document.service.buscall.serial.registration.documentline.LinkMateToOwnerDocumentLineEventSerialCodec
+one.modality.ecommerce.document.service.buscall.serial.registration.documentline.MarkDocumentLineAsSystemAllocatedEventSerialCodec
+one.modality.ecommerce.document.service.buscall.serial.registration.documentline.ReleaseDocumentLineEventSerialCodec
 one.modality.ecommerce.document.service.buscall.serial.registration.documentline.PriceDocumentLineEventSerialCodec
 one.modality.ecommerce.document.service.buscall.serial.registration.documentline.RemoveDocumentLineEventSerialCodec
 one.modality.ecommerce.document.service.buscall.serial.registration.moneytransfer.RemoveMoneyTransferEventSerialCodec
