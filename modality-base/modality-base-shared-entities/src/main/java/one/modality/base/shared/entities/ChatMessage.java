@@ -7,9 +7,14 @@ import one.modality.base.shared.entities.markers.EntityHasPerson;
 import java.time.Instant;
 
 /**
- * One message in a {@link Conversation}. Append-only — messages are never
- * edited or deleted by the chat surfaces (retention/cleanup is a separate
- * back-office concern).
+ * One message in a {@link Conversation}. Append-mostly — messages are never
+ * deleted by the chat surfaces (retention/cleanup is a separate back-office
+ * concern); the only in-place update is a back-office agent correcting
+ * their OWN text message, which stamps {@code editedAt} so both threads
+ * render an "(edited)" marker instead of silently swapping text the other
+ * side may already have read. {@code editedAt} is display-only (stamped by
+ * the editing client) — never compare it against {@code createdAt} or the
+ * participants' read cursors.
  *
  * <p>{@code person} is the author; a null person with {@code kind='system'}
  * is a system line (context attached / assigned / resolved ...) rendered
@@ -24,6 +29,7 @@ public interface ChatMessage extends Entity, EntityHasPerson {
     String kind = "kind";
     String content = "content";
     String createdAt = "createdAt";
+    String editedAt = "editedAt";
 
     // kind values
     String KIND_TEXT = "text";
@@ -63,5 +69,13 @@ public interface ChatMessage extends Entity, EntityHasPerson {
 
     default Instant getCreatedAt() {
         return getInstantFieldValue(createdAt);
+    }
+
+    default void setEditedAt(Instant value) {
+        setFieldValue(editedAt, value);
+    }
+
+    default Instant getEditedAt() {
+        return getInstantFieldValue(editedAt);
     }
 }

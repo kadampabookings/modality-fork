@@ -140,6 +140,7 @@
     "content": "string",
     "conversation": "Conversation",
     "createdAt": "Temporal.Instant",
+    "editedAt": "Temporal.Instant",
     "kind": "string",
     "person": "Person"
   },
