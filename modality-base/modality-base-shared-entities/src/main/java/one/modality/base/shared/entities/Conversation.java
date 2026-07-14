@@ -2,6 +2,7 @@ package one.modality.base.shared.entities;
 
 import dev.webfx.stack.orm.entity.Entity;
 import dev.webfx.stack.orm.entity.EntityId;
+import one.modality.base.shared.entities.markers.EntityHasDocument;
 import one.modality.base.shared.entities.markers.EntityHasEvent;
 import one.modality.base.shared.entities.markers.EntityHasOrganization;
 import one.modality.base.shared.entities.markers.EntityHasScheduledItem;
@@ -31,7 +32,7 @@ import java.time.Instant;
  *
  * @author Bruno Salmon
  */
-public interface Conversation extends Entity, EntityHasEvent, EntityHasOrganization, EntityHasScheduledItem {
+public interface Conversation extends Entity, EntityHasDocument, EntityHasEvent, EntityHasOrganization, EntityHasScheduledItem {
 
     String type = "type";
     String issue = "issue";
@@ -40,6 +41,7 @@ public interface Conversation extends Entity, EntityHasEvent, EntityHasOrganizat
     String assignee = "assignee";
     String title = "title";
     String viewerDevice = "viewerDevice";
+    String viewerLang = "viewerLang";
     String createdAt = "createdAt";
     String closedAt = "closedAt";
 
@@ -119,6 +121,14 @@ public interface Conversation extends Entity, EntityHasEvent, EntityHasOrganizat
 
     default String getViewerDevice() {
         return getStringFieldValue(viewerDevice);
+    }
+
+    default void setViewerLang(String value) {
+        setFieldValue(viewerLang, value);
+    }
+
+    default String getViewerLang() {
+        return getStringFieldValue(viewerLang);
     }
 
     default void setCreatedAt(Instant value) {

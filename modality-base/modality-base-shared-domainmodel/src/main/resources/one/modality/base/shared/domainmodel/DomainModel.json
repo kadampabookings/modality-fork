@@ -162,6 +162,7 @@
     "assignee": "Person",
     "closedAt": "Temporal.Instant",
     "createdAt": "Temporal.Instant",
+    "document": "Document",
     "event": "Event",
     "issue": "Issue",
     "organization": "Organization",
@@ -170,6 +171,7 @@
     "title": "string",
     "type": "string",
     "viewerDevice": "string",
+    "viewerLang": "string",
     "viewerPerson": "Person"
   },
   "ConversationParticipant": {
