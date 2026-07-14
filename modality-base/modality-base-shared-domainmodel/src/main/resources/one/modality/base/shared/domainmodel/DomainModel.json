@@ -145,6 +145,7 @@
   },
   "ChatPresence": {
     "id": 171,
+    "agent": "boolean",
     "event": "Event",
     "lastSeenAt": "Temporal.Instant",
     "person": "Person"
