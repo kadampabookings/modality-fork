@@ -164,7 +164,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                     " select scope.(organization,site,eventType,event)" +
                     ",itemFamily.ord" +
                     ",applicableToInPerson,applicableToOnline,includedByDefault,askDietForBreakfast,dayVisitorBreakfastAllowed,dayVisitorDinnerAllowed,childAllowed,youngAdultAllowed,adultAllowed" +
-                    ",disabled,replacesWiderScopes" +
+                    ",disabled,replacesWiderScopes,displayTimes" +
                     ",eventPhaseCoverage1,eventPhaseCoverage2,eventPhaseCoverage3,eventPhaseCoverage4" +
                     ",noticeLabel,prerequisiteDescriptionLabel,prerequisiteConfirmationLabel" +
                     " from ItemFamilyPolicy ifp, e where ifp.scope.(" +

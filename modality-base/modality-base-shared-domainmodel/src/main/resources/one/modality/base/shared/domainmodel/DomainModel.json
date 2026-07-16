@@ -1085,6 +1085,7 @@
     "dayVisitorBreakfastAllowed": "boolean",
     "dayVisitorDinnerAllowed": "boolean",
     "disabled": "boolean",
+    "displayTimes": "boolean",
     "eventPhaseCoverage1": "EventPhaseCoverage",
     "eventPhaseCoverage2": "EventPhaseCoverage",
     "eventPhaseCoverage3": "EventPhaseCoverage",

@@ -28,6 +28,7 @@ public interface ItemFamilyPolicy extends Entity,
     String adultAllowed = "adultAllowed";
     String disabled = "disabled";
     String replacesWiderScopes = "replacesWiderScopes";
+    String displayTimes = "displayTimes";
 
     default void setScope(Object value) {
         setForeignField(scope, value);
@@ -214,6 +215,19 @@ public interface ItemFamilyPolicy extends Entity,
 
     default Boolean isReplacesWiderScopes() {
         return getBooleanFieldValue(replacesWiderScopes);
+    }
+
+    // Whether the booking form shows this family's session times (meal serving times, etc). Nullable:
+    // null means unset ⇒ show, so only an explicit false hides them. Set false on the MEALS policy of
+    // an event hosted at another centre's venue, where the meals — which belong to the venue, not the
+    // event — carry the host's normal serving times rather than the event's own.
+
+    default void setDisplayTimes(Boolean value) {
+        setFieldValue(displayTimes, value);
+    }
+
+    default Boolean isDisplayTimes() {
+        return getBooleanFieldValue(displayTimes);
     }
 
 }
