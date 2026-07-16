@@ -28,3 +28,4 @@ V0020__support_chats_route_operation.sql
 V0021__conversation_viewer_lang_and_document.sql
 V0023__chat_presence_agent_flag.sql
 V0024__chat_message_edited_at.sql
+V0025__item_family_policy_scope_resolution.sql

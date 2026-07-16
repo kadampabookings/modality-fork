@@ -1084,6 +1084,7 @@
     "childAllowed": "boolean",
     "dayVisitorBreakfastAllowed": "boolean",
     "dayVisitorDinnerAllowed": "boolean",
+    "disabled": "boolean",
     "eventPhaseCoverage1": "EventPhaseCoverage",
     "eventPhaseCoverage2": "EventPhaseCoverage",
     "eventPhaseCoverage3": "EventPhaseCoverage",
@@ -1093,6 +1094,7 @@
     "noticeLabel": "Label",
     "prerequisiteConfirmationLabel": "Label",
     "prerequisiteDescriptionLabel": "Label",
+    "replacesWiderScopes": "boolean",
     "scope": "PolicyScope",
     "youngAdultAllowed": "boolean"
   },

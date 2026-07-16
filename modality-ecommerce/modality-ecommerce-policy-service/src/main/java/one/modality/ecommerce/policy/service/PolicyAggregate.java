@@ -15,11 +15,17 @@ import one.modality.base.shared.entities.util.Rates;
 import one.modality.base.shared.entities.util.ScheduledItems;
 import one.modality.base.shared.knownitems.KnownItemFamily;
 
+import dev.webfx.stack.orm.entity.EntityId;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -55,6 +61,10 @@ public final class PolicyAggregate {
     private EntityList<ItemFamilyPolicy> itemFamilyPolicies;
     private EntityList<ItemPolicy> itemPolicies;
     private EntityList<Rate> rates;
+    // Above lists as loaded, i.e. unioned across every scope matching the event; below lists after
+    // cross-scope resolution, which is what application code sees. Rebuilt lazily, dropped on reload.
+    private List<ItemFamilyPolicy> resolvedItemFamilyPolicies;
+    private List<ItemPolicy> resolvedItemPolicies;
 
     public PolicyAggregate(
             QueryResult eventQueryResult,
@@ -121,6 +131,8 @@ public final class PolicyAggregate {
         queryMapping = (QueryRowToEntityMapping) ratesQueryResult.getEntityMapping();
         rates = QueryResultToEntitiesMapper.mapQueryResultToEntities(ratesQueryResult, queryMapping, entityStore,
                 "rates");
+        resolvedItemFamilyPolicies = null;
+        resolvedItemPolicies = null;
     }
 
     public Future<Void> reloadAvailabilities() {
@@ -216,12 +228,111 @@ public final class PolicyAggregate {
         return phaseCoverages;
     }
 
-    public EntityList<ItemFamilyPolicy> getItemFamilyPolicies() {
-        return itemFamilyPolicies;
+    public List<ItemFamilyPolicy> getItemFamilyPolicies() {
+        if (resolvedItemFamilyPolicies == null)
+            resolveScopes();
+        return resolvedItemFamilyPolicies;
     }
 
-    public EntityList<ItemPolicy> getItemPolicies() {
-        return itemPolicies;
+    public List<ItemPolicy> getItemPolicies() {
+        if (resolvedItemPolicies == null)
+            resolveScopes();
+        return resolvedItemPolicies;
+    }
+
+    // ------------------------------------------------------------------------
+    // Cross-scope resolution
+    // ------------------------------------------------------------------------
+
+    // A policy hangs off a PolicyScope that is general (organization, optionally narrowed to a site),
+    // eventType-scoped or event-scoped. The server's scope predicate is null-permissive, so for a
+    // given event every matching scope's rows come back unioned together — an org-wide row and an
+    // event-specific row for the same item are returned as siblings. Resolution collapses that union
+    // down to what actually applies, and every accessor below goes through it.
+
+    private static final int GENERAL_SCOPE_LEVEL = 1;
+    private static final int EVENT_TYPE_SCOPE_LEVEL = 2;
+    private static final int EVENT_SCOPE_LEVEL = 3;
+
+    /**
+     * Scope specificity — higher is narrower. Site is deliberately not ranked: it says which venue an
+     * item belongs to (the booking forms read scope.getSite() as a payload) rather than how narrowly
+     * the policy applies, and it has no defined order against eventType. A consequence worth knowing:
+     * for an organization that declares policies across several sites, a narrow scope replacing a
+     * family replaces it for all of them.
+     */
+    private static int scopeLevel(PolicyScope scope) {
+        if (scope == null)
+            return 0;
+        if (scope.getEventId() != null)
+            return EVENT_SCOPE_LEVEL;
+        if (scope.getEventTypeId() != null)
+            return EVENT_TYPE_SCOPE_LEVEL;
+        return GENERAL_SCOPE_LEVEL;
+    }
+
+    private void resolveScopes() {
+        // 1) One ItemFamilyPolicy per family: the narrowest scope wins, wholesale. Field-level
+        // inheritance across scopes is not attempted, because it isn't expressible: applicableToOnline
+        // & co are NOT NULL DEFAULT true, so "inherit" can't be told apart from "explicitly true".
+        // Iteration follows the query's "order by itemFamily.ord, id", and ties (two policies for the
+        // same family at the same level — a configuration error) keep the incumbent, i.e. the lowest
+        // id, which is what the previous findFirst() resolution did.
+        Map<EntityId, ItemFamilyPolicy> winnerByFamily = new LinkedHashMap<>();
+        for (ItemFamilyPolicy ifp : itemFamilyPolicies) {
+            EntityId familyId = ifp.getItemFamilyId();
+            if (familyId == null)
+                continue;
+            ItemFamilyPolicy incumbent = winnerByFamily.get(familyId);
+            if (incumbent == null || scopeLevel(ifp.getScope()) > scopeLevel(incumbent.getScope()))
+                winnerByFamily.put(familyId, ifp);
+        }
+
+        // 2) Note which families are switched off at their winning scope. The policy row itself stays in
+        // the resolved list: disabled has to remain observable so callers can tell "withdrawn" from
+        // "never configured", which is a distinction a caller consulting getItemFamilyPolicy() needs to
+        // make. Only its items are dropped, below.
+        List<ItemFamilyPolicy> familyPolicies = new ArrayList<>();
+        Set<EntityId> disabledFamilies = new HashSet<>();
+        for (Map.Entry<EntityId, ItemFamilyPolicy> entry : winnerByFamily.entrySet()) {
+            if (Booleans.isTrue(entry.getValue().isDisabled()))
+                disabledFamilies.add(entry.getKey());
+            familyPolicies.add(entry.getValue());
+        }
+
+        // 3) Item policies: drop the disabled families, then apply each family's replacement floor.
+        // The floor is the level of the winning family policy when it declares replacesWiderScopes —
+        // anything declared more widely than that stops applying. Without the flag the floor is 0 and
+        // the sets merge, which is the historical behaviour.
+        Map<EntityId, ItemPolicy> winnerByItem = new LinkedHashMap<>();
+        for (ItemPolicy ip : itemPolicies) {
+            Item item = ip.getItem();
+            EntityId familyId = item == null ? null : item.getFamilyId();
+            if (familyId != null && disabledFamilies.contains(familyId))
+                continue;
+            if (scopeLevel(ip.getScope()) < replacementFloor(winnerByFamily.get(familyId)))
+                continue;
+            EntityId itemId = ip.getItemId();
+            if (itemId == null)
+                continue;
+            // 4) One ItemPolicy per item: the narrowest scope wins. This is what lets a narrow scope
+            // refine one item's attributes without restating the whole family, and it removes the
+            // duplicate rows the scope union would otherwise leave in the merged lists. LinkedHashMap
+            // keeps the query's family.ord/item.ord ordering, which callers rely on.
+            ItemPolicy incumbent = winnerByItem.get(itemId);
+            if (incumbent == null || scopeLevel(ip.getScope()) > scopeLevel(incumbent.getScope()))
+                winnerByItem.put(itemId, ip);
+        }
+
+        resolvedItemFamilyPolicies = familyPolicies;
+        resolvedItemPolicies = new ArrayList<>(winnerByItem.values());
+    }
+
+    /** Item policies for the family are dropped below this level. 0 = keep them all (merge). */
+    private static int replacementFloor(ItemFamilyPolicy winningFamilyPolicy) {
+        if (winningFamilyPolicy == null || !Booleans.isTrue(winningFamilyPolicy.isReplacesWiderScopes()))
+            return 0;
+        return scopeLevel(winningFamilyPolicy.getScope());
     }
 
     public EventPart getEarlyArrivalPart() {

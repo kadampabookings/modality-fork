@@ -26,6 +26,8 @@ public interface ItemFamilyPolicy extends Entity,
     String childAllowed = "childAllowed";
     String youngAdultAllowed = "youngAdultAllowed";
     String adultAllowed = "adultAllowed";
+    String disabled = "disabled";
+    String replacesWiderScopes = "replacesWiderScopes";
 
     default void setScope(Object value) {
         setForeignField(scope, value);
@@ -180,6 +182,38 @@ public interface ItemFamilyPolicy extends Entity,
 
     default Boolean isAdultAllowed() {
         return getBooleanFieldValue(adultAllowed);
+    }
+
+    // Cross-scope resolution (see PolicyAggregate.resolveScopes). Policies are declared at a general
+    // scope (organization, optionally narrowed to a site), an eventType scope or an event scope, and
+    // the server returns every matching scope's rows unioned together. These two flags, read on the
+    // winning (narrowest) policy for the family, say what that narrower scope means.
+
+    // Withdraws the whole family for the event: its item policies are dropped and no ItemPolicy flag
+    // can reintroduce them. This is the "hide the discovery options on advanced retreats" lever —
+    // distinct from applicableToInPerson/applicableToOnline, which say the option doesn't suit an
+    // attendance mode rather than that it isn't offered here at all.
+
+    default void setDisabled(Boolean value) {
+        setFieldValue(disabled, value);
+    }
+
+    default Boolean isDisabled() {
+        return getBooleanFieldValue(disabled);
+    }
+
+    // Whether this scope's ItemPolicy set for the family replaces the set declared at wider scopes,
+    // instead of adding to it. False (the default, and the historical behaviour) means the sets
+    // merge; per-item attributes are overridden by the narrowest scope either way. The flag lives on
+    // the family rather than the item because "which accommodation types do I offer" is a question
+    // about a set, and no per-item row can express that the wider set should stop applying.
+
+    default void setReplacesWiderScopes(Boolean value) {
+        setFieldValue(replacesWiderScopes, value);
+    }
+
+    default Boolean isReplacesWiderScopes() {
+        return getBooleanFieldValue(replacesWiderScopes);
     }
 
 }
