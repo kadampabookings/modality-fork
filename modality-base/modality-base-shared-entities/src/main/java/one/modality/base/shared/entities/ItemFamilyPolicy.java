@@ -31,6 +31,8 @@ public interface ItemFamilyPolicy extends Entity,
     String displayTimes = "displayTimes";
     String minDay = "minDay";
     String wholeEvent = "wholeEvent";
+    String earlyAccommodationAllowed = "earlyAccommodationAllowed";
+    String lateAccommodationAllowed = "lateAccommodationAllowed";
 
     default void setScope(Object value) {
         setForeignField(scope, value);
@@ -261,6 +263,26 @@ public interface ItemFamilyPolicy extends Entity,
 
     default Boolean isWholeEvent() {
         return getBooleanFieldValue(wholeEvent);
+    }
+
+    // Whether this family's items may be booked before the event starts / after it ends. Nullable:
+    // null means unset, so resolution asks a wider scope and finally defaults to allowed. Stated on
+    // the family, a retreat says "no early arrival" once instead of on every room.
+
+    default void setEarlyAccommodationAllowed(Boolean value) {
+        setFieldValue(earlyAccommodationAllowed, value);
+    }
+
+    default Boolean isEarlyAccommodationAllowed() {
+        return getBooleanFieldValue(earlyAccommodationAllowed);
+    }
+
+    default void setLateAccommodationAllowed(Boolean value) {
+        setFieldValue(lateAccommodationAllowed, value);
+    }
+
+    default Boolean isLateAccommodationAllowed() {
+        return getBooleanFieldValue(lateAccommodationAllowed);
     }
 
 }

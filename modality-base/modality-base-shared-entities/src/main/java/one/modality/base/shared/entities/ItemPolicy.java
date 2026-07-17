@@ -14,6 +14,8 @@ public interface ItemPolicy extends Entity,
     String scope = "scope";
     String descriptionLabel = "descriptionLabel";
     String noticeLabel = "noticeLabel";
+    String applicableToInPerson = "applicableToInPerson";
+    String applicableToOnline = "applicableToOnline";
     String minDay = "minDay";
     String wholeEvent = "wholeEvent";
     String _default = "default";
@@ -78,6 +80,27 @@ public interface ItemPolicy extends Entity,
     // minDay=29 there is met by any 29 nights in a 57-night span). Both constraints apply when both
     // resolve, so an item opting out of its family's wholeEvent must set it false explicitly — the
     // dormitory that wants a 7-night minimum carries wholeEvent=false AND minDay=7.
+
+    // Whether this item is offered for in-person / online attendance. Present in the database since
+    // long before this interface named them: they were selected by the policy query and read only by
+    // the React booking form, off the untyped row. Declared here now that cross-scope resolution
+    // needs to name them.
+
+    default void setApplicableToInPerson(Boolean value) {
+        setFieldValue(applicableToInPerson, value);
+    }
+
+    default Boolean isApplicableToInPerson() {
+        return getBooleanFieldValue(applicableToInPerson);
+    }
+
+    default void setApplicableToOnline(Boolean value) {
+        setFieldValue(applicableToOnline, value);
+    }
+
+    default Boolean isApplicableToOnline() {
+        return getBooleanFieldValue(applicableToOnline);
+    }
 
     default void setWholeEvent(Boolean value) {
         setFieldValue(wholeEvent, value);

@@ -305,8 +305,10 @@ public final class PolicyAggregate {
         // 3) Item policies: drop the disabled families, then apply each family's replacement floor.
         // The floor is the level of the winning family policy when it declares replacesWiderScopes —
         // anything declared more widely than that stops applying. Without the flag the floor is 0 and
-        // the sets merge, which is the historical behaviour.
-        Map<EntityId, ItemPolicy> winnerByItem = new LinkedHashMap<>();
+        // the sets merge, which is the historical behaviour. Survivors are grouped per item, keeping
+        // EVERY scope's row: step 4 resolves across them. LinkedHashMap keeps the query's
+        // family.ord/item.ord ordering, which callers rely on.
+        Map<EntityId, List<ItemPolicy>> rowsByItem = new LinkedHashMap<>();
         for (ItemPolicy ip : itemPolicies) {
             Item item = ip.getItem();
             EntityId familyId = item == null ? null : item.getFamilyId();
@@ -317,17 +319,92 @@ public final class PolicyAggregate {
             EntityId itemId = ip.getItemId();
             if (itemId == null)
                 continue;
-            // 4) One ItemPolicy per item: the narrowest scope wins. This is what lets a narrow scope
-            // refine one item's attributes without restating the whole family, and it removes the
-            // duplicate rows the scope union would otherwise leave in the merged lists. LinkedHashMap
-            // keeps the query's family.ord/item.ord ordering, which callers rely on.
-            ItemPolicy incumbent = winnerByItem.get(itemId);
-            if (incumbent == null || scopeLevel(ip.getScope()) > scopeLevel(incumbent.getScope()))
-                winnerByItem.put(itemId, ip);
+            rowsByItem.computeIfAbsent(itemId, k -> new ArrayList<>()).add(ip);
+        }
+
+        // 4) One fully-resolved policy per item, across both specificity axes.
+        List<ItemPolicy> itemPoliciesResolved = new ArrayList<>();
+        for (List<ItemPolicy> itemRows : rowsByItem.values()) {
+            Item item = itemRows.get(0).getItem();
+            EntityId familyId = item == null ? null : item.getFamilyId();
+            List<ItemFamilyPolicy> familyRows = familyId == null ? java.util.Collections.emptyList()
+                : rowsByFamily.getOrDefault(familyId, java.util.Collections.emptyList());
+            itemPoliciesResolved.add(resolveItemAcrossScopes(itemRows, familyRows));
         }
 
         resolvedItemFamilyPolicies = familyPolicies;
-        resolvedItemPolicies = new ArrayList<>(winnerByItem.values());
+        resolvedItemPolicies = itemPoliciesResolved;
+    }
+
+    /**
+     * The fields an ItemFamilyPolicy can supply a default for: those declared on BOTH entities where
+     * the family's value means the same as the item's.
+     *
+     * Deliberately an explicit list rather than every shared field — scope and noticeLabel are on
+     * both and must never cross over (the first would misreport which scope won, and a family notice
+     * is not an item notice). Add a field here only when the family declaring it means "unless the
+     * item says otherwise".
+     */
+    private static final String[] FAMILY_DEFAULTABLE_FIELDS = {
+        ItemPolicy.applicableToInPerson, ItemPolicy.applicableToOnline,
+        ItemPolicy.childAllowed, ItemPolicy.youngAdultAllowed, ItemPolicy.adultAllowed,
+        ItemPolicy.minDay, ItemPolicy.wholeEvent,
+        ItemPolicy.earlyAccommodationAllowed, ItemPolicy.lateAccommodationAllowed,
+    };
+
+    /**
+     * Resolve one item into a single fully-resolved policy, across BOTH specificity axes at once:
+     *
+     *   item@event -> family@event -> item@eventType -> family@eventType -> item@general -> family@general
+     *
+     * Scope is the primary axis: anything set at a narrower scope beats anything set at a wider one,
+     * whether it was said about the item or about its family. Within one scope the item wins, being
+     * the more specific statement — which is how a dormitory keeps its own 7-night minimum against
+     * its family's "whole event only" declared at that same scope.
+     *
+     * Resolving item-then-family instead (ignoring scope) reads naturally but is wrong here: an
+     * organization-wide item value would silently beat an event's family rule, so declaring anything
+     * on a narrow family would appear to do nothing until every wider item row was blanked by hand.
+     *
+     * Enriches the narrowest item row in place and returns it, so it keeps its id and scope (the
+     * booking forms read scope.site off it) — see mergeFamilyRowsAcrossScopes for why that is safe.
+     */
+    private static ItemPolicy resolveItemAcrossScopes(List<ItemPolicy> itemRows, List<ItemFamilyPolicy> familyRows) {
+        itemRows.sort((r1, r2) -> scopeLevel(r2.getScope()) - scopeLevel(r1.getScope()));
+        ItemPolicy narrowest = itemRows.get(0);
+        try (ThreadLocalEntityLoadingContext ignored = ThreadLocalEntityLoadingContext.open(true)) {
+            // Everything the item itself says, narrowest scope first.
+            for (int i = 1; i < itemRows.size(); i++) {
+                ItemPolicy wider = itemRows.get(i);
+                for (Object field : wider.getLoadedFields()) {
+                    if (narrowest.getFieldValue(field) == null) {
+                        Object widerValue = wider.getFieldValue(field);
+                        if (widerValue != null)
+                            narrowest.setFieldValue(field, widerValue);
+                    }
+                }
+            }
+            if (familyRows.isEmpty())
+                return narrowest;
+            // Then the family, but only where it outranks what the item said — a family at a
+            // narrower scope beats an item value set wider.
+            for (String field : FAMILY_DEFAULTABLE_FIELDS) {
+                int itemLevel = 0;
+                for (ItemPolicy row : itemRows)
+                    if (row.getFieldValue(field) != null)
+                        itemLevel = Math.max(itemLevel, scopeLevel(row.getScope()));
+                ItemFamilyPolicy best = null;
+                for (ItemFamilyPolicy row : familyRows) {
+                    if (row.getFieldValue(field) == null || scopeLevel(row.getScope()) <= itemLevel)
+                        continue;
+                    if (best == null || scopeLevel(row.getScope()) > scopeLevel(best.getScope()))
+                        best = row;
+                }
+                if (best != null)
+                    narrowest.setFieldValue(field, best.getFieldValue(field));
+            }
+        }
+        return narrowest;
     }
 
     /**
