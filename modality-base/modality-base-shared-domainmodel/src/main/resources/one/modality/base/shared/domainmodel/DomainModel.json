@@ -1911,6 +1911,12 @@
     "ssl": "boolean",
     "username": "string"
   },
+  "SoldOutItem": {
+    "id": 172,
+    "event": "Event",
+    "item": "Item",
+    "site": "Site"
+  },
   "SupportReport": {
     "id": 164,
     "event": "Event",

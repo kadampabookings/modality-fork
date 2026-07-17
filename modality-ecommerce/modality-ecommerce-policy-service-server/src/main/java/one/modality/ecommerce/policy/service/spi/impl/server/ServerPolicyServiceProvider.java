@@ -209,6 +209,12 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                     ")" +
                     // Note: TeachingsPricing relies on the following order to work properly
                     " order by site,item,perDay desc,startDate,endDate,price", eventPk)
+                    // 10 - Registration's manual sold-out overrides. The row's presence forces the item
+                    // sold out; there is no flag to read. Bound to the event itself, NOT the repeated
+                    // event: it is operational state about this run, not configuration inherited from
+                    // the series.
+                    , DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
+                    "select item,site from SoldOutItem where event=$1", eventPk)
                 }))
             .map(batch -> new PolicyAggregate(
                 batch.get(0),
@@ -220,7 +226,8 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                 batch.get(6),
                 batch.get(7),
                 batch.get(8),
-                batch.get(9)
+                batch.get(9),
+                batch.get(10)
             ));
     }
 

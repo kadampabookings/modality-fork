@@ -46,6 +46,7 @@ public final class PolicyAggregate {
     private final QueryResult itemFamilyPoliciesQueryResult;
     private final QueryResult itemPoliciesQueryResult;
     private final QueryResult ratesQueryResult;
+    private final QueryResult soldOutItemsQueryResult;
     private final long creationTimeMillis = System.currentTimeMillis();
 
     // Fields intended for application code
@@ -62,6 +63,7 @@ public final class PolicyAggregate {
     private EntityList<ItemFamilyPolicy> itemFamilyPolicies;
     private EntityList<ItemPolicy> itemPolicies;
     private EntityList<Rate> rates;
+    private EntityList<SoldOutItem> soldOutItems;
     // Above lists as loaded, i.e. unioned across every scope matching the event; below lists after
     // cross-scope resolution, which is what application code sees. Rebuilt lazily, dropped on reload.
     private List<ItemFamilyPolicy> resolvedItemFamilyPolicies;
@@ -77,7 +79,8 @@ public final class PolicyAggregate {
             QueryResult phaseCoveragesQueryResult,
             QueryResult itemFamilyPoliciesQueryResult,
             QueryResult itemPoliciesQueryResult,
-            QueryResult ratesQueryResult) {
+            QueryResult ratesQueryResult,
+            QueryResult soldOutItemsQueryResult) {
         this.eventQueryResult = eventQueryResult;
         this.scheduledItemsQueryResult = scheduledItemsQueryResult;
         this.scheduledBoundariesQueryResult = scheduledBoundariesQueryResult;
@@ -88,6 +91,7 @@ public final class PolicyAggregate {
         this.ratesQueryResult = ratesQueryResult;
         this.itemFamilyPoliciesQueryResult = itemFamilyPoliciesQueryResult;
         this.itemPoliciesQueryResult = itemPoliciesQueryResult;
+        this.soldOutItemsQueryResult = soldOutItemsQueryResult;
     }
 
     public void rebuildEntities(Event event) {
@@ -132,6 +136,19 @@ public final class PolicyAggregate {
         queryMapping = (QueryRowToEntityMapping) ratesQueryResult.getEntityMapping();
         rates = QueryResultToEntitiesMapper.mapQueryResultToEntities(ratesQueryResult, queryMapping, entityStore,
                 "rates");
+        // Tolerate an aggregate serialised by a server that predates the sold-out query (its "soqr"
+        // key is simply absent). A rolling deploy can serve the new front-office assets before the
+        // server task has cycled, and this must degrade rather than fail to load the booking form.
+        // Empty is the right degradation: sold_out_item only ever ADDS a manual override on top of
+        // computed availability, so a genuinely full room still reads as sold out — only the handful
+        // of manual overrides go missing, and only until the server catches up.
+        if (soldOutItemsQueryResult == null) {
+            soldOutItems = EntityList.create("soldOutItems", entityStore);
+        } else {
+            queryMapping = (QueryRowToEntityMapping) soldOutItemsQueryResult.getEntityMapping();
+            soldOutItems = QueryResultToEntitiesMapper.mapQueryResultToEntities(soldOutItemsQueryResult, queryMapping,
+                    entityStore, "soldOutItems");
+        }
         resolvedItemFamilyPolicies = null;
         resolvedItemPolicies = null;
     }
@@ -691,6 +708,36 @@ public final class PolicyAggregate {
 
     public QueryResult getItemPoliciesQueryResult() {
         return itemPoliciesQueryResult;
+    }
+
+    public QueryResult getSoldOutItemsQueryResult() {
+        return soldOutItemsQueryResult;
+    }
+
+    /**
+     * Registration's manual sold-out overrides for this event: a row's PRESENCE forces its item sold
+     * out, whatever the computed availability says. Operational state written by the registration
+     * team, deliberately not an ItemPolicy field — see the SoldOutItem entity.
+     */
+    public List<SoldOutItem> getSoldOutItems() {
+        return soldOutItems;
+    }
+
+    /**
+     * Whether registration has forced this item sold out for the event. A row with no site applies to
+     * every site the item is offered at, which is what the KBS3 control writes; KBS2 names the site.
+     */
+    public boolean isItemForcedSoldOut(Item item, Site site) {
+        if (item == null)
+            return false;
+        for (SoldOutItem soldOut : getSoldOutItems()) {
+            if (!Entities.samePrimaryKey(soldOut.getItem(), item))
+                continue;
+            if (soldOut.getSiteId() == null || site == null
+                || Entities.samePrimaryKey(soldOut.getSite(), site))
+                return true;
+        }
+        return false;
     }
 
     public QueryResult getRatesQueryResult() {
