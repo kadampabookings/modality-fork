@@ -29,6 +29,8 @@ public interface ItemFamilyPolicy extends Entity,
     String disabled = "disabled";
     String replacesWiderScopes = "replacesWiderScopes";
     String displayTimes = "displayTimes";
+    String minDay = "minDay";
+    String wholeEvent = "wholeEvent";
 
     default void setScope(Object value) {
         setForeignField(scope, value);
@@ -228,6 +230,37 @@ public interface ItemFamilyPolicy extends Entity,
 
     default Boolean isDisplayTimes() {
         return getBooleanFieldValue(displayTimes);
+    }
+
+    // Minimum nights INSIDE THE MAIN EVENT PERIOD for this family's items — the same measure as
+    // ItemPolicy.minDay, which overrides it. Nullable: null means unset, so an item with no value of
+    // its own asks the family, and a family that says nothing imposes no minimum.
+    // Careful: the main event period is not the event's own dates. getEventDateRange EXTENDS it to
+    // cover every scheduled teaching, so on an extendable retreat (event 1933 runs 02/01-31/01 but
+    // teaches to 28/02) a minimum of 29 is satisfied by any 29 nights inside a 57-night span. Use
+    // wholeEvent when the stay must actually cover the event.
+
+    default void setMinDay(Integer value) {
+        setFieldValue(minDay, value);
+    }
+
+    default Integer getMinDay() {
+        return getIntegerFieldValue(minDay);
+    }
+
+    // Whether a booking must cover the EVENT'S OWN start..end dates, extra nights either side
+    // allowed. Distinct from minDay, and measured against a different window (see above) — on an
+    // extendable event minDay cannot express this at all. It is also the value that cannot go stale:
+    // a night count is a copy of a derived fact, so moving the event silently invalidates it.
+    // Nullable: null means unset. The two constraints are independent and both apply when both
+    // resolve, so an item opting out of its family's wholeEvent must set it false explicitly.
+
+    default void setWholeEvent(Boolean value) {
+        setFieldValue(wholeEvent, value);
+    }
+
+    default Boolean isWholeEvent() {
+        return getBooleanFieldValue(wholeEvent);
     }
 
 }

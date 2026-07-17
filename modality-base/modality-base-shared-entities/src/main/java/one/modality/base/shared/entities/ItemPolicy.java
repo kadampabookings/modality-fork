@@ -15,6 +15,7 @@ public interface ItemPolicy extends Entity,
     String descriptionLabel = "descriptionLabel";
     String noticeLabel = "noticeLabel";
     String minDay = "minDay";
+    String wholeEvent = "wholeEvent";
     String _default = "default";
     String earlyAccommodationAllowed = "earlyAccommodationAllowed";
     String lateAccommodationAllowed = "lateAccommodationAllowed";
@@ -68,6 +69,22 @@ public interface ItemPolicy extends Entity,
 
     default Integer getMinDay() {
         return getIntegerFieldValue(minDay);
+    }
+
+    // Whether a booking of this item must cover the EVENT'S OWN start..end dates, extra nights either
+    // side allowed. Nullable: null means unset ⇒ take the family's value. Not a shorthand for minDay:
+    // minDay counts nights inside the MAIN EVENT period, which extends to cover scheduled teachings
+    // and so can be much longer than the event (event 1933 runs 02/01-31/01 but teaches to 28/02, so
+    // minDay=29 there is met by any 29 nights in a 57-night span). Both constraints apply when both
+    // resolve, so an item opting out of its family's wholeEvent must set it false explicitly — the
+    // dormitory that wants a 7-night minimum carries wholeEvent=false AND minDay=7.
+
+    default void setWholeEvent(Boolean value) {
+        setFieldValue(wholeEvent, value);
+    }
+
+    default Boolean isWholeEvent() {
+        return getBooleanFieldValue(wholeEvent);
     }
 
     default void setDefault(Boolean value) {

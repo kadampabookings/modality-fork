@@ -1092,11 +1092,13 @@
     "eventPhaseCoverage4": "EventPhaseCoverage",
     "includedByDefault": "boolean",
     "itemFamily": "ItemFamily",
+    "minDay": "integer",
     "noticeLabel": "Label",
     "prerequisiteConfirmationLabel": "Label",
     "prerequisiteDescriptionLabel": "Label",
     "replacesWiderScopes": "boolean",
     "scope": "PolicyScope",
+    "wholeEvent": "boolean",
     "youngAdultAllowed": "boolean"
   },
   "ItemPolicy": {
@@ -1118,6 +1120,7 @@
     "noticeLabel": "Label",
     "scope": "PolicyScope",
     "titleLabel": "Label",
+    "wholeEvent": "boolean",
     "youngAdultAllowed": "boolean"
   },
   "KdmCenter": {
