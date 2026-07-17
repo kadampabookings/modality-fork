@@ -16,6 +16,7 @@ import one.modality.base.shared.entities.util.ScheduledItems;
 import one.modality.base.shared.knownitems.KnownItemFamily;
 
 import dev.webfx.stack.orm.entity.EntityId;
+import dev.webfx.stack.orm.entity.impl.ThreadLocalEntityLoadingContext;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -272,21 +273,22 @@ public final class PolicyAggregate {
     }
 
     private void resolveScopes() {
-        // 1) One ItemFamilyPolicy per family: the narrowest scope wins, wholesale. Field-level
-        // inheritance across scopes is not attempted, because it isn't expressible: applicableToOnline
-        // & co are NOT NULL DEFAULT true, so "inherit" can't be told apart from "explicitly true".
-        // Iteration follows the query's "order by itemFamily.ord, id", and ties (two policies for the
-        // same family at the same level — a configuration error) keep the incumbent, i.e. the lowest
-        // id, which is what the previous findFirst() resolution did.
-        Map<EntityId, ItemFamilyPolicy> winnerByFamily = new LinkedHashMap<>();
+        // 1) One ItemFamilyPolicy per family, resolved FIELD BY FIELD along the scope chain: the
+        // narrowest scope that declares a value wins, and whatever it leaves unset falls back to a
+        // wider scope. Previously the narrowest row won wholesale, which meant an event-scoped row
+        // tuning one field (say a minimum stay) silently discarded everything its organization had
+        // said about the family — so avoiding per-item duplication just moved the duplication up to
+        // the family level.
+        Map<EntityId, List<ItemFamilyPolicy>> rowsByFamily = new LinkedHashMap<>();
         for (ItemFamilyPolicy ifp : itemFamilyPolicies) {
             EntityId familyId = ifp.getItemFamilyId();
             if (familyId == null)
                 continue;
-            ItemFamilyPolicy incumbent = winnerByFamily.get(familyId);
-            if (incumbent == null || scopeLevel(ifp.getScope()) > scopeLevel(incumbent.getScope()))
-                winnerByFamily.put(familyId, ifp);
+            rowsByFamily.computeIfAbsent(familyId, k -> new ArrayList<>()).add(ifp);
         }
+        Map<EntityId, ItemFamilyPolicy> winnerByFamily = new LinkedHashMap<>();
+        for (Map.Entry<EntityId, List<ItemFamilyPolicy>> familyRows : rowsByFamily.entrySet())
+            winnerByFamily.put(familyRows.getKey(), mergeFamilyRowsAcrossScopes(familyRows.getValue()));
 
         // 2) Note which families are switched off at their winning scope. The policy row itself stays in
         // the resolved list: disabled has to remain observable so callers can tell "withdrawn" from
@@ -326,6 +328,48 @@ public final class PolicyAggregate {
 
         resolvedItemFamilyPolicies = familyPolicies;
         resolvedItemPolicies = new ArrayList<>(winnerByItem.values());
+    }
+
+    /**
+     * Resolve one family's rows — each matching scope declares at most one — into a single policy:
+     * the narrowest scope's row, with every field it leaves null filled in from the next widest
+     * scope that sets one. This is what lets an organization state a family's rules once and an
+     * event override a single field without restating the rest.
+     *
+     * The returned instance IS the narrowest row, enriched in place. That is safe: the aggregate is
+     * a read-only snapshot rebuilt on every load, into a store that rebuildEntities always layers
+     * above the event's (a plain EntityStore, never an UpdateStore). The writes are nonetheless
+     * wrapped in an entity-loading context — the same one QueryResultToEntitiesMapper uses when it
+     * populates these very fields — so they could not register as modifications even if an
+     * UpdateStore were ever passed to the public rebuildEntities(EntityStore). Keeping the narrowest
+     * row's identity is what callers expect: getScope() still reports the scope that won.
+     *
+     * Fields that are NOT NULL in the database (disabled, replacesWiderScopes, applicableTo* and the
+     * dayVisitor pair) can never read as null, so they always resolve to the narrowest row and never
+     * inherit. That is exactly right for the two that are statements about their own scope rather
+     * than inheritable values, and it makes this a no-op for the rest.
+     */
+    private static ItemFamilyPolicy mergeFamilyRowsAcrossScopes(List<ItemFamilyPolicy> familyRows) {
+        if (familyRows.size() == 1)
+            return familyRows.get(0);
+        // Narrowest first. The sort is stable and the query orders by id, so rows at the same level
+        // (two policies for one family at one scope level — a configuration error) keep the lowest
+        // id, which is what the previous resolution picked.
+        familyRows.sort((r1, r2) -> scopeLevel(r2.getScope()) - scopeLevel(r1.getScope()));
+        ItemFamilyPolicy narrowest = familyRows.get(0);
+        try (ThreadLocalEntityLoadingContext ignored = ThreadLocalEntityLoadingContext.open(true)) {
+            for (int i = 1; i < familyRows.size(); i++) {
+                ItemFamilyPolicy wider = familyRows.get(i);
+                for (Object field : wider.getLoadedFields()) {
+                    if (narrowest.getFieldValue(field) != null)
+                        continue; // the narrower scope has spoken
+                    Object widerValue = wider.getFieldValue(field);
+                    if (widerValue != null)
+                        narrowest.setFieldValue(field, widerValue);
+                }
+            }
+        }
+        return narrowest;
     }
 
     /** Item policies for the family are dropped below this level. 0 = keep them all (merge). */
