@@ -34,3 +34,4 @@ V0027__item_family_policy_display_times.sql
 V0028__policy_min_day_and_whole_event.sql
 V0029__policy_accommodation_window_flags.sql
 V0030__sold_out_item.sql
+V0031__support_email.sql

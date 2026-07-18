@@ -25,6 +25,7 @@ public interface Organization extends
     String termsUrlLabel = "termsUrlLabel";
     String privacyUrlLabel = "privacyUrlLabel";
     String registrationMailAccount = "registrationMailAccount";
+    String supportEmail = "supportEmail";
     String timezone = "timezone";
     String metaPixelId = "metaPixelId";
     String includeTeachingsInAccommodationPricesByDefault = "includeTeachingsInAccommodationPricesByDefault";
@@ -179,6 +180,18 @@ public interface Organization extends
 
     default MailAccount getRegistrationMailAccount() {
         return getForeignEntity(registrationMailAccount);
+    }
+
+    /** Address shown to bookers on this organization's booking forms as "contact us for help with your
+     *  booking" — a display address, distinct from {@link #getRegistrationMailAccount()}, which is the
+     *  identity we send letters *from*. Null means the organization has none, in which case the booking
+     *  forms show no support note at all rather than a wrong address; an event type may override it. */
+    default void setSupportEmail(String value) {
+        setFieldValue(supportEmail, value);
+    }
+
+    default String getSupportEmail() {
+        return getStringFieldValue(supportEmail);
     }
 
 }

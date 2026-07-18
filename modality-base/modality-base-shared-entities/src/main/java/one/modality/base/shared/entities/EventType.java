@@ -19,6 +19,7 @@ public interface EventType extends Entity,
     String bookingForm = "bookingForm";
     String recurringItem = "recurringItem";
     String registrationMailAccount = "registrationMailAccount";
+    String supportEmail = "supportEmail";
     String ord = "ord";
 
     default void setBookingForm(Object value) {
@@ -57,6 +58,18 @@ public interface EventType extends Entity,
 
     default MailAccount getRegistrationMailAccount() {
         return getForeignEntity(registrationMailAccount);
+    }
+
+    /** Address shown to bookers on this event type's booking forms as "contact us for help with your
+     *  booking". Takes precedence over the organization's supportEmail, so a programme with its own
+     *  inbox (public talks, say) can route its bookers there while the rest of the centre's events
+     *  keep the general address. Null defers to the organization. */
+    default void setSupportEmail(String value) {
+        setFieldValue(supportEmail, value);
+    }
+
+    default String getSupportEmail() {
+        return getStringFieldValue(supportEmail);
     }
 
 

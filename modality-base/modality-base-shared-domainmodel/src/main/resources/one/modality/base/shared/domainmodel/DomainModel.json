@@ -912,7 +912,8 @@
     "ord": "integer",
     "organization": "Organization",
     "recurringItem": "Item",
-    "registrationMailAccount": "MailAccount"
+    "registrationMailAccount": "MailAccount",
+    "supportEmail": "string"
   },
   "Filter": {
     "id": 110,
@@ -1560,6 +1561,7 @@
     "registrationMailAccount": "MailAccount",
     "residentEvent": "Event",
     "street": "string",
+    "supportEmail": "string",
     "teachingsDayTicketItem": "Item",
     "termsUrlLabel": "Label",
     "timezone": "string",
