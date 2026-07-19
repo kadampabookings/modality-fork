@@ -909,6 +909,7 @@
     "deprecated": "boolean",
     "label": "Label",
     "name": "string",
+    "noTermsAcceptance": "boolean",
     "ord": "integer",
     "organization": "Organization",
     "recurringItem": "Item",
@@ -1548,6 +1549,7 @@
       "expr": "id=1 ? image('images/16/organizations/nkt.png') : id=263 ? image('images/16/organizations/isc.png') : type.icon"
     },
     "importIssue": "string",
+    "inPersonTermsLabel": "Label",
     "includeTeachingsInAccommodationPricesByDefault": "boolean",
     "kdmCenter": "KdmCenter",
     "language": "Language",
@@ -1555,6 +1557,7 @@
     "longitude": "float",
     "metaPixelId": "string",
     "name": "string",
+    "onlineTermsLabel": "Label",
     "phone": "string",
     "postCode": "string",
     "privacyUrlLabel": "Label",

@@ -35,3 +35,4 @@ V0028__policy_min_day_and_whole_event.sql
 V0029__policy_accommodation_window_flags.sql
 V0030__sold_out_item.sql
 V0031__support_email.sql
+V0032__organization_terms_and_event_type_no_terms.sql
