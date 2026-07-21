@@ -115,6 +115,10 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                     // 0 - Loading event
                     DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
                         "select name, slug, " + LABEL_I18N + ", state, type.(bookingForm.code,category,supportEmail,noTermsAcceptance), themeBaseColor, themeAccentColor, themeBorderColor, themeStrongBackground, themeSurfaceColor, theme.(baseColor,accentColor,borderColor,strongBackground,surfaceColor), venue.(name," + LABEL_I18N + ",address), startDate, endDate, shortDescriptionLabel.(" + LABEL_I18N_COLS + "), longDescriptionLabel.(" + LABEL_I18N_COLS + "), currency.symbol, organization.(includeTeachingsInAccommodationPricesByDefault, currency.symbol, country.(currency.symbol, mainLanguage.iso_639_1), privacyUrlLabel, timezone, language.iso_639_1, supportEmail, inPersonTermsLabel.(" + LABEL_I18N_COLS + "), onlineTermsLabel.(" + LABEL_I18N_COLS + ")), openingDate, bookingProcessStart, audioClosingDate, timezone, noAccountBooking, inPersonAllowed, onlineAllowed, vodEnabled, earlyBird, teacher.(name," + LABEL_I18N + ")" +
+                        // Series = shared content of a term batch of sibling events (GP classes): title/description
+                        // labels, colour palette, and the id for the cover-image fallback chain. Event-level fields
+                        // override field by field; the client resolvers consult series.* only where the event is unset.
+                        ", series.(" + LABEL_I18N + ", shortDescriptionLabel.(" + LABEL_I18N_COLS + "), longDescriptionLabel.(" + LABEL_I18N_COLS + "), themeBaseColor, themeAccentColor, themeBorderColor, themeStrongBackground, themeSurfaceColor)" +
                         ", inPersonTermsLabel.(" + LABEL_I18N_COLS + "),onlineTermsLabel.(" + LABEL_I18N_COLS + "),termsUrlEn" +
                         ", date_part('epoch', openingDate - now()) as " + Event.secondsToOpeningDateAtLoadingTime +
                         ", date_part('epoch', coalesce(bookingProcessStart, openingDate) - now()) as " + Event.secondsToBookingProcessStartAtLoadingTime +
