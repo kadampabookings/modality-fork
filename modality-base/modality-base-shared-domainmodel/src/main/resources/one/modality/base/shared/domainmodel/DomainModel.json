@@ -819,6 +819,7 @@
     "repeatable": "boolean",
     "repeatedEvent": "Event",
     "sendHistoryEmails": "boolean",
+    "series": "Series",
     "shortDescription": "string",
     "shortDescriptionLabel": "Label",
     "showSites": "boolean",
@@ -1868,6 +1869,19 @@
     "teacher": "Teacher",
     "timeline": "Timeline",
     "vodDelayed": "boolean"
+  },
+  "Series": {
+    "id": 173,
+    "label": "Label",
+    "longDescriptionLabel": "Label",
+    "name": "string",
+    "organization": "Organization",
+    "shortDescriptionLabel": "Label",
+    "themeAccentColor": "string",
+    "themeBaseColor": "string",
+    "themeBorderColor": "string",
+    "themeStrongBackground": "boolean",
+    "themeSurfaceColor": "string"
   },
   "Site": {
     "id": 42,
