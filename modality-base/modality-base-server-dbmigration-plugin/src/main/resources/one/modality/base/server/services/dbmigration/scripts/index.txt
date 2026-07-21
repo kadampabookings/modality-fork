@@ -39,3 +39,4 @@ V0032__organization_terms_and_event_type_no_terms.sql
 V0033__series.sql
 V0034__person_gender_changed_date.sql
 V0035__person_gender_changed_trigger.sql
+V0036__series_theme.sql

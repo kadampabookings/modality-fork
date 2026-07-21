@@ -118,7 +118,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                         // Series = shared content of a term batch of sibling events (GP classes): title/description
                         // labels, colour palette, and the id for the cover-image fallback chain. Event-level fields
                         // override field by field; the client resolvers consult series.* only where the event is unset.
-                        ", series.(" + LABEL_I18N + ", shortDescriptionLabel.(" + LABEL_I18N_COLS + "), longDescriptionLabel.(" + LABEL_I18N_COLS + "), themeBaseColor, themeAccentColor, themeBorderColor, themeStrongBackground, themeSurfaceColor)" +
+                        ", series.(" + LABEL_I18N + ", shortDescriptionLabel.(" + LABEL_I18N_COLS + "), longDescriptionLabel.(" + LABEL_I18N_COLS + "), themeBaseColor, themeAccentColor, themeBorderColor, themeStrongBackground, themeSurfaceColor, theme.(baseColor,accentColor,borderColor,strongBackground,surfaceColor))" +
                         ", inPersonTermsLabel.(" + LABEL_I18N_COLS + "),onlineTermsLabel.(" + LABEL_I18N_COLS + "),termsUrlEn" +
                         ", date_part('epoch', openingDate - now()) as " + Event.secondsToOpeningDateAtLoadingTime +
                         ", date_part('epoch', coalesce(bookingProcessStart, openingDate) - now()) as " + Event.secondsToBookingProcessStartAtLoadingTime +

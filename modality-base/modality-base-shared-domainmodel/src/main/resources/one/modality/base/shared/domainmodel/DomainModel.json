@@ -1878,6 +1878,7 @@
     "name": "string",
     "organization": "Organization",
     "shortDescriptionLabel": "Label",
+    "theme": "EventTheme",
     "themeAccentColor": "string",
     "themeBaseColor": "string",
     "themeBorderColor": "string",
