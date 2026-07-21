@@ -13,6 +13,7 @@ import java.time.LocalDate;
 public interface Person extends Entity, EntityHasPersonalDetails, EntityHasEvent {
     // Field name constants
     String birthDate = "birthdate";
+    String genderChangedDate = "genderChangedDate";
     String frontendAccount = "frontendAccount";
     String accountPerson = "accountPerson";
     String branch = "branch";
@@ -44,6 +45,16 @@ public interface Person extends Entity, EntityHasPersonalDetails, EntityHasEvent
 
     default LocalDate getBirthDate() {
         return getLocalDateFieldValue(birthDate);
+    }
+
+    // Gender changed date (single-sex dormitory allocation warning when non-null;
+    // live attention marker — deliberately not snapshotted onto Document, read it via document.person)
+    default void setGenderChangedDate(LocalDate value) {
+        setFieldValue(genderChangedDate, value);
+    }
+
+    default LocalDate getGenderChangedDate() {
+        return getLocalDateFieldValue(genderChangedDate);
     }
 
     // Frontend account

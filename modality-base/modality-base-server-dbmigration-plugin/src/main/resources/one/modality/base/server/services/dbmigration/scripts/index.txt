@@ -37,3 +37,4 @@ V0030__sold_out_item.sql
 V0031__support_email.sql
 V0032__organization_terms_and_event_type_no_terms.sql
 V0033__series.sql
+V0034__person_gender_changed_date.sql
