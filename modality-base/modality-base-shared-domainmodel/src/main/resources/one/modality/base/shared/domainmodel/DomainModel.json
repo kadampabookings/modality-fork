@@ -1223,6 +1223,7 @@
     "subject_es": "string",
     "subject_fr": "string",
     "subject_pt": "string",
+    "suppressesSending": "boolean",
     "type": "LetterType"
   },
   "LetterType": {

@@ -48,7 +48,7 @@ final class ToggleConfirmDocumentExecutor {
                 condition.append(" or site=$").append(params.size());
             }
             condition.append("))");
-            return document.getStore().<Letter>executeQuery("select subject_en,event,eventType,site from Letter where " + condition, params.toArray());
+            return document.getStore().<Letter>executeQuery("select subject_en,event,eventType,site,suppressesSending from Letter where " + condition, params.toArray());
         }).compose(letters -> {
             Document document = rq.getDocument();
             boolean confirmed = !document.isConfirmed(); // toggling confirmed
@@ -105,7 +105,9 @@ final class ToggleConfirmDocumentExecutor {
     /**
      * The resolved confirmation letter: the unique letter at the narrowest applicable scope.
      * A tie at the best rank means the choice is ambiguous — return null so the dialog offers
-     * no auto-send (the same guard the previous letters.size() == 1 check provided).
+     * no auto-send (the same guard the previous letters.size() == 1 check provided). A
+     * suppression letter (V0043) winning the resolution also yields null: it says "no
+     * confirmation letter here", overriding wider-scoped ones.
      */
     private static Letter pickNarrowestUnique(List<Letter> letters) {
         Letter best = null;
@@ -117,6 +119,8 @@ final class ToggleConfirmDocumentExecutor {
             } else if (scopeRank(letter) == scopeRank(best))
                 unique = false;
         }
+        if (best != null && Boolean.TRUE.equals(best.isSuppressesSending()))
+            return null;
         return unique ? best : null;
     }
 }

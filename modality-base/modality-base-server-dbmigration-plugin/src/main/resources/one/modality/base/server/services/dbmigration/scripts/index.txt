@@ -46,3 +46,4 @@ V0039__fix_share_owner_pricing_quantity.sql
 V0040__letter_scope_consumers.sql
 V0041__fix_event1901_parking_duplicates.sql
 V0042__fix_event1883_ittp_duplicates.sql
+V0043__letter_suppression.sql

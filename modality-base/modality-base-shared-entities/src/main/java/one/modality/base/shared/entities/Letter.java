@@ -20,4 +20,16 @@ public interface Letter extends
     EntityHasSite,
     EntityHasEventType,
     EntityHasI18nFields {
+
+    // Suppression (V0043): an active letter that WINS scope resolution but sends nothing —
+    // lets a narrower scope switch off a wider-scoped letter ("no cart letter for GP classes").
+    String suppressesSending = "suppressesSending";
+
+    default void setSuppressesSending(Boolean value) {
+        setFieldValue(suppressesSending, value);
+    }
+
+    default Boolean isSuppressesSending() {
+        return getBooleanFieldValue(suppressesSending);
+    }
 }
