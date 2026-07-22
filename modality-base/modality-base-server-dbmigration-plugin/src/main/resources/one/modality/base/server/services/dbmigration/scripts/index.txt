@@ -43,3 +43,4 @@ V0036__series_theme.sql
 V0037__letter_scope.sql
 V0038__letter_organization_consistency.sql
 V0039__fix_share_owner_pricing_quantity.sql
+V0040__letter_scope_consumers.sql
