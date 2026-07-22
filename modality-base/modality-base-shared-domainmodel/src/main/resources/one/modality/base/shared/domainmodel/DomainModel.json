@@ -1207,6 +1207,7 @@
     "en": "HTML",
     "es": "HTML",
     "event": "Event",
+    "eventType": "EventType",
     "fr": "HTML",
     "icon": {
       "expr": "image('images/16/letter.png')"
@@ -1215,6 +1216,7 @@
     "onHold": "boolean",
     "organization": "Organization",
     "pt": "HTML",
+    "site": "Site",
     "subject": "string",
     "subject_de": "string",
     "subject_en": "string",
