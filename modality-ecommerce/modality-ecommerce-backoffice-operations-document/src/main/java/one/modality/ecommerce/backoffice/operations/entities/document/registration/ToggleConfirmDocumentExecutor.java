@@ -10,11 +10,13 @@ import javafx.scene.control.CheckBox;
 import javafx.scene.layout.GridPane;
 import one.modality.base.client.i18n.BaseI18nKeys;
 import one.modality.base.shared.entities.Document;
+import one.modality.base.shared.entities.Event;
 import one.modality.base.shared.entities.Letter;
 import one.modality.ecommerce.document.service.DocumentService;
 import one.modality.ecommerce.document.service.SubmitDocumentChangesArgument;
 import one.modality.ecommerce.document.service.events.registration.ConfirmDocumentEvent;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -25,10 +27,30 @@ final class ToggleConfirmDocumentExecutor {
     static Future<Void> executeRequest(ToggleConfirmDocumentRequest rq) {
         return Future.all(
             rq.getDocument().<Document>onExpressionLoaded("confirmed,passReady"),
-            rq.getDocument().getStore().executeQuery("select subject_en from Letter where event=$1 and active and type.confirmation", rq.getDocument().getEvent())
+            rq.getDocument().getEvent().<Event>onExpressionLoaded("type,venue,organization")
         ).compose(compositeFuture -> {
-            Document document = compositeFuture.resultAt(0);
-            List<Letter> letters = compositeFuture.resultAt(1);
+            Document document = rq.getDocument();
+            Event event = document.getEvent();
+            // Scope-applicable confirmation letters (letter scope resolution, V0037): the event's
+            // own letters plus wider-scoped ones matching the event's type / venue / organization.
+            StringBuilder condition = new StringBuilder("active and type.confirmation and (event=$1 or event=null and organization=$2");
+            List<Object> params = new ArrayList<>();
+            params.add(event);
+            params.add(event.getOrganization());
+            condition.append(" and (eventType=null");
+            if (event.getType() != null) {
+                params.add(event.getType());
+                condition.append(" or eventType=$").append(params.size());
+            }
+            condition.append(") and (site=null");
+            if (event.getVenue() != null) {
+                params.add(event.getVenue());
+                condition.append(" or site=$").append(params.size());
+            }
+            condition.append("))");
+            return document.getStore().<Letter>executeQuery("select subject_en,event,eventType,site from Letter where " + condition, params.toArray());
+        }).compose(letters -> {
+            Document document = rq.getDocument();
             boolean confirmed = !document.isConfirmed(); // toggling confirmed
             boolean read = !document.isPassReady(); // read if pass is not ready, otherwise
             String confirmationText = "Are you sure you want to " + (confirmed ? "confirm" : "unconfirm") + " this booking?";
@@ -36,7 +58,7 @@ final class ToggleConfirmDocumentExecutor {
                 .setHeaderText(I18n.getI18nText(BaseI18nKeys.AreYouSure))
                 .setContentText(confirmationText)
                 .setYesNo();
-            Letter confirmationLetter = letters.size() == 1 ? letters.get(0) : null;
+            Letter confirmationLetter = pickNarrowestUnique(letters);
             CheckBox sendConfirmationLetterCheckBox;
             if (confirmed && confirmationLetter != null) {
                 sendConfirmationLetterCheckBox = new CheckBox("Send the confirmation letter");
@@ -63,5 +85,38 @@ final class ToggleConfirmDocumentExecutor {
                     ));
             });
         });
+    }
+
+    /**
+     * Scope rank of a letter, mirroring the SQL letter_scope_rank(): 0 = event,
+     * 1 = (site, eventType), 2 = eventType, 3 = site, 4 = organization. The query already
+     * guarantees each letter's scope matches the document's event context, so only the
+     * shape of the scope columns matters here.
+     */
+    private static int scopeRank(Letter letter) {
+        if (letter.getEventId() != null)
+            return 0;
+        boolean siteScoped = letter.getSiteId() != null;
+        if (letter.getEventTypeId() != null)
+            return siteScoped ? 1 : 2;
+        return siteScoped ? 3 : 4;
+    }
+
+    /**
+     * The resolved confirmation letter: the unique letter at the narrowest applicable scope.
+     * A tie at the best rank means the choice is ambiguous — return null so the dialog offers
+     * no auto-send (the same guard the previous letters.size() == 1 check provided).
+     */
+    private static Letter pickNarrowestUnique(List<Letter> letters) {
+        Letter best = null;
+        boolean unique = false;
+        for (Letter letter : letters) {
+            if (best == null || scopeRank(letter) < scopeRank(best)) {
+                best = letter;
+                unique = true;
+            } else if (scopeRank(letter) == scopeRank(best))
+                unique = false;
+        }
+        return unique ? best : null;
     }
 }
