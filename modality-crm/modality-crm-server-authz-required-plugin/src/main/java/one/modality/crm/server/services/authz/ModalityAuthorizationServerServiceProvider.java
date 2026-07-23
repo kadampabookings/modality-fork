@@ -51,15 +51,11 @@ public final class ModalityAuthorizationServerServiceProvider implements Authori
 
     private <T> Future<T> loadAndPushUserAuthorizations(UserClaims userClaims, boolean backoffice, Object runId) {
         String userEmail = userClaims.email();
-        // A guest principal has no username (only an email). A registered user always has a username.
-        boolean isRegistered = userClaims.username() != null;
         EntityStore entityStore = EntityStore.create(DataSourceModelService.getDefaultDataSourceModel());
         return Future.all(
-            // Loading operations for logged-in users:
-            //   - guest=true operations  → always (for both guests and registered users)
-            //   - guest=false operations → only for registered users (isRegistered=true)
-            // Merged into a single query: guest OR $2
-            entityStore.<Operation>executeQuery("select operationCode, grantRoute from Operation op where ($1 and backoffice or !$1 and frontoffice) and (public or guest or $2)", backoffice, isRegistered)
+            // Public and guest operations are automatically granted to all logged-in users (registered or guest users).
+            // Non-public/guest operations require explicit grant access from administrators.
+            entityStore.<Operation>executeQuery("select operationCode, grantRoute from Operation op where ($1 and backoffice or !$1 and frontoffice) and (public or guest)", backoffice)
                 .map(operations -> grantOperations(operations, new StringBuilder()).toString()),
             // Loading operations and rules granted to the user
             entityStore.<AuthorizationOrganizationUserAccess>executeQuery(
