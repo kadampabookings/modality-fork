@@ -47,3 +47,4 @@ V0040__letter_scope_consumers.sql
 V0041__fix_event1901_parking_duplicates.sql
 V0042__fix_event1883_ittp_duplicates.sql
 V0043__letter_suppression.sql
+V0044__index_media_consumption_scheduled_item.sql
