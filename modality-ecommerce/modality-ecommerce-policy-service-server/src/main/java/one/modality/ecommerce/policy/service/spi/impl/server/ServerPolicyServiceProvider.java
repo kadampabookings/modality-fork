@@ -22,17 +22,16 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
 
     // ── Shared DQL fragments for scheduled items queries (loadPolicy & loadAvailabilities) ──
 
-    // Per-language Label columns to expand wherever a label is shown to the public booker, so the
-    // client can localise the text instead of falling back to the raw (English) name. Matches the
-    // LABEL_I18N_FIELDS set in kbs3-react/shared/src/utils/label-utils.ts.
-    private static final String LABEL_I18N_COLS = "de,el,en,es,fr,pt,vi,zhs,zht";
-    private static final String LABEL_I18N = "label.(" + LABEL_I18N_COLS + ")"; // for an FK literally named "label"
+    // Labels are selected as BARE FKs everywhere below: the domain model auto-loads a bare Label
+    // FK's language columns (Label foreignFields rule — the persistent terms of Label.text's
+    // per-language switch, all 9 languages since the `el` branch was added to that switch), so no
+    // explicit label.(de,el,…,zht) expansion is needed.
 
     // CTEs + SELECT fields + availability subquery (via LATERAL) + FROM + common WHERE conditions
     private static final String SCHEDULED_ITEMS_DQL_BASE =
         "with e as (select coalesce(repeatedEvent,id) as finalEvent,startDate,endDate,preDate,postDate,venue from Event where id=$1)" +
         ", ep as (select startBoundary,endBoundary from EventPart where event=(select e.finalEvent from e))" +
-        " select name," + LABEL_I18N + ",comment,site.(name,terminal,selfArranged," + LABEL_I18N + "),arrivalSite.(name,terminal,selfArranged," + LABEL_I18N + "),item.(name," + LABEL_I18N + ",perResourceLabel,code,temporal,family.(code,name,label,ord),capacity,share_mate,breakfastIncluded,ord),date,startTime,endTime,timeline?.(site,item,startTime,endTime),cancelled,resource,buddha.hyt" +
+        " select name,label,comment,site.(name,terminal,selfArranged,label),arrivalSite.(name,terminal,selfArranged,label),item.(name,label,perResourceLabel,code,temporal,family.(code,name,label,ord),capacity,share_mate,breakfastIncluded,ord),date,startTime,endTime,timeline?.(site,item,startTime,endTime),cancelled,resource,buddha.hyt" +
         // Availability: for each applicable ResourceConfiguration rc (resolved on the fly by matching the
         // scheduled item's site & item, with the event config winning over the global one), LATERAL computes
         // availability once, then distributes it to 4 categories. This replaces the former scheduled_resource
@@ -114,12 +113,12 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                 new Batch<>(new QueryArgument[]{
                     // 0 - Loading event
                     DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
-                        "select name, slug, " + LABEL_I18N + ", state, type.(bookingForm.code,category,supportEmail,noTermsAcceptance), themeBaseColor, themeAccentColor, themeBorderColor, themeStrongBackground, themeSurfaceColor, theme.(baseColor,accentColor,borderColor,strongBackground,surfaceColor), venue.(name," + LABEL_I18N + ",address), startDate, endDate, shortDescriptionLabel.(" + LABEL_I18N_COLS + "), longDescriptionLabel.(" + LABEL_I18N_COLS + "), currency.symbol, organization.(includeTeachingsInAccommodationPricesByDefault, currency.symbol, country.(currency.symbol, mainLanguage.iso_639_1), privacyUrlLabel, timezone, language.iso_639_1, supportEmail, inPersonTermsLabel.(" + LABEL_I18N_COLS + "), onlineTermsLabel.(" + LABEL_I18N_COLS + ")), openingDate, bookingProcessStart, audioClosingDate, timezone, noAccountBooking, inPersonAllowed, onlineAllowed, vodEnabled, earlyBird, teacher.(name," + LABEL_I18N + ")" +
+                        "select name, slug, label, state, type.(bookingForm.code,category,supportEmail,noTermsAcceptance), themeBaseColor, themeAccentColor, themeBorderColor, themeStrongBackground, themeSurfaceColor, theme.(baseColor,accentColor,borderColor,strongBackground,surfaceColor), venue.(name,label,address), startDate, endDate, shortDescriptionLabel, longDescriptionLabel, currency.symbol, organization.(includeTeachingsInAccommodationPricesByDefault, currency.symbol, country.(currency.symbol, mainLanguage.iso_639_1), privacyUrlLabel, timezone, language.iso_639_1, supportEmail, inPersonTermsLabel, onlineTermsLabel), openingDate, bookingProcessStart, audioClosingDate, timezone, noAccountBooking, inPersonAllowed, onlineAllowed, vodEnabled, earlyBird, teacher.(name,label)" +
                         // Series = shared content of a term batch of sibling events (GP classes): title/description
                         // labels, colour palette, and the id for the cover-image fallback chain. Event-level fields
                         // override field by field; the client resolvers consult series.* only where the event is unset.
-                        ", series.(" + LABEL_I18N + ", shortDescriptionLabel.(" + LABEL_I18N_COLS + "), longDescriptionLabel.(" + LABEL_I18N_COLS + "), themeBaseColor, themeAccentColor, themeBorderColor, themeStrongBackground, themeSurfaceColor, theme.(baseColor,accentColor,borderColor,strongBackground,surfaceColor))" +
-                        ", inPersonTermsLabel.(" + LABEL_I18N_COLS + "),onlineTermsLabel.(" + LABEL_I18N_COLS + "),termsUrlEn" +
+                        ", series.(label, shortDescriptionLabel, longDescriptionLabel, themeBaseColor, themeAccentColor, themeBorderColor, themeStrongBackground, themeSurfaceColor, theme.(baseColor,accentColor,borderColor,strongBackground,surfaceColor))" +
+                        ", inPersonTermsLabel,onlineTermsLabel,termsUrlEn" +
                         ", date_part('epoch', openingDate - now()) as " + Event.secondsToOpeningDateAtLoadingTime +
                         ", date_part('epoch', coalesce(bookingProcessStart, openingDate) - now()) as " + Event.secondsToBookingProcessStartAtLoadingTime +
                         " from Event" + " where id=$1", eventPk),
@@ -182,7 +181,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                     , DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
                     "with e as (select coalesce(repeatedEvent,id) as finalEvent,coalesce(repeatedEvent?.type,type) as finalEventType,organization,venue.organization as venue_organization from Event where id=$1)" +
                     " select scope.(organization,site,eventType,event)" +
-                    ",item.(name," + LABEL_I18N + ",code,temporal,family.(code,name,label,ord),capacity,share_mate,breakfastIncluded,ord)" +
+                    ",item.(name,label,code,temporal,family.(code,name,label,ord),capacity,share_mate,breakfastIncluded,ord)" +
                     ",applicableToInPerson,applicableToOnline,descriptionLabel,titleLabel,noticeLabel,minDay,wholeEvent,default,genderInfoRequired,earlyAccommodationAllowed,lateAccommodationAllowed,minOccupancy,forceSoldOut,autoBookItem,childAllowed,youngAdultAllowed,adultAllowed" +
                     " from ItemPolicy ip, e where ip.scope.(" +
                     " (organization = e.organization or organization=e.venue_organization)" +
