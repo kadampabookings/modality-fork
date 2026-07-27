@@ -83,11 +83,18 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
         // meaning "not resource-managed") for items that have no resource configuration.
         " group by rc.item)" +
         " as " + ScheduledItem.maleFemaleAvailabilities +
-        " from ScheduledItem si, e" +
+        " from ScheduledItem si" +
         " where bookableScheduledItem=id" +
-        // bound to this event (or its repeatedEvent), or unbound but happening at the event venue during the event period
-        " and (si.event = e.finalEvent" +
-        "      or si.event=null and si.site = e.venue and (si.date >= coalesce(e.preDate, e.startDate) and si.date <= coalesce(e.postDate, e.endDate) or exists(select ep where si.date>=coalesce(ep.startBoundary.date, ep.startBoundary.scheduledItem.date) and si.date<=coalesce(ep.endBoundary.date, ep.endBoundary.scheduledItem.date))))";
+        // bound to this event (or its repeatedEvent), or unbound but happening at the event venue during the event period.
+        // e is read via scalar sub-selects, NOT joined in FROM: joined, this OR is a join clause that Postgres only
+        // applies AFTER all the display joins have run over every scheduled item in the DB (the bookableScheduledItem=id
+        // column=column predicate gets a default 0.5% selectivity estimate — ~122 rows instead of ~22k — which makes
+        // that full-scan pipeline look cheap, and no statistics object can fix a bare col=col clause). As scalar
+        // InitPlan params the OR stays a restriction clause the planner turns into a BitmapOr on the partial index
+        // scheduled_item_self_bookable_event_site_date_idx (V0049), so only this event's ~300 rows reach the display
+        // joins: 310ms → 80ms for event 1898.
+        " and (si.event = (select e.finalEvent from e)" +
+        "      or si.event=null and si.site = (select e.venue from e) and (si.date >= (select coalesce(e.preDate, e.startDate) from e) and si.date <= (select coalesce(e.postDate, e.endDate) from e) or exists(select ep where si.date>=coalesce(ep.startBoundary.date, ep.startBoundary.scheduledItem.date) and si.date<=coalesce(ep.endBoundary.date, ep.endBoundary.scheduledItem.date))))";
     // Accommodation filter appended by each caller
 
     // ItemPolicy exists check (shared by both acco filters)
