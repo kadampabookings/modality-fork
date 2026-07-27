@@ -52,3 +52,4 @@ V0045__index_person_account_access.sql
 V0046__index_media_consumption_attendance.sql
 V0047__letter_kbs3.sql
 V0049__scheduled_item_bookable_query_plan.sql
+V0050__availability_subplan_indexes.sql
