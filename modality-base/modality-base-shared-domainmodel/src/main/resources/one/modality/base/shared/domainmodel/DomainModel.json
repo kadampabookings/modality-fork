@@ -1163,7 +1163,7 @@
     "pt": "string",
     "ref": "string",
     "text": {
-      "expr": "?lang='de' ? de : ?lang='en' ? en : ?lang='es' ? es : ?lang='fr' ? fr : ?lang='pt' ? pt : ?lang='zhs' ? zhs : ?lang='zht' ? zht : ?lang='vi' ? vi : en"
+      "expr": "?lang='de' ? de : ?lang='el' ? el : ?lang='en' ? en : ?lang='es' ? es : ?lang='fr' ? fr : ?lang='pt' ? pt : ?lang='zhs' ? zhs : ?lang='zht' ? zht : ?lang='vi' ? vi : en"
     },
     "vi": "string",
     "zhs": "string",
