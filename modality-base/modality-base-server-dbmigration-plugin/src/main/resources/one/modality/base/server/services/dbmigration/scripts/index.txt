@@ -49,3 +49,4 @@ V0042__fix_event1883_ittp_duplicates.sql
 V0043__letter_suppression.sql
 V0044__index_media_consumption_scheduled_item.sql
 V0045__index_person_account_access.sql
+V0046__index_media_consumption_attendance.sql
