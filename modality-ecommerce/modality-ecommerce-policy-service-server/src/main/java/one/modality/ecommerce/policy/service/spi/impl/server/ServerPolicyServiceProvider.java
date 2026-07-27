@@ -27,6 +27,24 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
     // per-language switch, all 9 languages since the `el` branch was added to that switch), so no
     // explicit label.(de,el,…,zht) expansion is needed.
 
+    // Per-rc availability — reserved-partition model (docs/pool-allocation-removal-plan.md, replaces
+    // PoolAllocation):
+    //  • public beds = rc.max − rc.maxReserved, bookable online iff rc.online. documentLine.reserved
+    //    is the partition marker: reserved-bed bookings (reserved=true) never count against the
+    //    public partition. documentLine.pool is informative only (the reason, mirroring rc.pool).
+    //  • greatest(..., 0) floors the reserved-partition arithmetic at 0: a room whose reserved
+    //    partition overlaps an unreserved booking (e.g. maxReserved=1 + 1 public booking on a
+    //    1-bed room) must not go negative and cancel out other rooms' availability (found on the
+    //    staging rehearsal: ITTP female availability summed to 0 because of two such rooms).
+    //  • least(...) then caps by physical occupancy (max − ALL live lines), deliberately NOT
+    //    floored: a physically overbooked room contributes negatively so that its overflow
+    //    guests consume the pool's remaining free beds (US NEDC twins: 3 free rooms + 1 room
+    //    overbooked by 2 → 4 bookable beds, not 6 — matches the former PoolAllocation figures).
+    // Both booking sums come from the single-pass `sums` LATERAL below; this expression is pure
+    // arithmetic on them, so repeating it in the 4 gender/ordination sum args costs nothing.
+    private static final String RC_AVAIL_EXPR =
+        "(!rc.online ? 0 : least(greatest(rc.max - coalesce(rc.maxReserved,0) - sums.unreservedQty, 0), rc.max - sums.totalQty))";
+
     // CTEs + SELECT fields + availability subquery (via LATERAL) + FROM + common WHERE conditions
     private static final String SCHEDULED_ITEMS_DQL_BASE =
         "with e as (select coalesce(repeatedEvent,id) as finalEvent,startDate,endDate,preDate,postDate,venue from Event where id=$1)" +
@@ -37,36 +55,21 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
         // availability once, then distributes it to 4 categories. This replaces the former scheduled_resource
         // grid: rc is joined to the scheduled item directly, so no scheduled_resource rows need to exist.
         ",(select [" +
-        "sum(!rc.(allowsMale and allowsLay) ? 0 : lat.avail)," +       // lay male
-        "sum(!rc.(allowsFemale and allowsLay) ? 0 : lat.avail)," +     // lay female
-        "sum(!rc.(allowsMale and allowsOrdained) ? 0 : lat.avail)," +  // monk
-        "sum(!rc.(allowsFemale and allowsOrdained) ? 0 : lat.avail)" + // nun
+        "sum(!rc.(allowsMale and allowsLay) ? 0 : " + RC_AVAIL_EXPR + ")," +       // lay male
+        "sum(!rc.(allowsFemale and allowsLay) ? 0 : " + RC_AVAIL_EXPR + ")," +     // lay female
+        "sum(!rc.(allowsMale and allowsOrdained) ? 0 : " + RC_AVAIL_EXPR + ")," +  // monk
+        "sum(!rc.(allowsFemale and allowsOrdained) ? 0 : " + RC_AVAIL_EXPR + ")" + // nun
         "] from ResourceConfiguration rc" +
-        // avail per resource configuration — reserved-partition model (docs/pool-allocation-removal-plan.md,
-        // replaces PoolAllocation):
-        //  • public beds = rc.max − rc.maxReserved, bookable online iff rc.online. documentLine.reserved
-        //    is the partition marker: reserved-bed bookings (reserved=true) never count against the
-        //    public partition. documentLine.pool is informative only (the reason, mirroring rc.pool).
-        //  • greatest(..., 0) floors the reserved-partition arithmetic at 0: a room whose reserved
-        //    partition overlaps an unreserved booking (e.g. maxReserved=1 + 1 public booking on a
-        //    1-bed room) must not go negative and cancel out other rooms' availability (found on the
-        //    staging rehearsal: ITTP female availability summed to 0 because of two such rooms).
-        //  • least(...) then caps by physical occupancy (max − ALL live lines), deliberately NOT
-        //    floored: a physically overbooked room contributes negatively so that its overflow
-        //    guests consume the pool's remaining free beds (US NEDC twins: 3 free rooms + 1 room
-        //    overbooked by 2 → 4 bookable beds, not 6 — matches the former PoolAllocation figures).
+        // Both booking sums in ONE pass over this rc's live attendances (full-select LATERAL — a
+        // one-row aggregate, so the cross join never drops rc rows and Postgres cannot pull it up:
+        // it runs exactly once per rc row). unreservedQty excludes reserved-bed bookings (they never
+        // count against the public partition), totalQty is ALL live lines for physical occupancy.
         // Bookings are counted via (scheduledItem=si and documentLine.resourceConfiguration=rc) — exactly
         // equivalent to the former Attendance.scheduledResource pointer, but without the scheduled_resource table.
-        // The whole expression is wrapped in a correlated sub-SELECT (rooted on ResourceConfiguration via
-        // id=rc) so bare field references resolve — the LATERAL body has no FROM (null domain class), which
-        // otherwise fails translation with "Domain class 'null' not found".
-        ", lateral (select (select !online ? 0 : least(greatest(" +
-        "max - coalesce(maxReserved,0)" +
-        " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledItem=si and present and documentLine.(resourceConfiguration=rc and !frontend_released and !reserved)), 0)" +
-        ", 0), max" +
-        " - coalesce((select sum(documentLine.quantity) from Attendance where scheduledItem=si and present and documentLine.(resourceConfiguration=rc and !frontend_released)), 0))" +
-        " from ResourceConfiguration where id=rc)" +
-        " as avail) lat" +
+        ", lateral (select" +
+        " coalesce(sum(!documentLine.reserved ? documentLine.quantity : 0),0) as unreservedQty," +
+        " coalesce(sum(documentLine.quantity),0) as totalQty" +
+        " from Attendance where scheduledItem=si and present and documentLine.(resourceConfiguration=rc and !frontend_released)) sums" +
         // Configurations applicable to this scheduled item: same site & item.
         " where rc.resource.site=si.site and rc.item=si.item" +
         // Event config overrides global: an event configuration (event=$1) replaces the resource's global config
