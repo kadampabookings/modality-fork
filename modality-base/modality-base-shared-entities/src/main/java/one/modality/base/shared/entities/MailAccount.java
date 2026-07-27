@@ -14,6 +14,9 @@ public interface MailAccount extends Entity, EntityHasOrganization {
     String event = "event";
     String signatureLabel = "signatureLabel";
     String smtpAccount = "smtpAccount";
+    // This account's domain is verified in AWS SES, so mail can be sent From its own address
+    // (otherwise From = the central verified address, with Reply-To routing back to the account)
+    String awsSesVerified = "awsSesVerified";
 
     default void setName(String value) {
         setFieldValue(name, value);
@@ -69,5 +72,13 @@ public interface MailAccount extends Entity, EntityHasOrganization {
 
     default SmtpAccount getSmtpAccount() {
         return getForeignEntity(smtpAccount);
+    }
+
+    default void setAwsSesVerified(Boolean value) {
+        setFieldValue(awsSesVerified, value);
+    }
+
+    default Boolean isAwsSesVerified() {
+        return getBooleanFieldValue(awsSesVerified);
     }
 }

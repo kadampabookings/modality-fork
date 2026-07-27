@@ -14,6 +14,9 @@ public interface SmtpAccount extends Entity, EntityHasOrganization {
     String password = "password";
     String ssl = "ssl";
     String quota = "quota";
+    // The central SES-verified sender address (e.g. kbs@kadampabookings.org) used as From
+    // for accounts whose own domain is not SES-verified
+    String email = "email";
 
     default void setHost(String value) {
         setFieldValue(host, value);
@@ -61,5 +64,13 @@ public interface SmtpAccount extends Entity, EntityHasOrganization {
 
     default EntityId getQuotaId() {
         return getForeignEntityId(quota);
+    }
+
+    default void setEmail(String value) {
+        setFieldValue(email, value);
+    }
+
+    default String getEmail() {
+        return getStringFieldValue(email);
     }
 }

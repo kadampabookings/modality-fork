@@ -5,6 +5,9 @@ import one.modality.base.shared.entities.markers.EntityHasDocument;
 import dev.webfx.stack.orm.entity.Entity;
 import one.modality.base.shared.entities.markers.EntityHasOrganization;
 
+import java.time.Instant;
+import java.time.LocalDate;
+
 /**
  * @author Bruno Salmon
  */
@@ -16,6 +19,11 @@ public interface Mail extends Entity, EntityHasDocument, EntityHasOrganization {
     String out = "out";
     String magicLink = "magicLink";
     String account = "account";
+    String date = "date";
+    String letter = "letter";
+    String transmitted = "transmitted";
+    String transmissionDate = "transmissionDate";
+    String error = "error";
 
     default void setFromName(String value) {
         setFieldValue(fromName, value);
@@ -65,7 +73,7 @@ public interface Mail extends Entity, EntityHasDocument, EntityHasOrganization {
         return getForeignEntityId(magicLink);
     }
 
-    default Organization getMagicLink() {
+    default MagicLink getMagicLink() {
         return getForeignEntity(magicLink);
     }
 
@@ -79,6 +87,50 @@ public interface Mail extends Entity, EntityHasDocument, EntityHasOrganization {
 
     default MailAccount getAccount() {
         return getForeignEntity(account);
+    }
+
+    default void setDate(LocalDate value) {
+        setFieldValue(date, value);
+    }
+
+    default LocalDate getDate() {
+        return getLocalDateFieldValue(date);
+    }
+
+    default void setLetter(Object value) {
+        setForeignField(letter, value);
+    }
+
+    default EntityId getLetterId() {
+        return getForeignEntityId(letter);
+    }
+
+    default Letter getLetter() {
+        return getForeignEntity(letter);
+    }
+
+    default void setTransmitted(Boolean value) {
+        setFieldValue(transmitted, value);
+    }
+
+    default Boolean isTransmitted() {
+        return getBooleanFieldValue(transmitted);
+    }
+
+    default void setTransmissionDate(Instant value) {
+        setFieldValue(transmissionDate, value);
+    }
+
+    default Instant getTransmissionDate() {
+        return getInstantFieldValue(transmissionDate);
+    }
+
+    default void setError(String value) {
+        setFieldValue(error, value);
+    }
+
+    default String getError() {
+        return getStringFieldValue(error);
     }
 
 }

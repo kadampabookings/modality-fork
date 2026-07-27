@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project>
+
+    <description>The Modality mailer: drains the shared mail table (out=true, untransmitted)
+        and transmits each mail through the webfx mail transport, taking over the role of
+        KBS2's legacy JavaMailSender. Behaviour-preserving port: same drain order (letter
+        type ord), same 4s inter-send spacing, same sender resolution (awsSesVerified vs
+        central address + Reply-To), same custom Message-ID, same bookkeeping (transmitted /
+        error / recipient ok / document confirmed-cancelled-read side effects). The KBS2→KBS3
+        handover is progressive: with drainScope = flagged (default) only letterless mails
+        and letters flagged kbs3 are drained here, everything else stays with
+        KBS2's mailer — both drain queries test the same DB column, so each mail has exactly
+        one transmitter. The job is disabled by default (modality.base.server.mailer.enabled)
+        and additionally requires a configured mail transport provider before it pulses.</description>
+
+    <exported-packages>
+        <source-packages/>
+    </exported-packages>
+
+    <dependencies>
+        <used-by-source-modules/>
+        <!-- Both transport providers ship with the mailer; config selects which one is active
+             (webfx.stack.mail.transport.provider = smtp | sandbox | none). -->
+        <plugin-module>webfx-stack-mail-transport-smtp-vertx-plugin</plugin-module>
+        <plugin-module>webfx-stack-mail-transport-sandbox-plugin</plugin-module>
+    </dependencies>
+
+    <providers>
+        <provider interface="dev.webfx.platform.boot.spi.ApplicationJob">one.modality.base.server.mailer.MailerJob</provider>
+    </providers>
+
+</project>

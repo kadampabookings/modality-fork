@@ -1212,6 +1212,7 @@
     "icon": {
       "expr": "image('images/16/letter.png')"
     },
+    "kbs3": "boolean",
     "name": "string",
     "onHold": "boolean",
     "organization": "Organization",

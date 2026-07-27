@@ -43,7 +43,10 @@ one.modality.base.shared.entities.impl.KdmCenterImpl$ProvidedFactory
 one.modality.base.shared.entities.impl.LanguageImpl$ProvidedFactory
 one.modality.base.shared.entities.impl.LabelImpl$ProvidedFactory
 one.modality.base.shared.entities.impl.LetterImpl$ProvidedFactory
+one.modality.base.shared.entities.impl.LetterTypeImpl$ProvidedFactory
 one.modality.base.shared.entities.impl.MailImpl$ProvidedFactory
+one.modality.base.shared.entities.impl.MailAccountImpl$ProvidedFactory
+one.modality.base.shared.entities.impl.SmtpAccountImpl$ProvidedFactory
 one.modality.base.shared.entities.impl.MagicLinkImpl$ProvidedFactory
 one.modality.base.shared.entities.impl.MediaImpl$ProvidedFactory
 one.modality.base.shared.entities.impl.MediaConsumptionImpl$ProvidedFactory
