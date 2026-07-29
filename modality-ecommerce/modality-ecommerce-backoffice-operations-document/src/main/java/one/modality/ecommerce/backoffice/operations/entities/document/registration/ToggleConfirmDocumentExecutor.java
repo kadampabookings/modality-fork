@@ -31,8 +31,9 @@ final class ToggleConfirmDocumentExecutor {
         ).compose(compositeFuture -> {
             Document document = rq.getDocument();
             Event event = document.getEvent();
-            // Scope-applicable confirmation letters (letter scope resolution, V0037): the event's
-            // own letters plus wider-scoped ones matching the event's type / venue / organization.
+            // Scope-applicable confirmation letters (letter scope resolution, V0037/V0052): the
+            // event's own letters, wider-scoped ones of the event's organization matching its
+            // type / venue, plus GLOBAL event-type letters (organization null, V0052).
             StringBuilder condition = new StringBuilder("active and type.confirmation and (event=$1 or event=null and organization=$2");
             List<Object> params = new ArrayList<>();
             params.add(event);
@@ -47,8 +48,13 @@ final class ToggleConfirmDocumentExecutor {
                 params.add(event.getVenue());
                 condition.append(" or site=$").append(params.size());
             }
-            condition.append("))");
-            return document.getStore().<Letter>executeQuery("select subject_en,event,eventType,site,suppressesSending from Letter where " + condition, params.toArray());
+            condition.append(')');
+            if (event.getType() != null) {
+                params.add(event.getType());
+                condition.append(" or event=null and organization=null and eventType=$").append(params.size());
+            }
+            condition.append(')');
+            return document.getStore().<Letter>executeQuery("select subject_en,event,eventType,site,organization,suppressesSending from Letter where " + condition, params.toArray());
         }).compose(letters -> {
             Document document = rq.getDocument();
             boolean confirmed = !document.isConfirmed(); // toggling confirmed
@@ -88,18 +94,18 @@ final class ToggleConfirmDocumentExecutor {
     }
 
     /**
-     * Scope rank of a letter, mirroring the SQL letter_scope_rank(): 0 = event,
-     * 1 = (site, eventType), 2 = eventType, 3 = site, 4 = organization. The query already
-     * guarantees each letter's scope matches the document's event context, so only the
-     * shape of the scope columns matters here.
+     * Scope rank of a letter, mirroring the SQL letter_scope_rank() (V0052 ladder): 0 = event,
+     * 1 = (site, eventType), 2 = eventType, 3 = eventType GLOBAL (no organization), 4 = site,
+     * 5 = organization. The query already guarantees each letter's scope matches the document's
+     * event context, so only the shape of the scope columns matters here.
      */
     private static int scopeRank(Letter letter) {
         if (letter.getEventId() != null)
             return 0;
         boolean siteScoped = letter.getSiteId() != null;
         if (letter.getEventTypeId() != null)
-            return siteScoped ? 1 : 2;
-        return siteScoped ? 3 : 4;
+            return siteScoped ? 1 : letter.getOrganizationId() != null ? 2 : 3;
+        return siteScoped ? 4 : 5;
     }
 
     /**

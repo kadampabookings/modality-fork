@@ -53,3 +53,5 @@ V0046__index_media_consumption_attendance.sql
 V0047__letter_kbs3.sql
 V0049__scheduled_item_bookable_query_plan.sql
 V0050__availability_subplan_indexes.sql
+V0051__event_type_global.sql
+V0052__letter_global_event_type.sql
