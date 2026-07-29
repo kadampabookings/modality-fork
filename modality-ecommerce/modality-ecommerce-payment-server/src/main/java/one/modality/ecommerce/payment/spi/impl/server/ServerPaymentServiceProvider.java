@@ -288,7 +288,7 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
         // Extract wallet payment method from the payload if present (GOOGLE_PAY, APPLE_PAY, etc.)
         PaymentMethod paymentMethod = extractPaymentMethodFromPayload(argument.gatewayCompletePaymentPayload());
 
-        String moneyTransferFieldsToLoad = "amount,spread,document.(ref,person,person_firstName,person_lastName,person_email,person_phone,person_street,person_postCode,person_cityName,person_admin1Name,person_country.name,person_countryName,event.name)";
+        String moneyTransferFieldsToLoad = "amount,spread,pending,successful,transactionRef,document.(ref,person,person_firstName,person_lastName,person_email,person_phone,person_street,person_postCode,person_cityName,person_admin1Name,person_country.name,person_countryName,event.name)";
         return Future.all(
             loadPaymentGatewayParameters(paymentPrimaryKey, live),
             // We also load the amount and customer info to pass it to gateways like Authorize.net that set the amount on completion
@@ -321,6 +321,33 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
                 billingDocument.evaluate("person_country.iso_alpha2")
             );
             DatabasePayment databasePayment = new DatabasePayment(moneyTransfer, allocatedTransfers.toArray(MoneyTransfer[]::new));
+
+            // Idempotency guard: never charge the gateway twice for the same MoneyTransfer. A second
+            // completion attempt happens when the first attempt's outcome never reached the client
+            // (gateway response lost, bus reply timeout, socket drop) and the user or client retries —
+            // that's how booking E1901-REF14-MT101001 got charged twice. If the transfer is already
+            // successful, return the recorded outcome instead of creating a second gateway transaction.
+            if (Booleans.isTrue(moneyTransfer.isSuccessful())) {
+                boolean stillPending = Booleans.isTrue(moneyTransfer.isPending()); // authorised but not yet captured
+                Console.log("completePayment() called for MoneyTransfer " + paymentPrimaryKey + " which is already " + (stillPending ? "authorised" : "completed") + " - skipping gateway charge");
+                HistoryRecorder.preparePaymentHistoriesBeforeSubmit("Ignored duplicate completion attempt for already-successful payment [amount]", databasePayment, userId)
+                    .onFailure(Console::error)
+                    .onSuccess(x -> updateStore.submitChanges());
+                return Future.succeededFuture(new CompletePaymentResult(stillPending ? PaymentStatus.APPROVED : PaymentStatus.COMPLETED, null));
+            }
+            // Same guard for a pending transfer that already has a gateway transaction recorded (e.g.
+            // held for fraud review): a replayed completion (stale tab, back button) must not charge
+            // again while the first transaction's outcome is still undecided. A failed attempt
+            // (!pending && !successful) also stores a transactionRef, but that one must stay
+            // retryable — a declined card is a definitive "no charge", so paying again is legitimate.
+            if (Booleans.isTrue(moneyTransfer.isPending()) && moneyTransfer.getTransactionRef() != null) {
+                Console.log("completePayment() called for MoneyTransfer " + paymentPrimaryKey + " which is still pending on gateway transaction " + moneyTransfer.getTransactionRef() + " - skipping gateway charge");
+                HistoryRecorder.preparePaymentHistoriesBeforeSubmit("Ignored duplicate completion attempt for still-pending payment [amount]", databasePayment, userId)
+                    .onFailure(Console::error)
+                    .onSuccess(x -> updateStore.submitChanges());
+                return Future.succeededFuture(new CompletePaymentResult(PaymentStatus.PENDING, null));
+            }
+
             GatewayOrder order = createGatewayOrder(databasePayment);
 
             // The following code is executed just after the call to the Payment Gateway (which will take a bit of time to
