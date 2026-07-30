@@ -48,18 +48,48 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
     // CTEs + SELECT fields + availability subquery (via LATERAL) + FROM + common WHERE conditions
     private static final String SCHEDULED_ITEMS_DQL_BASE =
         "with e as (select coalesce(repeatedEvent,id) as finalEvent,startDate,endDate,preDate,postDate,venue from Event where id=$1)" +
-        ", ep as (select startBoundary,endBoundary from EventPart where event=(select e.finalEvent from e))" +
+        // Event-part date windows, resolved ONCE. MATERIALIZED is load-bearing: PG12+ inlines a
+        // single-reference CTE back into the correlated EXISTS below, re-joining boundaries and
+        // scheduled items for EVERY candidate row (231 evaluations / 4.8k buffers for event 1898).
+        // The scheduledItem hops use ?. so a boundary carrying an explicit date with no
+        // scheduledItem keeps its window (the old inner-join traversal silently dropped such
+        // event parts — latent only, no such rows exist today).
+        ", ep as materialized (select coalesce(startBoundary.date, startBoundary.scheduledItem?.date) as bstart, coalesce(endBoundary.date, endBoundary.scheduledItem?.date) as bend from EventPart where event=(select e.finalEvent from e))" +
+        // Applicable resource configurations, resolved ONCE (materialized, same reason as ep).
+        // The availability subquery below used to re-derive this set per scheduled item — scan the
+        // site's ~60 resources, probe rc(resource,item), re-run the event-override anti-join —
+        // 16.5k index probes / 36k buffers for event 1898 to rediscover a ~68-row set. Folded in
+        // here: the resource join (for the site), the event-override rule (an event configuration
+        // replaces the resource's global config for this event, resource-scoped — see the WHERE
+        // comment below), and the site scope. Scope = sites of this event's bookable scheduled
+        // items (NOT just the venue — event-bound items can sit at other sites); date params $2/$3
+        // are ignored here (harmless superset), and the si.date-correlated start/end filters stay
+        // in the subquery.
+        ", rc as materialized (select x.resource.site.id as rcSite, x.item, x.online, x.allowsMale, x.allowsFemale, x.allowsLay, x.allowsOrdained, x.max, x.maxReserved, x.startDate, x.endDate" +
+        " from ResourceConfiguration x" +
+        // Event config overrides global: an event configuration (event=$1) replaces the resource's
+        // global config for the event's duration — and may change the resource's item and/or
+        // capacity (e.g. a 'Cabin' offered as a 'Standard twin' during the event). So a global
+        // config (event=null) is dropped whenever the resource has ANY event config for this
+        // event, regardless of item (resource-scoped, NOT resource+item): a resource is a single
+        // physical unit with only one applicable config per day.
+        " where (x.event=$1 or x.event=null and !exists(select ResourceConfiguration where resource=x.resource and event=$1))" +
+        " and exists(select ScheduledItem si2 where bookableScheduledItem=id and si2.site=x.resource.site and (si2.event=(select e.finalEvent from e) or si2.event=null and si2.site=(select e.venue from e))))" +
         " select name,label,comment,site.(name,terminal,selfArranged,label),arrivalSite.(name,terminal,selfArranged,label),item.(name,label,perResourceLabel,code,temporal,family.(code,name,label,ord),capacity,share_mate,breakfastIncluded,ord),date,startTime,endTime,timeline?.(site,item,startTime,endTime),cancelled,resource,buddha.hyt" +
-        // Availability: for each applicable ResourceConfiguration rc (resolved on the fly by matching the
-        // scheduled item's site & item, with the event config winning over the global one), LATERAL computes
-        // availability once, then distributes it to 4 categories. This replaces the former scheduled_resource
-        // grid: rc is joined to the scheduled item directly, so no scheduled_resource rows need to exist.
+        // Availability: for each applicable configuration (from the rc CTE above, matched on the
+        // scheduled item's site & item), LATERAL computes availability once, then distributes it
+        // to 4 categories. This replaces the former scheduled_resource grid: rc is matched to the
+        // scheduled item directly, so no scheduled_resource rows need to exist. Scanning the
+        // materialized ~68-row CTE per item replaced the old per-item resource fan-out
+        // (16.5k probes / 36k buffers → in-memory scans; 53ms → 25ms for event 1898).
+        // `from rc rc`: the FROM-with-LATERAL grammar requires an explicit alias, and it must
+        // equal the CTE name — As-aliased CTE columns (rcSite) resolve against the CTE alias.
         ",(select [" +
         "sum(!rc.(allowsMale and allowsLay) ? 0 : " + RC_AVAIL_EXPR + ")," +       // lay male
         "sum(!rc.(allowsFemale and allowsLay) ? 0 : " + RC_AVAIL_EXPR + ")," +     // lay female
         "sum(!rc.(allowsMale and allowsOrdained) ? 0 : " + RC_AVAIL_EXPR + ")," +  // monk
         "sum(!rc.(allowsFemale and allowsOrdained) ? 0 : " + RC_AVAIL_EXPR + ")" + // nun
-        "] from ResourceConfiguration rc" +
+        "] from rc rc" +
         // Both booking sums in ONE pass over this rc's live attendances (full-select LATERAL — a
         // one-row aggregate, so the cross join never drops rc rows and Postgres cannot pull it up:
         // it runs exactly once per rc row). unreservedQty excludes reserved-bed bookings (they never
@@ -70,15 +100,9 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
         " coalesce(sum(!documentLine.reserved ? documentLine.quantity : 0),0) as unreservedQty," +
         " coalesce(sum(documentLine.quantity),0) as totalQty" +
         " from Attendance where scheduledItem=si and present and documentLine.(resourceConfiguration=rc and !frontend_released)) sums" +
-        // Configurations applicable to this scheduled item: same site & item.
-        " where rc.resource.site=si.site and rc.item=si.item" +
-        // Event config overrides global: an event configuration (event=$1) replaces the resource's global config
-        // for the event's duration — and may change the resource's item and/or capacity (e.g. a 'Cabin' offered as
-        // a 'Standard twin' during the event). So a global config (event=null) is dropped whenever the resource has
-        // ANY event config for this event, regardless of item (resource-scoped, NOT resource+item): a resource is a
-        // single physical unit with only one applicable config per day. Matches the original SR-based behaviour.
-        " and (rc.event=$1" +
-        " or rc.event=null and !exists(select ResourceConfiguration where resource=rc.resource and event=$1))" +
+        // Configurations applicable to this scheduled item: same site & item. (The event-override
+        // and site-scope rules are already folded into the rc CTE.)
+        " where rc.rcSite=si.site and rc.item=si.item" +
         // Date scope: global configs start/stop over time; event configs are time-scoped by the event itself (no
         // dates → the null-open-ended test below always passes). Mirrors kbs_overlaps(si.date,si.date,start,end).
         " and (rc.startDate=null or rc.startDate<=si.date) and (rc.endDate=null or rc.endDate>=si.date)" +
@@ -97,7 +121,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
         // scheduled_item_self_bookable_event_site_date_idx (V0049), so only this event's ~300 rows reach the display
         // joins: 310ms → 80ms for event 1898.
         " and (si.event = (select e.finalEvent from e)" +
-        "      or si.event=null and si.site = (select e.venue from e) and (si.date >= (select coalesce(e.preDate, e.startDate) from e) and si.date <= (select coalesce(e.postDate, e.endDate) from e) or exists(select ep where si.date>=coalesce(ep.startBoundary.date, ep.startBoundary.scheduledItem.date) and si.date<=coalesce(ep.endBoundary.date, ep.endBoundary.scheduledItem.date))))";
+        "      or si.event=null and si.site = (select e.venue from e) and (si.date >= (select coalesce(e.preDate, e.startDate) from e) and si.date <= (select coalesce(e.postDate, e.endDate) from e) or exists(select ep where si.date>=ep.bstart and si.date<=ep.bend)))";
     // Accommodation filter appended by each caller
 
     // ItemPolicy exists check (shared by both acco filters)
