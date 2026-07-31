@@ -129,9 +129,14 @@ public final class MailerJob implements ApplicationJob {
         // for letterless magic-link mails, which an inner join through letter would drop).
         // The "flagged" scope condition is the KBS3 side of the progressive handover; KBS2's
         // mailer drains the exact complement (letter is not null and !letter..kbs3).
+        // No `out` filter, exactly like KBS2: incoming mails (out=false — the cart "contact us"
+        // and refund-request messages a booker sends to a centre) are transmitted too, to the
+        // centre's address with Reply-To the booker. That's what the fromEmail branch of the
+        // sender resolution is for. Filtering them out here would strand them forever, since
+        // KBS2's side of the partition only drains lettered mail.
         String scopeCondition = drainAll ? "" : " and (letter=null or letter?.kbs3)";
         return EntityStore.create(dataSourceModel).<Mail>executeQuery(
-                        "select date from Mail where (transmitted=null or !transmitted) and out and date>$1"
+                        "select date from Mail where (transmitted=null or !transmitted) and date>$1"
                                 + " and (letter=null or letter?.onHold=null or !letter?.onHold)"
                                 + scopeCondition
                                 + " order by letter?.type?.ord limit 1",
