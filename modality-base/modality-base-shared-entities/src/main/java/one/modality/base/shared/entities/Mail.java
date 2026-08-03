@@ -24,6 +24,11 @@ public interface Mail extends Entity, EntityHasDocument, EntityHasOrganization {
     String transmitted = "transmitted";
     String transmissionDate = "transmissionDate";
     String error = "error";
+    // 'email' (DB default) or 'push' (V0055): which transmitter drains this mail — the SMTP
+    // mailer or the WebPushMailerJob (subject/content then hold a composed push title/body).
+    String channel = "channel";
+    String CHANNEL_EMAIL = "email";
+    String CHANNEL_PUSH = "push";
 
     default void setFromName(String value) {
         setFieldValue(fromName, value);
@@ -131,6 +136,14 @@ public interface Mail extends Entity, EntityHasDocument, EntityHasOrganization {
 
     default String getError() {
         return getStringFieldValue(error);
+    }
+
+    default void setChannel(String value) {
+        setFieldValue(channel, value);
+    }
+
+    default String getChannel() {
+        return getStringFieldValue(channel);
     }
 
 }

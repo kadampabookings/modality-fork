@@ -136,7 +136,9 @@ public final class MailerJob implements ApplicationJob {
         // KBS2's side of the partition only drains lettered mail.
         String scopeCondition = drainAll ? "" : " and (letter=null or letter?.kbs3)";
         return EntityStore.create(dataSourceModel).<Mail>executeQuery(
-                        "select date from Mail where (transmitted=null or !transmitted) and date>$1"
+                        // channel='email' (V0055): push-variant mails belong to the WebPushMailerJob —
+                        // their subject/content hold a composed push title/body, not an email.
+                        "select date from Mail where channel='email' and (transmitted=null or !transmitted) and date>$1"
                                 + " and (letter=null or letter?.onHold=null or !letter?.onHold)"
                                 + scopeCondition
                                 + " order by letter?.type?.ord limit 1",

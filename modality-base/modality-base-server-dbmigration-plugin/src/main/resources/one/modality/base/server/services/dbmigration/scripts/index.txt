@@ -55,3 +55,6 @@ V0049__scheduled_item_bookable_query_plan.sql
 V0050__availability_subplan_indexes.sql
 V0051__event_type_global.sql
 V0052__letter_global_event_type.sql
+V0053__letter_lang_fallback.sql
+V0054__push_subscription_tables.sql
+V0055__letter_web_push_variant.sql

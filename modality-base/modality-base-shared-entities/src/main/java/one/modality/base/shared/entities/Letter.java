@@ -32,6 +32,11 @@ public interface Letter extends
     // KBS3 mailer, unflagged ones stay with KBS2's — both drain queries test this same column,
     // so each mail has exactly one transmitter and letters migrate one by one via plain SQL.
     String kbs3 = "kbs3";
+    // Web-push variant (V0055): non-null = bookers live-subscribed to this push context get the
+    // letter as a web push (a channel='push' mail composed from push_title_<lang>/push_body_<lang>)
+    // instead of an email. A DB CHECK forces push-variant letters onto the kbs3 mailer partition.
+    String pushContext = "pushContext";
+    String pushUrl = "pushUrl";
 
     default void setSuppressesSending(Boolean value) {
         setFieldValue(suppressesSending, value);
@@ -67,5 +72,21 @@ public interface Letter extends
 
     default Boolean isKbs3() {
         return getBooleanFieldValue(kbs3);
+    }
+
+    default void setPushContext(String value) {
+        setFieldValue(pushContext, value);
+    }
+
+    default String getPushContext() {
+        return getStringFieldValue(pushContext);
+    }
+
+    default void setPushUrl(String value) {
+        setFieldValue(pushUrl, value);
+    }
+
+    default String getPushUrl() {
+        return getStringFieldValue(pushUrl);
     }
 }
