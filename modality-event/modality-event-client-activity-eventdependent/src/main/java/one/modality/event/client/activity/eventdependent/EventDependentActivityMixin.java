@@ -17,7 +17,9 @@ public interface EventDependentActivityMixin
 
     default void updateEventDependentPresentationModelFromContextParameters() {
         Object eventId = getParameter("eventId");
-        if (eventId != null)
+        // Same guard as the organization id: a malformed/absent optional route segment can arrive as a
+        // Boolean, which would fail the reactive query's event=$1 bind on every push re-fire.
+        if (OrganizationDependentActivityMixin.isUsableId(eventId))
             setEventId(eventId);
         else
             eventIdProperty().bind(FXEventId.eventIdProperty());
