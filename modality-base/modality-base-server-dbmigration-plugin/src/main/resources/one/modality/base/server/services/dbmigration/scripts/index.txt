@@ -59,3 +59,4 @@ V0053__letter_lang_fallback.sql
 V0054__push_subscription_tables.sql
 V0055__letter_web_push_variant.sql
 V0056__chat_message_reaction.sql
+V0057__chat_message_reply_to.sql

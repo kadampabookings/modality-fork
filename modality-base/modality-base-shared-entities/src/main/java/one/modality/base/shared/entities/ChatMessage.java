@@ -30,6 +30,7 @@ public interface ChatMessage extends Entity, EntityHasPerson {
     String content = "content";
     String createdAt = "createdAt";
     String editedAt = "editedAt";
+    String replyTo = "replyTo";
 
     // kind values
     String KIND_TEXT = "text";
@@ -69,6 +70,24 @@ public interface ChatMessage extends Entity, EntityHasPerson {
 
     default Instant getCreatedAt() {
         return getInstantFieldValue(createdAt);
+    }
+
+    /**
+     * The message this one answers (quote-reply), or null — which is the
+     * case for every message written before the feature existed. Points
+     * within the same conversation; the quoted message is never deleted,
+     * so a reply's context cannot go missing.
+     */
+    default void setReplyTo(Object value) {
+        setForeignField(replyTo, value);
+    }
+
+    default EntityId getReplyToId() {
+        return getForeignEntityId(replyTo);
+    }
+
+    default ChatMessage getReplyTo() {
+        return getForeignEntity(replyTo);
     }
 
     default void setEditedAt(Instant value) {

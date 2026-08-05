@@ -142,7 +142,8 @@
     "createdAt": "Temporal.Instant",
     "editedAt": "Temporal.Instant",
     "kind": "string",
-    "person": "Person"
+    "person": "Person",
+    "replyTo": "ChatMessage"
   },
   "ChatMessageReaction": {
     "id": 174,
