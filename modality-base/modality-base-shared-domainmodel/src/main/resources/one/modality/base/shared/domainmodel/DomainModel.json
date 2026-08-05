@@ -144,6 +144,13 @@
     "kind": "string",
     "person": "Person"
   },
+  "ChatMessageReaction": {
+    "id": 174,
+    "createdAt": "Temporal.Instant",
+    "emoji": "string",
+    "message": "ChatMessage",
+    "person": "Person"
+  },
   "ChatPresence": {
     "id": 171,
     "agent": "boolean",
