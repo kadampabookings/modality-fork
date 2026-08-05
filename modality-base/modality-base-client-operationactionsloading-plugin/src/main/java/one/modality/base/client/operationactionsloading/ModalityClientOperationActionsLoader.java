@@ -63,11 +63,19 @@ public final class ModalityClientOperationActionsLoader implements ApplicationMo
                     """.replace("officeType", officeType))
             .onFailure(cause -> {
                 Console.error("Failed loading operations", cause);
-                // Schedule a retry, as the client won't work anyway without a successful load
-                Scheduler.scheduleDeferred(this::bootModule);
+                // Schedule a retry, as the client won't work anyway without a successful load.
+                // The delay grows with each consecutive failure (1s, 2s, 4s… capped at 30s) plus a
+                // random jitter: failures cluster right after a deploy (server restarting or its
+                // query queue saturated by every client reconnecting at once), and an immediate
+                // deferred retry from all those clients in lockstep would only feed the stampede.
+                int backoffMs = (int) Math.min(30_000, 1000 * Math.pow(2, Math.min(operationsLoadFailures++, 5)));
+                Scheduler.scheduleDelay(backoffMs + (long) (Math.random() * 1000), this::bootModule);
             })
             .onCacheAndOrSuccess(this::registerOperations);
     }
+
+    // Consecutive operations-load failures, driving the retry backoff above
+    private int operationsLoadFailures;
 
     private void registerOperations(List<Entity> operations) {
         OperationActionRegistry registry = getOperationActionRegistry();

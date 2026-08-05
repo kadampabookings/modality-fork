@@ -10,7 +10,6 @@ import dev.webfx.stack.session.state.client.fx.FXAuthorizationsReceived;
 import dev.webfx.stack.session.state.client.fx.FXUserId;
 import dev.webfx.stack.shareddata.cache.CacheEntry;
 import dev.webfx.stack.shareddata.cache.serial.SerialCache;
-import one.modality.crm.shared.services.authn.fx.FXModalityUserPrincipal;
 
 import java.util.Objects;
 
@@ -28,8 +27,18 @@ final class ModalityInMemoryUserAuthorizationChecker extends InMemoryUserAuthori
         // Registering the authorization (requests and rules) parsers
         ruleRegistry.addAuthorizationRuleParser(new RoutingAuthorizationRuleParser());
         ruleRegistry.addAuthorizationRuleParser(new OperationAuthorizationRuleParser());
-        // Getting initial authorizations from cache if present (only if the previous session was logged in as Modality user already)
-        if (FXModalityUserPrincipal.getModalityUserPrincipal() != null) {
+        // Getting initial authorizations from cache if present. Restored for any checker created for a
+        // real (logged-in) user — typically the user restored from the persisted session on a page
+        // reload — so the previous session's grants apply IMMEDIATELY and the first routing pass can
+        // proceed instead of flashing /unauthorized until the server push arrives (which, right after
+        // a deploy, sits behind the most loaded server queue). The server push remains the source of
+        // truth: it overwrites these rules and re-fires FXAuthorizationsChanged on arrival, and
+        // client-side rules only gate routing — every actual call is authorized server-side anyway.
+        // (The previous guard — FXModalityUserPrincipal already loaded — was practically never
+        // satisfied at construction time on a cold reload, which left the cache unused exactly when
+        // it was needed. The public checker deliberately does NOT restore: the cache is a single
+        // shared entry, and an expired session must not surface the last user's grants.)
+        if (!LogoutUserId.isLogoutUserIdOrNull(userId)) {
             authorizationPushObjectCacheEntry.getValue()
                 .onSuccess(cachedValue -> {
                     if (cachedValue != null)

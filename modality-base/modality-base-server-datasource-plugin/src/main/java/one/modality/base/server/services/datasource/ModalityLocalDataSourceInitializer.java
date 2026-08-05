@@ -2,6 +2,7 @@ package one.modality.base.server.services.datasource;
 
 import dev.webfx.platform.boot.ApplicationReadiness;
 import dev.webfx.platform.boot.spi.ApplicationJob;
+import dev.webfx.platform.conf.Config;
 import dev.webfx.platform.conf.ConfigLoader;
 import dev.webfx.stack.db.datasource.ConnectionDetails;
 import dev.webfx.stack.db.datasource.DBMS;
@@ -41,7 +42,11 @@ public class ModalityLocalDataSourceInitializer implements ApplicationJob {
                     config.getString("databaseName"),
                     config.getString("url"),
                     config.getString("username"),
-                    config.getString("password")
+                    config.getString("password"),
+                    // Max parallel read/write connections (-1 = provider default); tunable per environment
+                    // because the read pool is the throughput bottleneck during a deploy reconnection stampede
+                    getPositiveIntegerOrDefault(config, "queryPoolSize"),
+                    getPositiveIntegerOrDefault(config, "submitPoolSize")
             );
 
             Object dataSourceId = ModalityLocalDataSourceProvider.getModalityDataSourceId();
@@ -67,5 +72,19 @@ public class ModalityLocalDataSourceInitializer implements ApplicationJob {
                     });
         });
 
+    }
+
+    // Robust positive-integer read: the CI renders these keys through envsubst, so an unset environment
+    // variable produces an EMPTY value (not an absent key), which must fall back to the provider default (-1)
+    // rather than break the datasource initialisation.
+    private int getPositiveIntegerOrDefault(Config config, String key) {
+        try {
+            Integer value = config.getInteger(key, -1);
+            if (value != null && value > 0)
+                return value;
+        } catch (RuntimeException e) {
+            log("⚠️ Ignoring invalid datasource config value for '" + key + "'");
+        }
+        return -1;
     }
 }
