@@ -29,17 +29,15 @@ public final class EditShareOwnerInfoDocumentLineEventSerialCodec extends Abstra
 
     @Override
     public EditShareOwnerInfoDocumentLineEvent decode(ReadOnlyAstObject serial) {
-        int quantity = decodeInteger(serial, QUANTITY_KEY, 0);
-        if (quantity > 0)
-            return postDecode(new EditShareOwnerInfoDocumentLineEvent(
-                decodeDocumentPrimaryKey(serial),
-                decodeDocumentLinePrimaryKey(serial),
-                quantity
-            ), serial);
+        // Decode BOTH fields — the former quantity>0 branch went through the quantity-only
+        // constructor, silently dropping the mates names sent with a named headcount
+        // (public-talk attendee 2+ names never reached the document lines).
+        String[] matesNames = decodeStringArray(serial, MATES_NAMES_KEY);
         return postDecode(new EditShareOwnerInfoDocumentLineEvent(
             decodeDocumentPrimaryKey(serial),
             decodeDocumentLinePrimaryKey(serial),
-            decodeStringArray(serial, MATES_NAMES_KEY)
+            matesNames != null ? matesNames : new String[0],
+            decodeInteger(serial, QUANTITY_KEY, 0)
         ), serial);
     }
 }

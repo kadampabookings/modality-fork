@@ -43,6 +43,17 @@ public final class EditShareOwnerInfoDocumentLineEvent extends AbstractDocumentL
         this.quantity = quantity;
     }
 
+    /**
+     * Combined constructor — an event may carry BOTH the mates names and an explicit quantity
+     * (e.g. a public-talk headcount whose extra attendees are named). The explicit quantity
+     * wins on replay, so a partially-filled names list never shrinks the headcount.
+     */
+    public EditShareOwnerInfoDocumentLineEvent(Object documentPrimaryKey, Object documentLinePrimaryKey, String[] matesNames, int quantity) {
+        super(documentPrimaryKey, documentLinePrimaryKey);
+        this.matesNames = matesNames;
+        this.quantity = quantity;
+    }
+
     public String[] getMatesNames() {
         return matesNames;
     }
