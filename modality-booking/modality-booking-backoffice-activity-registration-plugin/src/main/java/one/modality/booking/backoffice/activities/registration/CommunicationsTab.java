@@ -388,10 +388,13 @@ public class CommunicationsTab {
         String recipientEmail = document.getEmail(); // reads person_email field
         String recipientName = document.getFullName(); // reads person_firstName + person_lastName
 
-        if (recipientEmail == null || recipientEmail.trim().isEmpty()) {
-            Console.log("Cannot send letter: No email address for this guest");
-            return;
-        }
+        // person_email may be blank for an account member without their own address ("reach them
+        // via the account owner"). Since V0059 the auto_recipient DB trigger resolves the To
+        // address itself in that case — falling back to the account owner's login email, and
+        // discarding the mail (with a DB warning) when nothing resolves — so we only create the
+        // explicit Recipient when the denormalized email is present, and otherwise let the
+        // trigger do it.
+        boolean hasOwnEmail = recipientEmail != null && !recipientEmail.trim().isEmpty();
 
         // Create UpdateStore for this mail operation
         UpdateStore mailStore = UpdateStore.create(DataSourceModelService.getDefaultDataSourceModel());
@@ -407,27 +410,30 @@ public class CommunicationsTab {
         }
         mail.setAccount(27); // kbs@kadampa.net mail account ID
 
-        // Create Recipient record
-        Recipient recipient = mailStore.insertEntity(Recipient.class);
-        recipient.setMail(mail);
-        recipient.setEmail(recipientEmail);
-        recipient.setName(recipientName);
-        recipient.setTo(true);
-        recipient.setCc(false);
-        recipient.setBcc(false);
-        recipient.setOk(false);
+        if (hasOwnEmail) {
+            // Create Recipient record
+            Recipient recipient = mailStore.insertEntity(Recipient.class);
+            recipient.setMail(mail);
+            recipient.setEmail(recipientEmail);
+            recipient.setName(recipientName);
+            recipient.setTo(true);
+            recipient.setCc(false);
+            recipient.setBcc(false);
+            recipient.setOk(false);
+        }
 
         // Create History record for this email
         History history = mailStore.insertEntity(History.class);
         history.setDocument(document);
         history.setMail(mail);
         history.setUsername(FXUserName.getUserName());
-        history.setComment("Email sent: " + selectedLetter.getName() + " to " + recipientEmail);
+        String recipientLabel = hasOwnEmail ? recipientEmail : "account owner (no member email — DB fallback)";
+        history.setComment("Email sent: " + selectedLetter.getName() + " to " + recipientLabel);
 
         // Submit to database
         mailStore.submitChanges()
             .onSuccess(batch -> {
-                Console.log("Letter queued for sending: " + selectedLetter.getName() + " to " + recipientEmail);
+                Console.log("Letter queued for sending: " + selectedLetter.getName() + " to " + recipientLabel);
                 // UI updates must run on FX application thread
                 Platform.runLater(() -> {
                     // Clear form after sending

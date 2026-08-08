@@ -61,3 +61,4 @@ V0055__letter_web_push_variant.sql
 V0056__chat_message_reaction.sql
 V0057__chat_message_reply_to.sql
 V0058__closed_event_booking_guard.sql
+V0059__member_email_owner_fallback.sql
