@@ -172,9 +172,11 @@
     "assignee": "Person",
     "closedAt": "Temporal.Instant",
     "createdAt": "Temporal.Instant",
+    "devIssue": "DevIssue",
     "document": "Document",
     "event": "Event",
     "issue": "Issue",
+    "needsFix": "boolean",
     "organization": "Organization",
     "scheduledItem": "ScheduledItem",
     "status": "string",
@@ -232,6 +234,15 @@
     "dates": "string",
     "event": "Event",
     "name": "string"
+  },
+  "DevIssue": {
+    "id": 175,
+    "createdAt": "Temporal.Instant",
+    "githubIssue": "integer",
+    "kind": "string",
+    "resolvedAt": "Temporal.Instant",
+    "status": "string",
+    "title": "string"
   },
   "Document": {
     "id": 46,

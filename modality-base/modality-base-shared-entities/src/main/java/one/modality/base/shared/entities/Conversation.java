@@ -41,6 +41,8 @@ public interface Conversation extends Entity, EntityHasDocument, EntityHasEvent,
     String assignee = "assignee";
     String title = "title";
     String viewerDevice = "viewerDevice";
+    String needsFix = "needsFix";
+    String devIssue = "devIssue";
     String viewerLang = "viewerLang";
     String createdAt = "createdAt";
     String closedAt = "closedAt";
@@ -145,5 +147,35 @@ public interface Conversation extends Entity, EntityHasDocument, EntityHasEvent,
 
     default Instant getClosedAt() {
         return getInstantFieldValue(closedAt);
+    }
+
+    /**
+     * The agent's "this smells like something we must fix" flag, raised
+     * before anyone knows WHICH dev issue it is — the triage queue.
+     */
+    default void setNeedsFix(Boolean value) {
+        setFieldValue(needsFix, value);
+    }
+
+    default Boolean isNeedsFix() {
+        return getBooleanFieldValue(needsFix);
+    }
+
+    /**
+     * The dev issue this conversation turned out to be an instance of, or
+     * null. MANY conversations point at ONE issue — the status lives
+     * there, so marking it fixed cannot leave two conversations
+     * disagreeing about the same problem.
+     */
+    default void setDevIssue(Object value) {
+        setForeignField(devIssue, value);
+    }
+
+    default EntityId getDevIssueId() {
+        return getForeignEntityId(devIssue);
+    }
+
+    default DevIssue getDevIssue() {
+        return getForeignEntity(devIssue);
     }
 }
