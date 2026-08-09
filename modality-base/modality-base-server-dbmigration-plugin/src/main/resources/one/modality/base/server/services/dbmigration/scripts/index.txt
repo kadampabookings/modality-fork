@@ -63,3 +63,4 @@ V0057__chat_message_reply_to.sql
 V0058__closed_event_booking_guard.sql
 V0059__member_email_owner_fallback.sql
 V0060__dev_issue.sql
+V0061__person_details_freshness.sql

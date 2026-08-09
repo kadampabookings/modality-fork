@@ -14,6 +14,10 @@ public interface Person extends Entity, EntityHasPersonalDetails, EntityHasEvent
     // Field name constants
     String birthDate = "birthdate";
     String genderChangedDate = "genderChangedDate";
+    String addressDeprecatedDate = "addressDeprecatedDate";
+    String organizationDeprecatedDate = "organizationDeprecatedDate";
+    String detailsConfirmedDate = "detailsConfirmedDate";
+    String detailsEditedDate = "detailsEditedDate";
     String frontendAccount = "frontendAccount";
     String accountPerson = "accountPerson";
     String branch = "branch";
@@ -55,6 +59,49 @@ public interface Person extends Entity, EntityHasPersonalDetails, EntityHasEvent
 
     default LocalDate getGenderChangedDate() {
         return getLocalDateFieldValue(genderChangedDate);
+    }
+
+    // Deprecation markers set by staff when a value is known to be out of date (e.g. a
+    // resident moved out of a centre). Non-null means "do not trust this any more": the
+    // front-office booking flow then REQUIRES a fresh value before continuing, where a
+    // merely missing value is only prompted. Cleared when the booker supplies one.
+    default void setAddressDeprecatedDate(LocalDate value) {
+        setFieldValue(addressDeprecatedDate, value);
+    }
+
+    default LocalDate getAddressDeprecatedDate() {
+        return getLocalDateFieldValue(addressDeprecatedDate);
+    }
+
+    default void setOrganizationDeprecatedDate(LocalDate value) {
+        setFieldValue(organizationDeprecatedDate, value);
+    }
+
+    default LocalDate getOrganizationDeprecatedDate() {
+        return getLocalDateFieldValue(organizationDeprecatedDate);
+    }
+
+    // Stamped whenever the person confirms their details (booking-flow review or profile
+    // save), so the review can be skipped for someone who confirmed recently instead of
+    // re-interviewing them on every booking.
+    default void setDetailsConfirmedDate(LocalDate value) {
+        setFieldValue(detailsConfirmedDate, value);
+    }
+
+    default LocalDate getDetailsConfirmedDate() {
+        return getLocalDateFieldValue(detailsConfirmedDate);
+    }
+
+    // Stamped by the V0061 trigger whenever a tracked detail actually CHANGES (address,
+    // centre or phone) — diagnostic only. Because an edit implies a confirmation,
+    // confirmed >= edited, and the gap reveals details confirmed without ever being
+    // changed. No behaviour keys on it: the review's skip logic uses the confirmed date.
+    default void setDetailsEditedDate(LocalDate value) {
+        setFieldValue(detailsEditedDate, value);
+    }
+
+    default LocalDate getDetailsEditedDate() {
+        return getLocalDateFieldValue(detailsEditedDate);
     }
 
     // Frontend account
