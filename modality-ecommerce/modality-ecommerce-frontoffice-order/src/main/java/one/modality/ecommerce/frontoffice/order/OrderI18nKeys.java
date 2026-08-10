@@ -8,7 +8,6 @@ public interface OrderI18nKeys {
     Object Cancel = "Cancel";
     Object CancelBooking = "CancelBooking";
     Object CancelBookingAreYouSure = "CancelBookingAreYouSure";
-    Object CancelBookingRefund = "CancelBookingRefund";
     Object CancelBookingTitle = "CancelBookingTitle";
     Object ContactUs = "ContactUs";
     Object ContactUsAboutThisBooking = "ContactUsAboutThisBooking";
