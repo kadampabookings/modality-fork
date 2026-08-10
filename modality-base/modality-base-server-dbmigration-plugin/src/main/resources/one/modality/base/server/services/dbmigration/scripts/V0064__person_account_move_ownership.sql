@@ -41,6 +41,7 @@ DECLARE
     target_owner name;
     obj          record;
     realigned    int := 0;
+    skipped      int := 0;
 BEGIN
     SELECT pg_get_userbyid(relowner) INTO target_owner
       FROM pg_class WHERE oid = 'public.person'::regclass;
@@ -52,23 +53,48 @@ BEGIN
          WHERE n.nspname = 'public'
            AND c.relkind IN ('r', 'S', 'v', 'm')
            AND pg_get_userbyid(c.relowner) <> target_owner
+           -- Serial/identity sequences are OWNED BY a table column and Postgres refuses to
+           -- reassign them on their own ("cannot change owner of sequence", SQLSTATE 0A000)
+           -- — their owner must match the table they are linked to, and ALTER TABLE moves
+           -- them along with it. Reassigning the table is therefore both necessary and
+           -- sufficient; naming the sequence separately is an error.
+           AND NOT (c.relkind = 'S' AND EXISTS (
+                    SELECT 1 FROM pg_depend d
+                     WHERE d.classid = 'pg_class'::regclass AND d.objid = c.oid
+                       AND d.refclassid = 'pg_class'::regclass AND d.deptype IN ('a', 'i')))
+         -- Tables before views, so a view never outlives its table's ownership change.
+         ORDER BY CASE c.relkind WHEN 'r' THEN 0 WHEN 'S' THEN 1 ELSE 2 END, c.relname
     LOOP
-        EXECUTE format('ALTER %s public.%I OWNER TO %I',
-                       CASE obj.relkind
-                           WHEN 'S' THEN 'SEQUENCE'
-                           WHEN 'v' THEN 'VIEW'
-                           WHEN 'm' THEN 'MATERIALIZED VIEW'
-                           ELSE 'TABLE'
-                       END,
-                       obj.relname, target_owner);
-        realigned := realigned + 1;
-        RAISE NOTICE 'V0064: % realigned to %', obj.relname, target_owner;
+        -- Per-object exception handling, NOT one handler around the loop: this schema also
+        -- carries tables created by maintenance scripts run from a psql login
+        -- (member_email_nullify_backup), which the migration role cannot reassign either.
+        -- With a single outer handler the first such object ends the loop, and since it
+        -- sorts before person_account_move the audit table would silently stay broken.
+        BEGIN
+            EXECUTE format('ALTER %s public.%I OWNER TO %I',
+                           CASE obj.relkind
+                               WHEN 'S' THEN 'SEQUENCE'
+                               WHEN 'v' THEN 'VIEW'
+                               WHEN 'm' THEN 'MATERIALIZED VIEW'
+                               ELSE 'TABLE'
+                           END,
+                           obj.relname, target_owner);
+            realigned := realigned + 1;
+            RAISE NOTICE 'V0064: % realigned to %', obj.relname, target_owner;
+        EXCEPTION
+            -- Deliberately WHEN OTHERS. A tidy-up must never abort the boot migration
+            -- chain, and narrowing this to insufficient_privilege was not enough: the
+            -- first version died on SQLSTATE 0A000 from a linked sequence and the batch
+            -- was retried on every boot, blocking this and every later migration.
+            WHEN OTHERS THEN
+                skipped := skipped + 1;
+                RAISE WARNING 'V0064: could not realign % (% / %) — roles other than its owner cannot use it', obj.relname, SQLSTATE, SQLERRM;
+        END;
     END LOOP;
 
-    IF realigned = 0 THEN
+    IF realigned = 0 AND skipped = 0 THEN
         RAISE NOTICE 'V0064: every object in public is already owned by % — nothing to do', target_owner;
+    ELSE
+        RAISE NOTICE 'V0064: % object(s) realigned to %, % skipped', realigned, target_owner, skipped;
     END IF;
-EXCEPTION
-    WHEN insufficient_privilege THEN
-        RAISE WARNING 'V0064: could not realign object ownership (%). Until an owner does so, roles other than the migration role cannot use objects it created — and moving a person between accounts will fail on person_account_move.', SQLERRM;
 END $$;
