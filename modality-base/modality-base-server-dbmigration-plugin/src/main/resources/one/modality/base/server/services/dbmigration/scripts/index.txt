@@ -65,3 +65,4 @@ V0059__member_email_owner_fallback.sql
 V0060__dev_issue.sql
 V0061__person_details_freshness.sql
 V0062__username_sync_follows_owner_flag.sql
+V0063__person_account_move_audit.sql
