@@ -1630,6 +1630,7 @@
     "id": 66,
     "abcNames": "string",
     "accountPerson": "Person",
+    "accountPersonRevokedDate": "Temporal.PlainDate",
     "addressDeprecatedDate": "Temporal.PlainDate",
     "admin1Name": "string",
     "admin2Name": "string",
