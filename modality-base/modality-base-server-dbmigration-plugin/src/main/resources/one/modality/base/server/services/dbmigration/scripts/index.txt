@@ -69,3 +69,4 @@ V0063__person_account_move_audit.sql
 V0064__person_account_move_ownership.sql
 V0065__person_link_revocation.sql
 V0066__history_email_registration_account.sql
+V0067__event_type_ongoing.sql

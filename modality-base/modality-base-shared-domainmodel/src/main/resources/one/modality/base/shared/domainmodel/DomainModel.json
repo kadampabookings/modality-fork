@@ -931,6 +931,7 @@
     "label": "Label",
     "name": "string",
     "noTermsAcceptance": "boolean",
+    "ongoing": "boolean",
     "ord": "integer",
     "organization": "Organization",
     "recurringItem": "Item",

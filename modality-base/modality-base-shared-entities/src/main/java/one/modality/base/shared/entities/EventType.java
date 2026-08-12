@@ -21,6 +21,7 @@ public interface EventType extends Entity,
     String registrationMailAccount = "registrationMailAccount";
     String supportEmail = "supportEmail";
     String ord = "ord";
+    String ongoing = "ongoing";
 
     default void setBookingForm(Object value) {
         setForeignField(bookingForm, value);
@@ -79,6 +80,17 @@ public interface EventType extends Entity,
 
     default Integer getOrd() {
         return getIntegerFieldValue(ord);
+    }
+
+    /** Events of this type are ongoing containers rather than discrete events (Stays, Residents,
+     *  Volunteering…) — they can span months or years, and event timelines may hide them by
+     *  default. Named "ongoing" because "background" is taken by a legacy KBS2 styling field. */
+    default void setOngoing(Boolean value) {
+        setFieldValue(ongoing, value);
+    }
+
+    default Boolean isOngoing() {
+        return getBooleanFieldValue(ongoing);
     }
 
     default Boolean isRecurring() {
