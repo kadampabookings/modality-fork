@@ -1280,6 +1280,7 @@
     "noShuttleTime": "boolean",
     "ord": "integer",
     "order": "boolean",
+    "scopeOverride": "boolean",
     "sendPassword": "boolean",
     "terms": "boolean"
   },
