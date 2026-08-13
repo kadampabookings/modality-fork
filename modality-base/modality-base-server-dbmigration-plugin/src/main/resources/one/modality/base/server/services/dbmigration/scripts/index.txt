@@ -72,3 +72,4 @@ V0066__history_email_registration_account.sql
 V0067__event_type_ongoing.sql
 V0068__audit_actor_person.sql
 V0069__auto_ref_cart_for_backoffice_bookings.sql
+V0070__regenerate_letter_mails.sql
