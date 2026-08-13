@@ -38,14 +38,31 @@ COMMENT ON COLUMN public.person_link_change.changed_by_person_id IS
 CREATE INDEX IF NOT EXISTS person_account_move_actor_idx ON public.person_account_move (changed_by_person_id);
 CREATE INDEX IF NOT EXISTS person_link_change_actor_idx  ON public.person_link_change  (changed_by_person_id);
 
--- Reading the setting must NEVER be able to abort the write it is recording. A bad value would
--- otherwise raise 22P02 out of the cast and take a booking down with it, so the failure is
--- swallowed here and the column is simply left null.
+-- Where the actor id comes from, in order of preference:
+--
+--   1. `kbs.audit_person_id`, set explicitly. Nothing sets it yet — it is here so a future
+--      typed hand-off from the server needs no migration to take effect, only a value.
+--   2. Parsed out of `kbs.audit_note`, which the submit provider already stamps as
+--      "user:person=6801,account=7397" from ModalityUserPrincipal.toString().
+--
+-- Parsing a format is not the design I would choose freely; supplying the id directly would
+-- mean an interface shared between webfx-stack and Modality, and modality-crm-shared-authn's
+-- module-info is WebFX-generated, so that means a webfx.xml dependency plus a regeneration
+-- sweep for one integer. The coupling is instead pinned from the Java side by a test on
+-- ModalityUserPrincipal.toString(), which names this function so the link is discoverable from
+-- both ends. When the explicit setting arrives, this fallback simply stops being reached.
+--
+-- Reading it must NEVER abort the write it is recording: a bad value would otherwise raise
+-- 22P02 out of a trigger and take down the booking that fired it. Failures yield null instead.
 CREATE OR REPLACE FUNCTION public.kbs_audit_person_id() RETURNS integer
     LANGUAGE plpgsql
 AS $$
 BEGIN
-    RETURN nullif(current_setting('kbs.audit_person_id', true), '')::integer;
+    RETURN coalesce(
+        nullif(current_setting('kbs.audit_person_id', true), '')::integer,
+        -- Only matches the principal form; a script naming itself in the note yields null,
+        -- which is correct — a maintenance run is not a person.
+        substring(nullif(current_setting('kbs.audit_note', true), '') from 'person=(\d+)')::integer);
 EXCEPTION WHEN OTHERS THEN
     RETURN NULL;
 END $$;

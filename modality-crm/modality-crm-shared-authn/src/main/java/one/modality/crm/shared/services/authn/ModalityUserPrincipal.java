@@ -48,6 +48,14 @@ public final class ModalityUserPrincipal {
      * triggers store it verbatim, so the default Object.toString() would have filled the trail
      * with ModalityUserPrincipal@1a2b3c and answered nothing. Person first because that is who a
      * support question is usually about.
+     *
+     * <p><b>THIS FORMAT IS PARSED BY THE DATABASE.</b> V0068's kbs_audit_person_id() reads the
+     * person id out of it with {@code substring(note from 'person=(\d+)')} to populate
+     * changed_by_person_id on person_account_move and person_link_change. Changing "person=" here
+     * silently blanks the actor on every audit row from then on — nothing fails, the column just
+     * goes null. It is deliberately not guarded by a test because this repository has no JUnit
+     * wiring at all; the migration comment names this method in return, so the coupling is
+     * findable from either end.
      */
     @Override
     public String toString() {
