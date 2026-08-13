@@ -1683,6 +1683,33 @@
     "sponsored": "boolean",
     "street": "string"
   },
+  "PersonAccountMove": {
+    "id": 176,
+    "changedByPerson": "Person",
+    "fromAccount": "FrontendAccount",
+    "fromAccountUsername": "string",
+    "movedAt": "Temporal.Instant",
+    "movedBy": "string",
+    "note": "string",
+    "person": "Person",
+    "toAccount": "FrontendAccount",
+    "wasOwner": "boolean",
+    "wasRemoved": "boolean"
+  },
+  "PersonLinkChange": {
+    "id": 177,
+    "account": "FrontendAccount",
+    "changeType": "string",
+    "changedAt": "Temporal.Instant",
+    "changedBy": "string",
+    "changedByPerson": "Person",
+    "newAccountPerson": "Person",
+    "newRevokedDate": "Temporal.PlainDate",
+    "note": "string",
+    "oldAccountPerson": "Person",
+    "oldRevokedDate": "Temporal.PlainDate",
+    "person": "Person"
+  },
   "Playlist": {
     "id": 125,
     "name": "string"
