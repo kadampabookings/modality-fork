@@ -41,6 +41,19 @@ public final class ModalityUserPrincipal {
         return Objects.hash(userPersonId, userAccountId);
     }
 
+    /**
+     * Short, stable, parseable — this is what identifies the actor in the database audit trail.
+     *
+     * The submit provider stamps the current principal onto each write transaction, and the audit
+     * triggers store it verbatim, so the default Object.toString() would have filled the trail
+     * with ModalityUserPrincipal@1a2b3c and answered nothing. Person first because that is who a
+     * support question is usually about.
+     */
+    @Override
+    public String toString() {
+        return "person=" + userPersonId + ",account=" + userAccountId;
+    }
+
     // Static methods helpers
 
     public static Object getUserPersonId(Object principal) {
