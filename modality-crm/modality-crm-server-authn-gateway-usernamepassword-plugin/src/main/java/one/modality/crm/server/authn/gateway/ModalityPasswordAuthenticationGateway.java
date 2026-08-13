@@ -8,6 +8,7 @@ import dev.webfx.stack.authn.*;
 import dev.webfx.stack.authn.logout.server.LogoutPush;
 import dev.webfx.stack.authn.server.gateway.spi.ServerAuthenticationGateway;
 import dev.webfx.stack.hash.md5.Md5;
+import dev.webfx.stack.session.state.AuditActorRegistry;
 import dev.webfx.stack.orm.datasourcemodel.service.DataSourceModelService;
 import dev.webfx.stack.orm.domainmodel.DataSourceModel;
 import dev.webfx.stack.orm.domainmodel.HasDataSourceModel;
@@ -33,6 +34,25 @@ import java.util.Objects;
  * @author Bruno Salmon
  */
 public final class ModalityPasswordAuthenticationGateway implements ServerAuthenticationGateway, HasDataSourceModel {
+
+    /**
+     * Teaches the stack how to read an actor id out of a Modality principal.
+     *
+     * <p>The SQL submit provider stamps that id onto every write transaction so the person and
+     * account audit triggers can record WHO made a change. It cannot work this out for itself:
+     * ThreadLocalStateHolder.getUserId() is a generic Object, and only the side that
+     * authenticated it knows that a ModalityUserPrincipal's person is the actor. A gateway is
+     * exactly the component that knows, having created the principal in the first place.
+     *
+     * <p>Registered from boot() rather than a static initialiser so it happens when the gateway
+     * is actually loaded. Any gateway would do — the mapping is about the principal TYPE, not
+     * about how someone logged in — and registering it twice is harmless. Guests return null and
+     * are simply not recorded as an actor.
+     */
+    @Override
+    public void boot() {
+        AuditActorRegistry.registerResolver(ModalityUserPrincipal::getUserPersonId);
+    }
 
     private static final boolean LOG_INCORRECT_TYPED_PASSWORDS = true; // Used for debugging purposes only
 
