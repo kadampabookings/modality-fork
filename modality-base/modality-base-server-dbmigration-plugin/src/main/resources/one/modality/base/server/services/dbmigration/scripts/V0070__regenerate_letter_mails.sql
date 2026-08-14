@@ -77,22 +77,35 @@
 --     select preview_regenerate_mail(1322155);          -- see old vs new, writes nothing
 --     select regenerate_mail(1322155);                  -- one mail
 --     select regenerate_letter_mails(26304);            -- every pending mail of a letter
---     update letter set trigger_regenerate_mails = true where id = 26304;   -- same, from any UI
 --
--- The last form is the flag-column pattern already used by document.trigger_send_letter_id
--- and frontend_account.trigger_send_password: it makes the operation reachable from the
--- existing letter editors (KBS2 and the KBS3 back-office letter drawer) with no endpoint,
--- once the column is exposed in their domain models. The flag resets itself.
+-- NOTHING HERE TAKES A HEAVY LOCK — AND THAT IS THE POINT
+-- ------------------------------------------------------
+-- The first version of this script also added a `letter.trigger_regenerate_mails` flag
+-- column (+ its trigger) and a partial index on mail. It never applied on prod:
+--
+--     ERROR: canceling statement due to lock timeout (55P03)
+--
+-- three times, 15 s apart, and the whole batch — every pending script, not just this one —
+-- rolled back each time. ALTER TABLE and DROP/CREATE TRIGGER need ACCESS EXCLUSIVE on
+-- `letter`, which a live prod never hands over inside DbMigrationRunner's deliberate
+-- lock_timeout of 5 s (it fails fast on purpose: a QUEUED ACCESS EXCLUSIVE request blocks
+-- every subsequent reader of the table behind it, so waiting patiently would stall the
+-- letter queries of both servers). The index was the next landmine: CREATE INDEX takes a
+-- SHARE lock, which would have frozen every write to prod's ~3 GB mail table for the
+-- length of a full scan.
+--
+-- So a boot migration gets only what is lock-light: CREATE OR REPLACE FUNCTION touches
+-- pg_proc, not the tables. The flag column, its trigger and the index moved to
+-- `scripts/regenerate-letter-mails-flag.sql` in the aggregate repo, to run by hand in a
+-- quiet moment (same rule the index.txt header already states for CREATE INDEX
+-- CONCURRENTLY). Fold them into a later migration with IF NOT EXISTS once every
+-- environment has them, so a fresh database still converges.
+--
+-- Consequence until that script is run: `regenerate_letter_mails()` seq-scans mail (its
+-- index lives there), and the operation is SQL-only — no `update letter set
+-- trigger_regenerate_mails = true` from a letter editor.
 
--- 1. The regenerate flag on letter ---------------------------------------------------
-
-ALTER TABLE letter
-    ADD COLUMN IF NOT EXISTS trigger_regenerate_mails boolean NOT NULL DEFAULT false;
-
-COMMENT ON COLUMN letter.trigger_regenerate_mails IS
-    'Write-only flag: set it to true to re-compose every pending (untransmitted) mail of this letter from the letter''s current text; the trigger resets it to false (V0070).';
-
--- 2. Shared "from" account resolution ------------------------------------------------
+-- 1. Shared "from" account resolution ------------------------------------------------
 -- Verbatim the ladder both send triggers have used since V0017/V0053, including the
 -- second ordering key's `else id` (event-matching accounts first, then by id).
 
@@ -115,7 +128,7 @@ $$;
 COMMENT ON FUNCTION letter_from_mail_account_id(letter, integer, integer) IS
     'The mail_account a letter sends from for that organization/event: the letter''s own, else the event type''s registration account, else the organization''s, else the closest account of the organization (V0070).';
 
--- 3. Shared composition --------------------------------------------------------------
+-- 2. Shared composition --------------------------------------------------------------
 -- Both return NULLs (rather than raising) when the letter has nothing sendable in that
 -- language: mail.subject/content are NOT NULL, and a raise here would abort the caller's
 -- whole batch — the V0053 rule.
@@ -181,7 +194,7 @@ END $function$;
 COMMENT ON FUNCTION letter_compose_push(letter, text, integer, integer) IS
     'The web-push title/body a letter produces for that booking and language, brackets expanded — NULLs when the letter has no usable push text. Shared by the system-letter trigger and regenerate_mail() (V0070).';
 
--- 4. The two send triggers, now composing through the functions above -----------------
+-- 3. The two send triggers, now composing through the functions above -----------------
 --    (V0053 body for the manual one, V0055 body for the system one — unchanged apart
 --    from delegating the account resolution and the composition.)
 
@@ -287,7 +300,7 @@ BEGIN
 	RETURN NEW;
 END $function$;
 
--- 5. Recomposition of an existing mail (read-only core) ------------------------------
+-- 4. Recomposition of an existing mail (read-only core) ------------------------------
 -- All the guards and the composition in one place, writing nothing: regenerate_mail()
 -- applies its result, preview_regenerate_mail() just shows it.
 
@@ -364,7 +377,7 @@ END $function$;
 COMMENT ON FUNCTION preview_regenerate_mail(integer) IS
     'Old vs new text of a pending mail, to check a letter fix before applying it — writes nothing (V0070).';
 
--- 6. Regeneration --------------------------------------------------------------------
+-- 5. Regeneration --------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION regenerate_mail(p_mail_id integer, p_refresh_date boolean DEFAULT true)
 RETURNS boolean
@@ -443,32 +456,12 @@ END $function$;
 COMMENT ON FUNCTION regenerate_letter_mails(integer, boolean) IS
     'Re-compose every pending mail of a letter in place; returns how many were rewritten (V0070).';
 
--- Backs the loop above: mail has no index but its primary key, and 99.999% of its million
--- rows are transmitted, so this partial index is a few pages. Its predicate has to stay
--- exactly the loop's, or the planner cannot use it.
-CREATE INDEX IF NOT EXISTS mail_pending_letter_idx ON mail (letter_id) WHERE NOT transmitted;
+-- The loop's index (`mail_pending_letter_idx`, predicate `NOT transmitted`) is created by
+-- scripts/regenerate-letter-mails-flag.sql, CONCURRENTLY — building it here would hold a
+-- SHARE lock on mail, i.e. block every mail write, for a full scan of the table. Without
+-- it the loop seq-scans; correct either way, just slower.
 
--- 7. The flag trigger ----------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION trigger_letter_regenerate_mails() RETURNS trigger
-LANGUAGE plpgsql AS $function$
-DECLARE
-    v_count integer;
-BEGIN
-    RAISE NOTICE 'Entering trigger %.%(%)', TG_RELNAME, TG_NAME, NEW.id;
-    v_count := regenerate_letter_mails(NEW.id);
-    RAISE NOTICE 'Letter %: % pending mail(s) regenerated', NEW.id, v_count;
-    -- resets the flag; the WHEN clause keeps that update from re-entering here
-    UPDATE letter SET trigger_regenerate_mails = false WHERE id = NEW.id;
-    RETURN NEW;
-END $function$;
-
-DROP TRIGGER IF EXISTS regenerate_mails ON public.letter;
-CREATE TRIGGER regenerate_mails AFTER UPDATE OF trigger_regenerate_mails ON public.letter
-    FOR EACH ROW WHEN (new.trigger_regenerate_mails)
-    EXECUTE FUNCTION public.trigger_letter_regenerate_mails();
-
--- 8. Ownership of the objects this migration created ---------------------------------
+-- 6. Ownership of the objects this migration created ---------------------------------
 -- Migrations run as the server's connect role, so anything they CREATE is owned by that
 -- role instead of the schema owner every other role reaches the schema through — see
 -- V0064. Realign, warning rather than failing: a tidy-up must never abort the boot chain.
@@ -485,7 +478,7 @@ BEGIN
          WHERE n.nspname = 'public'
            AND p.proname IN ('letter_from_mail_account_id', 'letter_compose_email', 'letter_compose_push',
                              'letter_mail_recomposition', 'preview_regenerate_mail', 'regenerate_mail',
-                             'regenerate_letter_mails', 'trigger_letter_regenerate_mails')
+                             'regenerate_letter_mails')
            AND pg_get_userbyid(p.proowner) <> schema_owner
     LOOP
         BEGIN
