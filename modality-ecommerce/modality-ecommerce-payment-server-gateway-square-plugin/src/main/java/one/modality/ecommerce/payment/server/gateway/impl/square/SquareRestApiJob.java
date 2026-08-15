@@ -120,7 +120,7 @@ public final class SquareRestApiJob implements ApplicationJob {
 
     private static Future<Void> loadAndUpdatePaymentStatus(String field, Object value, boolean live, ReadOnlyAstObject payload, String textPayload, String logPrefix) {
         return EntityStore.create()
-            .<MoneyTransfer>executeQuery("select pending,successful,status,gatewayResponse from MoneyTransfer where " + field + " = $1", value)
+            .<MoneyTransfer>executeQuery("select pending,successful,status,gatewayResponse,fromMoneyAccount.closed,toMoneyAccount.closed from MoneyTransfer where " + field + " = $1", value)
             .onFailure(e -> Console.error(logPrefix + "⛔️️  An error occurred when reading the payment with " + field + " = " + value, e))
             .compose(payments -> {
                 int n = payments.size();
@@ -189,6 +189,21 @@ public final class SquareRestApiJob implements ApplicationJob {
         boolean pending = paymentStatus.isPending();
         boolean successful = paymentStatus.isSuccessful();
         Object paymentPk = payment.getPrimaryKey();
+        // Guard: never touch a transfer whose money account is closed. Those are decommissioned
+        // gateway accounts (e.g. "WorldPay Fall 2013 Euro", id 16) that still hold historical
+        // transfers. A re-delivered Square webhook resolves such an old transfer by referenceId->id
+        // and would (a) overwrite its transactionRef with the Square payment id + re-write
+        // pending/successful, arming the DEFERRABLE money_account balance-recompute trigger, which
+        // aborts at COMMIT with "'...' money account is closed" (P0001); the tx rolls back, we'd
+        // return HTTP 500 and Square retries forever; and (b) silently corrupt the WorldPay ref of a
+        // decade-old record. Nothing can or should be written to a closed account, so we ack (200,
+        // via the succeeded future) and stop.
+        boolean fromClosed = payment.getFromMoneyAccount() != null && Boolean.TRUE.equals(payment.getFromMoneyAccount().isClosed());
+        boolean toClosed   = payment.getToMoneyAccount()   != null && Boolean.TRUE.equals(payment.getToMoneyAccount().isClosed());
+        if (fromClosed || toClosed) {
+            Console.warn(logPrefix + "Ignoring Square notification for payment " + paymentPk + " (transactionRef=" + id + "): its money account is closed — nothing to do.");
+            return Future.succeededFuture();
+        }
         // Maybe this Square event doesn't really change the payment status (Square sometimes
         // sends very similar events with the same status, only change is in the payload)
         if (payment.isPending() == pending && payment.isSuccessful() == successful && status.equals(payment.getStatus())) {
