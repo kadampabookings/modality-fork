@@ -99,6 +99,33 @@ public final class ScheduledItems {
         return Collections.map(scheduledItems, ScheduledItem::getDate);
     }
 
+    /**
+     * A session's effective start time, as a DQL expression — the four levels it can live at, in
+     * precedence order. Used both to evaluate the time client-side ({@link #getSessionStartTime})
+     * and to sort session lists server-side ({@link #SESSION_ORDER_BY_DQL}); keeping one string for
+     * both is what stops a query sorting on a level the UI doesn't display.
+     *
+     * <p>The {@code ?} marks each FK hop as an OUTER join. It is omitted in the evaluate() form
+     * (which walks loaded entities, not SQL) but required in a query — ordering through a bare
+     * nullable FK inner-joins and silently drops the rows whose FK is null.</p>
+     */
+    public static final String SESSION_START_TIME_DQL =
+        "coalesce(startTime, timeline?.startTime, programScheduledItem?.startTime, programScheduledItem?.timeline?.startTime)";
+
+    /**
+     * Canonical {@code order by} clause for a chronological session list: day first, then the
+     * effective start time within the day, then {@code id} as a deterministic tie-break.
+     *
+     * <p>A plain {@code order by date, a, b} is NOT equivalent: Postgres sorts ASC with NULLS LAST,
+     * so every row carrying {@code a} lands before every row carrying only {@code b}, whatever the
+     * clock says. Only {@code coalesce} interleaves them by actual time.</p>
+     *
+     * <p>Without the trailing {@code id}, two sessions sharing a sort key come back in whatever
+     * order the plan happens to produce — unstable between runs, which reads to users as a randomly
+     * shuffled list.</p>
+     */
+    public static final String SESSION_ORDER_BY_DQL = " order by date, " + SESSION_START_TIME_DQL + ", id";
+
     public static LocalTime getSessionStartTime(ScheduledItem scheduledItem) {
         return scheduledItem.evaluate("coalesce(startTime, timeline.startTime, programScheduledItem.startTime, programScheduledItem.timeline.startTime)");
     }

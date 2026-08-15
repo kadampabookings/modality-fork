@@ -29,6 +29,7 @@ import javafx.scene.text.TextAlignment;
 import one.modality.base.frontoffice.utility.page.FOPageUtil;
 import one.modality.base.shared.entities.*;
 import one.modality.base.shared.entities.Event;
+import one.modality.base.shared.entities.util.ScheduledItems;
 import one.modality.base.shared.knownitems.KnownItem;
 import one.modality.base.shared.knownitems.KnownItemFamily;
 import one.modality.crm.frontoffice.help.HelpPanel;
@@ -163,7 +164,7 @@ final class VideoStreamingActivity extends ViewDomainActivityBase {
                 Event eventContainingVideos = Objects.coalesce(event.getRepeatedEvent(), event);
                 // We load all video scheduledItems booked by the user for the event (booking must be confirmed
                 // and paid). They will be grouped by day in the UI.
-                // Note: `programScheduledItem.timeline?.startTime` means we do a left join that allows null value (if the event is recurring, the timeline of the programScheduledItem is null)
+                // Note: the `?` in the order-by (see ScheduledItems.SESSION_ORDER_BY_DQL) means we do a left join that allows null value (if the event is recurring, the timeline of the programScheduledItem is null)
                 entityStore.<ScheduledItem>executeQueryWithCache("modality/event/video-streaming/scheduled-items",
                         """
                             select name, label, date, comment, commentLabel, expirationDate, programScheduledItem.(name, label, startTime, endTime, timeline.(startTime, endTime), cancelled), published, event.(name, type.recurringItem, livestreamUrl, recurringWithVideo, livestreamMessageLabel), vodDelayed,
@@ -176,8 +177,11 @@ final class VideoStreamingActivity extends ViewDomainActivityBase {
                                 and exists(select Attendance a
                                  where scheduledItem=si.bookableScheduledItem
                                     and videoAccessEnabled
-                                    and documentLine.(!cancelled and document.(event=$5 and accountCanAccessPersonMedias($1, person))))
-                             order by date, programScheduledItem.timeline?.startTime""",
+                                    and documentLine.(!cancelled and document.(event=$5 and accountCanAccessPersonMedias($1, person))))"""
+                             // Sorting on the program's timeline alone put every session whose times live on the
+                             // program row itself after all the ones with a timeline, in arbitrary order within
+                             // the day. See ScheduledItems.SESSION_ORDER_BY_DQL.
+                             + ScheduledItems.SESSION_ORDER_BY_DQL,
                         /*$1*/ userAccountId, /*$2*/ eventContainingVideos, /*$3*/ KnownItemFamily.TEACHING.getCode(), /*$4*/ KnownItem.VIDEO.getCode(), /*$5*/ event)
                     .onFailure(Console::error)
                     .inUiThread()

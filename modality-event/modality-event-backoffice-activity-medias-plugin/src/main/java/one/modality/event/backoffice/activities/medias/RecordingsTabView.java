@@ -35,6 +35,7 @@ import one.modality.base.shared.entities.Event;
 import one.modality.base.shared.entities.Item;
 import one.modality.base.shared.entities.Media;
 import one.modality.base.shared.entities.ScheduledItem;
+import one.modality.base.shared.entities.util.ScheduledItems;
 import one.modality.base.shared.entities.markers.EntityHasLocalDate;
 import one.modality.base.shared.knownitems.KnownItemFamily;
 import one.modality.event.client.event.fx.FXEvent;
@@ -195,8 +196,11 @@ final class RecordingsTabView {
                     new EntityStoreQuery("""
                             select name, date, programScheduledItem.(name, startTime, endTime, timeline.(startTime, endTime, audioOffered)), event, site, item.code, published, expirationDate, available
                              from ScheduledItem
-                             where programScheduledItem.event = $1 and item.family.code = $2 and programScheduledItem.item.family.code = $3
-                             order by date, programScheduledItem?.timeline?.startTime""",
+                             where programScheduledItem.event = $1 and item.family.code = $2 and programScheduledItem.item.family.code = $3"""
+                             // The list displays timeline.startTime ?? programScheduledItem.startTime but sorted on
+                             // the timeline alone, so recordings whose time lives on the program row sorted after
+                             // the rest, and tied rows came back in arbitrary order.
+                             + ScheduledItems.SESSION_ORDER_BY_DQL,
                         currentEditedEvent, KnownItemFamily.AUDIO_RECORDING.getCode(), KnownItemFamily.TEACHING.getCode()),
                     new EntityStoreQuery("""
                             select url, durationMillis, scheduledItem.(item.code, programScheduledItem, date, published)

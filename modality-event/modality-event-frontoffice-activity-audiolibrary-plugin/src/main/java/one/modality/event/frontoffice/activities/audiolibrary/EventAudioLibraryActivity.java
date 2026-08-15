@@ -43,6 +43,7 @@ import one.modality.base.frontoffice.utility.page.FOPageUtil;
 import one.modality.base.shared.entities.Event;
 import one.modality.base.shared.entities.Media;
 import one.modality.base.shared.entities.ScheduledItem;
+import one.modality.base.shared.entities.util.ScheduledItems;
 import one.modality.base.shared.knownitems.KnownItem;
 import one.modality.base.shared.knownitems.KnownItemFamily;
 import one.modality.crm.frontoffice.help.HelpPanel;
@@ -153,8 +154,13 @@ final class EventAudioLibraryActivity extends ViewDomainActivityBase {
                                             and programScheduledItem is not null
                                             and exists(select Attendance
                                                 where scheduledItem=si.bookableScheduledItem
-                                                    and documentLine.(!cancelled and document.(accountCanAccessPersonMedias($1, person) and event=$5)))
-                                        order by date, startTime, programScheduledItem.timeline?.startTime""",
+                                                    and documentLine.(!cancelled and document.(accountCanAccessPersonMedias($1, person) and event=$5)))"""
+                                        // An audio track carries none of the levels the old clause sorted on: its own
+                                        // startTime is null and its program has no timeline, while the time the row
+                                        // DISPLAYS lives in programScheduledItem.startTime — which was absent from the
+                                        // sort. The clause collapsed to `order by date` and each festival day's sessions
+                                        // came back in arbitrary order.
+                                        + ScheduledItems.SESSION_ORDER_BY_DQL,
                                     userAccountId, eventIdContainingAudios, KnownItemFamily.AUDIO_RECORDING.getCode(), pathItemCodeProperty.get(), event),
                                 // Index 1: we look for the scheduledItem of audio type having a `bookableScheduledItem` which is a teaching type (case of STTP)
                                 // TODO: for now we take only the English audio recording scheduledItem in that case. We should take the default language of the organization instead
@@ -170,8 +176,9 @@ final class EventAudioLibraryActivity extends ViewDomainActivityBase {
                                         and item.code=$4
                                         and exists(select Attendance
                                             where scheduledItem=si.bookableScheduledItem
-                                                and documentLine.(!cancelled and document.(accountCanAccessPersonMedias($1, person) and event=$5)))
-                                     order by date, startTime, programScheduledItem.timeline?.startTime""",
+                                                and documentLine.(!cancelled and document.(accountCanAccessPersonMedias($1, person) and event=$5)))"""
+                                     // Same wrong sort levels as the festival query above.
+                                     + ScheduledItems.SESSION_ORDER_BY_DQL,
                                     userAccountId, eventIdContainingAudios, KnownItemFamily.TEACHING.getCode(), KnownItem.AUDIO_RECORDING_ENGLISH.getCode(), event),
                                 // Index 2: the medias
                                 new EntityStoreQuery("""
