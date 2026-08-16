@@ -2094,6 +2094,7 @@
   "VolunteeringApplication": {
     "id": 153,
     "additionalInfo": "HTML",
+    "age": "integer",
     "applicationSource": "string",
     "arrivalConfirmationToken": "string",
     "arrivalReminderSentAt": "Temporal.PlainDate",

@@ -74,3 +74,4 @@ V0068__audit_actor_person.sql
 V0069__auto_ref_cart_for_backoffice_bookings.sql
 V0070__regenerate_letter_mails.sql
 V0071__event_type_ongoing_not_null.sql
+V0072__volunteer_application_age.sql
