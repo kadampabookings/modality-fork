@@ -14,10 +14,22 @@ public final class ModalityUserPrincipal {
 
     private final Object userPersonId;
     private final Object userAccountId;
+    private final Object supportAgentPersonId;
 
     public ModalityUserPrincipal(Object userPersonId, Object userAccountId) {
+        this(userPersonId, userAccountId, null);
+    }
+
+    /**
+     * @param supportAgentPersonId the person id of the support member viewing this account, or null
+     *                             for an ordinary login. Non-null makes this a <b>support view</b>:
+     *                             a read-only, time-boxed session that a member of staff opened onto
+     *                             someone else's front office. See {@link #isSupportView()}.
+     */
+    public ModalityUserPrincipal(Object userPersonId, Object userAccountId, Object supportAgentPersonId) {
         this.userPersonId = userPersonId;
         this.userAccountId = userAccountId;
+        this.supportAgentPersonId = supportAgentPersonId;
     }
 
     public Object getUserPersonId() {
@@ -28,17 +40,41 @@ public final class ModalityUserPrincipal {
         return userAccountId;
     }
 
+    /** The support member behind this session, or null when the account holder logged in themselves. */
+    public Object getSupportAgentPersonId() {
+        return supportAgentPersonId;
+    }
+
+    /**
+     * True when a support member is viewing this account rather than its owner using it.
+     *
+     * <p>Such a session is restricted to reads (enforced on the server's write path, not merely in
+     * the UI) and expires on its own. Anything that decides what a session may DO — as opposed to
+     * whose data it shows — should consult this.
+     */
+    public boolean isSupportView() {
+        return supportAgentPersonId != null;
+    }
+
+    /**
+     * A support view is deliberately NOT equal to the account holder's own session.
+     *
+     * <p>The principal is the cache key for authorizations and the value the session syncer compares
+     * to detect a login transition, so collapsing the two would let a support view inherit whatever
+     * was computed for the real user, and vice versa.
+     */
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         ModalityUserPrincipal that = (ModalityUserPrincipal) o;
-        return userPersonId.equals(that.userPersonId) && userAccountId.equals(that.userAccountId);
+        return userPersonId.equals(that.userPersonId) && userAccountId.equals(that.userAccountId)
+               && Objects.equals(supportAgentPersonId, that.supportAgentPersonId);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(userPersonId, userAccountId);
+        return Objects.hash(userPersonId, userAccountId, supportAgentPersonId);
     }
 
     /**
@@ -56,10 +92,17 @@ public final class ModalityUserPrincipal {
      * goes null. It is deliberately not guarded by a test because this repository has no JUnit
      * wiring at all; the migration comment names this method in return, so the coupling is
      * findable from either end.
+     *
+     * <p>A support view appends {@code ,supportAgent=<id>} so the trail names the human behind the
+     * session. The suffix is safe for the regex above, which scans left to right and finds
+     * {@code person=} in the leading segment first; "supportAgent" deliberately contains no
+     * lowercase "person=" of its own. Support views cannot write at all, so in practice this is
+     * belt and braces rather than the primary record — the durable one is the magic_link row.
      */
     @Override
     public String toString() {
-        return "person=" + userPersonId + ",account=" + userAccountId;
+        String s = "person=" + userPersonId + ",account=" + userAccountId;
+        return supportAgentPersonId == null ? s : s + ",supportAgent=" + supportAgentPersonId;
     }
 
     // Static methods helpers

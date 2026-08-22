@@ -126,4 +126,13 @@ public interface MagicLink extends Entity {
     default boolean isBookingAccess() {
         return MagicLinkType.BOOKING_ACCESS == getLinkType();
     }
+
+    /**
+     * True for a support-view grant — a support member's read-only pass into a customer's front
+     * office. These are never emailed and never behave like a login link; see {@link MagicLinkType}
+     * for why every redemption path must check the type rather than trusting the token alone.
+     */
+    default boolean isSupportView() {
+        return MagicLinkType.SUPPORT_VIEW == getLinkType();
+    }
 }

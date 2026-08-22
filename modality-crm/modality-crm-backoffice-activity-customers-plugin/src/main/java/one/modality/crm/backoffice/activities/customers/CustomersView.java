@@ -132,7 +132,6 @@ final class CustomersView {
 
     // Account tab controls
     private TextField usernameField;
-    private TextField passwordHashField;
     private VBox accountTypeSection;
     private Switch backofficeSwitch;
     private VBox backofficeBox;
@@ -239,7 +238,7 @@ final class CustomersView {
             .always(//language=JSON5
                 """
                     { class: 'Person', alias: 'p',
-                      fields: 'firstName, lastName, layName,phone,cityName,countryName,street,postCode,owner,removed,male,ordained,accountPerson.(id,fullName,frontendAccount), frontendAccount.(id,username,password,backoffice,disabled)',
+                      fields: 'firstName, lastName, layName,phone,cityName,countryName,street,postCode,owner,removed,male,ordained,accountPerson.(id,fullName,frontendAccount), frontendAccount.(id,username,backoffice,disabled)',
                       orderBy: 'removed, frontendAccount.disabled, id desc',
                       limit: 100
                       }""")
@@ -446,12 +445,6 @@ final class CustomersView {
         usernameField.setEditable(false);
         VBox usernameBox = ModalityStyle.createFormTextField(usernameLabel, usernameField, true);
 
-        Label passwordLabel = I18nControls.newLabel(PasswordHashLabel);
-        passwordHashField = new TextField();
-        passwordHashField.setEditable(false);
-        passwordHashField.getStyleClass().add("password-hash-display");
-        VBox passwordBox = ModalityStyle.createFormTextField(passwordLabel, passwordHashField, true);
-
         // Backoffice toggle with label
         Label backofficeLabel = I18nControls.newLabel(BackofficeLabel);
         backofficeSwitch = new Switch();
@@ -500,7 +493,6 @@ final class CustomersView {
             firstNameBox,
             lastNameBox,
             usernameBox,
-            passwordBox,
             backofficeBox
         );
 
@@ -919,7 +911,6 @@ final class CustomersView {
         try {
             if (account != null) {
                 usernameField.setText(account.getUsername());
-                passwordHashField.setText(account.getPassword());
                 // Backoffice toggle: only visible for account owners
                 if (isOwner) {
                     backofficeSwitch.setSelected(Boolean.TRUE.equals(account.isBackoffice()));
@@ -931,7 +922,6 @@ final class CustomersView {
                 }
             } else {
                 usernameField.setText(I18n.getI18nText(NoAccountText));
-                passwordHashField.setText("");
                 // Backoffice toggle: hidden when no account
                 backofficeBox.setVisible(false);
                 backofficeBox.setManaged(false);

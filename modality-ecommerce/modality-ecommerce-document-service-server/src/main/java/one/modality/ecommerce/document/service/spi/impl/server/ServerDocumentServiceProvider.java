@@ -14,6 +14,7 @@ import dev.webfx.stack.orm.datasourcemodel.service.DataSourceModelService;
 import dev.webfx.stack.orm.entity.EntityStore;
 import dev.webfx.stack.orm.entity.EntityStoreQuery;
 import dev.webfx.stack.orm.entity.UpdateStore;
+import dev.webfx.stack.session.state.RestrictedPrincipalRegistry;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 import one.modality.base.shared.entities.*;
 import one.modality.ecommerce.document.service.GuestBookingAccessService;
@@ -322,6 +323,17 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
     @Override
     public Future<SubmitDocumentChangesResult> submitDocumentChanges(SubmitDocumentChangesArgument argument) {
         DocumentSubmitRequest request = DocumentSubmitRequest.create(argument);
+        // A read-only session (a support member viewing a customer's front office) must not be able
+        // to book, cancel or amend anything on that customer's behalf.
+        //
+        // The check has to be HERE, against the principal the request captured at creation, and not
+        // at the SQL layer where writes are otherwise refused: by the time this flow reaches
+        // submitChanges() it has been through an async database read, and — as the comment in
+        // submitDocumentChangesNow() below records for the same reason — the thread-local no longer
+        // holds the caller's session, so a check down there would see no principal and let the write
+        // through.
+        if (RestrictedPrincipalRegistry.isRestricted(request.userId()))
+            return Future.failedFuture("[ReadOnlySessionError] This session is not allowed to modify data");
         if (request.document() == null)
             return Future.failedFuture("No document changes to submit");
         if (request.runId() == null) {

@@ -1,10 +1,10 @@
 package one.modality.crm.server.authn.gateway.shared;
 
 import dev.webfx.platform.async.Future;
+import dev.webfx.platform.console.Console;
 import dev.webfx.platform.util.Objects;
 import dev.webfx.platform.util.Strings;
 import dev.webfx.platform.util.collection.Collections;
-import dev.webfx.platform.util.uuid.Uuid;
 import dev.webfx.stack.authn.AlternativeLoginActionCredentials;
 import dev.webfx.stack.mail.MailMessage;
 import dev.webfx.stack.mail.MailService;
@@ -20,9 +20,11 @@ import one.modality.base.shared.entities.Person;
 import one.modality.base.shared.util.ActivityHashUtil;
 import one.modality.crm.shared.services.authn.ModalityAuthenticationI18nKeys;
 
+import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.UUID;
 
 /**
  * @author Bruno Salmon
@@ -33,6 +35,22 @@ public final class MagicLinkService {
     private static final Duration LINK_EXPIRATION_DURATION = Duration.ofMinutes(10);
     // BOOKING_ACCESS links are long-lived so guests can click them days or weeks after booking.
     private static final Duration BOOKING_ACCESS_EXPIRATION_DURATION = Duration.ofDays(365);
+    // A support member clicks straight through from the back office, so the window to redeem is the
+    // few seconds that takes. Kept deliberately tight: an unredeemed grant sitting in a chat log or
+    // a browser history for an hour is exactly the durable secret this design exists to avoid.
+    private static final Duration SUPPORT_VIEW_REDEEM_DURATION = Duration.ofMinutes(2);
+
+    /**
+     * Source of every token and verification code minted here.
+     *
+     * <p>Deliberately NOT {@code dev.webfx.platform.util.uuid.Uuid}, whose {@code randomUuid()} is
+     * built on {@code Math.random()} so it can compile for GWT. On the JVM that is
+     * {@code java.util.Random}: a 48-bit linear congruential generator whose entire future output
+     * follows from a couple of observed values. Anyone who can make the server mint two tokens to
+     * an address they control could then predict other people's. This class is server-only, so it
+     * is free to use the real thing.
+     */
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     // Designed to be used only from server front calls (not postponed by an async operation) in order to get the loginRunId
     public static Future<Void> createAndSendMagicLink(
@@ -103,7 +121,7 @@ public final class MagicLinkService {
             clientOrigin = (clientOrigin.contains(":80") ? "http" : "https") + clientOrigin.substring(clientOrigin.indexOf("://"));
         }
         String verificationCode = generateVerificationCode();
-        String token = Uuid.randomUuid(); // used for the magic link
+        String token = generateToken(); // used for the magic link
         String link = clientOrigin + activityPath.replace(":token", token).replace(":lang", lang);
         requestedPath = ActivityHashUtil.withoutHashPrefix(requestedPath);
         UpdateStore updateStore = UpdateStore.create(dataSourceModel);
@@ -134,7 +152,17 @@ public final class MagicLinkService {
 
     private static String generateVerificationCode() {
         // Generating a 6-digit verification code
-        return String.format("%06d", (int) (Math.random() * 1000000));
+        return String.format("%06d", SECURE_RANDOM.nextInt(1000000));
+    }
+
+    /**
+     * A fresh 128-bit bearer token, in the same UUID shape these have always had so that stored
+     * links, URLs and the varchar(64) column are all unaffected. {@code UUID.randomUUID()} draws
+     * from a cryptographically secure source — see {@link #SECURE_RANDOM} for why that matters and
+     * why the platform's own Uuid helper is not used.
+     */
+    private static String generateToken() {
+        return UUID.randomUUID().toString();
     }
 
     public static Future<MagicLink> loadMagicLinkFromTokenOrVerificationCode(String tokenOrVerificationCode, boolean checkValidity, DataSourceModel dataSourceModel) {
@@ -191,6 +219,16 @@ public final class MagicLinkService {
             .compose(magicLink -> {
                 if (magicLink == null)
                     return Future.failedFuture("[%s] Magic link not found (token: %s)".formatted(ModalityAuthenticationI18nKeys.LoginLinkUnrecognisedError, tokenOrVerificationCode));
+                // A SUPPORT_VIEW grant is not a login link and must never be redeemed as one. Every
+                // caller of this method ends up authenticating the bearer AS the account holder with
+                // full rights; a support pass is the opposite — a read-only visit by someone else.
+                // The lookups above match on token (or code) alone, so without this the stronger
+                // outcome would be reachable simply by pasting the support token into /magic-link.
+                // Reported as "unrecognised" rather than "wrong type": to anyone holding a token
+                // that does not belong on this path, that IS the truth, and it says nothing about
+                // which tokens exist.
+                if (magicLink.isSupportView())
+                    return Future.failedFuture("[%s] Magic link not found (token: %s)".formatted(ModalityAuthenticationI18nKeys.LoginLinkUnrecognisedError, tokenOrVerificationCode));
                 // 2) Checking the magic link is still valid. BOOKING_ACCESS links are multi-use and
                 //    have a much longer expiry than single-use LOGIN links.
                 if (checkValidity && !SKIP_LINK_VALIDITY_CHECK) {
@@ -222,7 +260,7 @@ public final class MagicLinkService {
      * @return the persisted MagicLink entity with its primary key and link URL set
      */
     public static Future<MagicLink> createBookingAccessLink(String email, String requestedPath, String clientOrigin, String activityPath, String lang, DataSourceModel dataSourceModel) {
-        return createBookingAccessLink(Uuid.randomUuid(), email, requestedPath, clientOrigin, activityPath, lang, dataSourceModel);
+        return createBookingAccessLink(generateToken(), email, requestedPath, clientOrigin, activityPath, lang, dataSourceModel);
     }
 
     /**
@@ -306,10 +344,156 @@ public final class MagicLinkService {
     public static Future<Person> loadUserPersonFromMagicLink(MagicLink magicLink) {
         String email = Objects.coalesce(magicLink.getOldEmail(), magicLink.getEmail());
         return magicLink.getStore()
-            // In most cases, only the frontendAccount id is needed, but when resetting the password from the magic link,
-            // the old password (encrypted) is also needed.
-            .<Person>executeQuery("select frontendAccount.password from Person p where lower(frontendAccount.username)=lower($1) order by p.id limit 1", email)
+            // Only the frontendAccount id is ever needed. This used to select the password hash as well, for the
+            // magic-link password reset — which no longer needs it (that flow proves identity by the link itself,
+            // not by echoing the stored hash back as the "old password"). Not loading a credential that nothing
+            // reads is worth the one-line change on its own.
+            .<Person>executeQuery("select frontendAccount.id from Person p where lower(frontendAccount.username)=lower($1) order by p.id limit 1", email)
             .map(Collections::first); // the owner of the account is the first person recorded in that account.
+    }
+
+    // ======================================== SUPPORT VIEW ========================================
+
+    /**
+     * Records a support member's one-time pass to open a customer's front office read-only.
+     *
+     * <p>Stored as a MagicLink row because that is already the system's table of short-lived bearer
+     * grants, and because the row doubles as the audit record: who asked ({@code oldEmail}), whose
+     * account ({@code email}), when it was issued ({@code creationDate}) and whether it was actually
+     * used ({@code usageDate}). That record is the reason this mechanism can answer "who looked at
+     * this person's data", which the password-hash practice it replaces never could.
+     *
+     * <p>No verification code is minted. A 6-digit code is a reasonable trade for someone reading it
+     * out of their own inbox, but it is six digits: guessable at leisure by anyone who knows the
+     * endpoint exists. A support pass gets 128 bits and nothing else.
+     *
+     * @param targetUsername the customer account being opened (goes to {@code email})
+     * @param agentEmail     the support member requesting it (goes to {@code oldEmail})
+     * @param agentRunId     the back-office client that asked, for the audit trail
+     * @param link           the front-office URL the agent will open
+     * @param requestedPath  where the front office should land after redeeming
+     * @return the persisted grant, whose {@code token} the caller returns to the agent
+     */
+    public static Future<MagicLink> createSupportViewLink(String targetUsername, String agentEmail, String agentRunId, String link, String requestedPath, String lang, DataSourceModel dataSourceModel) {
+        UpdateStore updateStore = UpdateStore.create(dataSourceModel);
+        MagicLink magicLink = updateStore.insertEntity(MagicLink.class);
+        magicLink.setLinkType(MagicLinkType.SUPPORT_VIEW);
+        magicLink.setToken(generateToken());
+        magicLink.setEmail(targetUsername);
+        magicLink.setOldEmail(agentEmail);
+        // login_run_id is NOT NULL. Here it genuinely is the originating client: the back-office tab
+        // the support member asked from.
+        magicLink.setLoginRunId(agentRunId != null ? agentRunId : "back-office");
+        magicLink.setLink(link);
+        magicLink.setRequestedPath(requestedPath);
+        magicLink.setLang(lang != null ? lang : "en");
+        return updateStore.submitChanges()
+            .map(ignored -> magicLink);
+    }
+
+    /**
+     * Validates a support-view token and burns it, or fails.
+     *
+     * <p>Strict by construction, and separate from
+     * {@link #loadMagicLinkFromTokenOrVerificationCode} on purpose: that method carries leniencies
+     * earned by other link types (codes are accepted, BOOKING_ACCESS links may be replayed for a
+     * year) which would each be a hole here. This one accepts a token only, of this type only,
+     * unused only, within a two-minute window only.
+     *
+     * <p>Every failure returns the same key. Distinguishing "expired" from "already used" from
+     * "never existed" would confirm to a holder of a guessed token which of those it was.
+     */
+    public static Future<MagicLink> loadSupportViewLinkAndMarkAsUsed(String token, DataSourceModel dataSourceModel) {
+        String usageRunId = ThreadLocalStateHolder.getRunId();
+        if (Strings.isEmpty(token))
+            return Future.failedFuture("[%s] Invalid support view pass".formatted(ModalityAuthenticationI18nKeys.SupportViewLinkInvalidError));
+        return EntityStore.create(dataSourceModel)
+            .<MagicLink>executeQuery(
+                "select email,oldEmail,creationDate,usageDate,requestedPath,linkType from MagicLink where token=$1 order by id desc limit 1",
+                token)
+            .map(Collections::first)
+            .compose(magicLink -> {
+                // The CLIENT is told nothing beyond "invalid", so a holder of a guessed token
+                // learns nothing from the difference. The OPERATOR needs the opposite — without
+                // this, every one of the five ways to be rejected looked identical in the log and
+                // a failing support view could not be diagnosed at all.
+                String rejection = supportViewRejectionReason(magicLink);
+                if (rejection != null) {
+                    // The row id, never the token. A token is a bearer credential and this line goes
+                    // to a rolling file that ships to log aggregation and backups — and the
+                    // "wrong link type" branch would otherwise write a LIVE login or year-long
+                    // booking-access token there in clear. The id identifies the grant for support
+                    // purposes without being usable to redeem anything.
+                    Console.log("🚫 Support view pass rejected (%s)%s".formatted(
+                        rejection, magicLink == null ? "" : " magicLinkId=" + magicLink.getPrimaryKey()));
+                    return Future.failedFuture("[%s] Invalid support view pass".formatted(ModalityAuthenticationI18nKeys.SupportViewLinkInvalidError));
+                }
+                // Burn it before handing it back, so the pass cannot be replayed. usageDate is also
+                // the clock the session lifetime is measured from (see the gateway).
+                return markMagicLinkAsUsed(magicLink, usageRunId)
+                    .map(ignored -> magicLink);
+            });
+    }
+
+    /**
+     * Why a support-view pass cannot be redeemed, or null when it can.
+     *
+     * <p>Split out so the reason can be logged for the operator while the caller still returns one
+     * indistinguishable message to the client: the client must not be able to tell "expired" from
+     * "already used" from "never existed", but whoever is running the server must.
+     */
+    private static String supportViewRejectionReason(MagicLink magicLink) {
+        if (magicLink == null)
+            return "no such token";
+        if (!magicLink.isSupportView())
+            return "wrong link type: " + magicLink.getLinkType();
+        if (magicLink.getUsageDate() != null)
+            return "already used at " + magicLink.getUsageDate();
+        Instant creationDate = magicLink.getCreationDate();
+        if (creationDate == null)
+            return "no creation date on the row";
+        Instant now = now();
+        if (now.isAfter(creationDate.plus(SUPPORT_VIEW_REDEEM_DURATION)))
+            return "expired: created %s, now %s, window %s".formatted(creationDate, now, SUPPORT_VIEW_REDEEM_DURATION);
+        return null;
+    }
+
+    /**
+     * Decides whether a support-view session may continue, by re-reading the grant it was built on.
+     *
+     * <p>This is what gives the session an end the browser cannot argue with. Called on the claims
+     * and verification round-trips of a support-view principal — rare enough (a handful of support
+     * visits a day) that the extra query costs nothing worth optimising.
+     *
+     * <p>Matched on <b>both</b> the account viewed and the agent viewing it. Keying on the account
+     * alone would be subtly wrong: a second support member opening the same customer would mint a
+     * fresh grant and silently restart the first member's expired clock.
+     *
+     * <p>Reads the last few grants rather than filtering on {@code usageDate} in the query, because
+     * a just-minted, not-yet-redeemed grant sorts first and would otherwise look like "no live
+     * session" — and because null comparison is a place DQL and SQL disagree.
+     *
+     * @param agentUsername the support member's own account username ({@code oldEmail} on the grant)
+     * @return the grant if the session is still within its lifetime, otherwise a failed future
+     */
+    public static Future<MagicLink> loadLiveSupportViewLink(String targetUsername, String agentUsername, Duration sessionDuration, DataSourceModel dataSourceModel) {
+        if (Strings.isEmpty(targetUsername) || Strings.isEmpty(agentUsername))
+            return Future.failedFuture("[%s] Support view session has ended".formatted(ModalityAuthenticationI18nKeys.SupportViewLinkInvalidError));
+        return EntityStore.create(dataSourceModel)
+            .<MagicLink>executeQuery(
+                "select email,oldEmail,usageDate,linkType from MagicLink"
+                + " where lower(email)=lower($1) and lower(oldEmail)=lower($2) and linkType=$3"
+                + " order by id desc limit 5",
+                targetUsername, agentUsername, MagicLinkType.SUPPORT_VIEW.name())
+            .compose(magicLinks -> {
+                Instant deadline = now().minus(sessionDuration);
+                for (MagicLink magicLink : magicLinks) {
+                    Instant usageDate = magicLink.getUsageDate();
+                    if (usageDate != null && usageDate.isAfter(deadline))
+                        return Future.succeededFuture(magicLink);
+                }
+                return Future.failedFuture("[%s] Support view session has ended".formatted(ModalityAuthenticationI18nKeys.SupportViewLinkInvalidError));
+            });
     }
 
     private static Instant now() {

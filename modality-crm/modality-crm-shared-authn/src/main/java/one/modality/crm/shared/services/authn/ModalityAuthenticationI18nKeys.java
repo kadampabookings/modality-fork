@@ -16,5 +16,8 @@ public interface ModalityAuthenticationI18nKeys {
     Object MagicLinkPushError = "MagicLinkPushError";
     Object MagicLinkUnexpectedError = "MagicLinkUnexpectedError";
     Object Please = "Please";
+    Object SupportViewInvalidTargetError = "SupportViewInvalidTargetError";
+    Object SupportViewLinkInvalidError = "SupportViewLinkInvalidError";
+    Object SupportViewNotPermittedError = "SupportViewNotPermittedError";
 
 }

@@ -85,7 +85,6 @@ public interface CustomersI18nKeys {
     Object PageSubtitle = "PageSubtitle";
     Object PageTitle = "PageTitle";
     Object PassportLabel = "PassportLabel";
-    Object PasswordHashLabel = "PasswordHashLabel";
     Object PersonalAttributesSection = "PersonalAttributesSection";
     Object PersonalInfoTab = "PersonalInfoTab";
     Object PhoneLabel = "PhoneLabel";
