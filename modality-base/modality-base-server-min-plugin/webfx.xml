@@ -19,7 +19,10 @@
         <!-- Injection auto-conditions don't work, so adding it manually for now TODO: REMOVE THIS ONCE FIXED -->
         <plugin-module>webfx-stack-push-server-liveclient-interceptor</plugin-module>
 
-        <plugin-module>webfx-stack-cloud-image-rest-server-plugin</plugin-module>
+        <!-- Secured replacement for webfx-stack-cloud-image-rest-server-plugin, whose
+             /rest/images/* endpoints required no authentication and let the caller choose
+             the storage key. Same paths, same client contract. -->
+        <plugin-module>modality-base-server-rest-images-vertx-plugin</plugin-module>
 
     </dependencies>
 

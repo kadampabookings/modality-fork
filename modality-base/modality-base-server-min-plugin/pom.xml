@@ -46,9 +46,9 @@
         </dependency>
 
         <dependency>
-            <groupId>dev.webfx</groupId>
-            <artifactId>webfx-stack-cloud-image-rest-server-plugin</artifactId>
-            <version>0.1.0-SNAPSHOT</version>
+            <groupId>one.modality</groupId>
+            <artifactId>modality-base-server-rest-images-vertx-plugin</artifactId>
+            <version>1.0.0-SNAPSHOT</version>
             <scope>runtime</scope>
         </dependency>
 
