@@ -14,7 +14,6 @@ import dev.webfx.extras.util.control.Controls;
 import dev.webfx.kit.util.properties.FXProperties;
 import dev.webfx.kit.util.properties.Unregisterable;
 import dev.webfx.platform.blob.spi.BlobProvider;
-import dev.webfx.platform.storage.LocalStorage;
 import dev.webfx.platform.uischeduler.UiScheduler;
 import dev.webfx.platform.util.Booleans;
 import dev.webfx.platform.util.Objects;
@@ -111,10 +110,6 @@ final class AudioColumnsRenderers {
         button.setOnAction(event -> {
             if (download) { // Download action
                 String url = firstMedia.getUrl();
-                boolean useProxy = Booleans.booleanValue(LocalStorage.getItem("modality-download-proxy"));
-                if (useProxy) {
-                    url = "/proxy/" + url;
-                }
                 // 1) We download the file. Note: there is no way to track the progress of the download...
                 downloadFile(url);
                 // 2) We record this action using MediaConsumptionRecorder
