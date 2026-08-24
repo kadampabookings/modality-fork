@@ -75,3 +75,7 @@ V0069__auto_ref_cart_for_backoffice_bookings.sql
 V0070__regenerate_letter_mails.sql
 V0071__event_type_ongoing_not_null.sql
 V0072__volunteer_application_age.sql
+# V0073 (view_as_customer_operation, in flight in another change) must be INSERTED
+# above this comment when it ships — never appended after V0074, the reader enforces
+# strictly ascending order and an appended V0073 fails the boot.
+V0074__volunteering_retention.sql
