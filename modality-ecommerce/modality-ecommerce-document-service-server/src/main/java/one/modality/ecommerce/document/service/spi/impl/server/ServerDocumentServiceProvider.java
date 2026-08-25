@@ -332,7 +332,7 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
         // submitDocumentChangesNow() below records for the same reason — the thread-local no longer
         // holds the caller's session, so a check down there would see no principal and let the write
         // through.
-        if (RestrictedPrincipalRegistry.isRestricted(request.userId()))
+        if (RestrictedPrincipalRegistry.isUserRestricted(request.userId()))
             return Future.failedFuture("[ReadOnlySessionError] This session is not allowed to modify data");
         if (request.document() == null)
             return Future.failedFuture("No document changes to submit");

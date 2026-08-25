@@ -2,33 +2,32 @@ package one.modality.crm.server.authn.gateway;
 
 import dev.webfx.platform.async.Future;
 import dev.webfx.platform.console.Console;
-import dev.webfx.platform.resource.Resource;
 import dev.webfx.platform.util.Strings;
+import dev.webfx.platform.util.collection.Collections;
 import dev.webfx.stack.authn.*;
 import dev.webfx.stack.authn.logout.server.LogoutPush;
 import dev.webfx.stack.authn.server.gateway.spi.ServerAuthenticationGateway;
 import dev.webfx.stack.hash.md5.Md5;
-import dev.webfx.stack.session.state.AuditActorRegistry;
-import dev.webfx.stack.session.state.RestrictedPrincipalRegistry;
 import dev.webfx.stack.orm.datasourcemodel.service.DataSourceModelService;
 import dev.webfx.stack.orm.domainmodel.DataSourceModel;
 import dev.webfx.stack.orm.domainmodel.HasDataSourceModel;
-import dev.webfx.platform.util.collection.Collections;
 import dev.webfx.stack.orm.entity.Entities;
 import dev.webfx.stack.orm.entity.EntityList;
 import dev.webfx.stack.orm.entity.EntityStore;
 import dev.webfx.stack.orm.entity.UpdateStore;
 import dev.webfx.stack.push.server.PushServerService;
+import dev.webfx.stack.session.state.AuditActorRegistry;
+import dev.webfx.stack.session.state.RestrictedPrincipalRegistry;
 import dev.webfx.stack.session.state.StateAccessor;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 import one.modality.base.shared.entities.FrontendAccount;
 import one.modality.base.shared.entities.Person;
+import one.modality.crm.server.authn.gateway.magiclink.ModalityMagicLinkAuthenticationGateway;
 import one.modality.crm.server.authn.gateway.shared.GuestPersonLinker;
 import one.modality.crm.server.authn.gateway.shared.LocalizedMailTemplate;
 import one.modality.crm.server.authn.gateway.shared.MagicLinkService;
 import one.modality.crm.shared.services.authn.ModalityAuthenticationI18nKeys;
 import one.modality.crm.shared.services.authn.ModalityUserPrincipal;
-import one.modality.crm.server.authn.gateway.magiclink.ModalityMagicLinkAuthenticationGateway;
 
 import java.time.Duration;
 import java.util.Objects;
@@ -56,12 +55,13 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
     @Override
     public void boot() {
         AuditActorRegistry.registerResolver(ModalityUserPrincipal::getUserPersonId);
+        RestrictedPrincipalRegistry.setRegisteredUserPredicate(userId -> userId instanceof ModalityUserPrincipal);
         // Tells the SQL submit provider which sessions may only read. A support view is a member of
         // staff looking at a customer's front office; it must not be able to change anything, and
         // the only place that can be guaranteed is the layer every write passes through. Registered
         // here for the same reason as the resolver above: the gateway is what creates the principal,
         // so it is the component that can interpret one.
-        RestrictedPrincipalRegistry.registerPredicate(userId ->
+        RestrictedPrincipalRegistry.registerRestrictedUserPredicate(userId ->
             userId instanceof ModalityUserPrincipal mup && mup.isSupportView());
     }
 
