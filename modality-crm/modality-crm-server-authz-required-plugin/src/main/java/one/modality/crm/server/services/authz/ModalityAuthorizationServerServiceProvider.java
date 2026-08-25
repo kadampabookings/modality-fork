@@ -6,7 +6,9 @@ import dev.webfx.platform.async.Future;
 import dev.webfx.platform.util.Strings;
 import dev.webfx.stack.authn.AuthenticationService;
 import dev.webfx.stack.authn.UserClaims;
-import dev.webfx.stack.authz.server.spi.AuthorizationServerServiceProvider;
+import dev.webfx.stack.authz.core.InMemoryAuthorizationRuleRegistry;
+import dev.webfx.stack.authz.core.operation.OperationAuthorizationRuleParser;
+import dev.webfx.stack.authz.server.spi.impl.AuthorizationServerServiceProviderBase;
 import dev.webfx.stack.com.bus.DeliveryOptions;
 import dev.webfx.stack.orm.datasourcemodel.service.DataSourceModelService;
 import dev.webfx.stack.orm.entity.Entities;
@@ -17,14 +19,14 @@ import dev.webfx.stack.session.state.LogoutUserId;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 import one.modality.base.shared.entities.*;
 
-import java.util.HashMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
  * @author Bruno Salmon
  */
-public final class ModalityAuthorizationServerServiceProvider implements AuthorizationServerServiceProvider {
+public final class ModalityAuthorizationServerServiceProvider extends AuthorizationServerServiceProviderBase {
 
     // TODO: Share these constants with the client counterpart (ModalityInMemoryUserAuthorizationChecker).
     private final static String CLIENT_AUTHZ_SERVICE_ADDRESS = "modality/service/authz";
@@ -44,8 +46,13 @@ public final class ModalityAuthorizationServerServiceProvider implements Authori
     private record AuthzCacheKey(Object principal, boolean backoffice) {}
     private record CachedAuthz(Future<String> future, long computedAtMillis) {}
 
-    // Single-threaded access (Vert.x event loop — see AuthorizationServerJob), so a plain HashMap is safe
-    private final Map<AuthzCacheKey, CachedAuthz> authzCache = new HashMap<>();
+    // Was a plain HashMap while pushAuthorizations() was the only caller and AuthorizationServerJob
+    // funnelled it through the Vert.x event loop. isAuthorized() is called from whatever thread is
+    // handling a request, so the single-threaded assumption no longer holds. Concurrent now: two
+    // threads can briefly compute the same grants, which wastes a query and cannot be wrong, whereas
+    // serialising every authorization check through one thread would put the enforcement path behind
+    // a queue.
+    private final Map<AuthzCacheKey, CachedAuthz> authzCache = new ConcurrentHashMap<>();
 
     @Override
     public Future<Void> pushAuthorizations() {
@@ -55,6 +62,35 @@ public final class ModalityAuthorizationServerServiceProvider implements Authori
         boolean backoffice = ThreadLocalStateHolder.isBackoffice();
         return getOrComputeAuthorizations(userId, backoffice)
             .compose(pushObject -> pushAuthorizationsObject(pushObject, runId));
+    }
+
+    /**
+     * Build a rule registry for this principal from the very grants that get pushed to the browser.
+     *
+     * <p>Same string, same parser, same semantics — deliberately. The alternative was a second
+     * server-side notion of what a user may do, and two implementations of one policy drift: the day
+     * they disagree, the UI shows a button the server refuses, or worse, hides one the server allows.
+     * Reusing getOrComputeAuthorizations() also reuses its cache, so enforcement costs no extra queries
+     * on a user whose grants were already computed to be pushed.
+     *
+     * <p>Only the operation parser is registered. Route rules are a client concern — they decide which
+     * screen opens — and a server asked whether a screen may open would be answering the wrong
+     * question. Unparsed lines are dropped, so route grants simply do not participate here.
+     */
+    @Override
+    protected Future<InMemoryAuthorizationRuleRegistry> createUserRuleRegistry(Object userId, boolean backoffice) {
+        return getOrComputeAuthorizations(userId, backoffice)
+            .map(authorizations -> {
+                InMemoryAuthorizationRuleRegistry registry = new InMemoryAuthorizationRuleRegistry();
+                registry.setAuthorizationRuleParser(new OperationAuthorizationRuleParser());
+                if (authorizations != null)
+                    for (String line : authorizations.split("\n")) {
+                        line = line.trim();
+                        if (!line.isEmpty())
+                            registry.registerAuthorizationRule(line);
+                    }
+                return registry;
+            });
     }
 
     private Future<String> getOrComputeAuthorizations(Object userId, boolean backoffice) {

@@ -10,6 +10,7 @@ module modality.crm.server.authz.required.plugin {
     requires webfx.platform.async;
     requires webfx.platform.util;
     requires webfx.stack.authn;
+    requires webfx.stack.authz.core;
     requires webfx.stack.authz.server;
     requires webfx.stack.com.bus;
     requires webfx.stack.orm.datasourcemodel.service;
