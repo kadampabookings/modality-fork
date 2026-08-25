@@ -20,6 +20,7 @@ import dev.webfx.stack.session.state.AuditActorRegistry;
 import dev.webfx.stack.session.state.RestrictedPrincipalRegistry;
 import dev.webfx.stack.session.state.StateAccessor;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
+import dev.webfx.stack.session.state.TransactionPreambleRegistry;
 import one.modality.base.shared.entities.FrontendAccount;
 import one.modality.base.shared.entities.Person;
 import one.modality.crm.server.authn.gateway.magiclink.ModalityMagicLinkAuthenticationGateway;
@@ -63,7 +64,31 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
         // so it is the component that can interpret one.
         RestrictedPrincipalRegistry.registerRestrictedUserPredicate(userId ->
             userId instanceof ModalityUserPrincipal mup && mup.isSupportView());
+        // Tells the SQL submit provider what a transaction preamble says, so that a client asking for
+        // one no longer gets to write it. Sending the SQL was how a caller chose the privileges its own
+        // transaction ran under: set_transaction_parameters(true) is what makes the document triggers
+        // skip EVENT_ON_HOLD, EVENT_CLOSED and DOUBLEBOOKING, and makes the allocator ignore capacity
+        // and room eligibility. Now the client only says THAT it needs a preamble; this says what it is.
+        //
+        // NOT YET A CLOSED DOOR: isBackoffice() reads the session state the client sends, so the value
+        // is still influenced by the caller — one source instead of two, and the single place a verified
+        // principal plugs into once identity binding lands. Until then this removes the raw-SQL route,
+        // not the choice. See docs/design/server-side-authorization-spec.md.
+        //
+        // Here rather than in the datasource plugin, whose module does not (yet) require
+        // webfx.stack.session.state and whose module-info is WebFX-generated. The cost of sharing this
+        // gateway's boot is that a deployment without it registers nothing — which fails loudly and
+        // closed at the submit provider, never silently open, so it is a visible misconfiguration
+        // rather than a hole.
+        TransactionPreambleRegistry.registerResolver(() ->
+            ThreadLocalStateHolder.isBackoffice() ? BACK_OFFICE_TRANSACTION_SQL : FRONT_OFFICE_TRANSACTION_SQL);
     }
+
+    // The canonical home of these two statements now that the server, not the caller, decides which one
+    // runs. Triggers.frontOfficeTransaction/backOfficeTransaction still carry copies for the callers that
+    // pass a preamble explicitly; those go away as each migrates to the marker.
+    private static final String FRONT_OFFICE_TRANSACTION_SQL = "select set_transaction_parameters(false)";
+    private static final String BACK_OFFICE_TRANSACTION_SQL = "select set_transaction_parameters(true)";
 
     private static final String CREATE_ACCOUNT_ACTIVITY_PATH_PREFIX = "/create-account";
     private static final String CREATE_ACCOUNT_ACTIVITY_PATH_FULL = CREATE_ACCOUNT_ACTIVITY_PATH_PREFIX + "/:token";
