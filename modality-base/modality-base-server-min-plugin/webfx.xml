@@ -11,6 +11,10 @@
         <plugin-module>webfx-stack-authn-buscall</plugin-module>
         <plugin-module>webfx-stack-authn-login-buscall</plugin-module>
         <plugin-module>webfx-stack-authz-server</plugin-module>
+        <!-- Installs the identity-token signing keys. A plugin module is only built into a server if a
+             plugin list names it, so without this line the keys are never read and nothing can mint —
+             silently, because the module simply is not there to say so. -->
+        <plugin-module>webfx-stack-session-token-plugin</plugin-module>
         <plugin-module>webfx-stack-com-bus-call-job</plugin-module>
         <plugin-module>webfx-stack-db-query-buscall</plugin-module>
         <plugin-module>webfx-stack-db-submit-buscall</plugin-module>
