@@ -84,8 +84,22 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
 
     @Override
     public boolean acceptsUserCredentials(Object userCredentials) {
+        // IssueBookingAccessMagicLinkCredentials is deliberately absent, and must stay absent.
+        // It asked the server to mint a BOOKING_ACCESS link for a caller-supplied email and hand
+        // the 6-digit verification code back in the reply. Nothing on this bus address is
+        // authenticated, so anyone could name any address and be returned a working sign-in code
+        // for it — redeemable below as that person, with no email sent to warn them.
+        //
+        // The booking-submit path still mints BOOKING_ACCESS links, and what separates it from
+        // this one is narrow but real: it never hands the verification code to anybody. It
+        // returns Future<Void> and the submit result carries no code, so the only way to the
+        // code is the magic link emailed to the address on the booking. (It is NOT that the
+        // email is trusted there — the booker types it — nor that the submit reply reveals
+        // nothing: that reply does carry cartUuid, which AuthenticateWithCartCredentials turns
+        // into a guest principal for the same address. That is a weaker grant than the full
+        // ModalityUserPrincipal a code buys, and predates this gateway, but do not read the
+        // submit path as handing back nothing.)
         return userCredentials instanceof SendMagicLinkCredentials
-               || userCredentials instanceof IssueBookingAccessMagicLinkCredentials
                || userCredentials instanceof RenewMagicLinkCredentials
                || userCredentials instanceof AuthenticateWithMagicLinkCredentials
                || userCredentials instanceof AuthenticateWithVerificationCodeCredentials
@@ -98,8 +112,6 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
     public Future<?> authenticate(Object userCredentials) {
         if (userCredentials instanceof SendMagicLinkCredentials sendMagicLinkCredentials)
             return createAndSendMagicLink(sendMagicLinkCredentials);
-        if (userCredentials instanceof IssueBookingAccessMagicLinkCredentials issueCredentials)
-            return issueBookingAccessMagicLink(issueCredentials);
         if (userCredentials instanceof RenewMagicLinkCredentials renewMagicLinkCredentials)
             return renewAndSendMagicLink(renewMagicLinkCredentials);
         if (userCredentials instanceof AuthenticateWithMagicLinkCredentials authenticateWithMagicLinkCredentials)
@@ -111,28 +123,6 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
         if (userCredentials instanceof AuthenticateWithSupportViewCredentials authenticateWithSupportViewCredentials)
             return authenticateWithSupportView(authenticateWithSupportViewCredentials);
         return Future.failedFuture("%s.authenticate() requires a %s, %s or %s argument".formatted(getClass().getSimpleName(), SendMagicLinkCredentials.class.getSimpleName(), RenewMagicLinkCredentials.class.getSimpleName(), AuthenticateWithMagicLinkCredentials.class.getSimpleName()));
-    }
-
-    /**
-     * Server-side creation of a BOOKING_ACCESS magic link with NO email sent.
-     * Returns the 6-digit verification code to the caller so the success
-     * page can display it for the user to copy. The PWA's standard
-     * verification-code login screen accepts it just like any other code.
-     * <p>
-     * Dedupe is delegated to {@code MagicLinkService.getOrCreateBookingAccessLink}
-     * — re-rendering the success page (or returning to it later) yields the
-     * same code, not a new one.
-     */
-    private Future<String> issueBookingAccessMagicLink(IssueBookingAccessMagicLinkCredentials request) {
-        String lang = Strings.toSafeString(request.getLanguage());
-        return MagicLinkService.getOrCreateBookingAccessLink(
-                request.getEmail(),
-                request.getRequestedPath(),
-                request.getClientOrigin(),
-                MAGIC_LINK_ACTIVITY_PATH_FULL,
-                lang,
-                dataSourceModel)
-            .map(MagicLink::getVerificationCode);
     }
 
     private Future<Void> createAndSendMagicLink(SendMagicLinkCredentials request) {
