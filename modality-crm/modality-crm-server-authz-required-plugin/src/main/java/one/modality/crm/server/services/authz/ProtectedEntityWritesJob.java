@@ -83,6 +83,47 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
     );
 
     /**
+     * Fields that are privileged on rows that otherwise are not — keyed "Entity.field".
+     *
+     * <p>FrontendAccount is the case that makes this necessary. Signup creates the row, and a member
+     * changing their language on the booking page updates it, so the row must stay writable by ordinary
+     * users; but `backoffice` decides whether an account may reach the back office at all, and that is
+     * not the account holder's to set. Protecting the entity would refuse the signup; protecting nothing
+     * leaves the flag writable by whoever holds the row. Only the field distinction fits.
+     *
+     * <p>What this buys is smaller than it looks, and worth stating so nobody over-trusts it: the flag
+     * is a NECESSARY condition for back-office login, not a sufficient one. Grants come from roles, so
+     * an account that sets it reaches an empty dashboard. This closes an unauthorized write, not an
+     * escalation.
+     */
+    private static final Map<String, String[]> REQUIRED_OPERATIONS_BY_FIELD = Map.of(
+        "FrontendAccount.backoffice", new String[] { "ManageBackofficeAccess" }
+    );
+
+    /** The languages EntityHasI18nFields carries; a bare language code IS a body field. */
+    private static final java.util.Set<String> I18N_LANGUAGES =
+        java.util.Set.of("de", "el", "en", "es", "fr", "it", "pt", "vi", "zhs", "zht");
+
+    /**
+     * Whether a Letter field holds CONTENT — what a member actually receives — rather than a property.
+     *
+     * <p>Matched by pattern rather than enumerated, and deliberately this way round. The content fields
+     * are language-suffixed and multiply whenever a language is added, while the property fields are a
+     * finite set that is nonetheless NOT fully declared in the Letter interface: the back office edits
+     * an Active toggle and an automation code that have no field constant there. Enumerating properties
+     * would therefore have silently misfiled whichever ones I failed to find, and misfiled them as
+     * content — refusing an editor who holds only the properties right. Enumerating content instead
+     * makes an unrecognised field a PROPERTY, which is both the larger set and the less consequential
+     * mistake: letter content is what lands in members' inboxes.
+     */
+    private static boolean isLetterContentField(String field) {
+        return I18N_LANGUAGES.contains(field)
+               || field.startsWith("subject_")
+               || field.startsWith("push_title_")
+               || field.startsWith("push_body_");
+    }
+
+    /**
      * OBSERVE FIRST. While this is false the decision is computed and logged but never acted on, so a
      * deploy cannot lock anyone out of the screen they would need to fix a lockout — the failure mode
      * that makes authorization administration the worst possible place to enforce something untested.
@@ -95,8 +136,13 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
 
     @Override
     public void onInit() {
+        // The pre-filter needs every name this policy can react to, including the entities that are
+        // protected only at field level — a statement naming one of those must still be parsed, or the
+        // field rule would never be reached.
+        java.util.Set<String> preFilterNames = new java.util.LinkedHashSet<>(REQUIRED_OPERATIONS.keySet());
+        REQUIRED_OPERATIONS_BY_FIELD.keySet().forEach(key -> preFilterNames.add(key.substring(0, key.indexOf('.'))));
         ProtectedEntityWriteRegistry.registerWriteAuthorizer(this::isWriteAuthorized,
-            REQUIRED_OPERATIONS.keySet().toArray(String[]::new));
+            preFilterNames.toArray(String[]::new));
         ProtectedEntityWriteRegistry.registerWriteObserver(ProtectedEntityWritesJob::onProtectedWriteSucceeded);
         Console.log("🛡 Write authorization active on " + REQUIRED_OPERATIONS.size() + " entities"
                     + (ENFORCING ? " — ENFORCING" : " — observing only, nothing is refused yet"));
@@ -123,15 +169,15 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         }
     }
 
-    private Future<Boolean> isWriteAuthorized(String entityName, ProtectedEntityWriteRegistry.WriteVerb verb) {
-        String[] codes = REQUIRED_OPERATIONS.get(entityName);
-        if (codes == null) // the textual pre-filter matched a name this policy does not actually cover
+    private Future<Boolean> isWriteAuthorized(String entityName, ProtectedEntityWriteRegistry.WriteVerb verb, String[] writtenFields) {
+        java.util.List<String[]> groups = requiredCodeGroups(entityName, writtenFields);
+        if (groups.isEmpty()) // the textual pre-filter matched a name this policy does not actually cover
             return Future.succeededFuture(true);
         // Read on THIS thread, while the request's state is still in place: past the first async hop
         // there is no principal left to log, and a check that reports "unknown" for every caller would
         // make the observation phase useless.
         Object userId = ThreadLocalStateHolder.getUserId();
-        return holdsAnyOf(codes)
+        return holdsAllGroups(groups)
             .map(authorized -> {
                 if (Boolean.TRUE.equals(authorized))
                     return true;
@@ -139,9 +185,57 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
                 // was refused is not enough to tell whether a real administrator is about to be locked
                 // out. It is an account identity, not personal data about a data subject.
                 Console.log("🛡 " + (ENFORCING ? "REFUSED" : "WOULD REFUSE") + " " + verb + " on "
-                            + entityName + " by " + userId + " (holds none of " + String.join(", ", codes) + ")");
+                            + entityName + " by " + userId + " (needs "
+                            + groups.stream().map(g -> String.join(" or ", g)).collect(java.util.stream.Collectors.joining(" and "))
+                            + ")");
                 return !ENFORCING;
             });
+    }
+
+    /**
+     * Every requirement this write must satisfy: ALL groups, any code within a group.
+     *
+     * <p>All-of across groups is what makes field rules mean anything. Pooling them into one any-of
+     * list — which is what an earlier version did — would have let somebody holding only
+     * EditLetterProperties rewrite a letter's content, because the pooled list contained a code they
+     * held. A statement touching both content and properties needs both rights, and that is only
+     * expressible as separate groups.
+     *
+     * <p>The entity rule stays as its own group even where field rules cover the same entity. It is the
+     * backstop for a statement whose assignments could not be read: a computed left-hand side yields no
+     * field name, so no field rule fires, and without the entity group such a write would pass
+     * unexamined on a technicality.
+     */
+    private static java.util.List<String[]> requiredCodeGroups(String entityName, String[] writtenFields) {
+        java.util.List<String[]> groups = new java.util.ArrayList<>();
+        String[] entityCodes = REQUIRED_OPERATIONS.get(entityName);
+        if (entityCodes != null)
+            groups.add(entityCodes);
+        boolean letterContent = false, letterProperties = false;
+        for (String field : writtenFields) {
+            String[] fieldCodes = REQUIRED_OPERATIONS_BY_FIELD.get(entityName + "." + field);
+            if (fieldCodes != null)
+                groups.add(fieldCodes);
+            if ("Letter".equals(entityName)) {
+                if (isLetterContentField(field)) letterContent = true;
+                else letterProperties = true;
+            }
+        }
+        if (letterContent)
+            groups.add(new String[] { "EditLetterContent" });
+        if (letterProperties)
+            groups.add(new String[] { "EditLetterProperties" });
+        return groups;
+    }
+
+    /** Every group must be satisfied; a failing group short-circuits the rest. */
+    private Future<Boolean> holdsAllGroups(java.util.List<String[]> groups) {
+        Future<Boolean> result = Future.succeededFuture(true);
+        for (String[] group : groups)
+            result = result.compose(stillAuthorized -> Boolean.TRUE.equals(stillAuthorized)
+                ? holdsAnyOf(group)
+                : Future.succeededFuture(false));
+        return result;
     }
 
     /** True as soon as one code authorizes; asked one at a time so a granted caller stops at the first. */
