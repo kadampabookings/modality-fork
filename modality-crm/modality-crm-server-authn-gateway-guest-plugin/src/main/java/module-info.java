@@ -23,6 +23,7 @@ module modality.crm.server.authn.gateway.guest.plugin {
     requires webfx.stack.orm.entity;
     requires webfx.stack.push.server;
     requires webfx.stack.session.state;
+    requires webfx.stack.session.token;
 
     // Exported packages
     exports one.modality.crm.server.authn.gateway.guest;
