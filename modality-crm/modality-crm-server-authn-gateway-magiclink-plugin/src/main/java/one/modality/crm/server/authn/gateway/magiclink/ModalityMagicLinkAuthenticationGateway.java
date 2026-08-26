@@ -16,6 +16,7 @@ import dev.webfx.stack.orm.entity.EntityList;
 import dev.webfx.stack.orm.entity.EntityStore;
 import dev.webfx.stack.push.server.PushServerService;
 import dev.webfx.stack.session.state.StateAccessor;
+import dev.webfx.stack.session.token.AuthenticatedState;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 import one.modality.base.shared.entities.FrontendAccount;
 import one.modality.base.shared.entities.MagicLink;
@@ -232,7 +233,7 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
                         }
                         // 4) Pushing the userId to the magic link client which is identified by runId = usageRunId.
                         // Pushing the userId will cause a login, and subsequently a push of the authorizations.
-                        return PushServerService.pushState(StateAccessor.createUserIdState(userId), usageRunId)
+                        return PushServerService.pushState(AuthenticatedState.createFor(userId), usageRunId)
                             .compose(ignored -> { // indicates that the magic link client acknowledged this login push
                                 // 5) For LOGIN links: mark as used (single-use) and push userId to the original
                                 //    login-page client so both tabs end up authenticated.
@@ -247,7 +248,7 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
                                     .onSuccess(ignored2 -> {
                                         // 6) Push userId to the original login client as well.
                                         String loginRunId = magicLink.getLoginRunId();
-                                        PushServerService.pushState(StateAccessor.createUserIdState(userId), loginRunId);
+                                        PushServerService.pushState(AuthenticatedState.createFor(userId), loginRunId);
                                     });
                             });
                     });
@@ -440,7 +441,7 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
                         targetPerson.getPrimaryKey(), accountId, agentPerson.getPrimaryKey());
                     Console.log("🔎 Support view opened: person %s → person %s".formatted(
                         agentPerson.getPrimaryKey(), targetPerson.getPrimaryKey()));
-                    return PushServerService.pushState(StateAccessor.createUserIdState(userId), usageRunId)
+                    return PushServerService.pushState(AuthenticatedState.createFor(userId), usageRunId)
                         .map(ignored -> Strings.toSafeString(magicLink.getRequestedPath()));
                 });
             });
