@@ -5,6 +5,8 @@ import dev.webfx.platform.async.Future;
 import dev.webfx.platform.boot.spi.ApplicationJob;
 import dev.webfx.platform.console.Console;
 import dev.webfx.stack.authz.server.AuthorizationServerService;
+import dev.webfx.stack.authz.server.spi.AuthorizationServerServiceProvider;
+import dev.webfx.stack.authz.server.spi.impl.AuthorizationServerServiceProviderBase;
 import dev.webfx.stack.db.submit.ProtectedEntityWriteRegistry;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 
@@ -83,8 +85,30 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
     public void onInit() {
         ProtectedEntityWriteRegistry.registerWriteAuthorizer(this::isWriteAuthorized,
             REQUIRED_OPERATIONS.keySet().toArray(String[]::new));
+        ProtectedEntityWriteRegistry.registerWriteObserver(ProtectedEntityWritesJob::onProtectedWriteSucceeded);
         Console.log("🛡 Write authorization active on " + REQUIRED_OPERATIONS.size() + " entities"
                     + (ENFORCING ? " — ENFORCING" : " — observing only, nothing is refused yet"));
+    }
+
+    /**
+     * Throws away the cached grants when the rows they were computed from change.
+     *
+     * <p>Only the privilege-bearing entities matter here: editing a letter does not change what anyone
+     * may do, so flushing on that would empty the cache constantly for nothing.
+     *
+     * <p>This is the fast path, not the guarantee. It fixes the instance that served the write; another
+     * instance behind the same load balancer saw nothing and still holds its own copy, which is why the
+     * registry cache also has a TTL. Without both, a revocation was not slow — it was indefinite,
+     * lasting until the process restarted.
+     */
+    private static void onProtectedWriteSucceeded(String entityName, ProtectedEntityWriteRegistry.WriteVerb verb) {
+        if (!entityName.startsWith("Authorization") && !entityName.startsWith("Operation"))
+            return;
+        AuthorizationServerServiceProvider provider = AuthorizationServerService.getProvider();
+        if (provider instanceof AuthorizationServerServiceProviderBase base) {
+            base.invalidateAllRuleRegistries();
+            Console.log("🛡 " + verb + " on " + entityName + " — cached authorizations discarded on this instance");
+        }
     }
 
     private Future<Boolean> isWriteAuthorized(String entityName, ProtectedEntityWriteRegistry.WriteVerb verb) {
