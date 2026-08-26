@@ -1,4 +1,10 @@
--- V0075: one row in transaction_parameter, and never NULL.
+-- V0076: one row in transaction_parameter, and never NULL.
+--
+-- WAS V0075, RENUMBERED. Version 75 was taken by V0075__revoke_client_minted_booking_access_codes.sql,
+-- applied to staging on 2026-08-26. Two scripts sharing a number is not a merge conflict anyone sees:
+-- both files can coexist, git merges them cleanly, and the collision only surfaces at boot as a CHECKSUM
+-- MISMATCH on the loser — which fails before any write, so it leaves no db_migration row and no database
+-- activity, only a readiness gate that never opens.
 --
 -- WHAT THIS IS ABOUT
 --   A submit batch opens with `select set_transaction_parameters(<bool>)`, which creates a
