@@ -19,6 +19,7 @@ import dev.webfx.stack.push.server.PushServerService;
 import dev.webfx.stack.session.state.AuditActorRegistry;
 import dev.webfx.stack.session.state.RestrictedPrincipalRegistry;
 import dev.webfx.stack.session.state.StateAccessor;
+import dev.webfx.stack.session.token.AuthenticatedState;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 import dev.webfx.stack.session.state.TransactionPreambleRegistry;
 import one.modality.base.shared.entities.FrontendAccount;
@@ -228,7 +229,7 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
                 // as a guest before logging in. Fire-and-forget.
                 GuestPersonLinker.linkGuestPersonsToAccount(normalizedUsername, accountId, dataSourceModel)
                     .onFailure(err -> Console.log("GuestPersonLinker failed on login for " + normalizedUsername + ": " + err));
-                return PushServerService.pushState(StateAccessor.createUserIdState(modalityUserPrincipal), runId);
+                return PushServerService.pushState(AuthenticatedState.createFor(modalityUserPrincipal), runId);
             });
     }
 
