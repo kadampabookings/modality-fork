@@ -169,8 +169,10 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         }
     }
 
-    private Future<Boolean> isWriteAuthorized(String entityName, ProtectedEntityWriteRegistry.WriteVerb verb, String[] writtenFields) {
-        java.util.List<String[]> groups = requiredCodeGroups(entityName, writtenFields);
+    private Future<Boolean> isWriteAuthorized(ProtectedEntityWriteRegistry.WriteRequest request) {
+        String entityName = request.entityName();
+        ProtectedEntityWriteRegistry.WriteVerb verb = request.verb();
+        java.util.List<String[]> groups = requiredCodeGroups(entityName, request.writtenFields());
         if (groups.isEmpty()) // the textual pre-filter matched a name this policy does not actually cover
             return Future.succeededFuture(true);
         // Read on THIS thread, while the request's state is still in place: past the first async hop
