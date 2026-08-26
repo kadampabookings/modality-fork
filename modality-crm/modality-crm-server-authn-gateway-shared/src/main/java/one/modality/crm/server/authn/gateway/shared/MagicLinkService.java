@@ -34,7 +34,12 @@ public final class MagicLinkService {
     private static final boolean SKIP_LINK_VALIDITY_CHECK = false; // Can be set to true when debugging the magic link client
     private static final Duration LINK_EXPIRATION_DURATION = Duration.ofMinutes(10);
     // BOOKING_ACCESS links are long-lived so guests can click them days or weeks after booking.
-    private static final Duration BOOKING_ACCESS_EXPIRATION_DURATION = Duration.ofDays(365);
+    // Not a year, though: the 6-digit verification code that accompanies each link is drawn from a
+    // 10^6 space and is redeemable without knowing whose it is, so the number of links alive at any
+    // moment is a direct multiplier on the odds of a blind guess landing on somebody. 90 days still
+    // covers "clicked it a couple of months later" while keeping that population an order of
+    // magnitude smaller than it was.
+    private static final Duration BOOKING_ACCESS_EXPIRATION_DURATION = Duration.ofDays(90);
     // A support member clicks straight through from the back office, so the window to redeem is the
     // few seconds that takes. Kept deliberately tight: an unredeemed grant sitting in a chat log or
     // a browser history for an hour is exactly the durable secret this design exists to avoid.
@@ -184,7 +189,7 @@ public final class MagicLinkService {
             //    request tab (prevents cross-user collisions while two users
             //    happen to share a 6-digit value in the same window).
             //
-            //  BOOKING_ACCESS codes — long-lived (1 year), multi-use. Generated
+            //  BOOKING_ACCESS codes — long-lived (90 days), multi-use. Generated
             //    server-side without an originating tab (loginRunId is the
             //    sentinel "server-generated"). Redemption from any subsequent
             //    tab (e.g. the freshly-installed PWA after the user noted
@@ -248,7 +253,7 @@ public final class MagicLinkService {
 
     /**
      * Creates a BOOKING_ACCESS magic link for a guest booking confirmation email.
-     * Unlike LOGIN links this link is long-lived (1 year) and multi-use — the guest can
+     * Unlike LOGIN links this link is long-lived (90 days) and multi-use — the guest can
      * click it from any device or browser without getting "already used" errors.
      *
      * @param email          the guest's email address
@@ -264,15 +269,19 @@ public final class MagicLinkService {
     }
 
     /**
-     * Variant that accepts a pre-generated token. Use this when the token has already been
-     * written onto the document (document.magic_link_token) before the INSERT so the DB
-     * bracket pattern can resolve it at email-generation time.
+     * Implementation, deliberately private: the token is this class's to mint, never a
+     * caller's to supply. It was public until a caller passed one built on the
+     * GWT-compatible Uuid helper — Math.random(), i.e. a 48-bit LCG on the JVM — which
+     * made every guest's booking-access link predictable from a couple of observed ones.
+     * The public entry point above takes no token and draws it from {@link #SECURE_RANDOM}.
+     * (Its former justification, a document.magic_link_token round-trip needed by the
+     * [bookingUrl] bracket pattern, no longer exists: that resolves via the cart.)
      * <p>
      * Always assigns a 6-digit verification code alongside the token, so the same link
      * can be redeemed either via URL (token) or via code entry (verification code) on
      * the post-install PWA login screen.
      */
-    public static Future<MagicLink> createBookingAccessLink(String token, String email, String requestedPath, String clientOrigin, String activityPath, String lang, DataSourceModel dataSourceModel) {
+    private static Future<MagicLink> createBookingAccessLink(String token, String email, String requestedPath, String clientOrigin, String activityPath, String lang, DataSourceModel dataSourceModel) {
         String normalizedOrigin = clientOrigin;
         if (normalizedOrigin != null && !normalizedOrigin.startsWith("http")) {
             normalizedOrigin = (normalizedOrigin.contains(":80") ? "http" : "https") + normalizedOrigin.substring(normalizedOrigin.indexOf("://"));
@@ -295,32 +304,19 @@ public final class MagicLinkService {
     }
 
     /**
-     * Returns a valid BOOKING_ACCESS magic link for the given email + requestedPath,
-     * reusing an existing one if found and still within its 1-year expiry, otherwise
-     * creating a new one. Lets the success page re-render without minting a new code
-     * each time (which would confuse a user who refreshed and saw the displayed code
-     * change).
+     * Whether a BOOKING_ACCESS link created at this instant would still be redeemable.
+     * <p>
+     * Exposed because the expiry is checked at REDEMPTION against creationDate, which means
+     * shortening {@link #BOOKING_ACCESS_EXPIRATION_DURATION} retroactively kills links that
+     * are already out in confirmation emails. The guest recovery flow needs to be able to ask
+     * "would this still work?" before mailing a link out again: a recovery mail carrying a URL
+     * the server is going to refuse is worse than no mail at all, because it looks like the
+     * route back and is a dead end.
+     *
+     * @param creationDate the link's creationDate; null counts as expired
      */
-    public static Future<MagicLink> getOrCreateBookingAccessLink(String email, String requestedPath, String clientOrigin, String activityPath, String lang, DataSourceModel dataSourceModel) {
-        // Look up the most recent BOOKING_ACCESS link for this email+path. We don't filter
-        // out used links here because BOOKING_ACCESS links are multi-use; their `usageDate`
-        // just records the most recent successful redeem, not a finality.
-        return EntityStore.create(dataSourceModel)
-            .<MagicLink>executeQuery(
-                "select loginRunId,email,creationDate,usageDate,requestedPath,oldEmail,linkType,verificationCode,token,link,lang"
-                + " from MagicLink where lower(email)=lower($1) and requestedPath=$2 and linkType=$3"
-                + " order by id desc limit 1",
-                email, requestedPath, MagicLinkType.BOOKING_ACCESS.name())
-            .map(Collections::first)
-            .compose(existing -> {
-                if (existing != null
-                    && existing.getCreationDate() != null
-                    && now().isBefore(existing.getCreationDate().plus(BOOKING_ACCESS_EXPIRATION_DURATION))
-                    && existing.getVerificationCode() != null) {
-                    return Future.succeededFuture(existing);
-                }
-                return createBookingAccessLink(email, requestedPath, clientOrigin, activityPath, lang, dataSourceModel);
-            });
+    public static boolean isBookingAccessLinkStillValid(Instant creationDate) {
+        return creationDate != null && now().isBefore(creationDate.plus(BOOKING_ACCESS_EXPIRATION_DURATION));
     }
 
     public static Future<Void> markMagicLinkAsUsed(MagicLink magicLink, String usageRunId) {

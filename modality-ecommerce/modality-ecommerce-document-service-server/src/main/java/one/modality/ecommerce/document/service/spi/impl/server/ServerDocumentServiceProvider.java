@@ -9,7 +9,6 @@ import dev.webfx.platform.util.Numbers;
 import dev.webfx.platform.util.Strings;
 import dev.webfx.platform.util.collection.Collections;
 import dev.webfx.stack.com.serial.SerialCodecManager;
-import dev.webfx.platform.util.uuid.Uuid;
 import dev.webfx.stack.orm.datasourcemodel.service.DataSourceModelService;
 import dev.webfx.stack.orm.entity.EntityStore;
 import dev.webfx.stack.orm.entity.EntityStoreQuery;
@@ -369,12 +368,13 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
                 return submitChangesAndPrepareResult(request.updateStore(), document, request.backoffice())
                     .compose(result -> { // Completing the history recording (changes column with resolved primary keys)
                         if (result.status() == DocumentChangesStatus.APPROVED) {
-                            // For guest bookings: generate the magic link token and link it to the cart.
+                            // For guest bookings: record the magic link and link it to the cart. The
+                            // link's bearer token is minted by MagicLinkService from a secure source —
+                            // this caller neither supplies nor sees it.
                             // The bracket pattern [bookingUrl] no longer needs the token on the document —
                             // it now derives the cart URL from person.frontend_account_id check.
                             if (isGuestBooking && clientOrigin != null) {
                                 registerBookingAccessMagicLink(
-                                    Uuid.randomUuid(),
                                     result.documentPrimaryKey(),
                                     result.cartPrimaryKey(),
                                     document.getEmail(),
@@ -503,12 +503,12 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
      * logged but do not affect the booking result already returned to the client.
      * The confirmation email was already queued by the DB trigger during the document INSERT.
      */
-    private static void registerBookingAccessMagicLink(String token, Object documentPk, Object cartPk, String personEmail, String personLang, String clientOrigin) {
+    private static void registerBookingAccessMagicLink(Object documentPk, Object cartPk, String personEmail, String personLang, String clientOrigin) {
         if (personEmail == null || clientOrigin == null) return;
         ServiceLoader<GuestBookingAccessService> loader = ServiceLoader.load(GuestBookingAccessService.class);
         for (GuestBookingAccessService service : loader) {
             service.registerBookingAccessMagicLink(
-                token, documentPk, cartPk, personEmail, personLang, clientOrigin,
+                documentPk, cartPk, personEmail, personLang, clientOrigin,
                 DataSourceModelService.getDefaultDataSourceModel()
             ).onFailure(err -> Console.log("GuestBookingAccessService failed for document " + documentPk + ": " + err));
             break; // use first registered implementation
