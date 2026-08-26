@@ -7,6 +7,7 @@ module modality.crm.shared.authn {
 
     // Direct dependencies modules
     requires webfx.platform.ast;
+    requires webfx.platform.util;
     requires webfx.stack.com.serial;
 
     // Exported packages

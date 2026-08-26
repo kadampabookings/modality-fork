@@ -1,5 +1,7 @@
 package one.modality.crm.shared.services.authn;
 
+import dev.webfx.platform.util.Numbers;
+
 import java.util.Objects;
 
 /**
@@ -62,19 +64,43 @@ public final class ModalityUserPrincipal {
      * <p>The principal is the cache key for authorizations and the value the session syncer compares
      * to detect a login transition, so collapsing the two would let a support view inherit whatever
      * was computed for the real user, and vice versa.
+     *
+     * <p><b>Ids compare by numeric VALUE, not by boxed type.</b> They are declared as Object and arrive
+     * from whatever produced them — a database primary key on one path, a decoded wire value on another —
+     * and nothing guarantees those agree on Integer versus Long versus Byte. They demonstrably do not:
+     * a principal serialized to JSON text and parsed back comes out with Byte ids for small values, and
+     * {@code Integer.equals(Byte)} is false.
+     *
+     * <p>The consequence of getting this wrong is invisible rather than loud, which is why it is spelled
+     * out here. Read the two sentences above again: cache key, and login-transition comparator. A
+     * principal that does not equal itself means the authorization cache misses on every request and the
+     * session syncer reads every message as a fresh login, re-checking the identity and re-pushing the
+     * whole grant set each time. Nothing fails. It just does all of that, forever.
+     *
+     * <p>What identity means here is "person 42, account 7" — not "an Integer 42".
      */
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         ModalityUserPrincipal that = (ModalityUserPrincipal) o;
-        return userPersonId.equals(that.userPersonId) && userAccountId.equals(that.userAccountId)
-               && Objects.equals(supportAgentPersonId, that.supportAgentPersonId);
+        return Numbers.identicalObjectsOrNumberValues(userPersonId, that.userPersonId)
+               && Numbers.identicalObjectsOrNumberValues(userAccountId, that.userAccountId)
+               && Numbers.identicalObjectsOrNumberValues(supportAgentPersonId, that.supportAgentPersonId);
     }
 
+    /**
+     * Hashes the ids by numeric value too, or equal principals would land in different buckets and the
+     * equality above would never be consulted — the classic way a fixed equals() stays broken.
+     */
     @Override
     public int hashCode() {
-        return Objects.hash(userPersonId, userAccountId, supportAgentPersonId);
+        return Objects.hash(canonicalId(userPersonId), canonicalId(userAccountId), canonicalId(supportAgentPersonId));
+    }
+
+    /** One representation per numeric value, so Integer 42, Byte 42 and Long 42 hash alike. */
+    private static Object canonicalId(Object id) {
+        return id instanceof Number number ? number.longValue() : id;
     }
 
     /**
