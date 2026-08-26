@@ -67,7 +67,19 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         // the UI agree with it, and must not happen before the grants exist or the buttons vanish for
         // everyone.
         Map.entry("Letter",       new String[] { "EditLetterContent", "EditLetterProperties" }),
-        Map.entry("PassTemplate", new String[] { "EditPassTemplate" })
+        Map.entry("PassTemplate", new String[] { "EditPassTemplate" }),
+        // Administrative entities no ordinary member writes: zero front-office write sites, so an
+        // operation code is the right shape of control here. Contrast Person (17 front-office write
+        // sites), Document, DocumentLine and Attendance, where a member's right to write rests on the
+        // row being THEIRS — an operation check there would either refuse every member or grant every
+        // member, and neither is a boundary. Those need target-id resolution, not a longer list.
+        //
+        // NOT the RouteTo codes the back office uses to open these screens: `operation:*` deliberately
+        // does not match a code beginning with RouteTo, so requiring RouteToOrganizations here would
+        // refuse even a super admin. A code that means "may change these rows" is the right question
+        // anyway — opening a screen and writing through it are not the same right.
+        Map.entry("Organization", new String[] { "ManageOrganizations" }),
+        Map.entry("MoneyAccount", new String[] { "ManageMoneyAccounts" })
     );
 
     /**
