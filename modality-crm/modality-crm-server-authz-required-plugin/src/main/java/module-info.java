@@ -26,7 +26,7 @@ module modality.crm.server.authz.required.plugin {
     exports one.modality.crm.server.services.authz;
 
     // Provided services
-    provides dev.webfx.platform.boot.spi.ApplicationJob with one.modality.crm.server.services.authz.ProtectedAuthorizationWritesJob;
+    provides dev.webfx.platform.boot.spi.ApplicationJob with one.modality.crm.server.services.authz.ProtectedEntityWritesJob;
     provides dev.webfx.stack.authz.server.spi.AuthorizationServerServiceProvider with one.modality.crm.server.services.authz.ModalityAuthorizationServerServiceProvider;
 
 }
