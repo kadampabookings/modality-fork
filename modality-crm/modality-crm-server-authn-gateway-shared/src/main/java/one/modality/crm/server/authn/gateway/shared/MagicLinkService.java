@@ -33,13 +33,25 @@ public final class MagicLinkService {
 
     private static final boolean SKIP_LINK_VALIDITY_CHECK = false; // Can be set to true when debugging the magic link client
     private static final Duration LINK_EXPIRATION_DURATION = Duration.ofMinutes(10);
-    // BOOKING_ACCESS links are long-lived so guests can click them days or weeks after booking.
-    // Not a year, though: the 6-digit verification code that accompanies each link is drawn from a
-    // 10^6 space and is redeemable without knowing whose it is, so the number of links alive at any
-    // moment is a direct multiplier on the odds of a blind guess landing on somebody. 90 days still
-    // covers "clicked it a couple of months later" while keeping that population an order of
-    // magnitude smaller than it was.
-    private static final Duration BOOKING_ACCESS_EXPIRATION_DURATION = Duration.ofDays(90);
+    // BOOKING_ACCESS links are long-lived because guests book a long way ahead, and for a guest
+    // with no account the link is the only way back to their booking.
+    //
+    // This was briefly cut to 90 days to shrink the pool of live 6-digit codes (each is drawn from
+    // a 10^6 space and is redeemable without knowing whose it is, so the number alive at once
+    // multiplies the odds of a blind guess landing on somebody). Measured against real bookings,
+    // that was far too short: across 5435 public-talk bookings the longest lead time from booking
+    // to event is 327 days, and London runs much longer than average — p90 150 days, p95 164, with
+    // 203 of 730 bookings (28%) made more than 90 days ahead. Every one of the bookings already
+    // taken for the 2027 London public talk is 262-313 days out. A 90-day window killed all of
+    // them months before the talk they were for.
+    //
+    // A year covers 100% of observed usage, so that is what this is. Note the shape is still not
+    // quite right: the window runs from creation, whereas what actually matters is that the link
+    // outlives the EVENT. An event announced more than a year ahead would still strand its earliest
+    // bookers. Tying expiry to event end + grace is the durable fix; the pool-size concern is
+    // better addressed by scoping redemption to the email and rate-limiting it, which removes the
+    // reason to keep this short at all.
+    private static final Duration BOOKING_ACCESS_EXPIRATION_DURATION = Duration.ofDays(365);
     // A support member clicks straight through from the back office, so the window to redeem is the
     // few seconds that takes. Kept deliberately tight: an unredeemed grant sitting in a chat log or
     // a browser history for an hour is exactly the durable secret this design exists to avoid.
@@ -189,7 +201,7 @@ public final class MagicLinkService {
             //    request tab (prevents cross-user collisions while two users
             //    happen to share a 6-digit value in the same window).
             //
-            //  BOOKING_ACCESS codes — long-lived (90 days), multi-use. Generated
+            //  BOOKING_ACCESS codes — long-lived (1 year), multi-use. Generated
             //    server-side without an originating tab (loginRunId is the
             //    sentinel "server-generated"). Redemption from any subsequent
             //    tab (e.g. the freshly-installed PWA after the user noted
@@ -253,7 +265,7 @@ public final class MagicLinkService {
 
     /**
      * Creates a BOOKING_ACCESS magic link for a guest booking confirmation email.
-     * Unlike LOGIN links this link is long-lived (90 days) and multi-use — the guest can
+     * Unlike LOGIN links this link is long-lived (1 year) and multi-use — the guest can
      * click it from any device or browser without getting "already used" errors.
      *
      * @param email          the guest's email address

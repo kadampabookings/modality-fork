@@ -97,11 +97,12 @@ public final class ModalityGuestAuthenticationGateway implements ServerAuthentic
      * Re-issues the BOOKING_ACCESS link behind any cart whose link has expired, so the
      * recovery mail never carries a URL the server would refuse.
      * <p>
-     * Needed because BOOKING_ACCESS expiry is evaluated at redemption against creationDate:
-     * when the window was shortened from a year to 90 days, every older link died at once,
-     * including ones already sitting in guests' confirmation emails. Without this, a guest who
-     * booked four months ago would ask for their booking link, receive one, click it, and be
-     * refused — with no other self-service route and no reason to think retrying would differ.
+     * Needed because BOOKING_ACCESS expiry is evaluated at redemption against creationDate, so a
+     * link can be dead by the time its holder comes back — a guest who booked further ahead than
+     * the window, or whose event was announced a long way out. Without this, they would ask for
+     * their booking link, receive one, click it, and be refused, with no other self-service route
+     * and no reason to think retrying would differ. It also makes any future shortening of the
+     * window safe to deploy, rather than something that strands everyone booked further out.
      * <p>
      * Deliberately conditional on the link actually being expired. Re-issuing on every request
      * would let anyone (this entry point is unauthenticated) inflate the magic_link table at
