@@ -34,6 +34,7 @@ public interface VolunteeringApplication extends Entity,
     String countryName = "countryName";
     String gender = "gender";
     String dateOfBirth = "dateOfBirth";
+    String age = "age";
     String photo = "photo";
 
     // --- Dates ---
@@ -184,6 +185,11 @@ public interface VolunteeringApplication extends Entity,
 
     default void setDateOfBirth(LocalDate value) { setFieldValue(dateOfBirth, value); }
     default LocalDate getDateOfBirth() { return getLocalDateFieldValue(dateOfBirth); }
+
+    // Declared on the application form since V0072. Null on legacy and KBS2-imported
+    // rows, which only carry dateOfBirth — derive the age from it in that case.
+    default void setAge(Integer value) { setFieldValue(age, value); }
+    default Integer getAge() { return getIntegerFieldValue(age); }
 
     default void setPhoto(String value) { setFieldValue(photo, value); }
     default String getPhoto() { return getStringFieldValue(photo); }

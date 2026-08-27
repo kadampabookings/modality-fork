@@ -11,6 +11,7 @@ import dev.webfx.stack.orm.domainmodel.DataSourceModel;
 import dev.webfx.stack.orm.entity.EntityStore;
 import dev.webfx.stack.orm.entity.UpdateStore;
 import dev.webfx.stack.push.server.PushServerService;
+import dev.webfx.stack.session.token.AuthenticatedState;
 import dev.webfx.stack.session.state.StateAccessor;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 import one.modality.base.server.mail.ModalityMailMessage;
@@ -23,6 +24,9 @@ import one.modality.crm.shared.services.authn.AuthenticateWithCartCredentials;
 import one.modality.crm.shared.services.authn.ModalityGuestPrincipal;
 import one.modality.crm.shared.services.authn.SendBookingAccessEmailCredentials;
 import one.modality.ecommerce.document.service.GuestBookingAccessService;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Handles authentication verification and claims for ModalityGuestPrincipal sessions.
@@ -65,6 +69,10 @@ public final class ModalityGuestAuthenticationGateway implements ServerAuthentic
      * (i.e. the guest has not yet created a registered account) and sends them
      * an email containing a /cart/:cartUuid link for each.
      * Always resolves successfully to avoid email-enumeration.
+     * <p>
+     * Any cart whose link has aged out is re-issued first — see
+     * {@link #refreshExpiredCartLinks}. This is the one route back for a guest with no
+     * account, so it has to hand them something that works.
      */
     private Future<Void> sendBookingAccessEmail(SendBookingAccessEmailCredentials cred) {
         String email      = cred.email();
@@ -74,37 +82,83 @@ public final class ModalityGuestAuthenticationGateway implements ServerAuthentic
 
         return EntityStore.create(ds)
             .<Cart>executeQuery(
-                "select id, uuid from Cart c where magicLink!=null and exists(" +
+                "select id, uuid, magicLink.(id,creationDate,requestedPath) from Cart c where magicLink!=null and exists(" +
                 "select Document d where d.cart=c and lower(d.person_email)=lower($1))",
                 email)
             .compose(carts -> {
                 if (carts.isEmpty())
-                    return Future.succeededFuture(); // silent — don't reveal whether email has bookings
-
-                // Build CTA buttons for every active cart.
-                StringBuilder buttons = new StringBuilder();
-                for (Cart cart : carts) {
-                    String url = origin + "/cart/" + cart.getUuid();
-                    buttons.append("<div class=\"cta-wrap\">")
-                        .append("<a href=\"").append(url).append("\" class=\"cta-btn\">View my booking</a>")
-                        .append("</div>")
-                        .append("<p class=\"fallback\">Button not working? Copy and paste:<br>")
-                        .append("<a href=\"").append(url).append("\">").append(url).append("</a></p>");
-                }
-
-                String subject = RESTORE_MAIL.renderSubject(lang);
-                String body    = RESTORE_MAIL.renderBody(lang)
-                    .replace("[cartButtons]", buttons.toString());
-
-                return MailService.sendMail(
-                    new ModalityMailMessage(
-                        MailMessage.create(MAIL_FROM, email, subject, body),
-                        new ModalityContext(1, null, null, null),
-                        MAIL_FROM_NAME
-                    )
-                );
+                    return Future.<Void>succeededFuture(); // silent — don't reveal whether email has bookings
+                return refreshExpiredCartLinks(carts, email, origin, lang, ds)
+                    .compose(ignored -> mailCartLinks(carts, email, origin, lang));
             })
             .mapEmpty();
+    }
+
+    /**
+     * Re-issues the BOOKING_ACCESS link behind any cart whose link has expired, so the
+     * recovery mail never carries a URL the server would refuse.
+     * <p>
+     * Needed because BOOKING_ACCESS expiry is evaluated at redemption against creationDate, so a
+     * link can be dead by the time its holder comes back — a guest who booked further ahead than
+     * the window, or whose event was announced a long way out. Without this, they would ask for
+     * their booking link, receive one, click it, and be refused, with no other self-service route
+     * and no reason to think retrying would differ. It also makes any future shortening of the
+     * window safe to deploy, rather than something that strands everyone booked further out.
+     * <p>
+     * Deliberately conditional on the link actually being expired. Re-issuing on every request
+     * would let anyone (this entry point is unauthenticated) inflate the magic_link table at
+     * will, and that population is exactly what makes a 6-digit code guessable. Gated this way,
+     * a cart can gain at most one row per expiry window however often it is asked for.
+     * <p>
+     * The cart's uuid does not change, so the emailed /cart/:cartUuid URL is the same one as
+     * always — only the credential behind it is fresh. The previous link's requestedPath is
+     * carried over to keep the row shape identical to what the booking-submit path writes.
+     */
+    private static Future<Void> refreshExpiredCartLinks(List<Cart> carts, String email, String origin, String lang, DataSourceModel ds) {
+        List<Future<?>> refreshes = new ArrayList<>();
+        for (Cart cart : carts) {
+            MagicLink magicLink = cart.getMagicLink();
+            if (magicLink != null && MagicLinkService.isBookingAccessLinkStillValid(magicLink.getCreationDate()))
+                continue;
+            Object cartPk = cart.getPrimaryKey();
+            String requestedPath = magicLink == null ? null : magicLink.getRequestedPath();
+            refreshes.add(
+                MagicLinkService.createBookingAccessLink(email, requestedPath, origin, MAGIC_LINK_ACTIVITY_PATH_FULL, lang, ds)
+                    .compose(freshLink -> {
+                        UpdateStore updateStore = UpdateStore.create(ds);
+                        Cart updatedCart = updateStore.updateEntity(Cart.class, cartPk);
+                        updatedCart.setMagicLink(freshLink.getPrimaryKey());
+                        return updateStore.submitChanges().mapEmpty();
+                    }));
+        }
+        if (refreshes.isEmpty())
+            return Future.succeededFuture();
+        return Future.all(refreshes).mapEmpty();
+    }
+
+    /** Builds and sends the "here are your bookings" mail, one CTA per cart. */
+    private static Future<Void> mailCartLinks(List<Cart> carts, String email, String origin, String lang) {
+        StringBuilder buttons = new StringBuilder();
+        for (Cart cart : carts) {
+            String url = origin + "/cart/" + cart.getUuid();
+            buttons.append("<div class=\"cta-wrap\">")
+                .append("<a href=\"").append(url).append("\" class=\"cta-btn\">View my booking</a>")
+                .append("</div>")
+                .append("<p class=\"fallback\">Button not working? Copy and paste:<br>")
+                .append("<a href=\"").append(url).append("\">").append(url).append("</a></p>");
+        }
+
+        String subject = RESTORE_MAIL.renderSubject(lang);
+        String body    = RESTORE_MAIL.renderBody(lang)
+            .replace("[cartButtons]", buttons.toString());
+
+        return MailService.sendMail(
+            new ModalityMailMessage(
+                MailMessage.create(MAIL_FROM, email, subject, body),
+                new ModalityContext(1, null, null, null),
+                MAIL_FROM_NAME
+            )
+        );
     }
 
     /**
@@ -130,8 +184,11 @@ public final class ModalityGuestAuthenticationGateway implements ServerAuthentic
                         magicLink.getToken(), true, dataSourceModel)
                     .compose(validMagicLink -> {
                         ModalityGuestPrincipal guestPrincipal = new ModalityGuestPrincipal(validMagicLink.getEmail());
+                        // Mints, rather than merely asserting the principal: the cart uuid and its magic link
+                        // have just been validated, so this IS a credential check, and a guest reaching the
+                        // cart page is exactly as much in need of a proven identity as a logged-in user.
                         return PushServerService.pushState(
-                                StateAccessor.createUserIdState(guestPrincipal), usageRunId)
+                                AuthenticatedState.createFor(guestPrincipal), usageRunId)
                             .map(ignored -> "");  // no requestedPath needed — CartPage handles navigation
                     });
             });
@@ -167,7 +224,6 @@ public final class ModalityGuestAuthenticationGateway implements ServerAuthentic
 
     @Override
     public Future<Void> registerBookingAccessMagicLink(
-            String token,
             Object documentPk,
             Object cartPk,
             String personEmail,
@@ -175,7 +231,6 @@ public final class ModalityGuestAuthenticationGateway implements ServerAuthentic
             String clientOrigin,
             DataSourceModel dataSourceModel) {
         return MagicLinkService.createBookingAccessLink(
-                token,
                 personEmail,
                 "/order/" + documentPk,
                 clientOrigin,

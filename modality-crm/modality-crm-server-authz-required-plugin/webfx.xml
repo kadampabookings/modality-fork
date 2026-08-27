@@ -12,6 +12,7 @@
     </dependencies>
 
     <providers>
+        <provider interface="dev.webfx.platform.boot.spi.ApplicationJob">one.modality.crm.server.services.authz.ProtectedEntityWritesJob</provider>
         <provider interface="dev.webfx.stack.authz.server.spi.AuthorizationServerServiceProvider">one.modality.crm.server.services.authz.ModalityAuthorizationServerServiceProvider</provider>
     </providers>
 

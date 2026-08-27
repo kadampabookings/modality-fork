@@ -12,7 +12,6 @@ module modality.crm.server.authn.gateway.usernamepassword.plugin {
     requires modality.crm.shared.authn;
     requires webfx.platform.async;
     requires webfx.platform.console;
-    requires webfx.platform.resource;
     requires webfx.platform.util;
     requires webfx.stack.authn;
     requires webfx.stack.authn.logout.server;
@@ -23,6 +22,7 @@ module modality.crm.server.authn.gateway.usernamepassword.plugin {
     requires webfx.stack.orm.entity;
     requires webfx.stack.push.server;
     requires webfx.stack.session.state;
+    requires webfx.stack.session.token;
 
     // Exported packages
     exports one.modality.crm.server.authn.gateway;

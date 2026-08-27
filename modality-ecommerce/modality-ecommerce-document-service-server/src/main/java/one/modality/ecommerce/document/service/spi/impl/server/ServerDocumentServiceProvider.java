@@ -9,11 +9,11 @@ import dev.webfx.platform.util.Numbers;
 import dev.webfx.platform.util.Strings;
 import dev.webfx.platform.util.collection.Collections;
 import dev.webfx.stack.com.serial.SerialCodecManager;
-import dev.webfx.platform.util.uuid.Uuid;
 import dev.webfx.stack.orm.datasourcemodel.service.DataSourceModelService;
 import dev.webfx.stack.orm.entity.EntityStore;
 import dev.webfx.stack.orm.entity.EntityStoreQuery;
 import dev.webfx.stack.orm.entity.UpdateStore;
+import dev.webfx.stack.session.state.RestrictedPrincipalRegistry;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 import one.modality.base.shared.entities.*;
 import one.modality.ecommerce.document.service.GuestBookingAccessService;
@@ -322,6 +322,17 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
     @Override
     public Future<SubmitDocumentChangesResult> submitDocumentChanges(SubmitDocumentChangesArgument argument) {
         DocumentSubmitRequest request = DocumentSubmitRequest.create(argument);
+        // A read-only session (a support member viewing a customer's front office) must not be able
+        // to book, cancel or amend anything on that customer's behalf.
+        //
+        // The check has to be HERE, against the principal the request captured at creation, and not
+        // at the SQL layer where writes are otherwise refused: by the time this flow reaches
+        // submitChanges() it has been through an async database read, and — as the comment in
+        // submitDocumentChangesNow() below records for the same reason — the thread-local no longer
+        // holds the caller's session, so a check down there would see no principal and let the write
+        // through.
+        if (RestrictedPrincipalRegistry.isUserRestricted(request.userId()))
+            return Future.failedFuture("[ReadOnlySessionError] This session is not allowed to modify data");
         if (request.document() == null)
             return Future.failedFuture("No document changes to submit");
         if (request.runId() == null) {
@@ -357,12 +368,13 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
                 return submitChangesAndPrepareResult(request.updateStore(), document, request.backoffice())
                     .compose(result -> { // Completing the history recording (changes column with resolved primary keys)
                         if (result.status() == DocumentChangesStatus.APPROVED) {
-                            // For guest bookings: generate the magic link token and link it to the cart.
+                            // For guest bookings: record the magic link and link it to the cart. The
+                            // link's bearer token is minted by MagicLinkService from a secure source —
+                            // this caller neither supplies nor sees it.
                             // The bracket pattern [bookingUrl] no longer needs the token on the document —
                             // it now derives the cart URL from person.frontend_account_id check.
                             if (isGuestBooking && clientOrigin != null) {
                                 registerBookingAccessMagicLink(
-                                    Uuid.randomUuid(),
                                     result.documentPrimaryKey(),
                                     result.cartPrimaryKey(),
                                     document.getEmail(),
@@ -491,12 +503,12 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
      * logged but do not affect the booking result already returned to the client.
      * The confirmation email was already queued by the DB trigger during the document INSERT.
      */
-    private static void registerBookingAccessMagicLink(String token, Object documentPk, Object cartPk, String personEmail, String personLang, String clientOrigin) {
+    private static void registerBookingAccessMagicLink(Object documentPk, Object cartPk, String personEmail, String personLang, String clientOrigin) {
         if (personEmail == null || clientOrigin == null) return;
         ServiceLoader<GuestBookingAccessService> loader = ServiceLoader.load(GuestBookingAccessService.class);
         for (GuestBookingAccessService service : loader) {
             service.registerBookingAccessMagicLink(
-                token, documentPk, cartPk, personEmail, personLang, clientOrigin,
+                documentPk, cartPk, personEmail, personLang, clientOrigin,
                 DataSourceModelService.getDefaultDataSourceModel()
             ).onFailure(err -> Console.log("GuestBookingAccessService failed for document " + documentPk + ": " + err));
             break; // use first registered implementation

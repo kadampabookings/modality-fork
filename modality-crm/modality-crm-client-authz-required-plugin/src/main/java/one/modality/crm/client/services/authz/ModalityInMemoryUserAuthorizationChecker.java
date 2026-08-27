@@ -1,8 +1,10 @@
 package one.modality.crm.client.services.authz;
 
 import dev.webfx.platform.console.Console;
-import dev.webfx.stack.authz.client.operation.OperationAuthorizationRuleParser;
-import dev.webfx.stack.authz.client.spi.impl.inmemory.InMemoryUserAuthorizationChecker;
+import dev.webfx.stack.authz.core.operation.OperationAuthorizationRuleParser;
+import dev.webfx.stack.authz.client.context.AuthorizationContext;
+import dev.webfx.stack.authz.core.InMemoryAuthorizationRuleRegistry;
+import dev.webfx.stack.authz.core.InMemoryUserAuthorizationChecker;
 import dev.webfx.stack.routing.router.auth.authz.RoutingAuthorizationRuleParser;
 import dev.webfx.stack.session.state.LogoutUserId;
 import dev.webfx.stack.session.state.client.fx.FXAuthorizationsChanged;
@@ -23,6 +25,11 @@ final class ModalityInMemoryUserAuthorizationChecker extends InMemoryUserAuthori
     private Object lastPushObject;
 
     ModalityInMemoryUserAuthorizationChecker(Object userId) {
+        // The context is no longer ambient in the rule engine, so this client supplies its own: the
+        // observable map describing what the UI is currently showing (organisation, event). Without
+        // this the engine would judge every context-scoped section against an empty context and no
+        // `context:organizationId=…` grant would ever match.
+        super(new InMemoryAuthorizationRuleRegistry(), AuthorizationContext::getContextProperties);
         this.userId = userId;
         // Registering the authorization (requests and rules) parsers
         ruleRegistry.addAuthorizationRuleParser(new RoutingAuthorizationRuleParser());
@@ -33,7 +40,8 @@ final class ModalityInMemoryUserAuthorizationChecker extends InMemoryUserAuthori
         // proceed instead of flashing /unauthorized until the server push arrives (which, right after
         // a deploy, sits behind the most loaded server queue). The server push remains the source of
         // truth: it overwrites these rules and re-fires FXAuthorizationsChanged on arrival, and
-        // client-side rules only gate routing — every actual call is authorized server-side anyway.
+        // client-side rules only gate routing. (This comment used to add "every actual call is
+        // authorized server-side anyway" — it is not; see docs/design/server-side-authorization-spec.md.)
         // (The previous guard — FXModalityUserPrincipal already loaded — was practically never
         // satisfied at construction time on a cold reload, which left the cache unused exactly when
         // it was needed. The public checker deliberately does NOT restore: the cache is a single
