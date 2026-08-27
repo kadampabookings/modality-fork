@@ -144,6 +144,7 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         ProtectedEntityWriteRegistry.registerWriteAuthorizer(this::isWriteAuthorized,
             preFilterNames.toArray(String[]::new));
         ProtectedEntityWriteRegistry.registerWriteObserver(ProtectedEntityWritesJob::onProtectedWriteSucceeded);
+        ProtectedEntityWriteRegistry.registerRawStatementObserver(ProtectedEntityWritesJob::onNonDqlSubmit);
         Console.log("🛡 Write authorization active on " + REQUIRED_OPERATIONS.size() + " entities"
                     + (ENFORCING ? " — ENFORCING" : " — observing only, nothing is refused yet"));
     }
@@ -167,6 +168,28 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
             base.invalidateAllRuleRegistries();
             Console.log("🛡 " + verb + " on " + entityName + " — cached authorizations discarded on this instance");
         }
+    }
+
+    /**
+     * Item 7's instrument: a statement that skips DQL translation reaches the database as written, and
+     * therefore passes none of the checks above — they read an entity and a verb that only the DQL layer
+     * can see. So the write authorization built this week protects against callers who ask in DQL, and
+     * this line measures how much that qualification is worth.
+     *
+     * <p>Only CLIENT-originated ones are reported. Server code composing SQL is ordinary; a client doing
+     * it is the door. The distinction is available for the first time because the SockJS bridge now
+     * stamps everything arriving from outside, and a caller cannot un-stamp itself.
+     *
+     * <p>Truncated, and the statement is logged rather than its parameters: a raw statement is written
+     * by whoever sent it, so the text is theirs, but its parameter values may be anybody's data.
+     */
+    private static void onNonDqlSubmit(String language, String statement) {
+        if (!ThreadLocalStateHolder.isClientOrigin())
+            return;
+        String shortened = statement == null ? "(none)"
+            : statement.length() <= 200 ? statement : statement.substring(0, 200) + "…";
+        Console.log("🛡 RAW STATEMENT from a client (language=" + language + ") — bypasses write"
+                    + " authorization entirely: " + shortened);
     }
 
     private Future<Boolean> isWriteAuthorized(ProtectedEntityWriteRegistry.WriteRequest request) {
