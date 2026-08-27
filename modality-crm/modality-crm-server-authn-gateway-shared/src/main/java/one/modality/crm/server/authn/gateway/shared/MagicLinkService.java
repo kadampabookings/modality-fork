@@ -356,8 +356,25 @@ public final class MagicLinkService {
             // magic-link password reset — which no longer needs it (that flow proves identity by the link itself,
             // not by echoing the stored hash back as the "old password"). Not loading a credential that nothing
             // reads is worth the one-line change on its own.
-            .<Person>executeQuery("select frontendAccount.id from Person p where lower(frontendAccount.username)=lower($1) order by p.id limit 1", email)
-            .map(Collections::first); // the owner of the account is the first person recorded in that account.
+            // ORDER BY: live rows before removed ones, the account owner before other members, and
+            // only then the lowest id. This used to be `order by p.id` alone, under the assumption --
+            // stated in a comment here -- that "the owner of the account is the first person recorded
+            // in that account". An account's lowest-id person row is very often a family member added
+            // later, or an obsolete duplicate of the holder, so the link signed people in as somebody
+            // else: on prod (2026-08-27) 133 accounts resolved differently here than at the password
+            // gateway, 19 of them onto a DIFFERENT LIVE person -- that person's name, profile,
+            // bookings and members, reached by asking for a login link at your own address.
+            //
+            // `removed` sorts before `owner` deliberately: a removed owner row must lose to a live
+            // member row, otherwise the fix hands people an account that reads as empty.
+            //
+            // Sorting rather than filtering `!removed`, which is what ModalityPasswordAuthenticationGateway
+            // does, because 12 prod accounts have no live person row at all: filtering resolves those to
+            // null, and a null user person here does not fail the login -- it silently downgrades to
+            // ModalityGuestPrincipal, so those people would lose their account instead of reaching it.
+            // Both columns are `boolean DEFAULT false NOT NULL`, so there is no NULLS FIRST trap.
+            .<Person>executeQuery("select frontendAccount.id from Person p where lower(frontendAccount.username)=lower($1) order by p.removed, p.owner desc, p.id limit 1", email)
+            .map(Collections::first);
     }
 
     // ======================================== SUPPORT VIEW ========================================
