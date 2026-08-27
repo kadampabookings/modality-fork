@@ -8,9 +8,9 @@ module modality.crm.server.authz.required.plugin {
     // Direct dependencies modules
     requires modality.base.shared.entities;
     requires webfx.extras.operation;
+    requires webfx.platform.async;
     requires webfx.platform.boot;
     requires webfx.platform.console;
-    requires webfx.platform.async;
     requires webfx.platform.util;
     requires webfx.stack.authn;
     requires webfx.stack.authz.core;
