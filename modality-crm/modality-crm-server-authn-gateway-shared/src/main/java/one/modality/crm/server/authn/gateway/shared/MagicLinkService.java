@@ -373,7 +373,18 @@ public final class MagicLinkService {
             // null, and a null user person here does not fail the login -- it silently downgrades to
             // ModalityGuestPrincipal, so those people would lose their account instead of reaching it.
             // Both columns are `boolean DEFAULT false NOT NULL`, so there is no NULLS FIRST trap.
-            .<Person>executeQuery("select frontendAccount.id from Person p where lower(frontendAccount.username)=lower($1) order by p.removed, p.owner desc, p.id limit 1", email)
+            // The fences match ModalityPasswordAuthenticationGateway: same corporation, and a
+            // disabled account refuses a magic link exactly as it refuses a password. Without
+            // them this path was the weaker of the two doors into the same account -- a disabled
+            // account could still be signed into by asking for a link, which is the one thing
+            // disabling is for. The bare 1 is the corporation, literal at the password gateway's
+            // call site too; there is no constant to share.
+            //
+            // `!removed` is NOT copied across, and its absence is the point: the password gateway
+            // filters removed persons, this one sorts them last (see the ORDER BY below). Note it
+            // binds to Person, not FrontendAccount -- the domain model gives FrontendAccount no
+            // `removed` field, so inside the dot-group the name falls back to the root entity.
+            .<Person>executeQuery("select frontendAccount.id from Person where frontendAccount.(corporation=$1 and lower(username)=lower($2) and !disabled) order by removed, owner desc, id limit 1", 1, email)
             .map(Collections::first);
     }
 
