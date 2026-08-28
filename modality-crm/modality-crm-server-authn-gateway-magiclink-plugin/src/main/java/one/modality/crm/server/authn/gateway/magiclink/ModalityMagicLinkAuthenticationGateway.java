@@ -448,10 +448,22 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
                 String agentUsername = magicLink.getOldEmail();
                 EntityStore entityStore = EntityStore.create(dataSourceModel);
                 return Future.all(
-                    // The account owner is the first person recorded against the account, same rule
-                    // as MagicLinkService.loadUserPersonFromMagicLink.
-                    entityStore.<Person>executeQuery("select frontendAccount.id from Person p where lower(frontendAccount.username)=lower($1) order by p.id limit 1", targetUsername),
-                    entityStore.<Person>executeQuery("select id from Person p where lower(frontendAccount.username)=lower($1) order by p.id limit 1", agentUsername)
+                    // Same ordering as MagicLinkService.loadUserPersonFromMagicLink, and for the same
+                    // reason. Both of these used to say `order by p.id`, under the belief -- written
+                    // here as fact -- that "the account owner is the first person recorded against
+                    // the account". It is not: on prod (2026-08-27) 133 accounts had a non-owner or
+                    // a removed duplicate holding the lowest id.
+                    //
+                    // Wrong in this method twice over, and both matter more here than at a login:
+                    //   target -- the agent opens somebody OTHER than the customer they asked for,
+                    //             while the audit row and the on-screen name both say otherwise.
+                    //   agent  -- the person recorded as having looked is not the person who looked.
+                    //             The permission was checked against the real principal upstream
+                    //             (requestSupportView), so this never granted anything it should not
+                    //             have -- it misattributed it, which is the failure this mechanism
+                    //             exists to prevent.
+                    entityStore.<Person>executeQuery("select frontendAccount.id from Person p where lower(frontendAccount.username)=lower($1) order by p.removed, p.owner desc, p.id limit 1", targetUsername),
+                    entityStore.<Person>executeQuery("select id from Person p where lower(frontendAccount.username)=lower($1) order by p.removed, p.owner desc, p.id limit 1", agentUsername)
                 ).compose(compositeFuture -> {
                     EntityList<Person> targets = compositeFuture.resultAt(0);
                     EntityList<Person> agents = compositeFuture.resultAt(1);
@@ -599,10 +611,22 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
                 String agentUsername = magicLink.getOldEmail();
                 EntityStore entityStore = EntityStore.create(dataSourceModel);
                 return Future.all(
-                    // The account owner is the first person recorded against the account, same rule
-                    // as the front-office redeem — plus the fields to re-vet the account below.
-                    entityStore.<Person>executeQuery("select frontendAccount.(id, backoffice, disabled), removed from Person p where lower(frontendAccount.username)=lower($1) order by p.id limit 1", targetUsername),
-                    entityStore.<Person>executeQuery("select id from Person p where lower(frontendAccount.username)=lower($1) order by p.id limit 1", agentUsername)
+                    // Owner first, then lowest id — same rule as the front-office redeem and the
+                    // support view, plus the fields to re-vet the account below. NOT `order by p.id`:
+                    // the comment that used to stand here said the account owner is the first person
+                    // recorded against the account, and that is simply untrue — on prod (2026-08-27)
+                    // 133 accounts had a non-owner or a removed duplicate holding the lowest id.
+                    //
+                    // It matters more on this path than at a login, and in two different ways:
+                    //   target -- a super admin opens a DIFFERENT customer's back office from the one
+                    //             they asked for, while the screen and the audit row both name the one
+                    //             they asked for.
+                    //   agent  -- the person recorded as having looked is not the person who looked.
+                    // Neither grants anything unearned: the pass was already minted against the real
+                    // principal. Both misattribute it, which is the one thing an audit trail exists
+                    // to prevent.
+                    entityStore.<Person>executeQuery("select frontendAccount.(id, backoffice, disabled), removed from Person p where lower(frontendAccount.username)=lower($1) order by p.removed, p.owner desc, p.id limit 1", targetUsername),
+                    entityStore.<Person>executeQuery("select id from Person p where lower(frontendAccount.username)=lower($1) order by p.removed, p.owner desc, p.id limit 1", agentUsername)
                 ).compose(compositeFuture -> {
                     EntityList<Person> targets = compositeFuture.resultAt(0);
                     EntityList<Person> agents = compositeFuture.resultAt(1);
