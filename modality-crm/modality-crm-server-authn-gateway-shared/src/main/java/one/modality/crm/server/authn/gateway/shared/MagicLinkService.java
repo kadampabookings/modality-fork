@@ -236,15 +236,21 @@ public final class MagicLinkService {
             .compose(magicLink -> {
                 if (magicLink == null)
                     return Future.failedFuture("[%s] Magic link not found (token: %s)".formatted(ModalityAuthenticationI18nKeys.LoginLinkUnrecognisedError, tokenOrVerificationCode));
-                // A SUPPORT_VIEW grant is not a login link and must never be redeemed as one. Every
-                // caller of this method ends up authenticating the bearer AS the account holder with
-                // full rights; a support pass is the opposite — a read-only visit by someone else.
-                // The lookups above match on token (or code) alone, so without this the stronger
-                // outcome would be reachable simply by pasting the support token into /magic-link.
+                // Only the two genuine login flavours may pass. Every caller of this method ends up
+                // authenticating the bearer AS the account holder with full rights; a support pass
+                // of either flavour (SUPPORT_VIEW, BACKOFFICE_VIEW) is the opposite — a read-only
+                // visit by someone else — and on a support row oldEmail is the AGENT's username, so
+                // redeeming one here would sign the bearer in as the member of staff. The lookups
+                // above match on token (or code) alone, so without this the stronger outcome would
+                // be reachable simply by pasting a support token into /magic-link. An allowlist
+                // rather than a denylist so the next link type has to argue its way in, not be
+                // permitted by omission (getLinkType() maps unknown names to LOGIN, which makes a
+                // denylist here silently wrong the day a constant is added without updating it).
                 // Reported as "unrecognised" rather than "wrong type": to anyone holding a token
                 // that does not belong on this path, that IS the truth, and it says nothing about
                 // which tokens exist.
-                if (magicLink.isSupportView())
+                MagicLinkType linkType = magicLink.getLinkType();
+                if (linkType != MagicLinkType.LOGIN && linkType != MagicLinkType.BOOKING_ACCESS)
                     return Future.failedFuture("[%s] Magic link not found (token: %s)".formatted(ModalityAuthenticationI18nKeys.LoginLinkUnrecognisedError, tokenOrVerificationCode));
                 // 2) Checking the magic link is still valid. BOOKING_ACCESS links are multi-use and
                 //    have a much longer expiry than single-use LOGIN links.
@@ -380,12 +386,18 @@ public final class MagicLinkService {
      * @param agentRunId     the back-office client that asked, for the audit trail
      * @param link           the front-office URL the agent will open
      * @param requestedPath  where the front office should land after redeeming
+     * @param linkType       which support flavour: {@link MagicLinkType#SUPPORT_VIEW} (front office)
+     *                       or {@link MagicLinkType#BACKOFFICE_VIEW} (back office) — the type is the
+     *                       ONLY thing that later separates the two redemption paths, so it is the
+     *                       caller's declaration of which door this pass opens
      * @return the persisted grant, whose {@code token} the caller returns to the agent
      */
-    public static Future<MagicLink> createSupportViewLink(String targetUsername, String agentEmail, String agentRunId, String link, String requestedPath, String lang, DataSourceModel dataSourceModel) {
+    public static Future<MagicLink> createSupportViewLink(String targetUsername, String agentEmail, String agentRunId, String link, String requestedPath, String lang, MagicLinkType linkType, DataSourceModel dataSourceModel) {
+        if (linkType != MagicLinkType.SUPPORT_VIEW && linkType != MagicLinkType.BACKOFFICE_VIEW)
+            return Future.failedFuture("createSupportViewLink only mints support flavours, not " + linkType);
         UpdateStore updateStore = UpdateStore.create(dataSourceModel);
         MagicLink magicLink = updateStore.insertEntity(MagicLink.class);
-        magicLink.setLinkType(MagicLinkType.SUPPORT_VIEW);
+        magicLink.setLinkType(linkType);
         magicLink.setToken(generateToken());
         magicLink.setEmail(targetUsername);
         magicLink.setOldEmail(agentEmail);
@@ -410,8 +422,12 @@ public final class MagicLinkService {
      *
      * <p>Every failure returns the same key. Distinguishing "expired" from "already used" from
      * "never existed" would confirm to a holder of a guessed token which of those it was.
+     *
+     * @param requiredType the flavour this redemption path was written for — a token of the other
+     *                     flavour fails exactly like a wrong token, so a pass minted for the front
+     *                     office can never open the back office or vice versa
      */
-    public static Future<MagicLink> loadSupportViewLinkAndMarkAsUsed(String token, DataSourceModel dataSourceModel) {
+    public static Future<MagicLink> loadSupportViewLinkAndMarkAsUsed(String token, MagicLinkType requiredType, DataSourceModel dataSourceModel) {
         String usageRunId = ThreadLocalStateHolder.getRunId();
         if (Strings.isEmpty(token))
             return Future.failedFuture("[%s] Invalid support view pass".formatted(ModalityAuthenticationI18nKeys.SupportViewLinkInvalidError));
@@ -425,7 +441,7 @@ public final class MagicLinkService {
                 // learns nothing from the difference. The OPERATOR needs the opposite — without
                 // this, every one of the five ways to be rejected looked identical in the log and
                 // a failing support view could not be diagnosed at all.
-                String rejection = supportViewRejectionReason(magicLink);
+                String rejection = supportViewRejectionReason(magicLink, requiredType);
                 if (rejection != null) {
                     // The row id, never the token. A token is a bearer credential and this line goes
                     // to a rolling file that ships to log aggregation and backups — and the
@@ -450,11 +466,14 @@ public final class MagicLinkService {
      * indistinguishable message to the client: the client must not be able to tell "expired" from
      * "already used" from "never existed", but whoever is running the server must.
      */
-    private static String supportViewRejectionReason(MagicLink magicLink) {
+    private static String supportViewRejectionReason(MagicLink magicLink, MagicLinkType requiredType) {
         if (magicLink == null)
             return "no such token";
-        if (!magicLink.isSupportView())
-            return "wrong link type: " + magicLink.getLinkType();
+        // Covers both a non-support link and the OTHER support flavour: a front-office pass
+        // presented at the back-office door (or vice versa) is rejected here, and this operator log
+        // line is the only place the mismatch is visible.
+        if (magicLink.getLinkType() != requiredType)
+            return "wrong link type: " + magicLink.getLinkType() + " (this path redeems " + requiredType + ")";
         if (magicLink.getUsageDate() != null)
             return "already used at " + magicLink.getUsageDate();
         Instant creationDate = magicLink.getCreationDate();
@@ -482,9 +501,13 @@ public final class MagicLinkService {
      * session" — and because null comparison is a place DQL and SQL disagree.
      *
      * @param agentUsername the support member's own account username ({@code oldEmail} on the grant)
+     * @param linkType      which support flavour the presented session claims to be — the type on
+     *                      the live row is the only thing that distinguishes a front-office pass
+     *                      from a back-office one, so a session presented under the wrong context
+     *                      finds no live row of the required type and ends here
      * @return the grant if the session is still within its lifetime, otherwise a failed future
      */
-    public static Future<MagicLink> loadLiveSupportViewLink(String targetUsername, String agentUsername, Duration sessionDuration, DataSourceModel dataSourceModel) {
+    public static Future<MagicLink> loadLiveSupportViewLink(String targetUsername, String agentUsername, Duration sessionDuration, MagicLinkType linkType, DataSourceModel dataSourceModel) {
         if (Strings.isEmpty(targetUsername) || Strings.isEmpty(agentUsername))
             return Future.failedFuture("[%s] Support view session has ended".formatted(ModalityAuthenticationI18nKeys.SupportViewLinkInvalidError));
         return EntityStore.create(dataSourceModel)
@@ -492,7 +515,7 @@ public final class MagicLinkService {
                 "select email,oldEmail,usageDate,linkType from MagicLink"
                 + " where lower(email)=lower($1) and lower(oldEmail)=lower($2) and linkType=$3"
                 + " order by id desc limit 5",
-                targetUsername, agentUsername, MagicLinkType.SUPPORT_VIEW.name())
+                targetUsername, agentUsername, linkType.name())
             .compose(magicLinks -> {
                 Instant deadline = now().minus(sessionDuration);
                 for (MagicLink magicLink : magicLinks) {

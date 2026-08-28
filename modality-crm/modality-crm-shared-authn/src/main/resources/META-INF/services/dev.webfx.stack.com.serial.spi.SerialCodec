@@ -4,3 +4,5 @@ one.modality.crm.shared.services.authn.serial.AuthenticateWithCartCredentialsSer
 one.modality.crm.shared.services.authn.serial.SendBookingAccessEmailCredentialsSerialCodec
 one.modality.crm.shared.services.authn.serial.RequestSupportViewCredentialsSerialCodec
 one.modality.crm.shared.services.authn.serial.AuthenticateWithSupportViewCredentialsSerialCodec
+one.modality.crm.shared.services.authn.serial.RequestBackOfficeViewCredentialsSerialCodec
+one.modality.crm.shared.services.authn.serial.AuthenticateWithBackOfficeViewCredentialsSerialCodec

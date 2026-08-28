@@ -135,4 +135,15 @@ public interface MagicLink extends Entity {
     default boolean isSupportView() {
         return MagicLinkType.SUPPORT_VIEW == getLinkType();
     }
+
+    /**
+     * True for a back-office view grant — a super admin's read-only pass into the back office as
+     * another back-office user. Same discipline as {@link #isSupportView()}: never emailed, never a
+     * login link. Note that {@link #getLinkType()} falls back to LOGIN for unknown names, so a
+     * server rolled back to a version without this constant would misread these rows — the login
+     * path therefore allowlists LOGIN/BOOKING_ACCESS instead of denylisting the support flavours.
+     */
+    default boolean isBackofficeView() {
+        return MagicLinkType.BACKOFFICE_VIEW == getLinkType();
+    }
 }
