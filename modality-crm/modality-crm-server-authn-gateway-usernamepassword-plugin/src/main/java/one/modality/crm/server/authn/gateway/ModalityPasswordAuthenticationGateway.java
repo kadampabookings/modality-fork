@@ -23,6 +23,7 @@ import dev.webfx.stack.session.token.AuthenticatedState;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 import dev.webfx.stack.session.state.TransactionPreambleRegistry;
 import one.modality.base.shared.entities.FrontendAccount;
+import one.modality.base.shared.entities.MagicLinkType;
 import one.modality.base.shared.entities.Person;
 import one.modality.crm.server.authn.gateway.magiclink.ModalityMagicLinkAuthenticationGateway;
 import one.modality.crm.server.authn.gateway.shared.GuestPersonLinker;
@@ -390,11 +391,6 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
         boolean isBackofficeAuthentication = ThreadLocalStateHolder.isBackoffice();
         if (!(userId instanceof ModalityUserPrincipal modalityUserPrincipal))
             return Future.failedFuture("[%s] This userId object is not recognized by Modality".formatted(ModalityAuthenticationI18nKeys.AuthnUnrecognizedUserIdError));
-        // A support view is a front-office affordance. Letting one identify itself to the back office
-        // would hand the session whatever back-office grants the CUSTOMER holds, which is neither
-        // what support asked for nor something the customer consented to.
-        if (modalityUserPrincipal.isSupportView() && isBackofficeAuthentication)
-            return Future.failedFuture("[%s] A support view cannot be used in the back office".formatted(ModalityAuthenticationI18nKeys.SupportViewLinkInvalidError));
         return EntityStore.create(dataSourceModel)
             .<Person>executeQuery("select " + fields + " from Person where id=$1 and frontendAccount.(id=$2 and !disabled and ($3=false or backoffice))", modalityUserPrincipal.getUserPersonId(), modalityUserPrincipal.getUserAccountId(), isBackofficeAuthentication)
             .compose(persons -> {
@@ -405,23 +401,49 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
                     return Future.succeededFuture(userPerson);
                 // Support views end on their own. This runs on the verification and claims round
                 // trips — i.e. on reconnection and on every authorization refresh — so an agent who
-                // simply leaves the tab open does not keep the customer's account open indefinitely.
-                return checkSupportViewStillLive(modalityUserPrincipal)
+                // simply leaves the tab open does not keep the borrowed account open indefinitely.
+                //
+                // The principal cannot say WHICH flavour of view it is — front-office SUPPORT_VIEW
+                // or back-office BACKOFFICE_VIEW carry the same (target, account, agent) shape. The
+                // live magic_link row's type is the only separator, so the context the session
+                // presents under picks the type the row must have. That yields mutual exclusion in
+                // both directions: a front-office pass presented under the back-office flag finds
+                // no live BACKOFFICE_VIEW row and dies here (it also fails the backoffice filter in
+                // the person query above, since front-office targets never hold the flag), and a
+                // back-office pass presented without the flag finds no live SUPPORT_VIEW row.
+                // This replaced the earlier flat refusal of support views in the back office, which
+                // predated the BACKOFFICE_VIEW flavour: a support view is no longer only a
+                // front-office affordance, but each pass still opens exactly the door it was
+                // minted for.
+                //
+                // Known residual, accepted: the old refusal was unconditional, this one depends on
+                // DB state. If the SAME (target, agent) pair holds live rows of BOTH flavours in
+                // one 30-minute window — the target's backoffice flag granted mid-window and the
+                // same super admin minting both passes — a tampered front-office session claiming
+                // the backoffice flag could ride the BO row's liveness. No privilege is gained
+                // (the agent already holds every grant; writes stay blocked), and closing it would
+                // need the principal to carry its flavour, which the identity-binding token will
+                // eventually provide.
+                return checkSupportViewStillLive(modalityUserPrincipal,
+                        isBackofficeAuthentication ? MagicLinkType.BACKOFFICE_VIEW : MagicLinkType.SUPPORT_VIEW)
                     .map(ignored -> userPerson);
             });
     }
 
-    /** How long a support member may keep a customer's account open before the pass has to be re-issued. */
+    /** How long a support member may keep a borrowed account open before the pass has to be re-issued. Shared by both flavours. */
     private static final Duration SUPPORT_VIEW_SESSION_DURATION = Duration.ofMinutes(30);
 
     /**
      * Fails when the grant behind a support-view session has run out.
      *
      * <p>Resolves both usernames rather than trusting the principal alone: the grant is recorded
-     * against the pair (customer viewed, member of staff viewing), and matching on both is what
+     * against the pair (account viewed, member of staff viewing), and matching on both is what
      * stops one agent's fresh pass from silently extending another's expired session.
+     *
+     * @param linkType the flavour the session's context calls for — see the caller for how the
+     *                 claimed {@code backoffice} flag maps to it and why that is safe
      */
-    private Future<Void> checkSupportViewStillLive(ModalityUserPrincipal principal) {
+    private Future<Void> checkSupportViewStillLive(ModalityUserPrincipal principal, MagicLinkType linkType) {
         EntityStore entityStore = EntityStore.create(dataSourceModel);
         return Future.all(
             entityStore.<Person>executeQuery("select frontendAccount.username from Person where id=$1 limit 1", principal.getUserPersonId()),
@@ -437,6 +459,7 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
                     targetPerson.evaluate("frontendAccount.username"),
                     agentPerson.evaluate("frontendAccount.username"),
                     SUPPORT_VIEW_SESSION_DURATION,
+                    linkType,
                     dataSourceModel)
                 .mapEmpty();
         });

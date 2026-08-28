@@ -15,6 +15,6 @@ module modality.crm.shared.authn {
     exports one.modality.crm.shared.services.authn.serial;
 
     // Provided services
-    provides dev.webfx.stack.com.serial.spi.SerialCodec with one.modality.crm.shared.services.authn.serial.ModalityUserPrincipalSerialCodec, one.modality.crm.shared.services.authn.serial.ModalityGuestPrincipalSerialCodec, one.modality.crm.shared.services.authn.serial.AuthenticateWithCartCredentialsSerialCodec, one.modality.crm.shared.services.authn.serial.SendBookingAccessEmailCredentialsSerialCodec, one.modality.crm.shared.services.authn.serial.RequestSupportViewCredentialsSerialCodec, one.modality.crm.shared.services.authn.serial.AuthenticateWithSupportViewCredentialsSerialCodec;
+    provides dev.webfx.stack.com.serial.spi.SerialCodec with one.modality.crm.shared.services.authn.serial.ModalityUserPrincipalSerialCodec, one.modality.crm.shared.services.authn.serial.ModalityGuestPrincipalSerialCodec, one.modality.crm.shared.services.authn.serial.AuthenticateWithCartCredentialsSerialCodec, one.modality.crm.shared.services.authn.serial.SendBookingAccessEmailCredentialsSerialCodec, one.modality.crm.shared.services.authn.serial.RequestSupportViewCredentialsSerialCodec, one.modality.crm.shared.services.authn.serial.AuthenticateWithSupportViewCredentialsSerialCodec, one.modality.crm.shared.services.authn.serial.RequestBackOfficeViewCredentialsSerialCodec, one.modality.crm.shared.services.authn.serial.AuthenticateWithBackOfficeViewCredentialsSerialCodec;
 
 }

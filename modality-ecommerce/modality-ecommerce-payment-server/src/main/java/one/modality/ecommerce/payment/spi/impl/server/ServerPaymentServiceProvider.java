@@ -10,6 +10,7 @@ import dev.webfx.platform.util.Strings;
 import dev.webfx.platform.util.collection.Collections;
 import dev.webfx.stack.orm.datasourcemodel.service.DataSourceModelService;
 import dev.webfx.stack.orm.entity.*;
+import dev.webfx.stack.session.state.RestrictedPrincipalRegistry;
 import dev.webfx.stack.session.state.SystemUserId;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 import one.modality.base.shared.entities.*;
@@ -177,6 +178,15 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
 
     @Override
     public Future<InitiatePaymentResult> initiatePayment(InitiatePaymentArgument argument) {
+        // A read-only session (a support member borrowing someone's view) must not start a payment
+        // on that person's behalf. Same reasoning as ServerDocumentServiceProvider.submitDocumentChanges:
+        // this flow's writes happen after async hops where the SQL layer's thread-local read-only
+        // check sees no principal, so the refusal has to live here at the synchronous entry, while
+        // the thread-local still holds the caller. (Gateway/system callers carry no such principal
+        // and are unaffected.)
+        Future<InitiatePaymentResult> refusal = refuseIfReadOnlySession("initiate a payment");
+        if (refusal != null)
+            return refusal;
         // Step 1: Inserting the payment in the database with its payment allocations
         return insertPayment(argument.amount(), argument.paymentAllocations(), argument.preferredFormType(), argument.paymentMethod()) // insertPayment
             .compose(databasePayment -> {
@@ -272,6 +282,10 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
 
     @Override
     public Future<CompletePaymentResult> completePayment(CompletePaymentArgument argument) {
+        // Same synchronous read-only refusal as initiatePayment — a borrowed view must not charge.
+        Future<CompletePaymentResult> refusal = refuseIfReadOnlySession("complete a payment");
+        if (refusal != null)
+            return refusal;
         String gatewayName = argument.gatewayName();
         Object paymentPrimaryKey = argument.paymentPrimaryKey();
         boolean live = argument.isLive();
@@ -456,8 +470,26 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
         );
     }
 
+    /**
+     * A failed future when the caller on this thread is a read-only session (a support view of
+     * either flavour), otherwise null. Must be called in the synchronous part of a bus call —
+     * past the first async hop the thread-local no longer holds the principal and the answer
+     * would silently become "not restricted", which is the failure mode this guard exists to
+     * avoid. Gateway/system principals and anonymous callers are not restricted.
+     */
+    private static <T> Future<T> refuseIfReadOnlySession(String action) {
+        if (RestrictedPrincipalRegistry.isCurrentUserRestricted())
+            return Future.failedFuture("[ReadOnlySessionError] This session is not allowed to " + action);
+        return null;
+    }
+
     @Override
     public Future<CancelPaymentResult> cancelPayment(CancelPaymentArgument argument) {
+        // Same synchronous read-only refusal as initiatePayment: cancellation mutates the payment
+        // row and can un-book options, neither of which a borrowed view may do.
+        Future<CancelPaymentResult> refusal = refuseIfReadOnlySession("cancel a payment");
+        if (refusal != null)
+            return refusal;
         boolean explicit = argument.isExplicitUserCancellation();
         Future<MoneyTransfer> updated = updatePaymentStatusImpl(
                 UpdatePaymentStatusArgument.createCancelStatusArgument(

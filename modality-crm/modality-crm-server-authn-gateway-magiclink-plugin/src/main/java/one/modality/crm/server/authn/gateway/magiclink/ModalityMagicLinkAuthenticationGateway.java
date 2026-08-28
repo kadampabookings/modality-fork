@@ -20,16 +20,19 @@ import dev.webfx.stack.session.token.AuthenticatedState;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 import one.modality.base.shared.entities.FrontendAccount;
 import one.modality.base.shared.entities.MagicLink;
+import one.modality.base.shared.entities.MagicLinkType;
 import one.modality.base.shared.entities.Operation;
 import one.modality.base.shared.entities.Person;
 import one.modality.base.shared.util.ActivityHashUtil;
 import one.modality.crm.server.authn.gateway.shared.GuestPersonLinker;
 import one.modality.crm.server.authn.gateway.shared.LocalizedMailTemplate;
 import one.modality.crm.server.authn.gateway.shared.MagicLinkService;
+import one.modality.crm.shared.services.authn.AuthenticateWithBackOfficeViewCredentials;
 import one.modality.crm.shared.services.authn.AuthenticateWithSupportViewCredentials;
 import one.modality.crm.shared.services.authn.ModalityAuthenticationI18nKeys;
 import one.modality.crm.shared.services.authn.ModalityGuestPrincipal;
 import one.modality.crm.shared.services.authn.ModalityUserPrincipal;
+import one.modality.crm.shared.services.authn.RequestBackOfficeViewCredentials;
 import one.modality.crm.shared.services.authn.RequestSupportViewCredentials;
 
 /**
@@ -106,6 +109,8 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
                || userCredentials instanceof AuthenticateWithVerificationCodeCredentials
                || userCredentials instanceof RequestSupportViewCredentials
                || userCredentials instanceof AuthenticateWithSupportViewCredentials
+               || userCredentials instanceof RequestBackOfficeViewCredentials
+               || userCredentials instanceof AuthenticateWithBackOfficeViewCredentials
             ;
     }
 
@@ -123,6 +128,10 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
             return requestSupportView(requestSupportViewCredentials);
         if (userCredentials instanceof AuthenticateWithSupportViewCredentials authenticateWithSupportViewCredentials)
             return authenticateWithSupportView(authenticateWithSupportViewCredentials);
+        if (userCredentials instanceof RequestBackOfficeViewCredentials requestBackOfficeViewCredentials)
+            return requestBackOfficeView(requestBackOfficeViewCredentials);
+        if (userCredentials instanceof AuthenticateWithBackOfficeViewCredentials authenticateWithBackOfficeViewCredentials)
+            return authenticateWithBackOfficeView(authenticateWithBackOfficeViewCredentials);
         return Future.failedFuture("%s.authenticate() requires a %s, %s or %s argument".formatted(getClass().getSimpleName(), SendMagicLinkCredentials.class.getSimpleName(), RenewMagicLinkCredentials.class.getSimpleName(), AuthenticateWithMagicLinkCredentials.class.getSimpleName()));
     }
 
@@ -163,12 +172,16 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
             .<MagicLink>executeQuery("select loginRunId, lang, link, email, requestedPath, linkType from MagicLink where token=$1 order by id desc limit 1", request.previousToken())
             .map(Collections::first)
             .compose(magicLink -> {
-                // A support-view grant is not a login link and must not be renewable as one. It
-                // currently fails anyway (its `link` holds a path, not an absolute URL, so the
-                // substring below throws) — but failing by accident is not the same as refusing on
-                // purpose, and this is the last magic-link entry point without the type fence its
-                // two siblings carry.
-                if (magicLink == null || magicLink.isSupportView())
+                // Only a LOGIN link is renewable — an allowlist, like the redeem fence, so a
+                // future link type has to argue its way in. For support passes of either flavour
+                // this must be impossible (never emailed; their `link` holds a path, not an
+                // absolute URL, so the substring below would throw anyway — but failing by
+                // accident is not the same as refusing on purpose). For BOOKING_ACCESS links this
+                // DELIBERATELY drops a previously reachable behaviour: an EXPIRED (>1 year)
+                // booking-access token presented here used to mint and email a fresh LOGIN link,
+                // i.e. a long-lived guest token could be traded up for a full sign-in link. The
+                // guest recovery flow (sendBookingAccessEmail) is the supported way back in.
+                if (magicLink == null || magicLink.getLinkType() != MagicLinkType.LOGIN)
                     return Future.failedFuture("[%s] Magic link token not found".formatted(ModalityAuthenticationI18nKeys.LoginLinkUnrecognisedError));
                 String link = magicLink.getLink();
                 String clientOrigin = ActivityHashUtil.withoutHashSuffix(link.substring(0, link.indexOf(MAGIC_LINK_ACTIVITY_PATH_PREFIX)));
@@ -317,6 +330,7 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
                                     "/support-view",
                                     SUPPORT_VIEW_LANDING_PATH,
                                     null,
+                                    MagicLinkType.SUPPORT_VIEW,
                                     dataSourceModel)
                                 .map(magicLink -> {
                                     Console.log("🔎 Support view granted: person %s → person %s (magicLinkId=%s)".formatted(
@@ -377,11 +391,11 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
         }
         String grantEmail = agentEmail;
         return Future.all(
-            entityStore.executeQuery("select AuthorizationSuperAdmin where superAdmin.email=$1 limit 1", grantEmail),
+            isSuperAdmin(grantEmail, entityStore),
             entityStore.<Operation>executeQuery("select group.id from Operation where operationCode=$1 limit 1", VIEW_AS_CUSTOMER_OPERATION_CODE)
         ).compose(compositeFuture -> {
-            EntityList<?> superAdmins = compositeFuture.resultAt(0);
-            if (!superAdmins.isEmpty())
+            Boolean superAdmin = compositeFuture.resultAt(0);
+            if (Boolean.TRUE.equals(superAdmin))
                 return Future.succeededFuture(true);
             EntityList<Operation> operations = compositeFuture.resultAt(1);
             Operation operation = Collections.first(operations);
@@ -397,6 +411,23 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
     }
 
     /**
+     * Whether this email belongs to a super admin — the same row the authorization provider keys the
+     * {@code operation:*} wildcard on, asked of the database rather than the client.
+     *
+     * <p>The one definition of "is super admin" in this gateway. It is deliberately the ONLY check
+     * behind the back-office view: an operation code would make the ability delegable to roles, and
+     * a free-text {@code AuthorizationRule} could forge the matching grant string — whereas
+     * membership of {@code authorization_super_admin} can only be conferred by someone who can
+     * already write that table.
+     */
+    private static Future<Boolean> isSuperAdmin(String email, EntityStore entityStore) {
+        if (Strings.isEmpty(email))
+            return Future.succeededFuture(false);
+        return entityStore.executeQuery("select AuthorizationSuperAdmin where superAdmin.email=$1 limit 1", email)
+            .map(superAdmins -> !superAdmins.isEmpty());
+    }
+
+    /**
      * Redeems a support-view pass, opening the customer's front office read-only.
      *
      * <p>Note what is deliberately absent compared with {@link #authenticateWithMagicLink}: no
@@ -407,9 +438,11 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
         String usageRunId = ThreadLocalStateHolder.getRunId();
         // A support view belongs in the front office. The back office would hand the session the
         // customer's own back-office grants, which is not what "see what the customer sees" means.
+        // (A super admin who wants the back-office equivalent has RequestBackOfficeViewCredentials,
+        // whose BACKOFFICE_VIEW-typed pass this call refuses just below by requiring SUPPORT_VIEW.)
         if (ThreadLocalStateHolder.isBackoffice())
             return Future.failedFuture("[%s] A support view can only be opened in the front office".formatted(ModalityAuthenticationI18nKeys.SupportViewLinkInvalidError));
-        return MagicLinkService.loadSupportViewLinkAndMarkAsUsed(credentials.token(), dataSourceModel)
+        return MagicLinkService.loadSupportViewLinkAndMarkAsUsed(credentials.token(), MagicLinkType.SUPPORT_VIEW, dataSourceModel)
             .compose(magicLink -> {
                 String targetUsername = magicLink.getEmail();
                 String agentUsername = magicLink.getOldEmail();
@@ -430,6 +463,167 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
                     ModalityUserPrincipal userId = new ModalityUserPrincipal(
                         targetPerson.getPrimaryKey(), accountId, agentPerson.getPrimaryKey());
                     Console.log("🔎 Support view opened: person %s → person %s".formatted(
+                        agentPerson.getPrimaryKey(), targetPerson.getPrimaryKey()));
+                    return PushServerService.pushState(AuthenticatedState.createFor(userId), usageRunId)
+                        .map(ignored -> Strings.toSafeString(magicLink.getRequestedPath()));
+                });
+            });
+    }
+
+    // ====================================== BACK-OFFICE VIEW ======================================
+
+    /** Where the back office lands once a back-office view pass is redeemed. */
+    private static final String BACKOFFICE_VIEW_LANDING_PATH = "/dashboard";
+
+    /**
+     * Issues a super admin a one-time pass to open the back office as another back-office user.
+     *
+     * <p>The mirror image of {@link #requestSupportView}, with two deliberate inversions. The
+     * permission is NOT an operation code: {@link #isSuperAdmin} membership is the only key, so the
+     * ability can never be delegated to a role (see that method for why). And the target must BE a
+     * back-office account rather than must not be one: the session inherits the target's grants,
+     * which here is the point — a super admin verifying what another staff member can see holds
+     * every grant already, so there is nothing to escalate to, and the write path stays closed by
+     * the same read-only guard as the front-office flavour.
+     *
+     * @return the token the super admin's browser will redeem at the back office's own
+     *         {@code /support-view/<token>} route
+     */
+    private Future<String> requestBackOfficeView(RequestBackOfficeViewCredentials credentials) {
+        // Capture the client state before the first async hop wipes the thread local.
+        String agentRunId = ThreadLocalStateHolder.getRunId();
+        Object callerUserId = ThreadLocalStateHolder.getUserId();
+
+        if (!(callerUserId instanceof ModalityUserPrincipal agentPrincipal))
+            return Future.failedFuture("[%s] Only a signed-in staff member can open a back-office view".formatted(ModalityAuthenticationI18nKeys.SupportViewNotPermittedError));
+        // No nesting, for the same audit-chain reason as the front-office flavour — and doubly so
+        // here, since the borrowed session's target could itself be a super admin.
+        if (agentPrincipal.isSupportView())
+            return Future.failedFuture("[%s] A support view cannot open another support view".formatted(ModalityAuthenticationI18nKeys.SupportViewNotPermittedError));
+
+        Object targetPersonId = normaliseId(credentials.targetPersonId());
+        if (targetPersonId == null)
+            return Future.failedFuture("[%s] No user specified".formatted(ModalityAuthenticationI18nKeys.SupportViewInvalidTargetError));
+
+        EntityStore entityStore = EntityStore.create(dataSourceModel);
+        // Same email-vs-username split as requestSupportView: grants (including super-admin
+        // membership) are keyed on Person.email; the grant row records account usernames.
+        return entityStore.<Person>executeQuery(
+                "select email, frontendAccount.username from Person where id=$1 limit 1", agentPrincipal.getUserPersonId())
+            .map(Collections::first)
+            .compose(agentPerson -> {
+                String agentUsername = agentPerson == null ? null : agentPerson.evaluate("frontendAccount.username");
+                String agentEmail = agentPerson == null ? null : agentPerson.getEmail();
+                if (Strings.isEmpty(agentUsername))
+                    return Future.failedFuture("[%s] Your account could not be identified".formatted(ModalityAuthenticationI18nKeys.SupportViewNotPermittedError));
+                return isSuperAdmin(agentEmail, entityStore)
+                    .compose(superAdmin -> {
+                        if (!Boolean.TRUE.equals(superAdmin)) {
+                            // Person ids, not emails — same log-file discipline as requestSupportView.
+                            Console.log("🚫 Back-office view refused: person %s is not a super admin".formatted(
+                                agentPrincipal.getUserPersonId()));
+                            return Future.failedFuture("[%s] Only a super admin can open a back-office view".formatted(ModalityAuthenticationI18nKeys.SupportViewNotPermittedError));
+                        }
+                        return loadBackOfficeViewTarget(targetPersonId, entityStore)
+                            .compose(targetUsername -> MagicLinkService.createSupportViewLink(
+                                    targetUsername,
+                                    agentUsername,
+                                    agentRunId,
+                                    "/support-view",
+                                    BACKOFFICE_VIEW_LANDING_PATH,
+                                    null,
+                                    MagicLinkType.BACKOFFICE_VIEW,
+                                    dataSourceModel)
+                                .map(magicLink -> {
+                                    Console.log("🔎 Back-office view granted: person %s → person %s (magicLinkId=%s)".formatted(
+                                        agentPrincipal.getUserPersonId(), targetPersonId, magicLink.getPrimaryKey()));
+                                    return magicLink.getToken();
+                                }));
+                    });
+            });
+    }
+
+    /**
+     * Resolves the account a back-office view may be opened on, or fails.
+     *
+     * <p>The inversion of {@link #loadSupportViewTarget}: the target MUST have back-office access,
+     * because "see what this staff member sees" is meaningless for an account the back office would
+     * refuse to sign in anyway (the login and re-verification queries both filter on the
+     * {@code backoffice} flag). Disabled accounts and removed persons are refused for the same
+     * reason as the front-office flavour: a pass onto a dead account is only ever a mistake.
+     *
+     * @return the target account's username
+     */
+    private Future<String> loadBackOfficeViewTarget(Object targetPersonId, EntityStore entityStore) {
+        return entityStore.<Person>executeQuery(
+                "select frontendAccount.(username, backoffice, disabled), removed from Person where id=$1 limit 1", targetPersonId)
+            .map(Collections::first)
+            .compose(person -> {
+                FrontendAccount account = person == null ? null : person.getFrontendAccount();
+                if (account == null)
+                    return Future.failedFuture("[%s] This person has no account".formatted(ModalityAuthenticationI18nKeys.SupportViewInvalidTargetError));
+                if (Boolean.TRUE.equals(person.isRemoved()) || Boolean.TRUE.equals(account.isDisabled()))
+                    return Future.failedFuture("[%s] This account is disabled".formatted(ModalityAuthenticationI18nKeys.SupportViewInvalidTargetError));
+                if (!Boolean.TRUE.equals(account.isBackoffice()))
+                    return Future.failedFuture("[%s] This account has no back-office access".formatted(ModalityAuthenticationI18nKeys.SupportViewInvalidTargetError));
+                String username = account.getUsername();
+                if (Strings.isEmpty(username))
+                    return Future.failedFuture("[%s] This account has no username".formatted(ModalityAuthenticationI18nKeys.SupportViewInvalidTargetError));
+                return Future.succeededFuture(username);
+            });
+    }
+
+    /**
+     * Redeems a back-office view pass, opening the back office read-only as the target user.
+     *
+     * <p>Mirror of {@link #authenticateWithSupportView} with the context check inverted, and the
+     * same deliberate absence of {@code GuestPersonLinker}: looking must not alter. The principal is
+     * the same {@code ModalityUserPrincipal(target, targetAccount, agent)} shape, so the SQL-layer
+     * write guard, the credential-change refusals and the audit {@code toString()} all apply
+     * unchanged; which application the session belongs to is told apart later solely by the
+     * link type on the live {@code magic_link} row (see the password gateway's liveness check).
+     */
+    private Future<String> authenticateWithBackOfficeView(AuthenticateWithBackOfficeViewCredentials credentials) {
+        String usageRunId = ThreadLocalStateHolder.getRunId();
+        // A back-office view belongs in the back office. The `backoffice` flag is client-claimed
+        // (the identity-binding spec's signed token is the planned hardening), so this refusal is
+        // hygiene rather than the gate: the gate is that the pass was minted by a super admin, is
+        // single-use, and expires in minutes — and a front-office session presenting the resulting
+        // principal WITHOUT the flag dies on the liveness check, which finds no live SUPPORT_VIEW
+        // row for it.
+        if (!ThreadLocalStateHolder.isBackoffice())
+            return Future.failedFuture("[%s] A back-office view can only be opened in the back office".formatted(ModalityAuthenticationI18nKeys.SupportViewLinkInvalidError));
+        return MagicLinkService.loadSupportViewLinkAndMarkAsUsed(credentials.token(), MagicLinkType.BACKOFFICE_VIEW, dataSourceModel)
+            .compose(magicLink -> {
+                String targetUsername = magicLink.getEmail();
+                String agentUsername = magicLink.getOldEmail();
+                EntityStore entityStore = EntityStore.create(dataSourceModel);
+                return Future.all(
+                    // The account owner is the first person recorded against the account, same rule
+                    // as the front-office redeem — plus the fields to re-vet the account below.
+                    entityStore.<Person>executeQuery("select frontendAccount.(id, backoffice, disabled), removed from Person p where lower(frontendAccount.username)=lower($1) order by p.id limit 1", targetUsername),
+                    entityStore.<Person>executeQuery("select id from Person p where lower(frontendAccount.username)=lower($1) order by p.id limit 1", agentUsername)
+                ).compose(compositeFuture -> {
+                    EntityList<Person> targets = compositeFuture.resultAt(0);
+                    EntityList<Person> agents = compositeFuture.resultAt(1);
+                    Person targetPerson = Collections.first(targets);
+                    Person agentPerson = Collections.first(agents);
+                    if (targetPerson == null || agentPerson == null)
+                        return Future.failedFuture("[%s] Invalid support view pass".formatted(ModalityAuthenticationI18nKeys.SupportViewLinkInvalidError));
+                    // Re-vet what was vetted at mint time: the two minutes between the two are
+                    // exactly when an admin revoking someone's access expects it to take effect,
+                    // so a pass minted just before the toggle must not open a session just after.
+                    FrontendAccount targetAccount = targetPerson.getFrontendAccount();
+                    if (targetAccount == null
+                        || Boolean.TRUE.equals(targetPerson.isRemoved())
+                        || Boolean.TRUE.equals(targetAccount.isDisabled())
+                        || !Boolean.TRUE.equals(targetAccount.isBackoffice())) {
+                        Console.log("🚫 Back-office view pass refused at redeem: target account no longer eligible (magicLinkId=%s)".formatted(magicLink.getPrimaryKey()));
+                        return Future.failedFuture("[%s] Invalid support view pass".formatted(ModalityAuthenticationI18nKeys.SupportViewLinkInvalidError));
+                    }
+                    ModalityUserPrincipal userId = new ModalityUserPrincipal(
+                        targetPerson.getPrimaryKey(), targetAccount.getPrimaryKey(), agentPerson.getPrimaryKey());
+                    Console.log("🔎 Back-office view opened: person %s → person %s".formatted(
                         agentPerson.getPrimaryKey(), targetPerson.getPrimaryKey()));
                     return PushServerService.pushState(AuthenticatedState.createFor(userId), usageRunId)
                         .map(ignored -> Strings.toSafeString(magicLink.getRequestedPath()));
@@ -491,16 +685,27 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
             return Future.failedFuture("[%s] A support view cannot change this account's password".formatted(ModalityAuthenticationI18nKeys.SupportViewLinkInvalidError));
         // 1) Loading the email for the magic link normally associated with this magic link app userId from the database
         // This will be used to identify the account we need to change the password for.
+        //
+        // Scoped to LOGIN rows IN THE QUERY, not just in the Java check below: one tab (one runId)
+        // can legitimately stamp usageRunId onto more than one row — the account-creation-from-
+        // booking flows mark BOOKING_ACCESS links as used with the same runId — and an unordered
+        // `limit 1` over that set is a coin toss. Before the type check tightened to LOGIN-only
+        // the coin toss was invisible (either row passed); with it, drawing the BOOKING_ACCESS row
+        // would refuse a perfectly legitimate password change. The column is NOT NULL DEFAULT
+        // 'LOGIN', so the SQL filter cannot miss legacy rows, and `order by id desc` keeps the
+        // answer deterministic even so.
         return EntityStore.create(dataSourceModel)
-            .<MagicLink>executeQuery("select email,linkType from MagicLink where usageRunId=$1 limit 1", usageRunId)
+            .<MagicLink>executeQuery("select email,linkType from MagicLink where usageRunId=$1 and linkType=$2 order by id desc limit 1", usageRunId, MagicLinkType.LOGIN.name())
             .compose(magicLinks -> {
                 if (magicLinks.isEmpty())
                     return Future.failedFuture("[%s] Magic link not found!".formatted(ModalityAuthenticationI18nKeys.LoginLinkUnrecognisedError));
                 MagicLink magicLink = magicLinks.get(0);
-                // Belt and braces for the guard above: only a login-style link authorises a password
-                // change. linkType is selected explicitly because an unselected field reads as null,
-                // which getLinkType() would charitably interpret as LOGIN.
-                if (magicLink.isSupportView())
+                // Belt and braces for the query filter above and the principal guard before it:
+                // only a LOGIN link authorises a password change — stated as an allowlist so a
+                // support pass of either flavour (or any future type) is refused without this line
+                // needing to know about it. linkType is selected explicitly because an unselected
+                // field reads as null, which getLinkType() would charitably interpret as LOGIN.
+                if (magicLink.getLinkType() != MagicLinkType.LOGIN)
                     return Future.failedFuture("[%s] Magic link not found!".formatted(ModalityAuthenticationI18nKeys.LoginLinkUnrecognisedError));
                 // 3) Reading the user person
                 return MagicLinkService.loadUserPersonFromMagicLink(magicLink)

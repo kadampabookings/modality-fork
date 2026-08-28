@@ -9,9 +9,15 @@ package one.modality.base.shared.entities;
  *       multi-use so the guest can open it from any device at any time.</li>
  *   <li>{@link #SUPPORT_VIEW} — issued to a support member to open a customer's front office read-only:
  *       very short-lived (2 min to redeem), single-use, never emailed.</li>
+ *   <li>{@link #BACKOFFICE_VIEW} — issued to a super admin to open the back office as another
+ *       back-office user, read-only: same mechanics as SUPPORT_VIEW (2 min to redeem, single-use,
+ *       never emailed), but redeemable only in a back-office context and only mintable by a
+ *       super admin for a target account that has back-office access.</li>
  * </ul>
  *
- * The {@code name()} of each constant is stored verbatim in the {@code magic_link.link_type} column.
+ * The {@code name()} of each constant is stored verbatim in the {@code magic_link.link_type} column,
+ * which is {@code varchar(20)} — a new constant's name must fit, which is why it is
+ * {@code BACKOFFICE_VIEW} and not the more symmetric {@code SUPPORT_VIEW_BACKOFFICE}.
  *
  * <p><b>The type is a security boundary, not a label.</b> Each redemption path must accept only the
  * type it was written for: a SUPPORT_VIEW grant redeemed through the ordinary magic-link path would
@@ -23,5 +29,6 @@ package one.modality.base.shared.entities;
 public enum MagicLinkType {
     LOGIN,
     BOOKING_ACCESS,
-    SUPPORT_VIEW
+    SUPPORT_VIEW,
+    BACKOFFICE_VIEW
 }

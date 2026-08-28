@@ -18,6 +18,8 @@
         <provider interface="dev.webfx.stack.com.serial.spi.SerialCodec">one.modality.crm.shared.services.authn.serial.SendBookingAccessEmailCredentialsSerialCodec</provider>
         <provider interface="dev.webfx.stack.com.serial.spi.SerialCodec">one.modality.crm.shared.services.authn.serial.RequestSupportViewCredentialsSerialCodec</provider>
         <provider interface="dev.webfx.stack.com.serial.spi.SerialCodec">one.modality.crm.shared.services.authn.serial.AuthenticateWithSupportViewCredentialsSerialCodec</provider>
+        <provider interface="dev.webfx.stack.com.serial.spi.SerialCodec">one.modality.crm.shared.services.authn.serial.RequestBackOfficeViewCredentialsSerialCodec</provider>
+        <provider interface="dev.webfx.stack.com.serial.spi.SerialCodec">one.modality.crm.shared.services.authn.serial.AuthenticateWithBackOfficeViewCredentialsSerialCodec</provider>
     </providers>
     <java-ui-api package="one.modality.crm.shared.services.authn" prefix="ModalityAuthentication">
         <i18n/>
