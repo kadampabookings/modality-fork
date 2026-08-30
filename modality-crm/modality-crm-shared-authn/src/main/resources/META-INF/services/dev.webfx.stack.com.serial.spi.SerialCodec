@@ -6,3 +6,10 @@ one.modality.crm.shared.services.authn.serial.RequestSupportViewCredentialsSeria
 one.modality.crm.shared.services.authn.serial.AuthenticateWithSupportViewCredentialsSerialCodec
 one.modality.crm.shared.services.authn.serial.RequestBackOfficeViewCredentialsSerialCodec
 one.modality.crm.shared.services.authn.serial.AuthenticateWithBackOfficeViewCredentialsSerialCodec
+one.modality.crm.shared.services.authn.serial.StartPasskeyRegistrationCredentialsSerialCodec
+one.modality.crm.shared.services.authn.serial.FinalisePasskeyRegistrationCredentialsSerialCodec
+one.modality.crm.shared.services.authn.serial.StartPasskeyAssertionCredentialsSerialCodec
+one.modality.crm.shared.services.authn.serial.AuthenticateWithPasskeyCredentialsSerialCodec
+one.modality.crm.shared.services.authn.serial.ListPasskeysCredentialsSerialCodec
+one.modality.crm.shared.services.authn.serial.RemovePasskeyCredentialsSerialCodec
+one.modality.crm.shared.services.authn.serial.RenamePasskeyCredentialsSerialCodec

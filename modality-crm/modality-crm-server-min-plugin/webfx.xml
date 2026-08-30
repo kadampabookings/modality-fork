@@ -13,6 +13,7 @@
         <plugin-module>modality-crm-server-authn-gateway-usernamepassword-plugin</plugin-module>
         <plugin-module>modality-crm-server-authn-gateway-guest-plugin</plugin-module>
         <plugin-module>modality-crm-server-authn-gateway-magiclink-plugin</plugin-module>
+        <plugin-module>modality-crm-server-authn-gateway-webauthn-plugin</plugin-module>
         <plugin-module>modality-crm-server-authz-required-plugin</plugin-module>
         <!-- Without this module the identity token still slides and is still capped, but nothing rotates
              it and a stolen copy stays undetectable — a plugin module is only built in if a list names
