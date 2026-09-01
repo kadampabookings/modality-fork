@@ -79,3 +79,4 @@ V0076__transaction_parameter_single_row.sql
 V0077__erase_past_event_function.sql
 V0078__bo_device.sql
 V0079__bo_device_admin_note.sql
+V0080__resolve_document_person_email.sql
