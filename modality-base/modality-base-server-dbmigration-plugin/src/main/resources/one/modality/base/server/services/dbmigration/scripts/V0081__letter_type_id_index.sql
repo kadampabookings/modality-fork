@@ -1,0 +1,26 @@
+-- Index letter.type_id, for the letter-type lookups in the automatic-letters job.
+--
+-- letter has an FK constraint on type_id (letter_type_id_fkey) but Postgres does NOT auto-index FK
+-- columns, and letter had no index on it. AutomaticLettersActor.sendSystemLetter picks its letter
+-- through a subquery correlated on the document's event, so the planner cannot prune it: without
+-- this index it hash-joined letter_type LAST and seq-scanned all 23,195 letter rows PER DOCUMENT
+-- ROW, evaluating the letter_scope_rank() CASE on every one of them.
+--
+-- Measured on production 2026-09-01, the no-shuttle-time letters: 2975ms -> 193ms (15.4x), per
+-- subquery execution 15.9ms -> 1.02ms, buffers 690k -> 54.7k. The plan flips from
+--   Hash Join -> Seq Scan on letter (23,194 rows/loop)
+-- to
+--   Nested Loop -> Index Scan using letter_type_id_idx (Index Cond: type_id = lt.id).
+-- The audio letters were far worse (353s, 161M rows examined, to return nothing at all) and hung
+-- the KBS2 server past its ELB health check every hour; that path is additionally short-circuited
+-- by a pre-check in AutomaticLettersActor.
+--
+-- This is a NO-OP on production and staging, where the index was created by hand on 2026-09-01
+-- (plain CREATE INDEX, not CONCURRENTLY: the build is sub-second on this table, whereas
+-- CONCURRENTLY waits for every open transaction and repeatedly stalled behind unrelated
+-- long-running queries). It exists so that a freshly built database gets the index too.
+--
+-- Plain CREATE INDEX is deliberate here: DbMigrationRunner wraps every script in ONE transaction,
+-- and CREATE INDEX CONCURRENTLY cannot run inside a transaction block.
+
+CREATE INDEX IF NOT EXISTS letter_type_id_idx ON public.letter USING btree (type_id);
