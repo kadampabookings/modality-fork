@@ -47,15 +47,30 @@ function modality_injectJavaPaymentForm(jpf) {
 function modality_submitGatewayPayment(firstName, lastName, email, phone, address, city, state, zipCode, countryCode, countryName) {
     console.log("modality_submitGatewayPayment() called (PayPal Card Fields)");
     if (!modality_cardFields) return; // no-op in Buttons fallback (React Pay button is hidden anyway)
-    modality_cardFields.submit({
-        billingAddress: {
-            addressLines: address ? [address] : [],
-            adminArea1:   state       || '',
-            adminArea2:   city        || '',
-            countryCode:  (countryCode || '').toUpperCase(),
-            postalCode:   zipCode     || '',
-        },
-    }).catch(function(err) {
+    // The billing address is OPTIONAL, but if we send one it MUST carry a country code:
+    // PayPal rejects the whole confirm-payment-source call with
+    //   400 INVALID_REQUEST / MISSING_REQUIRED_PARAMETER on
+    //   /payment_source/card/billing_address/country_code
+    // when country_code is absent or empty. We used to send the object unconditionally, so
+    // every card payment by a payer we hold no country for — every anonymous /pay-cart and
+    // public-talk payer, and any member whose Person record has no country — failed with a
+    // 400 no amount of retrying could fix. When we don't know the country we therefore send
+    // no billing address at all, which is the same rule the server applies when it attaches
+    // the payer address to the order (see PayPalPaymentGateway.createPayPalOrderId).
+    var country = (countryCode || '').trim().toUpperCase();
+    var submitOptions;
+    if (country) {
+        submitOptions = {
+            billingAddress: {
+                addressLines: address ? [address] : [],
+                adminArea1:   state       || '',
+                adminArea2:   city        || '',
+                countryCode:  country,
+                postalCode:   zipCode     || '',
+            },
+        };
+    }
+    modality_cardFields.submit(submitOptions).catch(function(err) {
         modality_notifyGatewayCardVerificationFailure(String(err));
     });
 }

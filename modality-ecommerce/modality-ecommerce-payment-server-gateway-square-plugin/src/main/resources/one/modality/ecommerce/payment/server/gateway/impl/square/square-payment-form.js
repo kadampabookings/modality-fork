@@ -368,23 +368,29 @@ import(square_webPaymentsSDKUrl)
         }
 
         // Required in SCA Mandated Regions: Learn more at https://developer.squareup.com/docs/sca-overview
+        //
+        // Only the fields we actually hold are put in billingContact. Sending the keys with
+        // blank values is not equivalent: buyer verification then fails with the generic
+        // "An unexpected error occurred while verifying buyer.", which is what every anonymous
+        // payer hit (pay-cart and the public-talk form have no Person record to read a billing
+        // address from, so every field arrived as ''). The client now supplies at least the
+        // payer's name and email for those flows; whatever is still unknown is omitted rather
+        // than sent empty.
         async function verifyBuyer(token, firstName, lastName, email, phone, address, city, state, countryCode) {
-            if (email)
-                email = email.toLowerCase();
-            if (countryCode)
-                countryCode = countryCode.toUpperCase(); // Square rejects lower case country codes
+            const billingContact = {};
+            if (firstName) billingContact.givenName    = firstName;
+            if (lastName)  billingContact.familyName   = lastName;
+            if (email)     billingContact.email        = email.toLowerCase();
+            if (phone)     billingContact.phone        = phone;
+            if (address)   billingContact.addressLines = [address];
+            if (city)      billingContact.city         = city;
+            if (state)     billingContact.state        = state;
+            // Square rejects lower case country codes
+            if (countryCode) billingContact.countryCode = countryCode.toUpperCase();
+
             const verificationDetails = {
                 amount: (Number(modality_amount) / 100).toFixed(2),
-                billingContact: {
-                    givenName: firstName,
-                    familyName: lastName,
-                    email: email,
-                    phone: phone,
-                    addressLines: address ? [address] : [],
-                    city: city,
-                    state: state,
-                    countryCode: countryCode,
-                },
+                billingContact: billingContact,
                 currencyCode: modality_currencyCode,
                 intent: 'CHARGE',
             };
