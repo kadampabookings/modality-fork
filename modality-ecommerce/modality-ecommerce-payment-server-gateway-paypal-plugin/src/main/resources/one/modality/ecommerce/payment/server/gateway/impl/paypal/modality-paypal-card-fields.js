@@ -16,6 +16,37 @@ var modality_cardFields;   // set only when Card Fields API is used (null in But
 // Guard against same-injection double-calls: reset to false on each re-injection.
 var modality_onLoadedRunning = false;
 
+// ── Cross-injection state reset ───────────────────────────────────────────────
+// Every `var` above WITHOUT an initialiser keeps its previous value when this
+// script is injected again: re-declaring an existing global is a no-op, only an
+// assignment overwrites it. React injects a fresh gateway script into the same
+// window for every payment attempt and every method switch, so state from the
+// previous attempt — even from a DIFFERENT gateway, since all three scripts use
+// these same global names — arrives looking like our own. Both known symptoms
+// come from the inherited `modality_initialized`:
+//
+//   * Stripe answered the bridge with init success from the stale flag before
+//     window.Stripe() had run, so the payer's click reached confirmPayment on
+//     an undefined instance ("undefined is not an object").
+//   * PayPal returned early from modality_injectJavaPaymentForm and therefore
+//     never ran onLoaded() at all — an empty form under a live Pay button whose
+//     click did nothing, leaving the UI spinning. Nothing is logged for that
+//     one, so it cannot be counted; it can only be reported by the payer.
+//
+// The identity is the payment attempt this script was generated for. The DOM
+// check covers the rest: same attempt, but React has since unmounted the widget
+// we rendered, so there is nothing left to reuse.
+var modality_formIdentity = 'paypal|card|' + paypal_orderId;
+if (window._modalityFormIdentity !== modality_formIdentity
+    || !modality_containerElement || !document.contains(modality_containerElement)) {
+    window._modalityFormIdentity = modality_formIdentity;
+    modality_initialized = false;
+    modality_initError = undefined;
+    modality_initNotificationCalled = false;
+    modality_containerElement = undefined;
+    modality_cardFields = undefined;
+}
+
 // Cross-injection stale detection for React Strict Mode: the counter lives on window so it
 // survives script re-injection (unlike 'var' declarations which reset on every injection).
 // onLoaded() captures its value as a LOCAL variable (myRunId) at call time; after each

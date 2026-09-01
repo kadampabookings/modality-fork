@@ -36,6 +36,43 @@ var square_applePay;   // set when payment method is APPLE_PAY
 // both call onLoaded() and attach two card widgets. Reset to false on each script re-injection.
 var modality_onLoadedRunning = false;
 
+// ── Cross-injection state reset ───────────────────────────────────────────────
+// Every `var` above WITHOUT an initialiser keeps its previous value when this
+// script is injected again: re-declaring an existing global is a no-op, only an
+// assignment overwrites it. React injects a fresh gateway script into the same
+// window for every payment attempt and every method switch, so state from the
+// previous attempt — even from a DIFFERENT gateway, since all three scripts use
+// these same global names — arrives looking like our own. Both known symptoms
+// come from the inherited `modality_initialized`:
+//
+//   * Stripe answered the bridge with init success from the stale flag before
+//     window.Stripe() had run, so the payer's click reached confirmPayment on
+//     an undefined instance ("undefined is not an object").
+//   * PayPal returned early from modality_injectJavaPaymentForm and therefore
+//     never ran onLoaded() at all — an empty form under a live Pay button whose
+//     click did nothing, leaving the UI spinning. Nothing is logged for that
+//     one, so it cannot be counted; it can only be reported by the payer.
+//
+// Square has no per-attempt id to identify itself by (the idempotency key is
+// generated fresh on every injection, so it would make even a Strict Mode
+// re-injection look like a new attempt). Gateway, method, location and amount
+// tell it apart from every other form; two consecutive Square attempts for the
+// same amount are left to the DOM check below, which is what catches "same
+// attempt, but React has since unmounted the widget we rendered".
+var modality_formIdentity = 'square|' + modality_paymentMethodId + '|' + square_locationId
+    + '|' + modality_amount + '|' + modality_currencyCode;
+if (window._modalityFormIdentity !== modality_formIdentity
+    || !modality_containerElement || !document.contains(modality_containerElement)) {
+    window._modalityFormIdentity = modality_formIdentity;
+    modality_initialized = false;
+    modality_initError = undefined;
+    modality_initNotificationCalled = false;
+    modality_containerElement = undefined;
+    square_card = undefined;
+    square_googlePay = undefined;
+    square_applePay = undefined;
+}
+
 // Catches uncaught errors thrown by the Square SDK or browser extensions during initialisation
 // (e.g. "insertBefore" DOM errors caused by password-manager extensions injecting into the card
 // form). Routes them through modality_notifyGatewayInitFailure so the fallback redirect fires

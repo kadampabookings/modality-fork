@@ -48,6 +48,40 @@ var stripe_paymentRequest;  // set when payment method is GOOGLE_PAY / APPLE_PAY
 // run onLoaded() twice and attach two widgets. Reset to false on each script re-injection.
 var modality_onLoadedRunning = false;
 
+// ── Cross-injection state reset ───────────────────────────────────────────────
+// Every `var` above WITHOUT an initialiser keeps its previous value when this
+// script is injected again: re-declaring an existing global is a no-op, only an
+// assignment overwrites it. React injects a fresh gateway script into the same
+// window for every payment attempt and every method switch, so state from the
+// previous attempt — even from a DIFFERENT gateway, since all three scripts use
+// these same global names — arrives looking like our own. Both known symptoms
+// come from the inherited `modality_initialized`:
+//
+//   * Stripe answered the bridge with init success from the stale flag before
+//     window.Stripe() had run, so the payer's click reached confirmPayment on
+//     an undefined instance ("undefined is not an object").
+//   * PayPal returned early from modality_injectJavaPaymentForm and therefore
+//     never ran onLoaded() at all — an empty form under a live Pay button whose
+//     click did nothing, leaving the UI spinning. Nothing is logged for that
+//     one, so it cannot be counted; it can only be reported by the payer.
+//
+// The identity is the payment attempt this script was generated for. The DOM
+// check covers the rest: same attempt, but React has since unmounted the widget
+// we rendered, so there is nothing left to reuse.
+var modality_formIdentity = 'stripe|' + modality_paymentMethodId + '|' + stripe_paymentIntentId;
+if (window._modalityFormIdentity !== modality_formIdentity
+    || !modality_containerElement || !document.contains(modality_containerElement)) {
+    window._modalityFormIdentity = modality_formIdentity;
+    modality_initialized = false;
+    modality_initError = undefined;
+    modality_initNotificationCalled = false;
+    modality_containerElement = undefined;
+    stripe_stripeInstance = undefined;
+    stripe_elements = undefined;
+    stripe_paymentElement = undefined;
+    stripe_paymentRequest = undefined;
+}
+
 // Catches uncaught errors thrown by Stripe.js or browser extensions during initialisation
 // (e.g. extensions injecting into the card form). Routes them through
 // modality_notifyGatewayInitFailure so the fallback redirect can fire instead of leaving
