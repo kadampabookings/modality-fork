@@ -29,7 +29,8 @@ import one.modality.ecommerce.payment.server.gateway.*;
 import one.modality.ecommerce.payment.server.gateway.impl.util.RestApiOneTimeHtmlResponsesCache;
 
 import java.util.List;
-import java.util.regex.Pattern;
+
+import static one.modality.ecommerce.payment.server.gateway.impl.util.GatewayEmail.emailOrNull;
 
 import static one.modality.ecommerce.payment.server.gateway.impl.stripe.StripeAsync.executeBlocking;
 import static one.modality.ecommerce.payment.server.gateway.impl.stripe.StripeAsync.retryingRequestOptions;
@@ -64,11 +65,6 @@ public final class StripePaymentGateway implements PaymentGateway {
 
     static final String GATEWAY_NAME = "Stripe";
     private static final boolean DEBUG_LOG = true;
-
-    // Deliberately stricter than RFC 5322 (no quoted local parts, no IP-literal domains): this
-    // only ever decides whether an address is safe to hand to Stripe as receipt_email, and the
-    // penalty for a false accept — Stripe refusing the call — is paid on the payment path.
-    private static final Pattern EMAIL_SHAPE = Pattern.compile("[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(\\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*@[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)+");
 
     // Source: https://docs.stripe.com/testing — covers card decline triggers used in mapStripeDeclineCodeToFailureReason()
     private static final SandboxCard[] SANDBOX_CARDS = {
@@ -165,7 +161,17 @@ public final class StripePaymentGateway implements PaymentGateway {
                     .replace("${stripe_countryCode}", merchantCountryCodeOrDefault(argument))
                     .replace("${modality_billingFirstName}",   jsStringEscape(customer == null ? null : customer.firstName()))
                     .replace("${modality_billingLastName}",    jsStringEscape(customer == null ? null : customer.lastName()))
-                    .replace("${modality_billingEmail}",       jsStringEscape(customer == null ? null : customer.email()))
+                    // Guarded, unlike the billing fields around it, because this value decides two
+                    // things at once: a non-empty value sets fields.billingDetails.email = 'never'
+                    // in the form (HIDING the email input, on the promise that we supply the value
+                    // ourselves) and it is the fallback sent as billing_details.email at
+                    // confirmPayment. A value that isn't an address would therefore hide the field
+                    // while handing Stripe something it rejects — and an unauthenticated payer, who
+                    // has no client-side address of their own to override it with, would be left
+                    // with no way to pay and no field to correct. Empty instead means the input
+                    // stays visible and the payer types their own. emailOrNull() also trims, so a
+                    // stored address with stray whitespace is used rather than discarded.
+                    .replace("${modality_billingEmail}",       jsStringEscape(emailOrNull(customer == null ? null : customer.email())))
                     .replace("${modality_billingPhone}",       jsStringEscape(customer == null ? null : customer.phone()))
                     .replace("${modality_billingAddress}",     jsStringEscape(customer == null ? null : customer.address()))
                     .replace("${modality_billingCity}",        jsStringEscape(customer == null ? null : customer.city()))
@@ -393,19 +399,6 @@ public final class StripePaymentGateway implements PaymentGateway {
             .onSuccess(sent -> Console.log(sent
                 ? "[Stripe] Receipt requested on charge " + chargeId
                 : "[Stripe] Nothing to do for a receipt on charge " + chargeId + " (already requested, or no usable email address)"));
-    }
-
-    /**
-     * Returns the value only if it plausibly is an email address, otherwise null. Stripe rejects
-     * the whole API call on a malformed {@code receipt_email}, so junk in {@code person.email} (a
-     * free-text field) would break the payment itself. A missing receipt is by far the lesser
-     * failure, so anything that doesn't look like an address is dropped here rather than sent.
-     */
-    private static String emailOrNull(String email) {
-        if (email == null)
-            return null;
-        String trimmed = email.trim();
-        return trimmed.length() <= 254 && EMAIL_SHAPE.matcher(trimmed).matches() ? trimmed : null;
     }
 
     /** Builds the gateway result from a retrieved PaymentIntent. Visible to the webhook handler. */

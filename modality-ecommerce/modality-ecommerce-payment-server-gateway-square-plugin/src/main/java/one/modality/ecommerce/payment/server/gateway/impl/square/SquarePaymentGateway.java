@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static one.modality.ecommerce.payment.server.gateway.impl.square.SquareRestApiJob.SQUARE_PAYMENT_FORM_ENDPOINT;
+import static one.modality.ecommerce.payment.server.gateway.impl.util.GatewayEmail.emailOrNull;
 
 /**
  * @author Bruno Salmon
@@ -259,22 +260,29 @@ public final class SquarePaymentGateway implements PaymentGateway {
         String note = truncate(argument.order().longName(), 500);
         String referenceId = truncate(argument.order().id(), 40);
 
+        // The buyer's email on the Square payment record — what staff see when they look a payment
+        // up in the dashboard, and what a refund or dispute enquiry is traced by. It does NOT make
+        // Square send a receipt: Square confirms automatic receipts are not sent for Payments API
+        // payments, and its own receipt emails are card-linked (tied to an address the buyer gave
+        // Square directly, which we neither see nor control). Emailing our own receipt — Square
+        // returns a hosted receipt_url on every payment — is a separate job.
+        String buyerEmail = emailOrNull(argument.customer() == null ? null : argument.customer().email());
+
+        createSquarePayment(client,
+            new SquarePaymentInputs(sourceId, locationId, verificationToken, amount, currencyCode, note, referenceId),
+            idempotencyKey, buyerEmail, promise);
+        return promise.future();
+    }
+
+    /**
+     * Sends one CreatePayment attempt, and retries it once WITHOUT the buyer email if that is the
+     * field Square rejected — this call IS the payment, so an address we hold must never be the
+     * reason a member can't pay.
+     */
+    private static void createSquarePayment(AsyncSquareClient client, SquarePaymentInputs inputs, String idempotencyKey, String buyerEmail, Promise<GatewayCompletePaymentResult> promise) {
         // Use Square SDK async client pattern (like AsyncCustomersClient)
         client.payments()
-            .create(
-                CreatePaymentRequest.builder()
-                    .sourceId(sourceId)
-                    .idempotencyKey(idempotencyKey)
-                    .locationId(locationId)
-                    .verificationToken(verificationToken)
-                    .amountMoney(Money.builder()
-                        .amount(amount)
-                        .currency(Currency.valueOf(currencyCode))
-                        .build())
-                    .note(note)
-                    .referenceId(referenceId)
-                    .build()
-            )
+            .create(inputs.toCreatePaymentRequest(idempotencyKey, buyerEmail))
             .thenAccept(response -> {
                 // Extract payment from response (it's an Optional in v45)
                 Payment payment = response.getPayment().orElse(null);
@@ -288,6 +296,24 @@ public final class SquarePaymentGateway implements PaymentGateway {
             .exceptionally(ex -> {
                 Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
                 if (cause instanceof SquareApiException ae) {
+                    if (buyerEmail != null && isBuyerEmailRejection(ae)) {
+                        // Square names this field only while validating the REQUEST, which happens
+                        // before any card is touched — no payment was created, so paying again
+                        // cannot double-charge. A different key is required: Square refuses a
+                        // reused key whose request body changed (IDEMPOTENCY_KEY_REUSED).
+                        Console.warn("[Square] completePayment - buyer_email_address refused by Square (" + squareErrorCodes(ae) + ") — retrying the payment without it");
+                        try {
+                            createSquarePayment(client, inputs, retryIdempotencyKey(idempotencyKey), null, promise);
+                        } catch (Throwable t) {
+                            // We are inside exceptionally(), and nothing consumes the stage this
+                            // lambda returns — so a synchronous throw from the retry (request
+                            // building, SDK client) would settle nothing at all, leaving the payer
+                            // on a spinner until the bus times out instead of seeing an error.
+                            // tryFail() rather than fail() as the promise may already be settled.
+                            promise.tryFail(generateErrorMessage(t, "completePayment"));
+                        }
+                        return null;
+                    }
                     // Card declines and validation errors arrive as SquareApiException (4xx HTTP response).
                     // Convert to a structured failure result so the UI can show a specific reason
                     // rather than a generic server error.
@@ -300,7 +326,65 @@ public final class SquarePaymentGateway implements PaymentGateway {
                 }
                 return null;
             });
-        return promise.future();
+    }
+
+    /**
+     * The idempotency key for the retry above. DERIVED from the client's key, never random: a
+     * replayed completePayment (lost bus reply, resubmitted payload) must land on the same key it
+     * did the first time, so Square recognises it and returns the original payment instead of
+     * taking a second one. A random key here would make every replay of a malformed-email payment
+     * a fresh charge — the double-charge shape KBS has already been bitten by. Square caps the key
+     * at 45 characters, so the base is trimmed to leave room for the suffix.
+     */
+    private static String retryIdempotencyKey(String idempotencyKey) {
+        return idempotencyKey == null ? null : truncate(idempotencyKey, 42) + "-ne";
+    }
+
+    /** True when Square refused the request specifically because of the buyer email we sent. */
+    private static boolean isBuyerEmailRejection(SquareApiException ae) {
+        for (Error error : ae.errors()) {
+            if (error.getField().orElse("").toLowerCase().endsWith("buyer_email_address"))
+                return true;
+            // The buyer's is the only email address a CreatePayment request carries, so this code
+            // can't be about anything else.
+            if ("INVALID_EMAIL_ADDRESS".equals(error.getCode().toString()))
+                return true;
+        }
+        return false;
+    }
+
+    /** Square error codes as a log-safe string — no address is ever logged, only what was wrong. */
+    private static String squareErrorCodes(SquareApiException ae) {
+        StringBuilder codes = new StringBuilder();
+        for (Error error : ae.errors()) {
+            if (!codes.isEmpty()) codes.append(", ");
+            codes.append(error.getCode());
+        }
+        return codes.toString();
+    }
+
+    /**
+     * The CreatePayment fields that stay identical across attempts — only the idempotency key and
+     * the buyer email differ between the first try and the retry above.
+     */
+    private record SquarePaymentInputs(String sourceId, String locationId, String verificationToken, Long amount, String currencyCode, String note, String referenceId) {
+
+        CreatePaymentRequest toCreatePaymentRequest(String idempotencyKey, String buyerEmail) {
+            CreatePaymentRequest._FinalStage builder = CreatePaymentRequest.builder()
+                .sourceId(sourceId)
+                .idempotencyKey(idempotencyKey)
+                .locationId(locationId)
+                .verificationToken(verificationToken)
+                .amountMoney(Money.builder()
+                    .amount(amount)
+                    .currency(Currency.valueOf(currencyCode))
+                    .build())
+                .note(note)
+                .referenceId(referenceId);
+            if (buyerEmail != null)
+                builder = builder.buyerEmailAddress(buyerEmail);
+            return builder.build();
+        }
     }
 
     private static GatewayCompletePaymentResult generateResultFromSquarePayment(Payment payment, CreatePaymentResponse response) {
