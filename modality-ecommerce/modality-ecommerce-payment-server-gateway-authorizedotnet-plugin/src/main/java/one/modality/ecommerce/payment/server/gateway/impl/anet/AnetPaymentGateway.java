@@ -12,6 +12,7 @@ import net.authorize.api.contract.v1.*;
 import net.authorize.api.controller.CreateTransactionController;
 import one.modality.ecommerce.payment.*;
 import one.modality.ecommerce.payment.server.gateway.*;
+import static one.modality.ecommerce.payment.server.gateway.impl.util.GatewayEmail.emailOrNull;
 import one.modality.ecommerce.payment.server.gateway.impl.util.RestApiOneTimeHtmlResponsesCache;
 
 import java.math.BigDecimal;
@@ -122,10 +123,18 @@ public final class AnetPaymentGateway implements PaymentGateway {
         // (denormalized person_* fields on the Document). The React client always sends strings
         // (never null), so a plain != null check would silently accept empty strings and
         // bypass the fallback — !Strings.isBlank() avoids that pitfall.
+        // Email is the one billing field where a bad value costs the payment rather than just
+        // AVS quality — Authorize.net rejects the transaction on a malformed address, and
+        // person.email is free text. Same client-first precedence as the fields below, but the
+        // criterion is the first VALID address rather than the first non-blank one.
+        String billingEmail = emailOrNull(clientSideEmail);
+        if (billingEmail == null)
+            billingEmail = emailOrNull(serverSideCustomer.email());
+
         CustomerAddressType billingAddress = new CustomerAddressType();
         billingAddress.setFirstName(  !Strings.isBlank(clientSideFirstName) ? clientSideFirstName : serverSideCustomer.firstName());
         billingAddress.setLastName(   !Strings.isBlank(clientSideLastName)  ? clientSideLastName  : serverSideCustomer.lastName());
-        billingAddress.setEmail(      !Strings.isBlank(clientSideEmail)     ? clientSideEmail     : serverSideCustomer.email());
+        billingAddress.setEmail(      billingEmail);
         billingAddress.setPhoneNumber(!Strings.isBlank(clientSidePhone)     ? clientSidePhone     : serverSideCustomer.phone());
         billingAddress.setAddress(    !Strings.isBlank(clientSideAddress)   ? clientSideAddress   : serverSideCustomer.address());
         billingAddress.setCity(       !Strings.isBlank(clientSideCity)      ? clientSideCity      : serverSideCustomer.city());
@@ -156,7 +165,7 @@ public final class AnetPaymentGateway implements PaymentGateway {
 
         CustomerDataType customerData = new CustomerDataType();
         customerData.setId(serverSideCustomer.id());
-        customerData.setEmail(serverSideCustomer.email());
+        customerData.setEmail(emailOrNull(serverSideCustomer.email()));
         customerData.setType(CustomerTypeEnum.INDIVIDUAL);
 
         OpaqueDataType opaqueData = new OpaqueDataType();

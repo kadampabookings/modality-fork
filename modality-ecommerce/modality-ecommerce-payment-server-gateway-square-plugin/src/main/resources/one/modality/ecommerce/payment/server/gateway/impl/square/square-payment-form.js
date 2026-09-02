@@ -122,6 +122,22 @@ function modality_injectJavaPaymentForm(jpf) {
     }
 }
 
+// Mirrors GatewayEmail.emailOrNull() on the server, and is duplicated in the Stripe form
+// script for the same reason: these two scripts talk to their gateway STRAIGHT FROM THE
+// BROWSER, so a value assembled here never passes through the server-side guard.
+//
+// The address that arrives from the app is the signed-in payer's own person.email — free
+// text, which staff and the returning-guest form both write. A gateway rejects the whole
+// call on a malformed one, and that call IS the payment, so an unusable address has to be
+// dropped rather than sent. Square's form has no email input of its own, so here dropping it
+// simply omits billingContact.email — verifyBuyer() proceeds on the name and address, rather
+// than failing and stranding the payer on a form that cannot complete.
+function modality_emailOrNull(email) {
+    if (!email) return null;
+    var trimmed = String(email).trim();
+    return trimmed.length <= 254 && /^[A-Za-z0-9!#$%&'*+\/=?^_`{|}~-]+(\.[A-Za-z0-9!#$%&'*+\/=?^_`{|}~-]+)*@[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)+$/.test(trimmed) ? trimmed : null;
+}
+
 function modality_submitGatewayPayment(firstName, lastName, email, phone, address, city, state, postCode, countryCode, countryName) {
     console.log("modality_submitGatewayPayment() called");
     // Google Pay and Apple Pay are self-contained: their buttons directly trigger the
@@ -417,7 +433,10 @@ import(square_webPaymentsSDKUrl)
             const billingContact = {};
             if (firstName) billingContact.givenName    = firstName;
             if (lastName)  billingContact.familyName   = lastName;
-            if (email)     billingContact.email        = email.toLowerCase();
+            // Validated: a rejection inside verifyBuyer() aborts the payment in the browser,
+            // before completePayment() and its server-side guard ever run.
+            var validEmail = modality_emailOrNull(email);
+            if (validEmail) billingContact.email       = validEmail.toLowerCase();
             if (phone)     billingContact.phone        = phone;
             if (address)   billingContact.addressLines = [address];
             if (city)      billingContact.city         = city;

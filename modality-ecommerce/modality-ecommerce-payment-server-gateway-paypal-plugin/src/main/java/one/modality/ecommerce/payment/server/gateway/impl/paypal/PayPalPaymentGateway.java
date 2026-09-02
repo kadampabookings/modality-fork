@@ -12,6 +12,7 @@ import dev.webfx.platform.resource.Resource;
 import dev.webfx.platform.util.uuid.Uuid;
 import one.modality.ecommerce.payment.*;
 import one.modality.ecommerce.payment.server.gateway.*;
+import static one.modality.ecommerce.payment.server.gateway.impl.util.GatewayEmail.emailOrNull;
 import one.modality.ecommerce.payment.server.gateway.impl.util.RestApiOneTimeHtmlResponsesCache;
 
 import java.nio.charset.StandardCharsets;
@@ -324,8 +325,12 @@ public final class PayPalPaymentGateway implements PaymentGateway {
                     .append("\"surname\":\"").append(jsonEscape(customer.lastName())).append("\"")
                     .append("},");
             }
-            if (customer.email() != null)
-                requestBody.append("\"email_address\":\"").append(jsonEscape(customer.email())).append("\",");
+            // Validated: PayPal rejects the whole create-order call on a malformed
+            // email_address, so free text in person.email would cost this member the ability to
+            // pay rather than just a pre-filled field.
+            String payerEmail = emailOrNull(customer.email());
+            if (payerEmail != null)
+                requestBody.append("\"email_address\":\"").append(jsonEscape(payerEmail)).append("\",");
             if (customer.phone() != null) {
                 String digitsOnly = customer.phone().replaceAll("[^0-9]", "");
                 if (!digitsOnly.isEmpty())

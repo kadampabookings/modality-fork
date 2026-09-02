@@ -303,11 +303,29 @@ async function handleCardSubmission(billing) {
 // defaults. Whatever we send here MUST cover any field set to 'never' in fields.billingDetails
 // (otherwise Stripe rejects the confirm) — and the modality_billing_* defaults are exactly
 // what we keyed the 'never' decision on, so coverage is guaranteed.
+// Mirrors GatewayEmail.emailOrNull() on the server, and is duplicated in the Square form
+// script for the same reason: these two scripts talk to their gateway STRAIGHT FROM THE
+// BROWSER, so a value assembled here never passes through the server-side guard.
+//
+// The address that arrives from the app is the signed-in payer's own person.email — free
+// text, which staff and the returning-guest form both write. A gateway rejects the whole
+// call on a malformed one, and that call IS the payment, so an unusable address has to be
+// dropped rather than sent. Dropping it also un-hides the form's email input, leaving the
+// payer a field to fill in instead of a dead end they cannot see the cause of.
+function modality_emailOrNull(email) {
+    if (!email) return null;
+    var trimmed = String(email).trim();
+    return trimmed.length <= 254 && /^[A-Za-z0-9!#$%&'*+\/=?^_`{|}~-]+(\.[A-Za-z0-9!#$%&'*+\/=?^_`{|}~-]+)*@[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)+$/.test(trimmed) ? trimmed : null;
+}
+
 function buildBillingDetails(b) {
     b = b || {};
     var firstName   = b.firstName   || modality_billingFirstName;
     var lastName    = b.lastName    || modality_billingLastName;
-    var email       = b.email       || modality_billingEmail;
+    // Same precedence as the fields around it, but the criterion is the first VALID address
+    // rather than the first non-empty one: modality_billingEmail is already validated server
+    // side, so without this an unusable b.email would win over a perfectly good fallback.
+    var email       = modality_emailOrNull(b.email) || modality_emailOrNull(modality_billingEmail);
     var phone       = b.phone       || modality_billingPhone;
     var address     = b.address     || modality_billingAddress;
     var city        = b.city        || modality_billingCity;
