@@ -340,9 +340,17 @@ public final class SquarePaymentGateway implements PaymentGateway {
         return idempotencyKey == null ? null : truncate(idempotencyKey, 42) + "-ne";
     }
 
-    /** True when Square refused the request specifically because of the buyer email we sent. */
+    /**
+     * True when Square refused the request specifically because of the buyer email we sent —
+     * INVALID_REQUEST_ERROR only, which is what makes the retry safe. That category is Square
+     * validating the request before it touches a card, so no payment exists to be duplicated; a
+     * rejection in any other category (a decline, an API fault) must NOT be retried under a
+     * different idempotency key.
+     */
     private static boolean isBuyerEmailRejection(SquareApiException ae) {
         for (Error error : ae.errors()) {
+            if (!ErrorCategory.INVALID_REQUEST_ERROR.equals(error.getCategory()))
+                continue;
             if (error.getField().orElse("").toLowerCase().endsWith("buyer_email_address"))
                 return true;
             // The buyer's is the only email address a CreatePayment request carries, so this code

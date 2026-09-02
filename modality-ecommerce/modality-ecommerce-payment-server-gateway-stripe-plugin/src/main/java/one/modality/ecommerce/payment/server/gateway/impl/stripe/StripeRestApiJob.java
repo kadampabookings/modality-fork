@@ -250,7 +250,7 @@ public final class StripeRestApiJob implements ApplicationJob {
         // StripePaymentGateway.createPaymentIntent(), so it identifies them exactly.
         Map<String, String> metadata = paymentIntent.getMetadata();
         if (metadata != null && metadata.containsKey("modality_paymentId"))
-            StripePaymentGateway.sendMissingReceiptEmail(client, paymentIntent, null);
+            StripePaymentGateway.sendMissingReceiptEmail(client, paymentIntent);
         return paymentIntent;
     }
 

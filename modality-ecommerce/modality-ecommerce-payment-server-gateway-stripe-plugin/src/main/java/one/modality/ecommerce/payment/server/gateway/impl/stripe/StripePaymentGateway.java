@@ -309,7 +309,6 @@ public final class StripePaymentGateway implements PaymentGateway {
                 Console.log("[Stripe][DEBUG] completePayment - paymentIntentId=" + paymentIntentId + ", live=" + argument.isLive());
 
             StripeClient client = new StripeClient(apiSecretKey);
-            GatewayCustomer customer = argument.customer();
             return executeBlocking(() ->
                 // Read-only call — no idempotency key, but still benefit from network retries.
                 client.v1().paymentIntents().retrieve(
@@ -318,7 +317,7 @@ public final class StripePaymentGateway implements PaymentGateway {
                     retryingRequestOptions(null))
             ).map(paymentIntent -> {
                 // Fire-and-forget: never delays or fails the payer's confirmation.
-                sendMissingReceiptEmail(client, paymentIntent, customer == null ? null : customer.email());
+                sendMissingReceiptEmail(client, paymentIntent);
                 return buildResultFromPaymentIntent(paymentIntent);
             }).recover(ex -> {
                 Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
@@ -345,23 +344,30 @@ public final class StripePaymentGateway implements PaymentGateway {
      *
      * <ul>
      *   <li>a PaymentIntent created before this gateway started setting {@code receipt_email};</li>
-     *   <li>a booking with no email on file, where the only address we ever see is the one the
-     *       payer typed into the payment form (it reaches Stripe as the charge's
+     *   <li>a booking with no email on file, where the only address we have is the one the payer
+     *       supplied in the payment form (it reaches Stripe as the charge's
      *       {@code billing_details.email}, and us only by reading the charge back).</li>
      * </ul>
      *
      * <p>Deliberately fire-and-forget: a missing receipt is not worth failing — or even
      * delaying — a payment that has already succeeded, so every failure is logged and dropped.
+     *
+     * <p>The address is read off the CHARGE and never taken from the caller. completePayment()
+     * reaches this method with a PaymentIntent id supplied by the client, and nothing binds that
+     * id to the MoneyTransfer being completed — so a caller naming someone else's {@code pi_…}
+     * must not be able to choose where that person's receipt is sent. Sourcing the address from
+     * the charge means the worst such a caller can do is re-send a receipt to the address the
+     * payment already carries, which is the payer's own.
      */
-    static void sendMissingReceiptEmail(StripeClient client, PaymentIntent paymentIntent, String bookingEmail) {
+    static void sendMissingReceiptEmail(StripeClient client, PaymentIntent paymentIntent) {
         try {
-            sendMissingReceiptEmailOrThrow(client, paymentIntent, bookingEmail);
+            sendMissingReceiptEmailOrThrow(client, paymentIntent);
         } catch (Throwable t) { // a receipt problem must never surface as a payment failure
             Console.error("[Stripe] Could not request a receipt for payment intent " + (paymentIntent == null ? null : paymentIntent.getId()), t);
         }
     }
 
-    private static void sendMissingReceiptEmailOrThrow(StripeClient client, PaymentIntent paymentIntent, String bookingEmail) {
+    private static void sendMissingReceiptEmailOrThrow(StripeClient client, PaymentIntent paymentIntent) {
         if (paymentIntent == null || !"succeeded".equals(paymentIntent.getStatus()))
             return; // no captured charge yet — nothing to send a receipt for
         if (emailOrNull(paymentIntent.getReceiptEmail()) != null)
@@ -369,7 +375,6 @@ public final class StripePaymentGateway implements PaymentGateway {
         String chargeId = paymentIntent.getLatestCharge();
         if (chargeId == null)
             return;
-        String knownEmail = emailOrNull(bookingEmail);
         executeBlocking(() -> {
             // The charge is the authority here, not the intent: our write below lands on the
             // charge and never propagates back to the intent, so re-reading the intent could
@@ -378,13 +383,10 @@ public final class StripePaymentGateway implements PaymentGateway {
             Charge charge = client.v1().charges().retrieve(chargeId, retryingRequestOptions(null));
             if (emailOrNull(charge.getReceiptEmail()) != null)
                 return Boolean.FALSE; // receipt already requested — don't send the payer a second one
-            String email = knownEmail;
-            if (email == null) { // last resort: whatever the payer entered in the payment form
-                Charge.BillingDetails billingDetails = charge.getBillingDetails();
-                email = emailOrNull(billingDetails == null ? null : billingDetails.getEmail());
-                if (email == null)
-                    return Boolean.FALSE;
-            }
+            Charge.BillingDetails billingDetails = charge.getBillingDetails();
+            String email = emailOrNull(billingDetails == null ? null : billingDetails.getEmail());
+            if (email == null)
+                return Boolean.FALSE;
             // Updating receipt_email on a succeeded charge is what makes Stripe send the receipt.
             // The idempotency key closes the remaining window where the two callers race on the
             // same charge: within Stripe's 24h key retention the second update is a replay, not a
