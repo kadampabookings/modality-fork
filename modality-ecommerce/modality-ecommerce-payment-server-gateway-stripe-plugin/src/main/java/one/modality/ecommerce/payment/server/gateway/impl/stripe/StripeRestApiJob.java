@@ -28,6 +28,8 @@ import one.modality.ecommerce.payment.server.gateway.impl.util.RestApiOneTimeHtm
 import dev.webfx.stack.orm.entity.EntityStore;
 import dev.webfx.stack.session.state.SystemUserId;
 
+import java.util.Map;
+
 import static one.modality.ecommerce.payment.server.gateway.impl.stripe.StripeAsync.executeBlocking;
 import static one.modality.ecommerce.payment.server.gateway.impl.stripe.StripeAsync.retryingRequestOptions;
 
@@ -238,7 +240,18 @@ public final class StripeRestApiJob implements ApplicationJob {
         // For a Checkout-session event with no payment_intent yet, target.paymentIntentId() may be
         // null — but callers only reach this method when we have a paymentIntentId to query.
         // Read-only retrieve — no idempotency key needed, but we want network retries on 429/5xx.
-        return client.v1().paymentIntents().retrieve(target.paymentIntentId(), retryingRequestOptions(null));
+        PaymentIntent paymentIntent = client.v1().paymentIntents().retrieve(target.paymentIntentId(), retryingRequestOptions(null));
+        // Receipt backstop for the payer who paid but never got back to us (tab closed, network
+        // dropped after confirmPayment): completePayment() never ran, so nothing else would fill
+        // in a missing receipt_email. Restricted to intents WE created in the embedded flow — a
+        // Checkout payment sends its own receipt, and target.formType() can't be used to tell the
+        // two apart (extractTarget() hard-codes EMBEDDED for every payment_intent.* event,
+        // including the ones Checkout raises). The metadata key is only ever set by
+        // StripePaymentGateway.createPaymentIntent(), so it identifies them exactly.
+        Map<String, String> metadata = paymentIntent.getMetadata();
+        if (metadata != null && metadata.containsKey("modality_paymentId"))
+            StripePaymentGateway.sendMissingReceiptEmail(client, paymentIntent, null);
+        return paymentIntent;
     }
 
     private static Future<Void> updatePaymentStatus(MoneyTransfer payment, PaymentIntent paymentIntent, String textPayload, PaymentFormType formType, String logPrefix) {

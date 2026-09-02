@@ -2,11 +2,14 @@ package one.modality.ecommerce.payment.server.gateway.impl.stripe;
 
 import com.stripe.StripeClient;
 import com.stripe.exception.CardException;
+import com.stripe.exception.InvalidRequestException;
 import com.stripe.exception.StripeException;
+import com.stripe.model.Charge;
 import com.stripe.model.PaymentIntent;
 import com.stripe.model.StripeError;
 import com.stripe.model.checkout.Session;
 import com.stripe.net.RequestOptions;
+import com.stripe.param.ChargeUpdateParams;
 import com.stripe.param.PaymentIntentCreateParams;
 import com.stripe.param.PaymentIntentRetrieveParams;
 import com.stripe.param.checkout.SessionCreateParams;
@@ -26,6 +29,7 @@ import one.modality.ecommerce.payment.server.gateway.*;
 import one.modality.ecommerce.payment.server.gateway.impl.util.RestApiOneTimeHtmlResponsesCache;
 
 import java.util.List;
+import java.util.regex.Pattern;
 
 import static one.modality.ecommerce.payment.server.gateway.impl.stripe.StripeAsync.executeBlocking;
 import static one.modality.ecommerce.payment.server.gateway.impl.stripe.StripeAsync.retryingRequestOptions;
@@ -58,9 +62,13 @@ import static one.modality.ecommerce.payment.server.gateway.impl.stripe.StripeRe
  */
 public final class StripePaymentGateway implements PaymentGateway {
 
+    static final String GATEWAY_NAME = "Stripe";
     private static final boolean DEBUG_LOG = true;
 
-    static final String GATEWAY_NAME = "Stripe";
+    // Deliberately stricter than RFC 5322 (no quoted local parts, no IP-literal domains): this
+    // only ever decides whether an address is safe to hand to Stripe as receipt_email, and the
+    // penalty for a false accept — Stripe refusing the call — is paid on the payment path.
+    private static final Pattern EMAIL_SHAPE = Pattern.compile("[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(\\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*@[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)+");
 
     // Source: https://docs.stripe.com/testing — covers card decline triggers used in mapStripeDeclineCodeToFailureReason()
     private static final SandboxCard[] SANDBOX_CARDS = {
@@ -143,7 +151,7 @@ public final class StripePaymentGateway implements PaymentGateway {
         // Element can hide the corresponding input fields ('fields.billingDetails = never') and
         // we still satisfy Stripe's requirement to supply them at confirmPayment() time.
         GatewayCustomer customer = argument.customer();
-        return executeBlocking(() -> createPaymentIntent(client, order, currencyCode, argument.paymentId()))
+        return executeBlocking(() -> createPaymentIntent(client, order, currencyCode, argument.paymentId(), customer))
             .map(paymentIntent -> {
                 String paymentFormContent = (seamless ? SCRIPT_TEMPLATE : HTML_TEMPLATE)
                     .replace("${modality_amount}", String.valueOf(order.amount()))
@@ -216,6 +224,11 @@ public final class StripePaymentGateway implements PaymentGateway {
                 paramsBuilder.setCancelUrl(argument.cancelUrl());
             else if (argument.returnUrl() != null)
                 paramsBuilder.setCancelUrl(argument.returnUrl()); // Stripe rejects sessions without cancel_url, so reuse the return URL
+            // No customer_email pre-fill on purpose: Checkout collects the address itself and
+            // sends its own receipt, and supplying one makes the field READ-ONLY on Stripe's page —
+            // a stale booking address would then take the receipt with no way for the payer to
+            // correct it. The embedded flow below (the only one this gateway exposes) is where the
+            // receipt address has to be set explicitly.
             // Idempotent + retries: a 429 here would otherwise leave the user with a broken
             // redirect button on the front-end during a booking-opening spike.
             RequestOptions requestOptions = retryingRequestOptions(argument.paymentId() + "-session");
@@ -238,7 +251,7 @@ public final class StripePaymentGateway implements PaymentGateway {
      * <p>Wallet flows (GOOGLE_PAY / APPLE_PAY) still work fine with {@code ['card']} because the
      * Payment Request Button tokenizes a card under the hood.
      */
-    private static PaymentIntent createPaymentIntent(StripeClient client, GatewayOrder order, String currencyCode, String paymentId) throws StripeException {
+    private static PaymentIntent createPaymentIntent(StripeClient client, GatewayOrder order, String currencyCode, String paymentId, GatewayCustomer customer) throws StripeException {
         PaymentIntentCreateParams.Builder paramsBuilder = PaymentIntentCreateParams.builder()
             .setAmount(order.amount())
             .setCurrency(currencyCode.toLowerCase())
@@ -247,10 +260,35 @@ public final class StripePaymentGateway implements PaymentGateway {
             // The reference is what links the Stripe-side payment back to our MoneyTransfer
             // when the webhook delivers payment_intent.succeeded.
             .putMetadata("modality_paymentId", paymentId);
+        // Stripe emails a receipt only when the charge carries a receipt_email (or an attached
+        // Customer object with an email on file). The billing_details.email we send at
+        // confirmPayment() time is recorded on the charge and shown in the dashboard — which
+        // makes it look like Stripe has the address — but it never triggers a receipt. That is
+        // why payers got none. receipt_email also forces delivery regardless of the account's
+        // "Successful payments" email setting, so receipts no longer depend on a dashboard toggle.
+        String receiptEmail = emailOrNull(customer == null ? null : customer.email());
         // Idempotency key (paymentId-derived) prevents the front-office retry / refresh from
         // creating duplicate PaymentIntents. setMaxNetworkRetries makes 429 + 5xx self-healing.
-        RequestOptions requestOptions = retryingRequestOptions(paymentId + "-intent");
-        return client.v1().paymentIntents().create(paramsBuilder.build(), requestOptions);
+        if (receiptEmail != null) {
+            try {
+                return client.v1().paymentIntents().create(
+                    paramsBuilder.setReceiptEmail(receiptEmail).build(),
+                    retryingRequestOptions(paymentId + "-intent"));
+            } catch (InvalidRequestException e) {
+                // emailOrNull() is a shape check, not Stripe's validator: an address can pass here
+                // and still be refused there. Retrying without it keeps a rejected receipt address
+                // from turning "no receipt" into "this payer cannot pay at all". A fresh
+                // idempotency key is required — Stripe refuses a reused key with changed params.
+                if (!"receipt_email".equals(e.getParam()))
+                    throw e;
+                Console.warn("[Stripe] receipt_email refused by Stripe for payment " + paymentId
+                    + " (code=" + e.getCode() + ") — creating the PaymentIntent without it, so this payer gets no Stripe receipt");
+                return client.v1().paymentIntents().create(
+                    paramsBuilder.setReceiptEmail(null).build(),
+                    retryingRequestOptions(paymentId + "-intent-no-receipt"));
+            }
+        }
+        return client.v1().paymentIntents().create(paramsBuilder.build(), retryingRequestOptions(paymentId + "-intent"));
     }
 
     @Override
@@ -265,12 +303,16 @@ public final class StripePaymentGateway implements PaymentGateway {
                 Console.log("[Stripe][DEBUG] completePayment - paymentIntentId=" + paymentIntentId + ", live=" + argument.isLive());
 
             StripeClient client = new StripeClient(apiSecretKey);
-            return executeBlocking(() -> {
+            GatewayCustomer customer = argument.customer();
+            return executeBlocking(() ->
                 // Read-only call — no idempotency key, but still benefit from network retries.
-                PaymentIntent paymentIntent = client.v1().paymentIntents().retrieve(
+                client.v1().paymentIntents().retrieve(
                     paymentIntentId,
                     PaymentIntentRetrieveParams.builder().build(),
-                    retryingRequestOptions(null));
+                    retryingRequestOptions(null))
+            ).map(paymentIntent -> {
+                // Fire-and-forget: never delays or fails the payer's confirmation.
+                sendMissingReceiptEmail(client, paymentIntent, customer == null ? null : customer.email());
                 return buildResultFromPaymentIntent(paymentIntent);
             }).recover(ex -> {
                 Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
@@ -288,6 +330,82 @@ public final class StripePaymentGateway implements PaymentGateway {
         } catch (Exception e) {
             return Future.failedFuture(GATEWAY_NAME + " completePayment() failed: " + e.getMessage());
         }
+    }
+
+    /**
+     * Sets {@code receipt_email} on an already-succeeded charge when the PaymentIntent doesn't
+     * carry one — Stripe sends the receipt at that moment. This covers the two cases
+     * {@link #createPaymentIntent} can't:
+     *
+     * <ul>
+     *   <li>a PaymentIntent created before this gateway started setting {@code receipt_email};</li>
+     *   <li>a booking with no email on file, where the only address we ever see is the one the
+     *       payer typed into the payment form (it reaches Stripe as the charge's
+     *       {@code billing_details.email}, and us only by reading the charge back).</li>
+     * </ul>
+     *
+     * <p>Deliberately fire-and-forget: a missing receipt is not worth failing — or even
+     * delaying — a payment that has already succeeded, so every failure is logged and dropped.
+     */
+    static void sendMissingReceiptEmail(StripeClient client, PaymentIntent paymentIntent, String bookingEmail) {
+        try {
+            sendMissingReceiptEmailOrThrow(client, paymentIntent, bookingEmail);
+        } catch (Throwable t) { // a receipt problem must never surface as a payment failure
+            Console.error("[Stripe] Could not request a receipt for payment intent " + (paymentIntent == null ? null : paymentIntent.getId()), t);
+        }
+    }
+
+    private static void sendMissingReceiptEmailOrThrow(StripeClient client, PaymentIntent paymentIntent, String bookingEmail) {
+        if (paymentIntent == null || !"succeeded".equals(paymentIntent.getStatus()))
+            return; // no captured charge yet — nothing to send a receipt for
+        if (emailOrNull(paymentIntent.getReceiptEmail()) != null)
+            return; // set at creation — Stripe has already sent the receipt
+        String chargeId = paymentIntent.getLatestCharge();
+        if (chargeId == null)
+            return;
+        String knownEmail = emailOrNull(bookingEmail);
+        executeBlocking(() -> {
+            // The charge is the authority here, not the intent: our write below lands on the
+            // charge and never propagates back to the intent, so re-reading the intent could
+            // never tell us we had already asked for this receipt. Both callers (completePayment
+            // and the webhook, plus every webhook redelivery) reach this line for the same charge.
+            Charge charge = client.v1().charges().retrieve(chargeId, retryingRequestOptions(null));
+            if (emailOrNull(charge.getReceiptEmail()) != null)
+                return Boolean.FALSE; // receipt already requested — don't send the payer a second one
+            String email = knownEmail;
+            if (email == null) { // last resort: whatever the payer entered in the payment form
+                Charge.BillingDetails billingDetails = charge.getBillingDetails();
+                email = emailOrNull(billingDetails == null ? null : billingDetails.getEmail());
+                if (email == null)
+                    return Boolean.FALSE;
+            }
+            // Updating receipt_email on a succeeded charge is what makes Stripe send the receipt.
+            // The idempotency key closes the remaining window where the two callers race on the
+            // same charge: within Stripe's 24h key retention the second update is a replay, not a
+            // second email.
+            client.v1().charges().update(chargeId,
+                ChargeUpdateParams.builder().setReceiptEmail(email).build(),
+                retryingRequestOptions(chargeId + "-receipt"));
+            return Boolean.TRUE;
+        })
+            // Addresses are never logged — the charge id is enough to find the payment in Stripe.
+            .onFailure(e -> Console.error("[Stripe] Could not set receipt_email on charge " + chargeId + " — no Stripe receipt for payment intent " + paymentIntent.getId(), e))
+            .onSuccess(sent -> Console.log(sent
+                ? "[Stripe] Receipt requested on charge " + chargeId
+                : "[Stripe] Nothing to do for a receipt on charge " + chargeId + " (already requested, or no usable email address)"));
+    }
+
+    /**
+     * Returns the value only if it plausibly is an email address, otherwise null. Stripe rejects
+     * the whole API call on a malformed {@code receipt_email}, so junk in {@code person.email} (a
+     * free-text field) would break the payment itself. A missing receipt is by far the lesser
+     * failure, so anything that doesn't look like an address is dropped here rather than sent.
+     */
+    private static String emailOrNull(String email) {
+        if (email == null)
+            return null;
+        String trimmed = email.trim();
+        return trimmed.length() <= 254 && EMAIL_SHAPE.matcher(trimmed).matches() ? trimmed : null;
     }
 
     /** Builds the gateway result from a retrieved PaymentIntent. Visible to the webhook handler. */
