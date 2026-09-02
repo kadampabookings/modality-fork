@@ -145,7 +145,8 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
             preFilterNames.toArray(String[]::new));
         ProtectedEntityWriteRegistry.registerWriteObserver(ProtectedEntityWritesJob::onProtectedWriteSucceeded);
         ProtectedEntityWriteRegistry.registerRawStatementObserver(ProtectedEntityWritesJob::onNonDqlSubmit);
-        Console.log("🛡 Write authorization active on " + REQUIRED_OPERATIONS.size() + " entities"
+        Console.log("🛡 Write authorization active on " + REQUIRED_OPERATIONS.size() + " entities and "
+                    + REQUIRED_OPERATIONS_BY_FIELD.size() + " fields"
                     + (ENFORCING ? " — ENFORCING" : " — observing only, nothing is refused yet"));
     }
 
