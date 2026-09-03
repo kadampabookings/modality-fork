@@ -87,22 +87,51 @@ public final class SquarePaymentGateway implements PaymentGateway {
 
     @Override
     public Future<GatewayInitiatePaymentResult> initiatePayment(GatewayInitiatePaymentArgument argument) {
-        // Reading the account parameters that have been loaded from the database by ServerPaymentServiceProvider
-        String locationId = argument.getAccountParameter("location_id"); // KBS3
-        if (locationId == null)
-            locationId = argument.getAccountParameter("order.order.location_id"); // KBS2 (to remove later)
         boolean live = argument.isLive();
+        try {
+            // Reading the account parameters that have been loaded from the database by ServerPaymentServiceProvider
+            String locationId = argument.getAccountParameter("location_id"); // KBS3
+            if (locationId == null)
+                locationId = argument.getAccountParameter("order.order.location_id"); // KBS2 (to remove later)
+            if (locationId == null)
+                throw new IllegalArgumentException("Missing required account parameter: location_id");
+            // The currency comes from the order rather than the account, but a null reaches the
+            // same template substitution below and fails the same opaque way.
+            if (argument.currencyCode() == null)
+                throw new IllegalArgumentException("Missing currency code for this payment");
 
-        if (argument.preferredFormType() == PaymentFormType.EMBEDDED) {
-            return initiatePaymentEmbedded(argument, locationId, live);
+            if (argument.preferredFormType() == PaymentFormType.EMBEDDED) {
+                return initiatePaymentEmbedded(argument, locationId, live);
+            }
+
+            return initiatePaymentRedirect(argument, locationId, live);
+        } catch (IllegalArgumentException e) {
+            // Until now a missing account parameter reached String.replace() as a null
+            // replacement and surfaced as
+            //   NullPointerException: because "replacement" is null
+            // from inside java.lang.String, naming neither the parameter nor the account — which
+            // is what a guest booking on event 1902 produced on 2 Sep 2026. Every other gateway
+            // (Stripe, PayPal, Authorize.net) already used the checked getter; Square was the
+            // last one building its form from unchecked values.
+            //
+            // The live/test hint is worth logging because it is the usual reason a parameter set
+            // comes back empty: live and test parameters are separate rows, and only the set
+            // matching this payment is read. It goes to the server log, where the NPE used to
+            // appear; the reply crosses the bus to the browser, so it says no more than its
+            // siblings do.
+            Console.error(GATEWAY_NAME + " initiatePayment() failed: " + e.getMessage()
+                + " — this payment is " + (live ? "live" : "in testing mode") + ", so only GatewayParameter"
+                + " rows with " + (live ? "live" : "test") + "=true are read, for this money account"
+                + " or for its gateway company", e);
+            return Future.failedFuture(GATEWAY_NAME + " initiatePayment() failed: " + e.getMessage());
+        } catch (Exception e) {
+            return Future.failedFuture(GATEWAY_NAME + " initiatePayment() failed: " + e.getMessage());
         }
-
-        return initiatePaymentRedirect(argument, locationId, live);
     }
 
     private Future<GatewayInitiatePaymentResult> initiatePaymentEmbedded(GatewayInitiatePaymentArgument argument, String locationId, boolean live) {
         // Our Square gateway script implementation supports seamless integration.
-        String appId = argument.getAccountParameter("app_id");
+        String appId = argument.getRequiredAccountParameter("app_id");
         boolean seamless = argument.favorSeamless()
             // && argument.isOriginOnHttps() // Maybe would be better to not use seamless integration on http, but commented for now as iFrame integration is not working well in browser (ex: WebPaymentForm fitHeight not working well)
             ;
