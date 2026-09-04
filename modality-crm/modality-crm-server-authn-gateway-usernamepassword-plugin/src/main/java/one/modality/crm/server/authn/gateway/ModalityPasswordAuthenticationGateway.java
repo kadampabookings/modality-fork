@@ -23,6 +23,7 @@ import dev.webfx.stack.session.token.AuthenticatedState;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 import dev.webfx.stack.session.state.TransactionPreambleRegistry;
 import one.modality.base.shared.entities.FrontendAccount;
+import one.modality.base.shared.entities.MagicLink;
 import one.modality.base.shared.entities.MagicLinkType;
 import one.modality.base.shared.entities.Person;
 import one.modality.crm.server.authn.gateway.magiclink.ModalityMagicLinkAuthenticationGateway;
@@ -286,7 +287,14 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
     }
 
     private Future<String> continueAccountCreation(ContinueAccountCreationCredentials credentials) {
+        // Marks the token as used by THIS session; finaliseAccountCreation() below then accepts it
+        // from the same session only (see MagicLinkService.loadMagicLinkForAccountCreation).
         return MagicLinkService.loadMagicLinkFromTokenAndMarkAsUsed(credentials.magicLinkTokenOrVerificationCode(), dataSourceModel)
+            .compose(magicLink -> magicLink.getLinkType() == MagicLinkType.LOGIN
+                ? Future.succeededFuture(magicLink)
+                // Only account-creation / login links may open the sign-up form. Reported as
+                // unrecognised: to whoever pasted a booking-access token here, that is the truth.
+                : Future.<MagicLink>failedFuture("[%s] Magic link not found (token: %s)".formatted(ModalityAuthenticationI18nKeys.LoginLinkUnrecognisedError, credentials.magicLinkTokenOrVerificationCode())))
             .compose(magicLink -> MagicLinkService.loadUserPersonFromMagicLink(magicLink)
                 .compose(userPerson -> {
                     String email = magicLink.getEmail();
@@ -298,9 +306,17 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
     }
 
     private Future<Object> finaliseAccountCreation(FinaliseAccountCreationCredentials credentials) {
-        return MagicLinkService.loadMagicLinkFromTokenOrVerificationCode(credentials.magicLinkTokenOrVerificationCode(), false, dataSourceModel)
+        // Captured before the async chain: identifies the tab that typed the code / clicked the link.
+        String runId = ThreadLocalStateHolder.getRunId();
+        // The credential must be a LOGIN-type link that is unexpired and unused — or the token this
+        // same session already claimed through ContinueAccountCreation. Until 2026-09 this loaded the
+        // row with every check off: an unscoped, year-long BOOKING_ACCESS code (one per guest booking)
+        // was accepted, and nothing was ever consumed, so guessing 6 digits could mint a password
+        // account for somebody else's email.
+        return MagicLinkService.loadMagicLinkForAccountCreation(credentials.magicLinkTokenOrVerificationCode(), runId, dataSourceModel)
             .compose(magicLink -> {
-                UpdateStore updateStore = UpdateStore.create(dataSourceModel);
+                // Above the link's store so the usage mark below can be staged next to the account insert.
+                UpdateStore updateStore = UpdateStore.createAbove(magicLink.getStore());
                 FrontendAccount fa = updateStore.insertEntity(FrontendAccount.class);
                 String email = magicLink.getEmail();
                 String salt = email; // like KBS2 for now
@@ -308,6 +324,10 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
                 fa.setSalt(salt);
                 fa.setPassword(encryptPassword(credentials.password(), salt));
                 fa.setCorporation(1);
+                // Consume the credential in the same transaction as the account it creates: a code is
+                // single-use from here on, and neither write can land without the other.
+                if (magicLink.getUsageDate() == null)
+                    MagicLinkService.stageMagicLinkUsage(updateStore, magicLink, runId);
                 return updateStore.submitChanges()
                     .compose(ignored -> {
                         // Link any guest Person records (created during guest bookings) that share

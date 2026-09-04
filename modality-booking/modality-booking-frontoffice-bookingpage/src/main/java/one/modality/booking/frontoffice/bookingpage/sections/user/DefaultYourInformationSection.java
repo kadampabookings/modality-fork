@@ -2324,9 +2324,12 @@ public class DefaultYourInformationSection implements HasYourInformationSection 
                         .onSuccess(success -> {
                             Console.log("Person created successfully, now authenticating...");
 
-                            // Authenticate using the verification code to log user in
+                            // Sign in with the email and the password just chosen. Not with the
+                            // code: finalising the account consumes it (single-use since 2026-09),
+                            // so a code login here would be refused as unrecognised.
                             new AuthenticationRequest()
-                                .setUserCredentials(new AuthenticateWithMagicLinkCredentials(code))
+                                .setUserCredentials(new AuthenticateWithUsernamePasswordCredentials(
+                                    emailProperty.get().trim().toLowerCase(), password))
                                 .executeAsync()
                                 .inUiThread()
                                 .onFailure(authError -> {

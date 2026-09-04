@@ -213,7 +213,7 @@ public final class MagicLinkService {
             // the type-specific rules co-located with their justification.
             String loginRunId = ThreadLocalStateHolder.getRunId();
             findFuture = entityStore.<MagicLink>executeQuery(
-                "select loginRunId,email,creationDate,usageDate,requestedPath,oldEmail,linkType from MagicLink where verificationCode=$1 order by id desc limit 1",
+                "select loginRunId,email,creationDate,usageDate,usageRunId,requestedPath,oldEmail,linkType from MagicLink where verificationCode=$1 order by id desc limit 1",
                 tokenOrVerificationCode)
                 .map(Collections::first)
                 .map(ml -> {
@@ -228,7 +228,7 @@ public final class MagicLinkService {
             // BOOKING_ACCESS links are multi-use (usageDate is set after first use), so we do NOT
             // filter by usageDate=null here; the validity check below uses type-appropriate expiry.
             findFuture = entityStore.<MagicLink>executeQuery(
-                "select loginRunId,email,creationDate,usageDate,requestedPath,oldEmail,linkType from MagicLink where token=$1 order by id desc limit 1",
+                "select loginRunId,email,creationDate,usageDate,usageRunId,requestedPath,oldEmail,linkType from MagicLink where token=$1 order by id desc limit 1",
                 tokenOrVerificationCode)
                 .map(Collections::first);
         }
@@ -341,10 +341,56 @@ public final class MagicLinkService {
         // We record the usage date in the database. This will indicate that the magic link has been used, and can't be
         // reused a second time.
         UpdateStore updateStore = UpdateStore.createAbove(magicLink.getStore());
+        stageMagicLinkUsage(updateStore, magicLink, usageRunId);
+        return updateStore.submitChanges().map(x -> null);
+    }
+
+    /**
+     * Stages the "used" mark on {@code magicLink} into {@code updateStore} without submitting, so a
+     * caller can consume the link in the SAME transaction as whatever the link authorised (an
+     * account insert, say) — neither side can then commit without the other.
+     * {@code updateStore} must sit above the link's store (see {@link UpdateStore#createAbove}).
+     */
+    public static void stageMagicLinkUsage(UpdateStore updateStore, MagicLink magicLink, String usageRunId) {
         MagicLink ml = updateStore.updateEntity(magicLink);
         ml.setUsageDate(now());
         ml.setUsageRunId(usageRunId);
-        return updateStore.submitChanges().map(x -> null);
+    }
+
+    /**
+     * Loads the magic link (URL token or 6-digit code) that may finalise an account creation, applying
+     * the checks that {@link #loadMagicLinkFromTokenOrVerificationCode} with {@code checkValidity=false}
+     * leaves to the caller. Two shapes are accepted:
+     * <ul>
+     *   <li>a credential nobody has used yet, still inside its validity window — the code route
+     *       (inline sign-up on the booking pages), where the caller consumes it on success via
+     *       {@link #stageMagicLinkUsage};</li>
+     *   <li>a token that THIS session already claimed through ContinueAccountCreation (marked used with
+     *       the same runId) — the link route, where the click was validated then and filling in the
+     *       sign-up form may legitimately take longer than the window.</li>
+     * </ul>
+     * Only {@link MagicLinkType#LOGIN} rows qualify: a BOOKING_ACCESS code is minted for every guest
+     * booking, lives a year and is not scoped to a session, so letting it through here would turn
+     * guessing one into a password account for that guest's email. Rejections are reported as
+     * "unrecognised" where the reason would otherwise reveal which credentials exist.
+     *
+     * @param runId the calling session's runId (captured BEFORE any async step)
+     */
+    public static Future<MagicLink> loadMagicLinkForAccountCreation(String tokenOrVerificationCode, String runId, DataSourceModel dataSourceModel) {
+        return loadMagicLinkFromTokenOrVerificationCode(tokenOrVerificationCode, false, dataSourceModel)
+            .compose(magicLink -> {
+                if (magicLink.getLinkType() != MagicLinkType.LOGIN)
+                    return Future.failedFuture("[%s] Magic link not found (token: %s)".formatted(ModalityAuthenticationI18nKeys.LoginLinkUnrecognisedError, tokenOrVerificationCode));
+                if (magicLink.getUsageDate() != null) {
+                    boolean claimedByThisSession = runId != null && runId.equals(magicLink.getUsageRunId());
+                    if (claimedByThisSession)
+                        return Future.succeededFuture(magicLink);
+                    return Future.failedFuture("[%s] Magic link already used (token: %s)".formatted(ModalityAuthenticationI18nKeys.LoginLinkAlreadyUsedError, tokenOrVerificationCode));
+                }
+                if (!SKIP_LINK_VALIDITY_CHECK && (magicLink.getCreationDate() == null || now().isAfter(magicLink.getCreationDate().plus(LINK_EXPIRATION_DURATION))))
+                    return Future.failedFuture("[%s] Magic link expired (token: %s)".formatted(ModalityAuthenticationI18nKeys.LoginLinkExpiredError, tokenOrVerificationCode));
+                return Future.succeededFuture(magicLink);
+            });
     }
 
     public static Future<MagicLink> loadMagicLinkFromTokenAndMarkAsUsed(String token, DataSourceModel dataSourceModel) {
