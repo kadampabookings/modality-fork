@@ -10,6 +10,8 @@ import dev.webfx.stack.authz.server.spi.impl.AuthorizationServerServiceProviderB
 import dev.webfx.stack.db.submit.ProtectedEntityWriteRegistry;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -199,11 +201,14 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         java.util.List<String[]> groups = requiredCodeGroups(entityName, request.writtenFields());
         if (groups.isEmpty()) // the textual pre-filter matched a name this policy does not actually cover
             return Future.succeededFuture(true);
-        // Read on THIS thread, while the request's state is still in place: past the first async hop
-        // there is no principal left to log, and a check that reports "unknown" for every caller would
-        // make the observation phase useless.
+        // Capture the WHOLE state, not just the user id, and on THIS thread. The thread local is
+        // restored the moment the synchronous portion returns, so anything read after the first async
+        // hop sees nothing — and every authorization call below is asynchronous. Reading only the user
+        // id here was not enough: it made the log line right while every check after the first still
+        // ran with no principal at all, was answered with the PUBLIC grants, and refused a super admin.
+        Object capturedState = ThreadLocalStateHolder.getThreadLocalState();
         Object userId = ThreadLocalStateHolder.getUserId();
-        return holdsAllGroups(groups)
+        return holdsAllGroups(groups, capturedState)
             .map(authorized -> {
                 if (Boolean.TRUE.equals(authorized))
                     return true;
@@ -233,7 +238,7 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
      * unexamined on a technicality.
      */
     private static java.util.List<String[]> requiredCodeGroups(String entityName, String[] writtenFields) {
-        java.util.List<String[]> groups = new java.util.ArrayList<>();
+        java.util.List<String[]> groups = new ArrayList<>();
         String[] entityCodes = REQUIRED_OPERATIONS.get(entityName);
         if (entityCodes != null)
             groups.add(entityCodes);
@@ -254,24 +259,52 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         return groups;
     }
 
-    /** Every group must be satisfied; a failing group short-circuits the rest. */
-    private Future<Boolean> holdsAllGroups(java.util.List<String[]> groups) {
-        Future<Boolean> result = Future.succeededFuture(true);
+    /**
+     * Every group must be satisfied.
+     *
+     * <p>All groups are asked AT ONCE rather than in sequence, which is not an optimisation. Chaining
+     * them with compose() put every question after the first into an async callback, where the thread
+     * local carrying the principal has already been restored — so the second group onwards was judged
+     * with no principal, answered from the public grants, and refused. Asking them together keeps every
+     * call on the synchronous side of the first hop; the state is passed explicitly as well, so a future
+     * change of shape cannot quietly reintroduce the same thing.
+     *
+     * <p>The cost of not short-circuiting is one extra cached lookup per group. The cost of
+     * short-circuiting was a super admin being refused.
+     */
+    private Future<Boolean> holdsAllGroups(java.util.List<String[]> groups, Object capturedState) {
+        List<Future<Boolean>> answers = new ArrayList<>(groups.size());
         for (String[] group : groups)
-            result = result.compose(stillAuthorized -> Boolean.TRUE.equals(stillAuthorized)
-                ? holdsAnyOf(group)
-                : Future.succeededFuture(false));
-        return result;
+            answers.add(holdsAnyOf(group, capturedState));
+        return Future.all(new ArrayList<>(answers))
+            .map(composite -> {
+                for (int i = 0; i < answers.size(); i++)
+                    if (!Boolean.TRUE.equals(composite.resultAt(i)))
+                        return false;
+                return true;
+            })
+            .otherwise(false);
     }
 
-    /** True as soon as one code authorizes; asked one at a time so a granted caller stops at the first. */
-    private Future<Boolean> holdsAnyOf(String[] codes) {
-        Future<Boolean> result = Future.succeededFuture(false);
+    /**
+     * True if any code authorizes. All are asked at once, and each inside the captured state.
+     *
+     * <p>isAuthorized() reads the principal from the thread local itself, so restoring that state
+     * around the call is what makes the answer about this caller rather than about the public.
+     */
+    private Future<Boolean> holdsAnyOf(String[] codes, Object capturedState) {
+        List<Future<Boolean>> answers = new ArrayList<>(codes.length);
         for (String code : codes)
-            result = result.compose(alreadyAuthorized -> Boolean.TRUE.equals(alreadyAuthorized)
-                ? Future.succeededFuture(true)
-                : AuthorizationServerService.isAuthorized(new OperationRequest(code)).otherwise(false));
-        return result;
+            answers.add(ThreadLocalStateHolder.runWithState(capturedState,
+                () -> AuthorizationServerService.isAuthorized(new OperationRequest(code)).otherwise(false)));
+        return Future.all(new ArrayList<>(answers))
+            .map(composite -> {
+                for (int i = 0; i < answers.size(); i++)
+                    if (Boolean.TRUE.equals(composite.resultAt(i)))
+                        return true;
+                return false;
+            })
+            .otherwise(false);
     }
 
     /** The question put to the rule registry. Only {@link HasOperationCode} requests match operation rules. */
