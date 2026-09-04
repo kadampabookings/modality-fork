@@ -118,7 +118,9 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
      * makes an unrecognised field a PROPERTY, which is both the larger set and the less consequential
      * mistake: letter content is what lands in members' inboxes.
      */
-    private static boolean isLetterContentField(String field) {
+    // Package-private, not private: the decision logic is what a check can actually verify without a
+    // running stack, and two bugs in it reached production before anything tested it.
+    static boolean isLetterContentField(String field) {
         return I18N_LANGUAGES.contains(field)
                || field.startsWith("subject_")
                || field.startsWith("push_title_")
@@ -237,7 +239,7 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
      * field name, so no field rule fires, and without the entity group such a write would pass
      * unexamined on a technicality.
      */
-    private static java.util.List<String[]> requiredCodeGroups(String entityName, String[] writtenFields) {
+    static java.util.List<String[]> requiredCodeGroups(String entityName, String[] writtenFields) {
         java.util.List<String[]> groups = new ArrayList<>();
         String[] entityCodes = REQUIRED_OPERATIONS.get(entityName);
         if (entityCodes != null)
