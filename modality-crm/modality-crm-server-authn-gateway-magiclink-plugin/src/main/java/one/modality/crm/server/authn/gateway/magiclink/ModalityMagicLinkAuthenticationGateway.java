@@ -225,18 +225,29 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
                     .compose(userPerson -> {
                         // 3) Preparing the userId = ModalityUserPrincipal for registered users, ModalityGuestPrincipal for unregistered users
                         Object userId;
+                        Future<Void> guestBookingsAttached = Future.succeededFuture();
                         if (userPerson != null) {
                             Object accountId = userPerson.getForeignEntity("frontendAccount").getPrimaryKey();
                             userId = new ModalityUserPrincipal(userPerson.getPrimaryKey(), accountId);
                             // Link any guest Person records with the same email. Fire-and-forget.
                             GuestPersonLinker.linkGuestPersonsToAccount(magicLink.getEmail(), accountId, dataSourceModel)
                                 .onFailure(err -> Console.log("GuestPersonLinker failed on magic-link login for " + magicLink.getEmail() + ": " + err));
+                            // Attach the person-less guest bookings made under this address: the link or
+                            // code just redeemed was mailed to it, so it is verified in-flow. Awaited before
+                            // the login push so the first /orders load sees them; a failure is logged and
+                            // never blocks the sign-in.
+                            guestBookingsAttached = GuestPersonLinker.linkGuestDocumentsToPerson(magicLink.getEmail(), userPerson.getPrimaryKey(), true, null, dataSourceModel)
+                                .otherwise(err -> {
+                                    Console.log("GuestPersonLinker (documents) failed on magic-link login for " + magicLink.getEmail() + ": " + err);
+                                    return null;
+                                });
                         } else {
                             userId = new ModalityGuestPrincipal(magicLink.getEmail());
                         }
                         // 4) Pushing the userId to the magic link client which is identified by runId = usageRunId.
                         // Pushing the userId will cause a login, and subsequently a push of the authorizations.
-                        return PushServerService.pushState(AuthenticatedState.createFor(userId), usageRunId)
+                        return guestBookingsAttached
+                            .compose(ignoredAttach -> PushServerService.pushState(AuthenticatedState.createFor(userId), usageRunId))
                             .compose(ignored -> { // indicates that the magic link client acknowledged this login push
                                 // 5) For LOGIN links: mark as used (single-use) and push userId to the original
                                 //    login-page client so both tabs end up authenticated.

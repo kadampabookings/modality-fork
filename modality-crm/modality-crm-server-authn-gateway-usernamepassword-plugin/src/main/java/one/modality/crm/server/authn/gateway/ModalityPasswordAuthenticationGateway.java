@@ -18,10 +18,9 @@ import dev.webfx.stack.orm.entity.UpdateStore;
 import dev.webfx.stack.push.server.PushServerService;
 import dev.webfx.stack.session.state.AuditActorRegistry;
 import dev.webfx.stack.session.state.RestrictedPrincipalRegistry;
-import dev.webfx.stack.session.state.StateAccessor;
-import dev.webfx.stack.session.token.AuthenticatedState;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 import dev.webfx.stack.session.state.TransactionPreambleRegistry;
+import dev.webfx.stack.session.token.AuthenticatedState;
 import one.modality.base.shared.entities.FrontendAccount;
 import one.modality.base.shared.entities.MagicLink;
 import one.modality.base.shared.entities.MagicLinkType;
@@ -231,7 +230,17 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
                 // as a guest before logging in. Fire-and-forget.
                 GuestPersonLinker.linkGuestPersonsToAccount(normalizedUsername, accountId, dataSourceModel)
                     .onFailure(err -> Console.log("GuestPersonLinker failed on login for " + normalizedUsername + ": " + err));
-                return PushServerService.pushState(AuthenticatedState.createFor(modalityUserPrincipal), runId);
+                // Attach the person-less guest bookings the React front office makes under this
+                // address to the owner Person — only if THIS session verified the address by
+                // redeeming a link or code for it (a password proves the account, not the
+                // address; see the linker). Awaited before the login push so the first /orders
+                // load already sees them, but a failure must never keep anyone from signing in.
+                return GuestPersonLinker.linkGuestDocumentsToPerson(normalizedUsername, personId, false, runId, dataSourceModel)
+                    .otherwise(err -> {
+                        Console.log("GuestPersonLinker (documents) failed on login for " + normalizedUsername + ": " + err);
+                        return null;
+                    })
+                    .compose(ignored -> PushServerService.pushState(AuthenticatedState.createFor(modalityUserPrincipal), runId));
             });
     }
 
