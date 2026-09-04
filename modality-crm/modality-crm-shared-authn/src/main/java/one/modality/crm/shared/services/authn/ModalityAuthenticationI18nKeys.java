@@ -12,6 +12,7 @@ public interface ModalityAuthenticationI18nKeys {
     Object LoginLinkAlreadyUsedError = "LoginLinkAlreadyUsedError";
     Object LoginLinkExpiredError = "LoginLinkExpiredError";
     Object LoginLinkUnrecognisedError = "LoginLinkUnrecognisedError";
+    Object VerificationCodeAttemptsExceededError = "VerificationCodeAttemptsExceededError";
     Object MagicLinkBusClosedError = "MagicLinkBusClosedError";
     Object MagicLinkPushError = "MagicLinkPushError";
     Object MagicLinkUnexpectedError = "MagicLinkUnexpectedError";

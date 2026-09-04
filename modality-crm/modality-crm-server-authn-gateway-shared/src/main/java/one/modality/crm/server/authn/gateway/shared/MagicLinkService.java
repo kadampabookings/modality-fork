@@ -24,6 +24,8 @@ import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.UUID;
 
 /**
@@ -32,7 +34,21 @@ import java.util.UUID;
 public final class MagicLinkService {
 
     private static final boolean SKIP_LINK_VALIDITY_CHECK = false; // Can be set to true when debugging the magic link client
-    private static final Duration LINK_EXPIRATION_DURATION = Duration.ofMinutes(10);
+    // Validity windows for LOGIN-type links, counted from creation (the moment the mail is sent).
+    //  - URL tokens are 128-bit random, so the window only limits how long a link sitting in an
+    //    inbox stays live; an hour lets someone open the email late without meeting a dead link.
+    //  - 6-digit codes are guessable in principle, so their window stays short. NIST 800-63B puts
+    //    emailed/SMS codes at 10 minutes; 15 is a deliberate stretch for slow typers (the code,
+    //    then a password typed twice), made safe by the per-session guessing cap below rather
+    //    than by the clock.
+    private static final Duration LINK_EXPIRATION_DURATION = Duration.ofMinutes(60);
+    private static final Duration CODE_EXPIRATION_DURATION = Duration.ofMinutes(15);
+    // A clicked LOGIN link signs in the tab that clicks it AND, as a convenience, the tab that
+    // asked for it. The second half is only wanted while someone is plausibly still sitting on
+    // that tab: past this window the requester is far more likely to be somebody who asked for a
+    // link to an address that is not theirs and is waiting for the owner to click. Kept at the
+    // old link lifetime so lengthening LINK_EXPIRATION_DURATION widened nothing on that side.
+    private static final Duration REQUESTER_PUSH_WINDOW = Duration.ofMinutes(10);
     // BOOKING_ACCESS links are long-lived because guests book a long way ahead, and for a guest
     // with no account the link is the only way back to their booking.
     //
@@ -68,6 +84,60 @@ public final class MagicLinkService {
      * is free to use the real thing.
      */
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+
+    // ── Verification-code guessing cap ──────────────────────────────────────────────────────────
+    // A 6-digit code can only be redeemed from the tab that requested it (loginRunId scoping in
+    // loadMagicLinkFromTokenOrVerificationCode), so the one attack left is that tab guessing
+    // online — and nothing else bounds it, there is no throttling anywhere on the bus, so the
+    // guess budget used to be "rate × window". This caps it per session: after
+    // MAX_CODE_ATTEMPTS codes the session's codes are refused until the entry ages out with the
+    // code, or until the session requests a fresh code — and a fresh code, for ANY
+    // address, supersedes every code or link the session asked for before (createAndSendMagicLink
+    // marks them used). So resetting the budget also kills the code being guessed: another five
+    // guesses at somebody's code costs another email to that somebody. Every attempt counts, hit
+    // or miss, and it is counted BEFORE the lookup: counting after the reply would let a client
+    // pipeline a burst of guesses that all see a zero count. A hit consumes the code anyway, so
+    // over-counting it costs nothing. Kept in memory on purpose: the server runs as a single task
+    // with single-active deploys, and a restart merely resets a counter that expires with the code.
+    private static final int MAX_CODE_ATTEMPTS = 5;
+    private static final Map<String, CodeAttempts> CODE_ATTEMPTS = new ConcurrentHashMap<>();
+
+    private record CodeAttempts(int count, Instant since) {}
+
+    private static String attemptsKey(String runId) {
+        return runId == null ? "" : runId;
+    }
+
+    private static void pruneCodeAttempts() {
+        Instant cutoff = now().minus(CODE_EXPIRATION_DURATION);
+        CODE_ATTEMPTS.values().removeIf(attempts -> attempts.since().isBefore(cutoff));
+    }
+
+    /** Counts one code attempt for the session and returns how many it has made in this window. */
+    private static int recordCodeAttempt(String runId) {
+        pruneCodeAttempts();
+        return CODE_ATTEMPTS.merge(attemptsKey(runId),
+            new CodeAttempts(1, now()),
+            (previous, one) -> new CodeAttempts(previous.count() + 1, previous.since())).count();
+    }
+
+    private static void clearCodeAttempts(String runId) {
+        CODE_ATTEMPTS.remove(attemptsKey(runId));
+    }
+
+    private static String attemptsExceededFailure() {
+        return "[%s] Too many wrong verification codes for this session".formatted(ModalityAuthenticationI18nKeys.VerificationCodeAttemptsExceededError);
+    }
+
+    /** Whether a clicked link may still sign in the tab that requested it (see REQUESTER_PUSH_WINDOW). */
+    public static boolean isWithinRequesterPushWindow(MagicLink magicLink) {
+        return magicLink.getCreationDate() != null && now().isBefore(magicLink.getCreationDate().plus(REQUESTER_PUSH_WINDOW));
+    }
+
+    /** Verification codes are 6-digit strings; magic-link tokens are UUIDs. */
+    private static boolean looksLikeVerificationCode(String tokenOrVerificationCode) {
+        return tokenOrVerificationCode != null && tokenOrVerificationCode.matches("\\d{6}");
+    }
 
     // Designed to be used only from server front calls (not postponed by an async operation) in order to get the loginRunId
     public static Future<Void> createAndSendMagicLink(
@@ -134,36 +204,51 @@ public final class MagicLinkService {
         DataSourceModel dataSourceModel) {
         if (loginRunId == null)
             loginRunId = ThreadLocalStateHolder.getRunId(); // runId = this runId (runId of the session where the request originates)
+        String runId = loginRunId;
         if (!clientOrigin.startsWith("http")) {
             clientOrigin = (clientOrigin.contains(":80") ? "http" : "https") + clientOrigin.substring(clientOrigin.indexOf("://"));
         }
+        String origin = clientOrigin;
         String verificationCode = generateVerificationCode();
         String token = generateToken(); // used for the magic link
-        String link = clientOrigin + activityPath.replace(":token", token).replace(":lang", lang);
-        requestedPath = ActivityHashUtil.withoutHashPrefix(requestedPath);
-        UpdateStore updateStore = UpdateStore.create(dataSourceModel);
-        MagicLink magicLink = updateStore.insertEntity(MagicLink.class);
-        magicLink.setLoginRunId(loginRunId);
-        magicLink.setVerificationCode(verificationCode);
-        magicLink.setToken(token);
-        magicLink.setLang(lang);
-        magicLink.setLink(link);
-        magicLink.setEmail(email);
-        magicLink.setOldEmail(oldEmail);
-        magicLink.setRequestedPath(requestedPath);
-        return updateStore.submitChanges()
-            .compose(ignoredBatch -> {
-                ModalityContext modalityContext = context instanceof ModalityContext ? (ModalityContext) context
-                    : new ModalityContext(1 /* default organizationId if no context is provided */, null, null, null);
-                modalityContext.setMagicLinkId(magicLink.getPrimaryKey());
-                String finalBody = body
-                    .replaceAll("\\[magicLink\\]", magicLink.getLink())
-                    .replaceAll("\\[verificationCode\\]", magicLink.getVerificationCode())
-                    ;
-                // `fromName` (e.g. "Kadampa Booking System") is carried via ModalityMailMessage
-                // so the provider can set Mail.from_name alongside Mail.from_email. Null means
-                // the caller didn't want a display name for this flow.
-                return MailService.sendMail(new ModalityMailMessage(MailMessage.create(from, magicLink.getEmail(), subject, finalBody), modalityContext, fromName));
+        String link = origin + activityPath.replace(":token", token).replace(":lang", lang);
+        String path = ActivityHashUtil.withoutHashPrefix(requestedPath);
+        // A fresh code supersedes every code or link this session asked for earlier, whatever address
+        // they were for: they are marked used in the same transaction that creates the new one. Latest
+        // wins, which is what a person pressing "resend" expects — and it is what keeps the guessing
+        // cap honest (see FAILED_CODE_ATTEMPTS): the budget is only reset once that commit succeeded,
+        // so it cannot be refilled while the code being guessed stays alive. BOOKING_ACCESS and
+        // support rows are other types and are untouched.
+        return EntityStore.create(dataSourceModel)
+            .<MagicLink>executeQuery("select id from MagicLink where loginRunId=$1 and usageDate=null and (linkType=null or linkType=$2)", runId, MagicLinkType.LOGIN.name())
+            .compose(previousLinks -> {
+                UpdateStore updateStore = UpdateStore.createAbove(previousLinks.getStore());
+                for (MagicLink previous : previousLinks)
+                    stageMagicLinkSupersession(updateStore, previous);
+                MagicLink magicLink = updateStore.insertEntity(MagicLink.class);
+                magicLink.setLoginRunId(runId);
+                magicLink.setVerificationCode(verificationCode);
+                magicLink.setToken(token);
+                magicLink.setLang(lang);
+                magicLink.setLink(link);
+                magicLink.setEmail(email);
+                magicLink.setOldEmail(oldEmail);
+                magicLink.setRequestedPath(path);
+                return updateStore.submitChanges()
+                    .compose(ignoredBatch -> {
+                        clearCodeAttempts(runId); // the earlier codes are dead: a fresh guessing budget
+                        ModalityContext modalityContext = context instanceof ModalityContext ? (ModalityContext) context
+                            : new ModalityContext(1 /* default organizationId if no context is provided */, null, null, null);
+                        modalityContext.setMagicLinkId(magicLink.getPrimaryKey());
+                        String finalBody = body
+                            .replaceAll("\\[magicLink\\]", magicLink.getLink())
+                            .replaceAll("\\[verificationCode\\]", magicLink.getVerificationCode())
+                            ;
+                        // `fromName` (e.g. "Kadampa Booking System") is carried via ModalityMailMessage
+                        // so the provider can set Mail.from_name alongside Mail.from_email. Null means
+                        // the caller didn't want a display name for this flow.
+                        return MailService.sendMail(new ModalityMailMessage(MailMessage.create(from, magicLink.getEmail(), subject, finalBody), modalityContext, fromName));
+                    });
             });
     }
 
@@ -186,43 +271,53 @@ public final class MagicLinkService {
         // 1) Checking the existence of the magic link in the database, and if so, loading it with required info.
         // Verification codes are 6-digit strings; magic-link tokens are UUIDs.
         // For verification codes we additionally scope by loginRunId — the tab that requested the code
-        // must be the one submitting it — to prevent cross-user collisions in the 10-minute window.
+        // must be the one submitting it — to prevent cross-user collisions inside the code window.
         // We also filter usageDate is null in the query (rather than post-load) and order by id desc
         // so concurrent duplicate codes always resolve to the most-recent row for the right client.
-        boolean isVerificationCode = tokenOrVerificationCode != null && tokenOrVerificationCode.matches("\\d{6}");
+        boolean isVerificationCode = looksLikeVerificationCode(tokenOrVerificationCode);
         EntityStore entityStore = EntityStore.create(dataSourceModel);
         // Map each branch immediately to Future<MagicLink> to avoid EntityList/List type mismatch.
         Future<MagicLink> findFuture;
         if (isVerificationCode) {
-            // Two flavours of verification codes coexist:
+            // Only LOGIN codes are redeemable by value: short-lived (CODE_EXPIRATION_DURATION),
+            // single-use, and scoped by the originating tab's loginRunId so the entry tab MUST be
+            // the request tab (prevents cross-user collisions while two users happen to share a
+            // 6-digit value in the same window, and is what makes the guessing cap meaningful).
             //
-            //  LOGIN codes — short-lived (10 min), single-use. Scoped by the
-            //    originating tab's loginRunId so the entry tab MUST be the
-            //    request tab (prevents cross-user collisions while two users
-            //    happen to share a 6-digit value in the same window).
+            // BOOKING_ACCESS rows carry a code too, but it is never shown to anyone (no mail or
+            // screen renders it; guests reach their booking by the token in the link), and it lives
+            // a year with no originating tab to scope it to. Redeeming one by value would be a
+            // guessable, un-cappable path to a guest's booking and contact details, so the code
+            // branch treats it as a miss — the same "not found" as a wrong guess.
             //
-            //  BOOKING_ACCESS codes — long-lived (1 year), multi-use. Generated
-            //    server-side without an originating tab (loginRunId is the
-            //    sentinel "server-generated"). Redemption from any subsequent
-            //    tab (e.g. the freshly-installed PWA after the user noted
-            //    the code in Safari) must work, so neither loginRunId nor
-            //    usageDate is filtered.
-            //
-            // We look up by code only and apply type-appropriate scoping in
-            // Java rather than fork the SQL — keeps the query trivial and
-            // the type-specific rules co-located with their justification.
+            // We look up by code only and apply the rule in Java rather than fork the SQL — keeps
+            // the query trivial and the rule co-located with its justification.
             String loginRunId = ThreadLocalStateHolder.getRunId();
+            int attempt = recordCodeAttempt(loginRunId);
+            if (attempt > MAX_CODE_ATTEMPTS)
+                return Future.failedFuture(attemptsExceededFailure());
             findFuture = entityStore.<MagicLink>executeQuery(
-                "select loginRunId,email,creationDate,usageDate,usageRunId,requestedPath,oldEmail,linkType from MagicLink where verificationCode=$1 order by id desc limit 1",
-                tokenOrVerificationCode)
+                // LOGIN rows only, in SQL too: a BOOKING_ACCESS row minted later with the same six
+                // digits must not shadow the genuine code (the Java check below is belt and braces).
+                "select loginRunId,email,creationDate,usageDate,usageRunId,requestedPath,oldEmail,linkType from MagicLink where verificationCode=$1 and linkType=$2 order by id desc limit 1",
+                tokenOrVerificationCode, MagicLinkType.LOGIN.name())
                 .map(Collections::first)
                 .map(ml -> {
                     if (ml == null) return null;
-                    if (ml.isBookingAccess()) return ml;
+                    if (ml.getLinkType() != MagicLinkType.LOGIN) return null; // see above
                     // LOGIN path: enforce the original strict scoping.
                     if (ml.getUsageDate() != null) return null;
                     if (loginRunId == null || !loginRunId.equals(ml.getLoginRunId())) return null;
                     return ml;
+                })
+                // A miss is "not found" — except on the last attempt of the budget, where the cap
+                // message tells the person to request a new code rather than keep typing.
+                .compose(ml -> {
+                    if (ml != null)
+                        return Future.succeededFuture(ml);
+                    return Future.failedFuture(attempt >= MAX_CODE_ATTEMPTS
+                        ? attemptsExceededFailure()
+                        : "[%s] Magic link not found (token: %s)".formatted(ModalityAuthenticationI18nKeys.LoginLinkUnrecognisedError, tokenOrVerificationCode));
                 });
         } else {
             // BOOKING_ACCESS links are multi-use (usageDate is set after first use), so we do NOT
@@ -259,7 +354,8 @@ public final class MagicLinkService {
                     // LOGIN links become invalid once used; BOOKING_ACCESS links tolerate repeated use.
                     if (!isBookingAccess && magicLink.getUsageDate() != null)
                         return Future.failedFuture("[%s] Magic link already used (token: %s)".formatted(ModalityAuthenticationI18nKeys.LoginLinkAlreadyUsedError, tokenOrVerificationCode));
-                    Duration expiry = isBookingAccess ? BOOKING_ACCESS_EXPIRATION_DURATION : LINK_EXPIRATION_DURATION;
+                    Duration expiry = isBookingAccess ? BOOKING_ACCESS_EXPIRATION_DURATION
+                        : isVerificationCode ? CODE_EXPIRATION_DURATION : LINK_EXPIRATION_DURATION;
                     Instant now = now();
                     if (magicLink.getCreationDate() == null || now.isAfter(magicLink.getCreationDate().plus(expiry))) {
                         return Future.failedFuture("[%s] Magic link expired (token: %s)".formatted(ModalityAuthenticationI18nKeys.LoginLinkExpiredError, tokenOrVerificationCode));
@@ -358,6 +454,17 @@ public final class MagicLinkService {
     }
 
     /**
+     * Retires a link that was never redeemed (a newer one replaced it): usageDate only. usageRunId
+     * stays null on purpose — "usageRunId equals my runId" means "this session REDEEMED the link"
+     * everywhere it is read (the password reset from a magic link resolves its target account
+     * from it, and the account-creation loader accepts a claimed token on it), and a session that
+     * merely asked for a newer link has proved nothing about the old one's address.
+     */
+    private static void stageMagicLinkSupersession(UpdateStore updateStore, MagicLink magicLink) {
+        updateStore.updateEntity(magicLink).setUsageDate(now());
+    }
+
+    /**
      * Loads the magic link (URL token or 6-digit code) that may finalise an account creation, applying
      * the checks that {@link #loadMagicLinkFromTokenOrVerificationCode} with {@code checkValidity=false}
      * leaves to the caller. Two shapes are accepted:
@@ -387,7 +494,8 @@ public final class MagicLinkService {
                         return Future.succeededFuture(magicLink);
                     return Future.failedFuture("[%s] Magic link already used (token: %s)".formatted(ModalityAuthenticationI18nKeys.LoginLinkAlreadyUsedError, tokenOrVerificationCode));
                 }
-                if (!SKIP_LINK_VALIDITY_CHECK && (magicLink.getCreationDate() == null || now().isAfter(magicLink.getCreationDate().plus(LINK_EXPIRATION_DURATION))))
+                Duration expiry = looksLikeVerificationCode(tokenOrVerificationCode) ? CODE_EXPIRATION_DURATION : LINK_EXPIRATION_DURATION;
+                if (!SKIP_LINK_VALIDITY_CHECK && (magicLink.getCreationDate() == null || now().isAfter(magicLink.getCreationDate().plus(expiry))))
                     return Future.failedFuture("[%s] Magic link expired (token: %s)".formatted(ModalityAuthenticationI18nKeys.LoginLinkExpiredError, tokenOrVerificationCode));
                 return Future.succeededFuture(magicLink);
             });

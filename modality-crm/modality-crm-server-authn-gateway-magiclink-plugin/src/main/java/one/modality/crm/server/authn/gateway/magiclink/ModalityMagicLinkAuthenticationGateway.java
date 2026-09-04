@@ -249,9 +249,14 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
                                     .map(ignored2 -> magicLink.getRequestedPath())
                                     .onFailure(Console::error)
                                     .onSuccess(ignored2 -> {
-                                        // 6) Push userId to the original login client as well.
-                                        String loginRunId = magicLink.getLoginRunId();
-                                        PushServerService.pushState(AuthenticatedState.createFor(userId), loginRunId);
+                                        // 6) Push userId to the original login client as well — but only while
+                                        //    somebody is plausibly still sitting on it. The link itself lives an
+                                        //    hour for the tab that clicks it; the tab that asked for it is signed
+                                        //    in only when the click lands inside the requester window. Past that,
+                                        //    the requester is far more likely to be someone who asked for a link
+                                        //    to an address that is not theirs, waiting for its owner to click.
+                                        if (MagicLinkService.isWithinRequesterPushWindow(magicLink))
+                                            PushServerService.pushState(AuthenticatedState.createFor(userId), magicLink.getLoginRunId());
                                     });
                             });
                     });
