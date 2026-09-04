@@ -12,7 +12,6 @@ public interface ModalityAuthenticationI18nKeys {
     Object LoginLinkAlreadyUsedError = "LoginLinkAlreadyUsedError";
     Object LoginLinkExpiredError = "LoginLinkExpiredError";
     Object LoginLinkUnrecognisedError = "LoginLinkUnrecognisedError";
-    Object VerificationCodeAttemptsExceededError = "VerificationCodeAttemptsExceededError";
     Object MagicLinkBusClosedError = "MagicLinkBusClosedError";
     Object MagicLinkPushError = "MagicLinkPushError";
     Object MagicLinkUnexpectedError = "MagicLinkUnexpectedError";
@@ -20,5 +19,6 @@ public interface ModalityAuthenticationI18nKeys {
     Object SupportViewInvalidTargetError = "SupportViewInvalidTargetError";
     Object SupportViewLinkInvalidError = "SupportViewLinkInvalidError";
     Object SupportViewNotPermittedError = "SupportViewNotPermittedError";
+    Object VerificationCodeAttemptsExceededError = "VerificationCodeAttemptsExceededError";
 
 }
