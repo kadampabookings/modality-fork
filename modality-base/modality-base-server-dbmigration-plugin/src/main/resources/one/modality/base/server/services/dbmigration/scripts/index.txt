@@ -81,3 +81,4 @@ V0078__bo_device.sql
 V0079__bo_device_admin_note.sql
 V0080__resolve_document_person_email.sql
 V0081__letter_type_id_index.sql
+V0082__sold_out_item_in_allocation_trigger.sql
