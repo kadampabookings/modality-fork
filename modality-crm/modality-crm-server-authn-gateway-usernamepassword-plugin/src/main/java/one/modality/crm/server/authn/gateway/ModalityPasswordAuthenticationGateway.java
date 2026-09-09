@@ -240,7 +240,10 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
                         Console.log("GuestPersonLinker (documents) failed on login for " + normalizedUsername + ": " + err);
                         return null;
                     })
-                    .compose(ignored -> PushServerService.pushState(AuthenticatedState.createFor(modalityUserPrincipal), runId));
+                    // isBackofficeAuthentication was captured at the top of this method, before any async
+                    // hop, which is the only place it can be read — see AuthenticatedState.createFor.
+                    .compose(ignored -> AuthenticatedState.createFor(modalityUserPrincipal, isBackofficeAuthentication))
+                    .compose(authenticatedState -> PushServerService.pushState(authenticatedState, runId));
             });
     }
 

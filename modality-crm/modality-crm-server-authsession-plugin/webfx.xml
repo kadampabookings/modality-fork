@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project>
+
+    <description>Records one row per live login session (auth_session, V0083) so that renewing an
+        identity token retires the one it replaces, and a retired token turning up again is recognised
+        as a copy somebody else is holding. Stores a generation counter, never a token.</description>
+
+    <exported-packages>
+        <source-packages/>
+    </exported-packages>
+
+    <providers>
+        <provider interface="dev.webfx.platform.boot.spi.ApplicationJob">one.modality.crm.server.authsession.ModalityAuthSessionStoreInitializer</provider>
+    </providers>
+
+    <dependencies>
+        <used-by-source-modules/>
+    </dependencies>
+
+</project>

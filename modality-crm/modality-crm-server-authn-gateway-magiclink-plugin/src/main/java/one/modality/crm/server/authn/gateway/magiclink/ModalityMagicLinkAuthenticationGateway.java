@@ -216,6 +216,9 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
 
     private Future<String> authenticateWithMagicLink(String tokenOrVerificationCode) {
         String usageRunId = ThreadLocalStateHolder.getRunId();
+        // Read on THIS thread, before the first async hop: ThreadLocalStateHolder is restored when the
+        // synchronous part of the call returns, and this decides the session's lifetime tier for good.
+        boolean backofficeSession = ThreadLocalStateHolder.isBackoffice();
         // 1) Checking the existence of the magic link in the database, and if so, loading it with required info
         return MagicLinkService.loadMagicLinkFromTokenOrVerificationCode(tokenOrVerificationCode, true, dataSourceModel)
             .compose(magicLink -> {
@@ -247,7 +250,8 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
                         // 4) Pushing the userId to the magic link client which is identified by runId = usageRunId.
                         // Pushing the userId will cause a login, and subsequently a push of the authorizations.
                         return guestBookingsAttached
-                            .compose(ignoredAttach -> PushServerService.pushState(AuthenticatedState.createFor(userId), usageRunId))
+                            .compose(ignoredAttach -> AuthenticatedState.createFor(userId, backofficeSession))
+                            .compose(authenticatedState -> PushServerService.pushState(authenticatedState, usageRunId))
                             .compose(ignored -> { // indicates that the magic link client acknowledged this login push
                                 // 5) For LOGIN links: mark as used (single-use) and push userId to the original
                                 //    login-page client so both tabs end up authenticated.
@@ -266,8 +270,17 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
                                         //    in only when the click lands inside the requester window. Past that,
                                         //    the requester is far more likely to be someone who asked for a link
                                         //    to an address that is not theirs, waiting for its owner to click.
+                                        //    KNOWN LIMITATION on the lifetime tier, not on the identity: this
+                                        //    token is minted with the REDEEMING client's backoffice flag but
+                                        //    handed to the tab that requested the link, which may be a different
+                                        //    app — click a back-office login link on a phone and that back-office
+                                        //    session lands on the front-office tier. It affects how long the
+                                        //    session may live, never what it may do, and it is the same gap the
+                                        //    audience field closes: the tier will come from the session's own
+                                        //    audience rather than from whichever client happened to redeem.
                                         if (MagicLinkService.isWithinRequesterPushWindow(magicLink))
-                                            PushServerService.pushState(AuthenticatedState.createFor(userId), magicLink.getLoginRunId());
+                                            AuthenticatedState.createFor(userId, backofficeSession)
+                                                .compose(authenticatedState -> PushServerService.pushState(authenticatedState, magicLink.getLoginRunId()));
                                     });
                             });
                     });
@@ -452,6 +465,10 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
      */
     private Future<String> authenticateWithSupportView(AuthenticateWithSupportViewCredentials credentials) {
         String usageRunId = ThreadLocalStateHolder.getRunId();
+        // Always false here — the guard below refuses a back-office caller outright — but captured and
+        // passed rather than hard-coded, so the tier keeps coming from one rule. A support view is
+        // recognised by its principal in any case, and lands on the 30-minute tier either way.
+        boolean backofficeSession = ThreadLocalStateHolder.isBackoffice();
         // A support view belongs in the front office. The back office would hand the session the
         // customer's own back-office grants, which is not what "see what the customer sees" means.
         // (A super admin who wants the back-office equivalent has RequestBackOfficeViewCredentials,
@@ -492,7 +509,8 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
                         targetPerson.getPrimaryKey(), accountId, agentPerson.getPrimaryKey());
                     Console.log("🔎 Support view opened: person %s → person %s".formatted(
                         agentPerson.getPrimaryKey(), targetPerson.getPrimaryKey()));
-                    return PushServerService.pushState(AuthenticatedState.createFor(userId), usageRunId)
+                    return AuthenticatedState.createFor(userId, backofficeSession)
+                        .compose(authenticatedState -> PushServerService.pushState(authenticatedState, usageRunId))
                         .map(ignored -> Strings.toSafeString(magicLink.getRequestedPath()));
                 });
             });
@@ -613,6 +631,9 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
      */
     private Future<String> authenticateWithBackOfficeView(AuthenticateWithBackOfficeViewCredentials credentials) {
         String usageRunId = ThreadLocalStateHolder.getRunId();
+        // Read on THIS thread, before the first async hop: ThreadLocalStateHolder is restored when the
+        // synchronous part of the call returns, and this decides the session's lifetime tier for good.
+        boolean backofficeSession = ThreadLocalStateHolder.isBackoffice();
         // A back-office view belongs in the back office. The `backoffice` flag is client-claimed
         // (the identity-binding spec's signed token is the planned hardening), so this refusal is
         // hygiene rather than the gate: the gate is that the pass was minted by a super admin, is
@@ -665,7 +686,8 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
                         targetPerson.getPrimaryKey(), targetAccount.getPrimaryKey(), agentPerson.getPrimaryKey());
                     Console.log("🔎 Back-office view opened: person %s → person %s".formatted(
                         agentPerson.getPrimaryKey(), targetPerson.getPrimaryKey()));
-                    return PushServerService.pushState(AuthenticatedState.createFor(userId), usageRunId)
+                    return AuthenticatedState.createFor(userId, backofficeSession)
+                        .compose(authenticatedState -> PushServerService.pushState(authenticatedState, usageRunId))
                         .map(ignored -> Strings.toSafeString(magicLink.getRequestedPath()));
                 });
             });

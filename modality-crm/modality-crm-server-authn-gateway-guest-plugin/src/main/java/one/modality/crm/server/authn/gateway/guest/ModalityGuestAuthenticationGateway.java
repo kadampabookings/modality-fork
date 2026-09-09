@@ -167,6 +167,9 @@ public final class ModalityGuestAuthenticationGateway implements ServerAuthentic
      */
     private Future<String> authenticateWithCart(String cartUuid) {
         String usageRunId = ThreadLocalStateHolder.getRunId();
+        // Read on THIS thread, before the first async hop: ThreadLocalStateHolder is restored when the
+        // synchronous part of the call returns, and this decides the session's lifetime tier for good.
+        boolean backofficeSession = ThreadLocalStateHolder.isBackoffice();
         DataSourceModel dataSourceModel = dev.webfx.stack.orm.datasourcemodel.service.DataSourceModelService.getDefaultDataSourceModel();
         return EntityStore.create(dataSourceModel)
             .<Cart>executeQuery(
@@ -187,8 +190,8 @@ public final class ModalityGuestAuthenticationGateway implements ServerAuthentic
                         // Mints, rather than merely asserting the principal: the cart uuid and its magic link
                         // have just been validated, so this IS a credential check, and a guest reaching the
                         // cart page is exactly as much in need of a proven identity as a logged-in user.
-                        return PushServerService.pushState(
-                                AuthenticatedState.createFor(guestPrincipal), usageRunId)
+                        return AuthenticatedState.createFor(guestPrincipal, backofficeSession)
+                            .compose(authenticatedState -> PushServerService.pushState(authenticatedState, usageRunId))
                             .map(ignored -> "");  // no requestedPath needed — CartPage handles navigation
                     });
             });

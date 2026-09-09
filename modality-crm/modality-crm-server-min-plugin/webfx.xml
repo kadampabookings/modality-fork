@@ -14,6 +14,10 @@
         <plugin-module>modality-crm-server-authn-gateway-guest-plugin</plugin-module>
         <plugin-module>modality-crm-server-authn-gateway-magiclink-plugin</plugin-module>
         <plugin-module>modality-crm-server-authz-required-plugin</plugin-module>
+        <!-- Without this module the identity token still slides and is still capped, but nothing rotates
+             it and a stolen copy stays undetectable — a plugin module is only built in if a list names
+             it, so leaving this out is a silent reduction in what a compromise looks like. -->
+        <plugin-module>modality-crm-server-authsession-plugin</plugin-module>
 
     </dependencies>
 
