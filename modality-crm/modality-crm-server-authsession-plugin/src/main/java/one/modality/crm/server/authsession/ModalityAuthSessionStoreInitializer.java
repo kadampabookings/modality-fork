@@ -70,7 +70,7 @@ public final class ModalityAuthSessionStoreInitializer implements ApplicationJob
             return;
         store.purgeExpired()
             .onSuccess(deleted -> {
-                if (deleted > 0)
+                if (deleted > 0) // silence is the normal case, and the only honest report of it
                     Console.log("🧹 Removed " + deleted + " expired session row(s) from auth_session");
             })
             // Best-effort by design: this deletes rows nothing reads any more, so a failure is worth a

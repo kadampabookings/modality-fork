@@ -105,6 +105,24 @@ public final class ModalityAuthSessionStore implements SessionFamilyStore {
      * and holds a year less personal data. It also collects the rare orphan — a family opened for a login
      * whose token then failed to mint, revoked immediately by {@code SessionTokenService}.
      */
+    /**
+     * Counted separately, because the submit path cannot tell us how many rows went.
+     *
+     * <p>{@code SubmitResult.getRowCount()} is not rows-affected: {@code VertxSqlUtil.toWebFxSubmitResult}
+     * derives it by walking the RowSet CHAIN, which for a single statement has one element whatever the
+     * statement did. Reporting that as a deletion count made the sweep claim it had removed a row every
+     * hour while removing nothing — the precise failure a retention log exists to rule out, since it says
+     * "personal data is being deleted" whether or not any is.
+     *
+     * <p>Counting first costs one extra round trip an hour on rows nothing reads. The alternative — a
+     * data-modifying CTE read back through the QUERY path — would report honestly but would put a DELETE
+     * through the door that has no write gate on it, which is not a habit worth forming in a codebase
+     * trying to close that door.
+     */
+    private static final String COUNT_EXPIRED_SQL =
+        "select count(*) from auth_session where absolute_expiry < now() - interval '1 day'" +
+        "    or (revoked is not null and revoked < now() - interval '1 day')";
+
     static final String PURGE_SQL =
         "delete from auth_session where absolute_expiry < now() - interval '1 day'" +
         "    or (revoked is not null and revoked < now() - interval '1 day')";
@@ -173,13 +191,28 @@ public final class ModalityAuthSessionStore implements SessionFamilyStore {
             .mapEmpty();
     }
 
-    /** Removes rows whose session ended long enough ago to be of no further use. */
-    Future<Integer> purgeExpired() {
-        return asServer(() -> SubmitService.executeSubmit(new SubmitArgumentBuilder()
+    /**
+     * Removes rows whose session ended long enough ago to be of no further use, and reports how many.
+     *
+     * <p>Counts before deleting rather than trusting the submit's row count — see {@link #COUNT_EXPIRED_SQL}.
+     * The count can be stale by whatever expired in between, which does not matter: the number is for a
+     * human watching retention work, and the next sweep collects the remainder an hour later.
+     */
+    Future<Long> purgeExpired() {
+        return asServer(() -> QueryService.executeQuery(new QueryArgumentBuilder()
                 .setDataSourceId(dataSourceId())
-                .setStatement(PURGE_SQL)
+                .setStatement(COUNT_EXPIRED_SQL)
                 .build()))
-            .map(submitResult -> submitResult == null ? 0 : submitResult.getRowCount());
+            .compose(result -> {
+                long expired = result == null || result.getRowCount() == 0 ? 0 : longAt(result, 0);
+                if (expired == 0) // nothing to say, and nothing to do
+                    return Future.succeededFuture(0L);
+                return asServer(() -> SubmitService.executeSubmit(new SubmitArgumentBuilder()
+                        .setDataSourceId(dataSourceId())
+                        .setStatement(PURGE_SQL)
+                        .build()))
+                    .map(ignored -> expired);
+            });
     }
 
     /**
