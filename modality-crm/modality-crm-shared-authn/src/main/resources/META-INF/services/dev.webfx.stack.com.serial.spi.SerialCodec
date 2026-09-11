@@ -13,3 +13,6 @@ one.modality.crm.shared.services.authn.serial.AuthenticateWithPasskeyCredentials
 one.modality.crm.shared.services.authn.serial.ListPasskeysCredentialsSerialCodec
 one.modality.crm.shared.services.authn.serial.RemovePasskeyCredentialsSerialCodec
 one.modality.crm.shared.services.authn.serial.RenamePasskeyCredentialsSerialCodec
+one.modality.crm.shared.services.authn.serial.ListPendingPasskeysCredentialsSerialCodec
+one.modality.crm.shared.services.authn.serial.ApprovePasskeyCredentialsSerialCodec
+one.modality.crm.shared.services.authn.serial.RejectPasskeyCredentialsSerialCodec

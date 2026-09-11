@@ -38,13 +38,18 @@ import dev.webfx.stack.orm.entity.EntityStore;
 import dev.webfx.stack.push.server.PushServerService;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 import dev.webfx.stack.session.token.AuthenticatedState;
+import one.modality.base.shared.entities.FrontendAccount;
 import one.modality.base.shared.entities.Person;
 import one.modality.crm.server.authn.gateway.shared.LoginPersonResolver;
+import one.modality.crm.server.authn.gateway.shared.SuperAdminMembership;
+import one.modality.crm.shared.services.authn.ApprovePasskeyCredentials;
 import one.modality.crm.shared.services.authn.AuthenticateWithPasskeyCredentials;
 import one.modality.crm.shared.services.authn.FinalisePasskeyRegistrationCredentials;
 import one.modality.crm.shared.services.authn.ListPasskeysCredentials;
+import one.modality.crm.shared.services.authn.ListPendingPasskeysCredentials;
 import one.modality.crm.shared.services.authn.ModalityAuthenticationI18nKeys;
 import one.modality.crm.shared.services.authn.ModalityUserPrincipal;
+import one.modality.crm.shared.services.authn.RejectPasskeyCredentials;
 import one.modality.crm.shared.services.authn.RemovePasskeyCredentials;
 import one.modality.crm.shared.services.authn.RenamePasskeyCredentials;
 import one.modality.crm.shared.services.authn.StartPasskeyAssertionCredentials;
@@ -255,6 +260,22 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
                     .compose(userPerson -> {
                         if (userPerson == null)
                             return genericFailure();
+                        // Back-office trust (docs/security/backoffice-second-factor.md, decisions 2
+                        // and 4). A passkey enrolled behind a weak password must not be a free
+                        // upgrade to a strong credential, so back-office sign-in needs a super
+                        // administrator's approval of THIS credential; front-office sign-in does not
+                        // (it grants nothing the password did not already). A rejected passkey signs
+                        // in nowhere. Checked after the signature AND after the account fence above:
+                        // only a caller who holds the key learns anything, what they learn is their
+                        // own status, and an account that can never enter the back office gets the
+                        // same generic refusal as before rather than a promise that approval would
+                        // change that.
+                        if (WebAuthnCredentialStore.STATUS_REJECTED.equals(row.status())) {
+                            Console.log(LOG_PREFIX + "Assertion with a rejected credential refused (row " + row.id() + ")");
+                            return genericFailure();
+                        }
+                        if (originIsBackoffice && !WebAuthnCredentialStore.STATUS_APPROVED.equals(row.status()))
+                            return notApprovedFailure();
                         if (newSignCount != 0 && row.signCount() != 0 && newSignCount <= row.signCount())
                             // Warn-and-accept — see the class javadoc for why this is not a hard fail
                             Console.log(LOG_PREFIX + "Sign count regression on credential row " + row.id()
@@ -263,7 +284,16 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
                         credentialStore.updateUsage(row.id(), newSignCount)
                             .onFailure(e -> Console.log(LOG_PREFIX + "Usage update failed for credential row " + row.id() + ": " + e.getMessage()));
                         ModalityUserPrincipal principal = new ModalityUserPrincipal(userPerson.getPrimaryKey(), row.accountId());
-                        return PushServerService.pushState(AuthenticatedState.createFor(principal), runId);
+                        // The session TIER (which lifetime policy applies, and what auth_session records)
+                        // is decided by the flag passed here, and it must be passed explicitly: by now
+                        // the thread-local has been restored by the database round trips above, so
+                        // reading it where the token is minted would answer "front office" for every
+                        // login and hand every staff session the front office's year-long cap. The
+                        // other gateways pass the client-asserted flag they captured at method entry;
+                        // this one can do better — originIsBackoffice was proven by the signature over
+                        // clientDataJSON, and the cross-check above already forced the two to agree.
+                        return AuthenticatedState.createFor(principal, originIsBackoffice)
+                            .compose(authenticatedState -> PushServerService.pushState(authenticatedState, runId));
                     });
             });
     }
@@ -276,7 +306,10 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
                || updateCredentialsArgument instanceof FinalisePasskeyRegistrationCredentials
                || updateCredentialsArgument instanceof ListPasskeysCredentials
                || updateCredentialsArgument instanceof RemovePasskeyCredentials
-               || updateCredentialsArgument instanceof RenamePasskeyCredentials;
+               || updateCredentialsArgument instanceof RenamePasskeyCredentials
+               || updateCredentialsArgument instanceof ListPendingPasskeysCredentials
+               || updateCredentialsArgument instanceof ApprovePasskeyCredentials
+               || updateCredentialsArgument instanceof RejectPasskeyCredentials;
     }
 
     @Override
@@ -303,8 +336,19 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
             return removePasskey(principal, cred);
         if (updateCredentialsArgument instanceof RenamePasskeyCredentials cred)
             return renamePasskey(principal, cred);
+        // Approval operations: re-checked as super administrator on EVERY call, never trusted
+        // from the client's grant push, and never delegable through operation codes. The
+        // approver's own passkeys are neither listed nor decidable (store WHERE clauses).
+        if (updateCredentialsArgument instanceof ListPendingPasskeysCredentials)
+            return requireSuperAdmin(principal).compose(ignored -> listPendingPasskeysJson(principal));
+        if (updateCredentialsArgument instanceof ApprovePasskeyCredentials cred)
+            return requireSuperAdmin(principal).compose(ignored ->
+                decidePasskey(principal, cred.passkeyId(), WebAuthnCredentialStore.STATUS_APPROVED));
+        if (updateCredentialsArgument instanceof RejectPasskeyCredentials cred)
+            return requireSuperAdmin(principal).compose(ignored ->
+                decidePasskey(principal, cred.passkeyId(), WebAuthnCredentialStore.STATUS_REJECTED));
         // Unreachable while acceptsUpdateCredentialsArgument and this chain list the same types —
-        // this arm is what keeps a future sixth type from becoming a ClassCastException
+        // this arm is what keeps a future ninth type from becoming a ClassCastException
         return managementFailure();
     }
 
@@ -439,13 +483,26 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
             .compose(ignored -> listPasskeysJson(accountId));
     }
 
-    /** The management list, also returned by a successful registration so the client refreshes in one call. */
+    /**
+     * The management list, also returned by a successful registration so the client refreshes in
+     * one call. Shaped {@code {"approvalRequired": bool, "passkeys": [...]}}: approval only
+     * matters to an account that can enter the back office, so the flag lets the owner's UI show
+     * "awaiting approval" to staff and nothing of the sort to members.
+     */
     private Future<String> listPasskeysJson(Object accountId) {
-        return credentialStore.findByAccount(accountId).map(credentials -> {
+        return Future.all(
+            EntityStore.create(dataSourceModel)
+                .<FrontendAccount>executeQuery("select backoffice from FrontendAccount where id=$1", accountId),
+            credentialStore.findByAccount(accountId)
+        ).map(compositeFuture -> {
+            List<FrontendAccount> accounts = compositeFuture.resultAt(0);
+            List<WebAuthnCredentialStore.CredentialSummary> credentials = compositeFuture.resultAt(1);
+            boolean backofficeAccount = !accounts.isEmpty() && Boolean.TRUE.equals(accounts.get(0).isBackoffice());
             AstArray array = AST.createArray();
             for (WebAuthnCredentialStore.CredentialSummary summary : credentials) {
                 AstObject entry = AST.createObject();
                 entry.set("id", summary.id());
+                entry.set("status", summary.status());
                 if (summary.label() != null)
                     entry.set("label", summary.label());
                 if (summary.aaguid() != null)
@@ -458,8 +515,66 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
                     entry.set("lastUsedAt", summary.lastUsedAt().toString());
                 array.push(entry);
             }
+            AstObject response = AST.createObject();
+            response.set("approvalRequired", backofficeAccount);
+            response.setArray("passkeys", array);
+            return Json.formatObject(response);
+        });
+    }
+
+    // ===== super-administrator approval queue ====================================================
+
+    /** Fails with the admin-not-permitted key unless the principal's person is a super administrator. */
+    private Future<Void> requireSuperAdmin(ModalityUserPrincipal principal) {
+        return SuperAdminMembership.isSuperAdmin(principal, dataSourceModel)
+            .compose(isSuperAdmin -> {
+                if (!Boolean.TRUE.equals(isSuperAdmin)) {
+                    // Person id, not email: this lands in a log that ships to aggregation
+                    Console.log(LOG_PREFIX + "Passkey approval refused: person " + principal.getUserPersonId() + " is not a super administrator");
+                    return adminNotPermittedFailure();
+                }
+                return Future.succeededFuture();
+            });
+    }
+
+    /** The approval queue as JSON: pending credentials with the account (username) each belongs to. */
+    private Future<String> listPendingPasskeysJson(ModalityUserPrincipal approver) {
+        return credentialStore.findPending(accountIdOf(approver)).map(pending -> {
+            AstArray array = AST.createArray();
+            for (WebAuthnCredentialStore.PendingSummary summary : pending) {
+                AstObject entry = AST.createObject();
+                entry.set("id", summary.id());
+                if (summary.username() != null)
+                    entry.set("username", summary.username());
+                if (summary.label() != null)
+                    entry.set("label", summary.label());
+                if (summary.aaguid() != null)
+                    entry.set("aaguid", summary.aaguid());
+                if (summary.transports() != null)
+                    entry.set("transports", summary.transports());
+                if (summary.createdAt() != null)
+                    entry.set("createdAt", summary.createdAt().toString());
+                array.push(entry);
+            }
             return Json.formatArray(array);
         });
+    }
+
+    /**
+     * Records the approver's decision; a row that is no longer pending — or that belongs to the
+     * approver's own account — yields the generic management error.
+     */
+    private Future<?> decidePasskey(ModalityUserPrincipal approver, Object passkeyIdArg, String newStatus) {
+        Long passkeyId = Numbers.toLong(passkeyIdArg);
+        if (passkeyId == null)
+            return managementFailure();
+        return credentialStore.decidePending(passkeyId, newStatus, Numbers.toLong(approver.getUserPersonId()), accountIdOf(approver))
+            .compose(decided -> {
+                if (!Boolean.TRUE.equals(decided))
+                    return managementFailure();
+                Console.log(LOG_PREFIX + "Passkey row " + passkeyId + " " + newStatus + " by person " + approver.getUserPersonId());
+                return Future.succeededFuture();
+            });
     }
 
     private Future<?> removePasskey(ModalityUserPrincipal principal, RemovePasskeyCredentials credentials) {
@@ -467,7 +582,8 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
         if (passkeyId == null)
             return managementFailure();
         // Ownership is in the DELETE's WHERE clause; a valid id belonging to another account
-        // matches zero rows and gets the same generic error as a nonexistent one
+        // matches zero rows and gets the same generic error as a nonexistent one — as does a
+        // REJECTED row, which stays on record (the owner's UI offers no remove for it)
         return credentialStore.deleteOwned(passkeyId, accountIdOf(principal))
             .compose(deleted -> Boolean.TRUE.equals(deleted) ? Future.succeededFuture() : managementFailure());
     }
@@ -520,6 +636,16 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
 
     private static <T> Future<T> notConfiguredFailure() {
         return Future.failedFuture("[%s] Passkey sign-in is not configured on this server".formatted(ModalityAuthenticationI18nKeys.AuthnPasskeyNotConfiguredError));
+    }
+
+    private static <T> Future<T> notApprovedFailure() {
+        // Specific on purpose: the caller has just proven possession of the key, so telling them
+        // their own credential awaits approval discloses nothing to anyone else
+        return Future.failedFuture("[%s] This passkey has not been approved for back-office use yet".formatted(ModalityAuthenticationI18nKeys.AuthnPasskeyNotApprovedError));
+    }
+
+    private static <T> Future<T> adminNotPermittedFailure() {
+        return Future.failedFuture("[%s] Only a super administrator can approve or reject passkeys".formatted(ModalityAuthenticationI18nKeys.AuthnPasskeyAdminNotPermittedError));
     }
 
     private static <T> Future<T> managementFailure() {

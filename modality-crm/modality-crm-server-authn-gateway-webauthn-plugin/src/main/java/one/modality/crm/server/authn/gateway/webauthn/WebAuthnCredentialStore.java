@@ -24,35 +24,62 @@ import java.util.List;
  * ModalityWebPushSubscriptionStore for SubmitService writes. Raw-SQL results are read by column
  * POSITION, in SELECT order — they carry values, not usable column names.
  *
+ * <p>{@code status} is the credential's back-office trust (added by V0085): PENDING until a super
+ * administrator decides, then APPROVED or REJECTED. Only the gateway interprets it.
+ *
  * @author Claude Code
  */
 final class WebAuthnCredentialStore {
 
+    static final String STATUS_PENDING = "PENDING";
+    static final String STATUS_APPROVED = "APPROVED";
+    static final String STATUS_REJECTED = "REJECTED";
+
     /** One credential row as needed at assertion time (lookup by credential id). */
-    record CredentialRow(long id, Object accountId, String publicKeyCose, long signCount, String userHandle) {
+    record CredentialRow(long id, Object accountId, String publicKeyCose, long signCount, String userHandle, String status) {
     }
 
-    /** One credential row as shown by the management UI (never the key material). */
+    /** One credential row as shown by its owner's management UI (never the key material). */
     record CredentialSummary(long id, String credentialId, String userHandle, String label, String aaguid,
-                             String transports, Object createdAt, Object lastUsedAt) {
+                             String transports, Object createdAt, Object lastUsedAt, String status) {
+    }
+
+    /** One pending credential as shown to an approver: whose it is, what it is, when it arrived. */
+    record PendingSummary(long id, String username, String label, String aaguid, String transports, Object createdAt) {
     }
 
     // SELECT column positions, in SELECT order (raw SQL ⇒ read by position)
     private static final String SELECT_BY_ACCOUNT_SQL =
-        "SELECT id, credential_id, user_handle, label, aaguid, transports, created_at, last_used_at" +
+        "SELECT id, credential_id, user_handle, label, aaguid, transports, created_at, last_used_at, status" +
         " FROM webauthn_credential WHERE frontend_account_id = $1 ORDER BY id";
     private static final int A_ID = 0, A_CREDENTIAL_ID = 1, A_USER_HANDLE = 2, A_LABEL = 3, A_AAGUID = 4,
-        A_TRANSPORTS = 5, A_CREATED_AT = 6, A_LAST_USED_AT = 7;
+        A_TRANSPORTS = 5, A_CREATED_AT = 6, A_LAST_USED_AT = 7, A_STATUS = 8;
 
     private static final String SELECT_BY_CREDENTIAL_ID_SQL =
-        "SELECT id, frontend_account_id, public_key_cose, sign_count, user_handle" +
+        "SELECT id, frontend_account_id, public_key_cose, sign_count, user_handle, status" +
         " FROM webauthn_credential WHERE credential_id = $1";
-    private static final int C_ID = 0, C_ACCOUNT_ID = 1, C_PUBLIC_KEY = 2, C_SIGN_COUNT = 3, C_USER_HANDLE = 4;
+    private static final int C_ID = 0, C_ACCOUNT_ID = 1, C_PUBLIC_KEY = 2, C_SIGN_COUNT = 3, C_USER_HANDLE = 4, C_STATUS = 5;
 
+    // The approval queue: pending credentials of BACK-OFFICE accounts, with the account each
+    // belongs to. Members' passkeys start PENDING too but are not listed — there is nothing to
+    // decide until the account is granted back-office access, at which point they appear here.
+    // The approver's own account ($2) is excluded: a super administrator must not certify a
+    // credential enrolled behind their own password, so another one has to. The username is the
+    // account's login email — personal data, shown only to super administrators and never
+    // logged. Oldest first, so the queue is worked in arrival order.
+    private static final String SELECT_PENDING_SQL =
+        "SELECT c.id, a.username, c.label, c.aaguid, c.transports, c.created_at" +
+        " FROM webauthn_credential c JOIN frontend_account a ON a.id = c.frontend_account_id" +
+        " WHERE c.status = $1 AND a.backoffice = true AND a.disabled IS NOT TRUE AND c.frontend_account_id <> $2" +
+        " ORDER BY c.created_at, c.id";
+    private static final int P_ID = 0, P_USERNAME = 1, P_LABEL = 2, P_AAGUID = 3, P_TRANSPORTS = 4, P_CREATED_AT = 5;
+
+    // status is bound explicitly (the column DEFAULT is only a safety net) so that the constants
+    // above are the one place the initial state is decided
     private static final String INSERT_SQL =
         "INSERT INTO webauthn_credential" +
-        " (frontend_account_id, credential_id, public_key_cose, sign_count, user_handle, transports, aaguid, label)" +
-        " VALUES ($1, $2, $3, $4, $5, $6, $7, $8)";
+        " (frontend_account_id, credential_id, public_key_cose, sign_count, user_handle, transports, aaguid, label, status)" +
+        " VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)";
 
     // GREATEST keeps the stored counter monotonic even under the warn-and-accept regression policy
     private static final String UPDATE_USAGE_SQL =
@@ -63,10 +90,25 @@ final class WebAuthnCredentialStore {
     // (always 1 for a single statement — VertxSqlUtil.toWebFxSubmitResult), so affected-vs-not can
     // only be observed through the generated keys that a " returning " statement populates: one key
     // when the row matched, none when it did not.
+    // A REJECTED row ($3) cannot be deleted by its owner: the rejection stays on record instead
+    // of being cleared by a delete-and-re-enrol from the same session that earned it.
     private static final String DELETE_OWNED_SQL =
-        "DELETE FROM webauthn_credential WHERE id = $1 AND frontend_account_id = $2 returning id";
+        "DELETE FROM webauthn_credential WHERE id = $1 AND frontend_account_id = $2 AND status <> $3 returning id";
     private static final String RENAME_OWNED_SQL =
         "UPDATE webauthn_credential SET label = $1 WHERE id = $2 AND frontend_account_id = $3 returning id";
+
+    // A decision only lands on a PENDING row: two approvers racing, or an approve after a reject,
+    // find nothing to change instead of overwriting each other — the first decision stands. It
+    // never lands on the approver's own account ($5): self-approval would make the gate a
+    // formality for the very accounts it matters most for. And it only lands on rows the queue
+    // would list (a live back-office account): approving a member's passkey by id would hand
+    // them a pre-approved credential the day they are granted back-office access.
+    private static final String DECIDE_PENDING_SQL =
+        "UPDATE webauthn_credential SET status = $1, decided_by_person_id = $2, decided_at = now()" +
+        " WHERE id = $3 AND status = $4 AND frontend_account_id <> $5" +
+        " AND EXISTS (SELECT 1 FROM frontend_account a WHERE a.id = webauthn_credential.frontend_account_id" +
+        "             AND a.backoffice = true AND a.disabled IS NOT TRUE)" +
+        " returning id";
 
     /** Every passkey of one account, oldest first — feeds both the management list and excludeCredentials. */
     Future<List<CredentialSummary>> findByAccount(Object accountId) {
@@ -82,7 +124,8 @@ final class WebAuthnCredentialStore {
                         stringValue(result.getValue(row, A_AAGUID)),
                         stringValue(result.getValue(row, A_TRANSPORTS)),
                         result.getValue(row, A_CREATED_AT),
-                        result.getValue(row, A_LAST_USED_AT)));
+                        result.getValue(row, A_LAST_USED_AT),
+                        stringValue(result.getValue(row, A_STATUS))));
                 }
                 return summaries;
             });
@@ -99,14 +142,36 @@ final class WebAuthnCredentialStore {
                     result.getValue(0, C_ACCOUNT_ID),
                     stringValue(result.getValue(0, C_PUBLIC_KEY)),
                     longValue(result.getValue(0, C_SIGN_COUNT)),
-                    stringValue(result.getValue(0, C_USER_HANDLE)));
+                    stringValue(result.getValue(0, C_USER_HANDLE)),
+                    stringValue(result.getValue(0, C_STATUS)));
+            });
+    }
+
+    /**
+     * The approval queue: every PENDING credential of a back-office account other than the
+     * approver's own, oldest first.
+     */
+    Future<List<PendingSummary>> findPending(Object approverAccountId) {
+        return executeRawQuery(SELECT_PENDING_SQL, new Object[]{STATUS_PENDING, approverAccountId})
+            .map(result -> {
+                List<PendingSummary> pending = new ArrayList<>(result.getRowCount());
+                for (int row = 0; row < result.getRowCount(); row++) {
+                    pending.add(new PendingSummary(
+                        longValue(result.getValue(row, P_ID)),
+                        stringValue(result.getValue(row, P_USERNAME)),
+                        stringValue(result.getValue(row, P_LABEL)),
+                        stringValue(result.getValue(row, P_AAGUID)),
+                        stringValue(result.getValue(row, P_TRANSPORTS)),
+                        result.getValue(row, P_CREATED_AT)));
+                }
+                return pending;
             });
     }
 
     Future<?> insert(Object accountId, String credentialIdB64, String publicKeyCoseB64, long signCount,
                      String userHandleB64, String transports, String aaguid, String label) {
         return executeRawSubmit(INSERT_SQL,
-            accountId, credentialIdB64, publicKeyCoseB64, signCount, userHandleB64, transports, aaguid, label);
+            accountId, credentialIdB64, publicKeyCoseB64, signCount, userHandleB64, transports, aaguid, label, STATUS_PENDING);
     }
 
     /** Fire-and-forget usage stamp after a successful assertion; a failure must not fail the login. */
@@ -114,14 +179,27 @@ final class WebAuthnCredentialStore {
         return executeRawSubmit(UPDATE_USAGE_SQL, newSignCount, id);
     }
 
-    /** Deletes the row only when it belongs to the account; resolves to whether a row was deleted. */
+    /**
+     * Deletes the row only when it belongs to the account and is not REJECTED; resolves to
+     * whether a row was deleted.
+     */
     Future<Boolean> deleteOwned(long id, Object accountId) {
-        return executeRawSubmit(DELETE_OWNED_SQL, id, accountId).map(WebAuthnCredentialStore::returnedARow);
+        return executeRawSubmit(DELETE_OWNED_SQL, id, accountId, STATUS_REJECTED).map(WebAuthnCredentialStore::returnedARow);
     }
 
     /** Renames the row only when it belongs to the account; resolves to whether a row was renamed. */
     Future<Boolean> renameOwned(long id, Object accountId, String label) {
         return executeRawSubmit(RENAME_OWNED_SQL, label, id, accountId).map(WebAuthnCredentialStore::returnedARow);
+    }
+
+    /**
+     * Records an approver's decision on a PENDING row; resolves to whether the row was still
+     * pending (false when it was already decided, does not exist, belongs to the approver, or
+     * belongs to an account that is not a live back-office one).
+     */
+    Future<Boolean> decidePending(long id, String newStatus, Object deciderPersonId, Object deciderAccountId) {
+        return executeRawSubmit(DECIDE_PENDING_SQL, newStatus, deciderPersonId, id, STATUS_PENDING, deciderAccountId)
+            .map(WebAuthnCredentialStore::returnedARow);
     }
 
     private Future<QueryResult> executeRawQuery(String sql, Object[] parameters) {

@@ -84,3 +84,4 @@ V0081__letter_type_id_index.sql
 V0082__sold_out_item_in_allocation_trigger.sql
 V0083__auth_session.sql
 V0084__webauthn_credential.sql
+V0085__webauthn_credential_approval.sql

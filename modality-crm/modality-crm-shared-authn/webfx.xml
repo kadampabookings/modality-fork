@@ -27,6 +27,9 @@
         <provider interface="dev.webfx.stack.com.serial.spi.SerialCodec">one.modality.crm.shared.services.authn.serial.ListPasskeysCredentialsSerialCodec</provider>
         <provider interface="dev.webfx.stack.com.serial.spi.SerialCodec">one.modality.crm.shared.services.authn.serial.RemovePasskeyCredentialsSerialCodec</provider>
         <provider interface="dev.webfx.stack.com.serial.spi.SerialCodec">one.modality.crm.shared.services.authn.serial.RenamePasskeyCredentialsSerialCodec</provider>
+        <provider interface="dev.webfx.stack.com.serial.spi.SerialCodec">one.modality.crm.shared.services.authn.serial.ListPendingPasskeysCredentialsSerialCodec</provider>
+        <provider interface="dev.webfx.stack.com.serial.spi.SerialCodec">one.modality.crm.shared.services.authn.serial.ApprovePasskeyCredentialsSerialCodec</provider>
+        <provider interface="dev.webfx.stack.com.serial.spi.SerialCodec">one.modality.crm.shared.services.authn.serial.RejectPasskeyCredentialsSerialCodec</provider>
     </providers>
     <java-ui-api package="one.modality.crm.shared.services.authn" prefix="ModalityAuthentication">
         <i18n/>
