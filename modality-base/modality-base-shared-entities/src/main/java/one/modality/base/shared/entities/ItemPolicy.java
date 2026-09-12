@@ -28,6 +28,10 @@ public interface ItemPolicy extends Entity,
     String childAllowed = "childAllowed";
     String youngAdultAllowed = "youngAdultAllowed";
     String adultAllowed = "adultAllowed";
+    String pairedItem1 = "pairedItem1";
+    String pairedItem2 = "pairedItem2";
+    String pairedItem3 = "pairedItem3";
+    String pairedItem4 = "pairedItem4";
 
     default void setScope(Object value) {
         setForeignField(scope, value);
@@ -164,6 +168,61 @@ public interface ItemPolicy extends Entity,
 
     default EntityId getAutoBookItemId() {
         return getForeignEntityId(autoBookItem);
+    }
+
+    /**
+     * The accommodations this sharing item pairs with — the rooms whose booker a sharer may be
+     * joining. The four slots are ONE value: a scope that sets any of them owns all four, so a
+     * narrower scope can shrink the set rather than only add to it (see PolicyAggregate's
+     * item-policy resolution). All four null means "any shareable accommodation", which is the
+     * behaviour every event had before the columns existed.
+     */
+    default void setPairedItem1(Object value) {
+        setForeignField(pairedItem1, value);
+    }
+
+    default EntityId getPairedItem1Id() {
+        return getForeignEntityId(pairedItem1);
+    }
+
+    default Item getPairedItem1() {
+        return getForeignEntity(pairedItem1);
+    }
+
+    default void setPairedItem2(Object value) {
+        setForeignField(pairedItem2, value);
+    }
+
+    default EntityId getPairedItem2Id() {
+        return getForeignEntityId(pairedItem2);
+    }
+
+    default Item getPairedItem2() {
+        return getForeignEntity(pairedItem2);
+    }
+
+    default void setPairedItem3(Object value) {
+        setForeignField(pairedItem3, value);
+    }
+
+    default EntityId getPairedItem3Id() {
+        return getForeignEntityId(pairedItem3);
+    }
+
+    default Item getPairedItem3() {
+        return getForeignEntity(pairedItem3);
+    }
+
+    default void setPairedItem4(Object value) {
+        setForeignField(pairedItem4, value);
+    }
+
+    default EntityId getPairedItem4Id() {
+        return getForeignEntityId(pairedItem4);
+    }
+
+    default Item getPairedItem4() {
+        return getForeignEntity(pairedItem4);
     }
 
     /**

@@ -22,6 +22,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -362,6 +363,37 @@ public final class PolicyAggregate {
      * is not an item notice). Add a field here only when the family declaring it means "unless the
      * item says otherwise".
      */
+    /**
+     * Field sets that resolve as ONE value rather than independently.
+     *
+     * Scope resolution fills each field from the narrowest scope that sets it, treating null as
+     * "inherit". That is right for independent fields and wrong for a set spread over numbered
+     * columns: an organization pairing a sharing item with {Twin, Double} and an event narrowing
+     * it to {Twin} leaves slots 2-4 null, which would inherit Double straight back and make the
+     * event's removal a no-op. Grouping them means the narrowest scope that fills ANY slot owns
+     * all of them, so a set can be shrunk or replaced. Ownership counts only against strictly
+     * wider scopes; site is not ranked, so two rows can tie, and a tie merges rather than
+     * overrides.
+     *
+     * Adding a group here is a deliberate statement that the columns are one value. Numbered
+     * columns alone do not qualify. Mirrors the TypeScript GROUPED_FIELD_SETS in
+     * kbs3-react/shared/src/domain/policy-aggregate.ts; keep the two in step.
+     */
+    private static final String[][] GROUPED_FIELD_SETS = {
+        {ItemPolicy.pairedItem1, ItemPolicy.pairedItem2, ItemPolicy.pairedItem3, ItemPolicy.pairedItem4},
+    };
+
+    /** field name -> index of its group in {@link #GROUPED_FIELD_SETS}. Built once. */
+    private static final Map<String, Integer> FIELD_GROUP_OF = buildFieldGroupIndex();
+
+    private static Map<String, Integer> buildFieldGroupIndex() {
+        Map<String, Integer> map = new HashMap<>();
+        for (int i = 0; i < GROUPED_FIELD_SETS.length; i++)
+            for (String field : GROUPED_FIELD_SETS[i])
+                map.put(field, i);
+        return map;
+    }
+
     private static final String[] FAMILY_DEFAULTABLE_FIELDS = {
         ItemPolicy.applicableToInPerson, ItemPolicy.applicableToOnline,
         ItemPolicy.childAllowed, ItemPolicy.youngAdultAllowed, ItemPolicy.adultAllowed,
@@ -390,16 +422,43 @@ public final class PolicyAggregate {
         itemRows.sort((r1, r2) -> scopeLevel(r2.getScope()) - scopeLevel(r1.getScope()));
         ItemPolicy narrowest = itemRows.get(0);
         try (ThreadLocalEntityLoadingContext ignored = ThreadLocalEntityLoadingContext.open(true)) {
+            // A grouped field set is owned by the narrowest scope that says anything about it, so
+            // that a scope can SHRINK an inherited set and not only extend it. Ownership counts
+            // only against STRICTLY wider scopes: scopeLevel deliberately does not rank site, so
+            // an org-wide row and an org+site row tie and neither is the other's narrower.
+            // Letting a tie claim the set would make one of them silently vanish; they merge
+            // instead, as ungrouped fields do at a tie. See GROUPED_FIELD_SETS.
+            Map<Integer, Integer> groupOwnerLevel = new HashMap<>();
+            int baseLevel = scopeLevel(narrowest.getScope());
+            for (Map.Entry<String, Integer> entry : FIELD_GROUP_OF.entrySet())
+                if (narrowest.getFieldValue(entry.getKey()) != null)
+                    groupOwnerLevel.putIfAbsent(entry.getValue(), baseLevel);
             // Everything the item itself says, narrowest scope first.
             for (int i = 1; i < itemRows.size(); i++) {
                 ItemPolicy wider = itemRows.get(i);
+                int widerLevel = scopeLevel(wider.getScope());
+                // Groups this row supplies. Recorded only once the whole row is done, so taking
+                // slot 1 from a row does not then block slot 2 of that same row.
+                Set<Integer> groupsFromThisRow = new HashSet<>();
                 for (Object field : wider.getLoadedFields()) {
                     if (narrowest.getFieldValue(field) == null) {
+                        Integer group = FIELD_GROUP_OF.get(field.toString());
+                        if (group != null) {
+                            Integer ownerLevel = groupOwnerLevel.get(group);
+                            if (ownerLevel != null && ownerLevel > widerLevel)
+                                continue; // a narrower scope owns this set
+                        }
                         Object widerValue = wider.getFieldValue(field);
-                        if (widerValue != null)
+                        if (widerValue != null) {
                             narrowest.setFieldValue(field, widerValue);
+                            if (group != null)
+                                groupsFromThisRow.add(group);
+                        }
                     }
                 }
+                // Rows are narrowest-first, so the first level to claim a group is the narrowest.
+                for (Integer group : groupsFromThisRow)
+                    groupOwnerLevel.putIfAbsent(group, widerLevel);
             }
             if (familyRows.isEmpty())
                 return narrowest;

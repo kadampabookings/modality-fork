@@ -367,10 +367,10 @@
       "expr": "coalesce((select min(item.code) from DocumentLine where document=d and !cancelled and item.family.code='diet' group by item order by item.ord limit 1), 'NO') as Diet"
     },
     "listing_dinner": {
-      "expr": "(select 'DIN' from DocumentLine where document=d and !cancelled and item.code='SUP' limit 1) as Dinner"
+      "expr": "(select 'DIN' from DocumentLine where document=d and !cancelled and item.code in ('SUP', 'DIN') limit 1) as Dinner"
     },
     "listing_dinnerDates": {
-      "expr": "(select dates from DocumentLine where document=d and !cancelled and item.code='SUP' limit 1) as Dinner"
+      "expr": "(select dates from DocumentLine where document=d and !cancelled and item.code in ('SUP', 'DIN') limit 1) as Dinner"
     },
     "listing_earlyAcco": {
       "expr": "(select min(resourceConfiguration != null ? resourceConfiguration..resource..name : item.name) from DocumentLine dl where document=d and !cancelled and item.family.code='acco' and dates!=null and exists(select Attendance where documentLine=dl and date<documentLine.document.event.startDate) group by item order by item.ord limit 1) as EarlyAcco"
@@ -1139,13 +1139,16 @@
     "default": "boolean",
     "descriptionLabel": "Label",
     "earlyAccommodationAllowed": "boolean",
-    "forceSoldOut": "boolean",
     "genderInfoRequired": "boolean",
     "item": "Item",
     "lateAccommodationAllowed": "boolean",
     "minDay": "integer",
     "minOccupancy": "integer",
     "noticeLabel": "Label",
+    "pairedItem1": "Item",
+    "pairedItem2": "Item",
+    "pairedItem3": "Item",
+    "pairedItem4": "Item",
     "scope": "PolicyScope",
     "titleLabel": "Label",
     "wholeEvent": "boolean",
