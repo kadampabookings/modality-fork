@@ -902,10 +902,12 @@
   "EventSelection": {
     "id": 146,
     "event": "Event",
+    "fixed": "boolean",
     "inPerson": "boolean",
     "label": "Label",
     "name": "string",
     "online": "boolean",
+    "ord": "integer",
     "part1": "EventPart",
     "part2": "EventPart",
     "part3": "EventPart",
