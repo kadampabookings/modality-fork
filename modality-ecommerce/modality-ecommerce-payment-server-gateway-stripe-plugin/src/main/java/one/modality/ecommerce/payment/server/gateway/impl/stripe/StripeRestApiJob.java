@@ -77,9 +77,17 @@ public final class StripeRestApiJob implements ApplicationJob {
             .handler(ctx -> {
                 String cacheKey = ctx.pathParam("htmlCacheKey");
                 String html = RestApiOneTimeHtmlResponsesCache.getOneTimeHtmlResponse(cacheKey);
-                ctx.response()
-                    .putHeader(HttpHeaders.CONTENT_TYPE, HttpHeaders.TEXT_HTML)
-                    .end(html);
+                if (html != null) // The cache key is one-time, and rejected if malformed
+                    ctx.response()
+                        .putHeader(HttpHeaders.CONTENT_TYPE, "text/html; charset=UTF-8")
+                        // The form embeds the gateway's client secret for this payment and the payer's billing
+                        // details, so it must not sit in the browser cache after the payment
+                        .putHeader(HttpHeaders.CACHE_CONTROL, "no-store")
+                        .end(html);
+                else // Not found (note: the key is not echoed back in the response)
+                    ctx.response()
+                        .setStatusCode(HttpResponseStatus.BAD_REQUEST_400)
+                        .end("No value for that cache key");
             });
 
         /*=========================================== WEBHOOKS REST API ==============================================*/

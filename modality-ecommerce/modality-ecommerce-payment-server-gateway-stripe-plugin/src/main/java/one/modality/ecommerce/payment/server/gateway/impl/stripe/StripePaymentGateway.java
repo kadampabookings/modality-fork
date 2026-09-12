@@ -18,7 +18,6 @@ import dev.webfx.platform.ast.ReadOnlyAstObject;
 import dev.webfx.platform.async.Future;
 import dev.webfx.platform.console.Console;
 import dev.webfx.platform.resource.Resource;
-import dev.webfx.platform.util.uuid.Uuid;
 import one.modality.ecommerce.payment.GatewayPaymentMethodInfo;
 import one.modality.ecommerce.payment.PaymentFailureReason;
 import one.modality.ecommerce.payment.PaymentFormType;
@@ -186,7 +185,7 @@ public final class StripePaymentGateway implements PaymentGateway {
                 }
                 // Non-seamless: serve the form via the one-time HTML cache endpoint so the iframe
                 // can load it through https (matches the Square plugin pattern).
-                String htmlCacheKey = Uuid.randomUuid();
+                String htmlCacheKey = RestApiOneTimeHtmlResponsesCache.generateKey();
                 RestApiOneTimeHtmlResponsesCache.registerOneTimeHtmlResponse(htmlCacheKey, paymentFormContent);
                 String url = STRIPE_PAYMENT_FORM_ENDPOINT.replace(":htmlCacheKey", htmlCacheKey);
                 return GatewayInitiatePaymentResult.createEmbeddedUrlInitiatePaymentResult(live, false, url, false, sandboxCards);
