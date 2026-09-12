@@ -28,6 +28,9 @@ import one.modality.ecommerce.document.service.events.registration.MarkDocumentA
 import one.modality.ecommerce.document.service.events.registration.documentline.AllocateDocumentLineEvent;
 import one.modality.ecommerce.document.service.events.registration.documentline.CancelDocumentLineEvent;
 import one.modality.ecommerce.document.service.events.registration.documentline.LinkMateToOwnerDocumentLineEvent;
+import one.modality.base.shared.entities.DocumentLine;
+import dev.webfx.stack.orm.entity.Entities;
+import dev.webfx.stack.orm.entity.Entity;
 import one.modality.ecommerce.document.service.events.registration.documentline.PriceDocumentLineEvent;
 import one.modality.ecommerce.document.service.spi.DocumentServiceProvider;
 import one.modality.ecommerce.history.server.HistoryRecorder;
@@ -347,7 +350,10 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
         // with status ENQUEUED. At the booking opening time, the queue will process the enqueued submissions and call
         // submitDocumentChangesNow() for each of them, and communicate the final result to the clients using push
         // notification.
-        return DocumentSubmitController.submitDocumentChanges(request);
+        // A roommate link names the booking line it points at, and the replay below would write whatever the
+        // client sent — so a link is judged against the database BEFORE it can be queued (MateLinkRules).
+        return validateMateLinks(request)
+            .compose(ignored -> DocumentSubmitController.submitDocumentChanges(request));
     }
 
     static Future<SubmitDocumentChangesResult> submitDocumentChangesNow(DocumentSubmitRequest request) {
@@ -465,6 +471,80 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
      * Extracts the user's frontend account ID from the userId principal object.
      * Uses reflection to avoid a direct module dependency on modality.crm.shared.authn.
      */
+    /**
+     * Refuses a submit carrying a roommate link that fails {@link MateLinkRules}, before anything is
+     * queued or written. Loads only what the rules judge: the submitting account's back-office flag and,
+     * for each link, the mate line and the owner line it names. A submit with no link passes at once, so
+     * every other booking flow is untouched.
+     */
+    private static Future<Void> validateMateLinks(DocumentSubmitRequest request) {
+        List<LinkMateToOwnerDocumentLineEvent> links = new ArrayList<>();
+        for (AbstractDocumentEvent documentEvent : request.argument().documentEvents())
+            if (documentEvent instanceof LinkMateToOwnerDocumentLineEvent link)
+                links.add(link);
+        if (links.isEmpty())
+            return Future.succeededFuture();
+
+        // The account's own flag, read from the database — the session's backoffice flag is client-asserted.
+        Object accountId = getUserAccountId(request.userId());
+        Future<Boolean> backofficeAccount = accountId == null
+            ? Future.succeededFuture(null)
+            : EntityStore.create().<Entity>executeQuery("select backoffice from FrontendAccount where id=$1", accountId)
+                .map(accounts -> accounts.isEmpty() ? null : Boolean.TRUE.equals(accounts.get(0).getBooleanFieldValue("backoffice")));
+        return backofficeAccount.compose(isBackofficeAccount ->
+            validateMateLinksFrom(links, 0, request.backoffice(), isBackofficeAccount));
+    }
+
+    /** Judges the links one after another; the first refusal fails the whole submit. */
+    private static Future<Void> validateMateLinksFrom(List<LinkMateToOwnerDocumentLineEvent> links, int index,
+                                                     boolean backofficeSession, Boolean backofficeAccount) {
+        if (index >= links.size())
+            return Future.succeededFuture();
+        LinkMateToOwnerDocumentLineEvent link = links.get(index);
+        Object matePk = link.getDocumentLinePrimaryKey();
+        Object ownerPk = link.getOwnerDocumentLine();
+        boolean ownerPersonNamed = link.getOwnerPerson() != null;
+        if (matePk == null)
+            return refuseOrContinue(MateLinkRules.check(backofficeSession, backofficeAccount, null, ownerPk != null, null, ownerPersonNamed),
+                links, index, backofficeSession, backofficeAccount);
+        return EntityStore.create().<DocumentLine>executeQuery(
+                "select share_mate, share_owner, item.share_mate, document.event from DocumentLine where id=$1 or id=$2",
+                matePk, ownerPk != null ? ownerPk : matePk)
+            .compose(lines -> {
+                MateLinkRules.LineFacts mate = null, owner = null;
+                for (DocumentLine line : lines) {
+                    MateLinkRules.LineFacts facts = lineFacts(line);
+                    Object linePk = line.getPrimaryKey();
+                    if (MateLinkRules.sameId(linePk, matePk))
+                        mate = facts;
+                    if (ownerPk != null && MateLinkRules.sameId(linePk, ownerPk))
+                        owner = facts;
+                }
+                return refuseOrContinue(MateLinkRules.check(backofficeSession, backofficeAccount, mate, ownerPk != null, owner, ownerPersonNamed),
+                    links, index, backofficeSession, backofficeAccount);
+            });
+    }
+
+    private static Future<Void> refuseOrContinue(String refusal, List<LinkMateToOwnerDocumentLineEvent> links, int index,
+                                                 boolean backofficeSession, Boolean backofficeAccount) {
+        if (refusal != null) {
+            Console.log(refusal);
+            return Future.failedFuture(refusal);
+        }
+        return validateMateLinksFrom(links, index + 1, backofficeSession, backofficeAccount);
+    }
+
+    /** The facts {@link MateLinkRules} judges, from a line loaded with share_mate, share_owner, item.share_mate and document.event. */
+    private static MateLinkRules.LineFacts lineFacts(DocumentLine line) {
+        Entity item = line.getForeignEntity("item");
+        Entity document = line.getForeignEntity("document");
+        boolean shareMate = Boolean.TRUE.equals(line.getBooleanFieldValue("share_mate"))
+                            || item != null && Boolean.TRUE.equals(item.getBooleanFieldValue("share_mate"));
+        Object documentPk = line.getForeignEntityId("document") == null ? null : Entities.getPrimaryKey(line.getForeignEntityId("document"));
+        Object eventPk = document == null || document.getForeignEntityId("event") == null ? null : Entities.getPrimaryKey(document.getForeignEntityId("event"));
+        return new MateLinkRules.LineFacts(shareMate, Boolean.TRUE.equals(line.getBooleanFieldValue("share_owner")), documentPk, eventPk);
+    }
+
     private static Object getUserAccountId(Object userId) {
         if (userId == null) return null;
         try {
