@@ -381,7 +381,51 @@ public final class PolicyAggregate {
      */
     private static final String[][] GROUPED_FIELD_SETS = {
         {ItemPolicy.pairedItem1, ItemPolicy.pairedItem2, ItemPolicy.pairedItem3, ItemPolicy.pairedItem4},
+        {ItemFamilyPolicy.eventPhaseCoverage1, ItemFamilyPolicy.eventPhaseCoverage2,
+            ItemFamilyPolicy.eventPhaseCoverage3, ItemFamilyPolicy.eventPhaseCoverage4},
     };
+
+    /**
+     * Fill {@code resolved} from the wider rows: every field the narrower scopes left unset is
+     * taken from the next widest scope that sets it. Shared by the family and item resolutions,
+     * which differ in what they do afterwards but agree exactly on this step.
+     *
+     * Grouped field sets are the one exception: they resolve as a single value, so the narrowest
+     * scope that fills ANY slot owns all of them. Ownership counts only against STRICTLY wider
+     * scopes — scopeLevel deliberately does not rank site, so two rows can tie, and a tie is not
+     * an override. Mirrors fillFromWiderScopes in kbs3-react's policy-aggregate.ts.
+     */
+    private static void fillFromWiderScopes(Entity resolved, List<? extends Entity> widerRowsNarrowestFirst, int baseLevel) {
+        Map<Integer, Integer> groupOwnerLevel = new HashMap<>();
+        for (Map.Entry<String, Integer> entry : FIELD_GROUP_OF.entrySet())
+            if (resolved.getFieldValue(entry.getKey()) != null)
+                groupOwnerLevel.putIfAbsent(entry.getValue(), baseLevel);
+        for (Entity wider : widerRowsNarrowestFirst) {
+            int widerLevel = scopeLevel((PolicyScope) wider.getForeignEntity("scope"));
+            // Groups this row supplies. Recorded only once the whole row is done, so taking slot 1
+            // from a row does not then block slot 2 of that same row.
+            Set<Integer> groupsFromThisRow = new HashSet<>();
+            for (Object field : wider.getLoadedFields()) {
+                if (resolved.getFieldValue(field) != null)
+                    continue; // the narrower scope has spoken
+                Integer group = FIELD_GROUP_OF.get(field.toString());
+                if (group != null) {
+                    Integer ownerLevel = groupOwnerLevel.get(group);
+                    if (ownerLevel != null && ownerLevel > widerLevel)
+                        continue; // a narrower scope owns this set
+                }
+                Object widerValue = wider.getFieldValue(field);
+                if (widerValue != null) {
+                    resolved.setFieldValue(field, widerValue);
+                    if (group != null)
+                        groupsFromThisRow.add(group);
+                }
+            }
+            // Rows are narrowest-first, so the first level to claim a group is the narrowest.
+            for (Integer group : groupsFromThisRow)
+                groupOwnerLevel.putIfAbsent(group, widerLevel);
+        }
+    }
 
     /** field name -> index of its group in {@link #GROUPED_FIELD_SETS}. Built once. */
     private static final Map<String, Integer> FIELD_GROUP_OF = buildFieldGroupIndex();
@@ -422,44 +466,10 @@ public final class PolicyAggregate {
         itemRows.sort((r1, r2) -> scopeLevel(r2.getScope()) - scopeLevel(r1.getScope()));
         ItemPolicy narrowest = itemRows.get(0);
         try (ThreadLocalEntityLoadingContext ignored = ThreadLocalEntityLoadingContext.open(true)) {
-            // A grouped field set is owned by the narrowest scope that says anything about it, so
-            // that a scope can SHRINK an inherited set and not only extend it. Ownership counts
-            // only against STRICTLY wider scopes: scopeLevel deliberately does not rank site, so
-            // an org-wide row and an org+site row tie and neither is the other's narrower.
-            // Letting a tie claim the set would make one of them silently vanish; they merge
-            // instead, as ungrouped fields do at a tie. See GROUPED_FIELD_SETS.
-            Map<Integer, Integer> groupOwnerLevel = new HashMap<>();
-            int baseLevel = scopeLevel(narrowest.getScope());
-            for (Map.Entry<String, Integer> entry : FIELD_GROUP_OF.entrySet())
-                if (narrowest.getFieldValue(entry.getKey()) != null)
-                    groupOwnerLevel.putIfAbsent(entry.getValue(), baseLevel);
-            // Everything the item itself says, narrowest scope first.
-            for (int i = 1; i < itemRows.size(); i++) {
-                ItemPolicy wider = itemRows.get(i);
-                int widerLevel = scopeLevel(wider.getScope());
-                // Groups this row supplies. Recorded only once the whole row is done, so taking
-                // slot 1 from a row does not then block slot 2 of that same row.
-                Set<Integer> groupsFromThisRow = new HashSet<>();
-                for (Object field : wider.getLoadedFields()) {
-                    if (narrowest.getFieldValue(field) == null) {
-                        Integer group = FIELD_GROUP_OF.get(field.toString());
-                        if (group != null) {
-                            Integer ownerLevel = groupOwnerLevel.get(group);
-                            if (ownerLevel != null && ownerLevel > widerLevel)
-                                continue; // a narrower scope owns this set
-                        }
-                        Object widerValue = wider.getFieldValue(field);
-                        if (widerValue != null) {
-                            narrowest.setFieldValue(field, widerValue);
-                            if (group != null)
-                                groupsFromThisRow.add(group);
-                        }
-                    }
-                }
-                // Rows are narrowest-first, so the first level to claim a group is the narrowest.
-                for (Integer group : groupsFromThisRow)
-                    groupOwnerLevel.putIfAbsent(group, widerLevel);
-            }
+            // Everything the item itself says, narrowest scope first — grouped sets included,
+            // see fillFromWiderScopes.
+            fillFromWiderScopes(narrowest, itemRows.subList(1, itemRows.size()),
+                scopeLevel(narrowest.getScope()));
             if (familyRows.isEmpty())
                 return narrowest;
             // Then the family, but only where it outranks what the item said — a family at a
@@ -501,6 +511,10 @@ public final class PolicyAggregate {
      * dayVisitor pair) can never read as null, so they always resolve to the narrowest row and never
      * inherit. That is exactly right for the two that are statements about their own scope rather
      * than inheritable values, and it makes this a no-op for the rest.
+     *
+     * eventPhaseCoverage1..4 is a grouped set (see GROUPED_FIELD_SETS), so it resolves as one value
+     * rather than slot by slot: an event row naming fewer phases than its organization narrows the
+     * coverage instead of silently inheriting the rest back.
      */
     private static ItemFamilyPolicy mergeFamilyRowsAcrossScopes(List<ItemFamilyPolicy> familyRows) {
         if (familyRows.size() == 1)
@@ -511,16 +525,8 @@ public final class PolicyAggregate {
         familyRows.sort((r1, r2) -> scopeLevel(r2.getScope()) - scopeLevel(r1.getScope()));
         ItemFamilyPolicy narrowest = familyRows.get(0);
         try (ThreadLocalEntityLoadingContext ignored = ThreadLocalEntityLoadingContext.open(true)) {
-            for (int i = 1; i < familyRows.size(); i++) {
-                ItemFamilyPolicy wider = familyRows.get(i);
-                for (Object field : wider.getLoadedFields()) {
-                    if (narrowest.getFieldValue(field) != null)
-                        continue; // the narrower scope has spoken
-                    Object widerValue = wider.getFieldValue(field);
-                    if (widerValue != null)
-                        narrowest.setFieldValue(field, widerValue);
-                }
-            }
+            fillFromWiderScopes(narrowest, familyRows.subList(1, familyRows.size()),
+                scopeLevel(narrowest.getScope()));
         }
         return narrowest;
     }
