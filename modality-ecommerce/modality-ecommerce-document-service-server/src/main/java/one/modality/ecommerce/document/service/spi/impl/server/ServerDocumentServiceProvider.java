@@ -618,7 +618,14 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
                 return Future.failedFuture("[MateInviteError] This booking has no room booking that can be shared");
             if (!MateLinkRules.sameId(ownerLine.frontendAccountId(), accountId))
                 return Future.failedFuture("[MateInviteError] You can only invite a roommate to your own booking");
-            return MateInviteTokenStore.mint(ownerLine.ownerDocumentLineId(), ownerLine.eventId(), accountId);
+            // Refuse early when the room is already full, so the booker is told now rather than
+            // after sending a link that would be refused at the other end. The link itself is
+            // guarded too (the capacity test is inside that UPDATE) — this is the friendly half.
+            return MateInviteTokenStore.hasFreeBed(ownerLine.ownerDocumentLineId()).compose(free -> {
+                if (!free)
+                    return Future.failedFuture("[MateInviteError] Every bed in this room is already taken");
+                return MateInviteTokenStore.mint(ownerLine.ownerDocumentLineId(), ownerLine.eventId(), accountId);
+            });
         });
     }
 
@@ -633,23 +640,29 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
         String token = request.argument().inviteToken();
         if (token == null || token.isBlank())
             return Future.succeededFuture(result);
-        return MateInviteTokenStore.claim(token).compose(claim -> {
-            if (claim == null) {
-                Console.log("[MateInvite] token could not be consumed (unknown, already used, or expired); booking left unlinked");
+        // Find the line to link BEFORE claiming. A booking with no share-mate line has nothing to
+        // link, and spending the invite on it would leave the mate holding a dead link.
+        return MateInviteTokenStore.findMateShareLineId(result.documentPrimaryKey()).compose(mateLineId -> {
+            if (mateLineId == null) {
+                Console.log("[MateInvite] no share-mate line on the new booking; token left unspent");
                 return Future.succeededFuture(result);
             }
-            if (!MateLinkRules.sameId(claim.eventId(), request.eventPrimaryKey())) {
-                Console.log("[MateInvite] token belongs to another event than the booking; booking left unlinked");
-                return Future.succeededFuture(result);
-            }
-            return MateInviteTokenStore.findMateShareLineId(result.documentPrimaryKey()).compose(mateLineId -> {
-                if (mateLineId == null) {
-                    Console.log("[MateInvite] no share-mate line on the new booking; token spent but booking left unlinked");
+            // The claim is atomic and carries the event: a token that is unknown, already used,
+            // expired, or issued for another event simply does not resolve.
+            return MateInviteTokenStore.claim(token, mateLineId, request.eventPrimaryKey()).compose(ownerLineId -> {
+                if (ownerLineId == null) {
+                    Console.log("[MateInvite] token did not resolve (unknown, already used, expired, or another event); booking left unlinked");
                     return Future.succeededFuture(result);
                 }
-                return MateInviteTokenStore.link(mateLineId, claim.ownerDocumentLineId())
-                    .compose(linked -> MateInviteTokenStore.recordConsumer(token, mateLineId))
-                    .map(ignored -> result);
+                return MateInviteTokenStore.link(mateLineId, ownerLineId).compose(linked -> {
+                    if (!linked) { // the room filled up after the invite was sent, or this is not a share-mate line
+                        Console.log("[MateInvite] link refused (no free bed, or not a share-mate line); booking left unlinked");
+                        return Future.succeededFuture(result);
+                    }
+                    // The owner is now known for certain, so label the line with their real name:
+                    // the mate need not have typed it, and may have typed it wrong.
+                    return MateInviteTokenStore.stampOwnerName(mateLineId, ownerLineId).map(ignored -> result);
+                });
             });
         }).otherwise(e -> {
             Console.log("[MateInvite] token consume errored; booking left unlinked: " + e);

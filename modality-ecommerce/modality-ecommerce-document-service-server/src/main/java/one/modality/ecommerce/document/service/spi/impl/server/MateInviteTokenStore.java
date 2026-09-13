@@ -20,9 +20,19 @@ import java.util.Base64;
  * report A1) that is deliberate, and the row stores only a HASH of the token — a leaked read cannot be
  * turned into a working link.
  *
- * <p>Single-use is enforced by the database, not by the application re-reading a flag: {@link #claim}
- * is a conditional {@code UPDATE ... WHERE used_date IS NULL AND expires_date > now()} whose row count
- * is the claim. Two racing consumers cannot both see a row count of 1, so a token resolves at most once.
+ * <p>Single-use is enforced by the database: {@link #claim} is one conditional
+ * {@code UPDATE ... WHERE used_date IS NULL AND ...} that also stamps the claiming line into
+ * {@code used_by_document_line_id}, and the caller reads the row back by that stamp. Only one
+ * consumer's stamp can survive the update, so a token resolves at most once. The booking's event is
+ * part of that WHERE, so a token offered against another event does not resolve — and is not spent.
+ *
+ * <p><b>Why nothing here trusts a submit's row count.</b> {@code SubmitResult.getRowCount()} is NOT
+ * rows-affected: {@code VertxSqlUtil.toWebFxSubmitResult} derives it by walking the RowSet chain,
+ * which for a single statement has one element whatever the statement did. The first version of this
+ * class gated the claim on that count, so the gate could never refuse: a spent token went on linking,
+ * and a second and third mate were put into a room with one spare bed. Every check here now reads its
+ * own effect back through the query path, where the row count is real. The same trap is documented in
+ * {@code ModalityAuthSessionStore}.
  */
 final class MateInviteTokenStore {
 
@@ -32,9 +42,6 @@ final class MateInviteTokenStore {
 
     /** The room-booking line a booking offers to share, and the facts the mint path checks. */
     record OwnerLine(Object ownerDocumentLineId, Object eventId, Object frontendAccountId) { }
-
-    /** Result of a successful claim: which booking line the mate is now linked to, and its event. */
-    record Claim(Object ownerDocumentLineId, Object eventId) { }
 
     private MateInviteTokenStore() { }
 
@@ -70,6 +77,39 @@ final class MateInviteTokenStore {
     }
 
     /**
+     * True when the room booked on the line bound to {@code $2} still has a bed free — its item's
+     * capacity, less the booker and the mates already linked to it.
+     *
+     * <p>An unknown capacity reads as "room available": this guard exists to catch the obvious
+     * over-fill, not to become the authority on availability, which is the derived-availability
+     * work (plan §1c) still to come.
+     */
+    private static final String ROOM_HAS_FREE_BED =
+        "(select i.capacity is null or (select count(*) from document_line m " +
+        "     where m.share_mate_owner_document_line_id = $2 and not m.cancelled) + 1 < i.capacity " +
+        " from document_line o join item i on i.id = o.item_id where o.id = $2)";
+
+    /**
+     * A line is a share-mate line by its own flag OR its item's — the rule MateLinkRules already
+     * applies. Only EditShareMateInfoDocumentLineEvent writes document_line.share_mate, so a
+     * sharing booking made without it is recognisable only by its item.
+     */
+    private static final String IS_SHARE_MATE_LINE =
+        "(share_mate = true or exists (select 1 from item i where i.id = item_id and i.share_mate = true))";
+
+    /** Whether the room on {@code ownerDocumentLineId} can still take another mate. */
+    static Future<Boolean> hasFreeBed(Object ownerDocumentLineId) {
+        return QueryService.executeQuery(new QueryArgumentBuilder()
+                .setDataSourceId(dataSourceId())
+                .setStatement("select i.capacity is null or (select count(*) from document_line m " +
+                              "    where m.share_mate_owner_document_line_id = $1 and not m.cancelled) + 1 < i.capacity " +
+                              "from document_line o join item i on i.id = o.item_id where o.id = $1")
+                .setParameters(ownerDocumentLineId)
+                .build())
+            .map(rs -> rs.getRowCount() >= 1 && Boolean.TRUE.equals(rs.getValue(0, 0)));
+    }
+
+    /**
      * Mints a token bound to {@code ownerDocumentLineId} and returns the RAW token (stored only as a
      * hash). {@code expires_date} is the event's end plus a grace window, read from the owner line's
      * event so a token never resolves after the event is over. Caller is responsible for having
@@ -81,48 +121,62 @@ final class MateInviteTokenStore {
         String sql =
             "insert into mate_invite_token (token_hash, owner_document_line_id, event_id, creator_account_id, expires_date) " +
             "select $1, $2, $3, $4, (e.end_date + interval '2 days') from event e where e.id = $3";
+        String hash = hashToken(rawToken);
         return SubmitService.executeSubmit(new SubmitArgumentBuilder()
                 .setDataSourceId(dataSourceId())
                 .setStatement(sql)
-                .setParameters(hashToken(rawToken), ownerDocumentLineId, eventId, creatorAccountId)
+                .setParameters(hash, ownerDocumentLineId, eventId, creatorAccountId)
                 .build())
-            .map(result -> {
-                if (result.getRowCount() < 1) // event id did not resolve — nothing inserted
+            // Read the row back rather than trust the submit's row count (see the class note): if the
+            // event id did not resolve, the insert selected no row and there is no token to hand out.
+            .compose(ignored -> QueryService.executeQuery(new QueryArgumentBuilder()
+                .setDataSourceId(dataSourceId())
+                .setStatement("select 1 from mate_invite_token where token_hash = $1")
+                .setParameters(hash)
+                .build()))
+            .map(rs -> {
+                if (rs.getRowCount() < 1)
                     throw new IllegalStateException("Could not mint invite token: event not found");
                 return rawToken;
             });
     }
 
     /**
-     * Atomically consumes a token: marks it used if and only if it is unused and unexpired, then reads
-     * back the booking line and event it points at. Returns null when the token does not resolve
-     * (unknown, already used, or expired) — the row count of the conditional update is the single-use
-     * gate, so a token yields a Claim at most once.
+     * Atomically consumes a token on behalf of {@code mateDocumentLineId}, returning the owner
+     * accommodation line it names, or null when it does not resolve — unknown, already used, expired,
+     * or issued for a different event than the booking being submitted.
+     *
+     * <p>The update is the whole decision: it marks the token used AND stamps the claiming line into
+     * {@code used_by_document_line_id}, so of two consumers racing on the same token only one leaves
+     * its stamp behind. The follow-up read asks "is the stamp mine?", which is what makes this
+     * single-use without depending on a row count the submit path cannot give honestly.
+     *
+     * <p>Re-running it for the SAME mate line is deliberately idempotent: the row still carries that
+     * line's stamp, so a retried submit re-resolves to the same owner instead of being refused.
      */
-    static Future<Claim> claim(String rawToken) {
-        if (rawToken == null || rawToken.isBlank())
+    static Future<Object> claim(String rawToken, Object mateDocumentLineId, Object eventId) {
+        if (rawToken == null || rawToken.isBlank() || mateDocumentLineId == null)
             return Future.succeededFuture(null);
         String hash = hashToken(rawToken);
+        // event_id is in the WHERE so a token offered against another event neither resolves nor is
+        // spent — the mate can still use it on the event it was issued for.
         String claimSql =
-            "update mate_invite_token set used_date = now() " +
-            "where token_hash = $1 and used_date is null and expires_date > now()";
+            "update mate_invite_token set used_date = now(), used_by_document_line_id = $2 " +
+            "where token_hash = $1 and event_id = $3 and expires_date > now() " +
+            "  and (used_date is null or used_by_document_line_id = $2)";
         return SubmitService.executeSubmit(new SubmitArgumentBuilder()
                 .setDataSourceId(dataSourceId())
                 .setStatement(claimSql)
-                .setParameters(hash)
+                .setParameters(hash, mateDocumentLineId, eventId)
                 .build())
-            .compose(result -> {
-                if (result.getRowCount() < 1) // not ours to claim: unknown, already used, or expired
-                    return Future.succeededFuture(null);
-                // We hold the claim; reading the target is now safe.
-                return QueryService.executeQuery(new QueryArgumentBuilder()
-                        .setDataSourceId(dataSourceId())
-                        .setStatement("select owner_document_line_id, event_id from mate_invite_token where token_hash = $1")
-                        .setParameters(hash)
-                        .build())
-                    .map(rs -> rs.getRowCount() < 1 ? null
-                        : new Claim(rs.getValue(0, 0), rs.getValue(0, 1)));
-            });
+            // The stamp, not the row count, says whether the claim is ours.
+            .compose(ignored -> QueryService.executeQuery(new QueryArgumentBuilder()
+                    .setDataSourceId(dataSourceId())
+                    .setStatement("select owner_document_line_id from mate_invite_token " +
+                                  "where token_hash = $1 and used_by_document_line_id = $2")
+                    .setParameters(hash, mateDocumentLineId)
+                    .build())
+                .map(rs -> rs.getRowCount() < 1 ? null : rs.getValue(0, 0)));
     }
 
     /**
@@ -135,10 +189,48 @@ final class MateInviteTokenStore {
     static Future<Boolean> link(Object mateDocumentLineId, Object ownerDocumentLineId) {
         return SubmitService.executeSubmit(new SubmitArgumentBuilder()
                 .setDataSourceId(dataSourceId())
-                .setStatement("update document_line set share_mate_owner_document_line_id = $2 where id = $1 and share_mate = true")
+                // The capacity test is part of the UPDATE rather than a check before it, so the
+                // room cannot be over-filled between deciding and writing. Single-use stops one
+                // token linking twice; this stops a booker minting a SECOND token and putting a
+                // third person in a twin, which nothing else in the booking path would catch — a
+                // share-mate line is free and carries no capacity of its own.
+                .setStatement(
+                    "update document_line set share_mate_owner_document_line_id = $2 " +
+                    "where id = $1 and " + IS_SHARE_MATE_LINE + " and " + ROOM_HAS_FREE_BED)
                 .setParameters(mateDocumentLineId, ownerDocumentLineId)
                 .build())
-            .map(result -> result.getRowCount() >= 1);
+            // Read back rather than trust the submit's row count (see the class note): a line that is
+            // not a share-mate line updates nothing, and the caller must be able to tell.
+            .compose(ignored -> QueryService.executeQuery(new QueryArgumentBuilder()
+                .setDataSourceId(dataSourceId())
+                .setStatement("select 1 from document_line where id = $1 and share_mate_owner_document_line_id = $2")
+                .setParameters(mateDocumentLineId, ownerDocumentLineId)
+                .build()))
+            .map(rs -> rs.getRowCount() >= 1);
+    }
+
+    /**
+     * Records the room booker's name on the mate's line once the link is made, so the booking says
+     * who it shares with even where the mate typed nothing or typed it wrong.
+     *
+     * <p>The name is taken from the owner's OWN booking, never from the client — the link is the
+     * fact, and this only labels it. A blank owner name leaves whatever the mate typed in place
+     * rather than replacing a real name with an empty string, and any failure here is swallowed:
+     * the link stands on its own without the label.
+     */
+    static Future<Void> stampOwnerName(Object mateDocumentLineId, Object ownerDocumentLineId) {
+        return SubmitService.executeSubmit(new SubmitArgumentBuilder()
+                .setDataSourceId(dataSourceId())
+                .setStatement(
+                    "update document_line set share_mate_owner_name = coalesce(nullif(trim(( " +
+                    "    select coalesce(d.person_first_name, '') || ' ' || coalesce(d.person_last_name, '') " +
+                    "      from document_line o join document d on d.id = o.document_id where o.id = $2)), ''), " +
+                    "  share_mate_owner_name) " +
+                    "where id = $1 and share_mate = true")
+                .setParameters(mateDocumentLineId, ownerDocumentLineId)
+                .build())
+            .map(r -> (Void) null)
+            .otherwise(e -> null); // label only — never fail a booking over it
     }
 
     /**
@@ -171,25 +263,18 @@ final class MateInviteTokenStore {
         return QueryService.executeQuery(new QueryArgumentBuilder()
                 .setDataSourceId(dataSourceId())
                 .setStatement(
+                    // The line's own flag OR its item's, the same rule MateLinkRules applies on the
+                    // back-office path: only EditShareMateInfoDocumentLineEvent writes
+                    // document_line.share_mate, so a sharing booking made without it (or linked by
+                    // the back office, which never sets it) is recognisable only by its item.
                     "select dl.id from document_line dl join item i on i.id = dl.item_id " +
                     "join item_family f on f.id = i.family_id " +
-                    "where dl.document_id = $1 and dl.share_mate = true and f.code = 'acco' and dl.share_mate_owner_document_line_id is null " +
+                    "where dl.document_id = $1 and (dl.share_mate = true or i.share_mate = true) " +
+                    "  and f.code = 'acco' and dl.share_mate_owner_document_line_id is null " +
                     "order by dl.id desc limit 1")
                 .setParameters(mateDocumentId)
                 .build())
             .map(rs -> rs.getRowCount() < 1 ? null : rs.getValue(0, 0));
     }
 
-    /** Best-effort audit: record which mate line consumed the token. Failure here never fails a booking. */
-    static Future<Void> recordConsumer(String rawToken, Object mateDocumentLineId) {
-        if (rawToken == null || mateDocumentLineId == null)
-            return Future.succeededFuture();
-        return SubmitService.executeSubmit(new SubmitArgumentBuilder()
-                .setDataSourceId(dataSourceId())
-                .setStatement("update mate_invite_token set used_by_document_line_id = $2 where token_hash = $1")
-                .setParameters(hashToken(rawToken), mateDocumentLineId)
-                .build())
-            .map(r -> (Void) null)
-            .otherwise(e -> null); // audit only
-    }
 }
