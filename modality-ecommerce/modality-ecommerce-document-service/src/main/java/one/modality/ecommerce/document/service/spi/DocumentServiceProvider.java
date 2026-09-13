@@ -19,4 +19,7 @@ public interface DocumentServiceProvider {
 
     Future<SubmitDocumentChangesResult> fetchEventQueueResult(Object queueToken);
 
+    /** Mints a single-use room-share invite token bound to the given owner accommodation line (steps 4-5). */
+    Future<String> mintMateInviteToken(Object documentId);
+
 }

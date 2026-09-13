@@ -85,3 +85,4 @@ V0082__sold_out_item_in_allocation_trigger.sql
 V0083__auth_session.sql
 V0084__event_selection_fixed_and_ord.sql
 V0086__item_policy_paired_items.sql
+V0087__mate_invite_token.sql

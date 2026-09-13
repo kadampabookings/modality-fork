@@ -389,7 +389,7 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
                                 );
                             }
                             return HistoryRecorder.completeDocumentHistoriesAfterSubmit(histories, request.argument().documentEvents())
-                                .map(ignoredVoid -> result);
+                                .compose(ignoredVoid -> consumeMateInviteTokenIfPresent(request, result));
                         }
                         return Future.succeededFuture(result); // submit refused by logic (e.g. sold-out)
                     });
@@ -603,5 +603,57 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
     @Override
     public Future<SubmitDocumentChangesResult> fetchEventQueueResult(Object queueToken) {
         return Future.succeededFuture(DocumentSubmitController.fetchEventQueueResult(queueToken));
+    }
+
+    @Override
+    public Future<String> mintMateInviteToken(Object documentId) {
+        // Capture the caller synchronously — the thread-local is gone after the first async hop.
+        Object accountId = getUserAccountId(ThreadLocalStateHolder.getUserId());
+        if (accountId == null)
+            return Future.failedFuture("[MateInviteError] Only a signed-in booker can create a room-share invite");
+        if (documentId == null)
+            return Future.failedFuture("[MateInviteError] No booking to invite for");
+        return MateInviteTokenStore.loadOwnerLineForBooking(documentId).compose(ownerLine -> {
+            if (ownerLine == null)
+                return Future.failedFuture("[MateInviteError] This booking has no room booking that can be shared");
+            if (!MateLinkRules.sameId(ownerLine.frontendAccountId(), accountId))
+                return Future.failedFuture("[MateInviteError] You can only invite a roommate to your own booking");
+            return MateInviteTokenStore.mint(ownerLine.ownerDocumentLineId(), ownerLine.eventId(), accountId);
+        });
+    }
+
+    /**
+     * If this submit carried a room-share invite token (steps 4-5), consume it: validate it and link the
+     * just-created mate line to the room booker the token names. The booking is already committed and
+     * valid, so a token that cannot be consumed (unknown, already used, expired, wrong event, or no mate
+     * line found) is logged and the booking still succeeds — the mate simply stays unlinked, which the
+     * back office can resolve. The TOKEN is the authorization; the client never names the owner line.
+     */
+    private static Future<SubmitDocumentChangesResult> consumeMateInviteTokenIfPresent(DocumentSubmitRequest request, SubmitDocumentChangesResult result) {
+        String token = request.argument().inviteToken();
+        if (token == null || token.isBlank())
+            return Future.succeededFuture(result);
+        return MateInviteTokenStore.claim(token).compose(claim -> {
+            if (claim == null) {
+                Console.log("[MateInvite] token could not be consumed (unknown, already used, or expired); booking left unlinked");
+                return Future.succeededFuture(result);
+            }
+            if (!MateLinkRules.sameId(claim.eventId(), request.eventPrimaryKey())) {
+                Console.log("[MateInvite] token belongs to another event than the booking; booking left unlinked");
+                return Future.succeededFuture(result);
+            }
+            return MateInviteTokenStore.findMateShareLineId(result.documentPrimaryKey()).compose(mateLineId -> {
+                if (mateLineId == null) {
+                    Console.log("[MateInvite] no share-mate line on the new booking; token spent but booking left unlinked");
+                    return Future.succeededFuture(result);
+                }
+                return MateInviteTokenStore.link(mateLineId, claim.ownerDocumentLineId())
+                    .compose(linked -> MateInviteTokenStore.recordConsumer(token, mateLineId))
+                    .map(ignored -> result);
+            });
+        }).otherwise(e -> {
+            Console.log("[MateInvite] token consume errored; booking left unlinked: " + e);
+            return result;
+        });
     }
 }

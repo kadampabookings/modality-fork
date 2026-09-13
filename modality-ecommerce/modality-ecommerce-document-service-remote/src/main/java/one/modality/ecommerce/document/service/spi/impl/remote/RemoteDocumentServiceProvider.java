@@ -38,4 +38,9 @@ public class RemoteDocumentServiceProvider implements DocumentServiceProvider {
     public Future<SubmitDocumentChangesResult> fetchEventQueueResult(Object queueToken) {
         return BusCallService.call(DocumentServiceBusAddresses.FETCH_EVENT_QUEUE_RESULT_ADDRESS, queueToken);
     }
+
+    @Override
+    public Future<String> mintMateInviteToken(Object documentId) {
+        return BusCallService.call(DocumentServiceBusAddresses.MINT_MATE_INVITE_TOKEN_ADDRESS, documentId);
+    }
 }
