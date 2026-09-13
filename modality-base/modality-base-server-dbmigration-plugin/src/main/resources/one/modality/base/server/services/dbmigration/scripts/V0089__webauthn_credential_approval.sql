@@ -1,6 +1,6 @@
--- V0085: the back-office approval gate for passkeys — docs/security/backoffice-second-factor.md,
+-- V0089: the back-office approval gate for passkeys — docs/security/backoffice-second-factor.md,
 -- decisions 2 and 4. Adds the credential's back-office trust and the decision audit to the
--- webauthn_credential table that V0084 created. Separate script on purpose: V0084 is checksummed
+-- webauthn_credential table that V0088 created. Separate script on purpose: V0088 is checksummed
 -- once applied, and a table that already exists cannot grow columns through CREATE TABLE.
 --
 -- status: PENDING | APPROVED | REJECTED. A passkey enrolled behind a weak password must not be a

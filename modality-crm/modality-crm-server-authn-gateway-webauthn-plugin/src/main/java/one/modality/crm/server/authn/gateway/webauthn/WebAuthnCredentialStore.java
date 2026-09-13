@@ -13,7 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * All SQL access to the {@code webauthn_credential} table (created by migration V0084).
+ * All SQL access to the {@code webauthn_credential} table (created by migration V0088).
  *
  * <p>The table is deliberately NOT in the domain model (like bo_device/V0078 and
  * person_account_move/V0063): generic client DQL cannot reach it, so ownership is enforced solely
@@ -24,7 +24,7 @@ import java.util.List;
  * ModalityWebPushSubscriptionStore for SubmitService writes. Raw-SQL results are read by column
  * POSITION, in SELECT order — they carry values, not usable column names.
  *
- * <p>{@code status} is the credential's back-office trust (added by V0085): PENDING until a super
+ * <p>{@code status} is the credential's back-office trust (added by V0089): PENDING until a super
  * administrator decides, then APPROVED or REJECTED. Only the gateway interprets it.
  *
  * @author Claude Code
