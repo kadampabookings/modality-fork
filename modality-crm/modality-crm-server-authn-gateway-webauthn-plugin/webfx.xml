@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project>
+
+    <description>Server-side passkey (WebAuthn) authentication gateway.</description>
+
+    <exported-packages>
+        <source-packages/>
+    </exported-packages>
+
+    <dependencies>
+        <used-by-source-modules/>
+    </dependencies>
+
+    <providers>
+        <provider interface="dev.webfx.stack.authn.server.gateway.spi.ServerAuthenticationGateway">one.modality.crm.server.authn.gateway.webauthn.ModalityWebAuthnAuthenticationGateway</provider>
+    </providers>
+
+    <required-libraries>
+        <!-- WebAuthn ceremony verification (attestation + assertion). The library name matches the
+             jar's JPMS module name (module-info.class: com.webauthn4j.core, checked on 0.29.1).
+             Packages are listed explicitly — automatic discovery was not working on the staging
+             server for the Stripe library, so we don't rely on it here either. Transitives
+             (jackson-databind, jackson-dataformat-cbor, slf4j-api) arrive via Maven. -->
+        <library name="com.webauthn4j.core">
+            <groupId>com.webauthn4j</groupId>
+            <artifactId>webauthn4j-core</artifactId>
+            <version>0.29.1.RELEASE</version>
+            <exported-packages>
+                <package>com.webauthn4j</package>
+                <package>com.webauthn4j.converter</package>
+                <package>com.webauthn4j.converter.util</package>
+                <package>com.webauthn4j.credential</package>
+                <package>com.webauthn4j.data</package>
+                <package>com.webauthn4j.data.attestation</package>
+                <package>com.webauthn4j.data.attestation.authenticator</package>
+                <package>com.webauthn4j.data.attestation.statement</package>
+                <package>com.webauthn4j.data.client</package>
+                <package>com.webauthn4j.data.client.challenge</package>
+                <package>com.webauthn4j.server</package>
+            </exported-packages>
+        </library>
+        <!-- Jackson's CBOR module, pinned to the version the rest of the server runs.
+             NOT decoration: webauthn4j 0.29.1 asks for jackson-dataformat-cbor 2.19.0, but
+             jackson-databind/core resolve to 2.17.2 through a NEARER path
+             (logstash-logback-encoder 8.0 -> jackson-databind 2.17.2), and Maven's
+             nearest-wins leaves databind at 2.17.2 while nothing competes with the 2.19.0
+             CBOR module. Jackson does not support mixing minor versions across its modules,
+             and CBOR decoding is exactly the passkey registration path (the attestation
+             object), so the mismatch would surface as a runtime NoSuchMethodError on the
+             first registration rather than at build time. Declaring it here makes it a
+             depth-1 dependency, which beats webauthn4j's transitive one.
+             If the server's jackson version ever moves, move this with it — re-check with
+             `mvn dependency:tree -pl kbs3/kbs-server-application-vertx | grep jackson`. -->
+        <library name="com.fasterxml.jackson.dataformat.cbor">
+            <groupId>com.fasterxml.jackson.dataformat</groupId>
+            <artifactId>jackson-dataformat-cbor</artifactId>
+            <version>2.17.2</version>
+            <exported-packages>
+                <package>com.fasterxml.jackson.dataformat.cbor</package>
+            </exported-packages>
+        </library>
+    </required-libraries>
+
+</project>

@@ -27,6 +27,7 @@ import one.modality.base.shared.util.ActivityHashUtil;
 import one.modality.crm.server.authn.gateway.shared.GuestPersonLinker;
 import one.modality.crm.server.authn.gateway.shared.LocalizedMailTemplate;
 import one.modality.crm.server.authn.gateway.shared.MagicLinkService;
+import one.modality.crm.server.authn.gateway.shared.SuperAdminMembership;
 import one.modality.crm.shared.services.authn.AuthenticateWithBackOfficeViewCredentials;
 import one.modality.crm.shared.services.authn.AuthenticateWithSupportViewCredentials;
 import one.modality.crm.shared.services.authn.ModalityAuthenticationI18nKeys;
@@ -443,17 +444,15 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
      * Whether this email belongs to a super admin — the same row the authorization provider keys the
      * {@code operation:*} wildcard on, asked of the database rather than the client.
      *
-     * <p>The one definition of "is super admin" in this gateway. It is deliberately the ONLY check
-     * behind the back-office view: an operation code would make the ability delegable to roles, and
-     * a free-text {@code AuthorizationRule} could forge the matching grant string — whereas
-     * membership of {@code authorization_super_admin} can only be conferred by someone who can
-     * already write that table.
+     * <p>Delegates to {@link SuperAdminMembership}, the one definition of "is super admin" across
+     * the gateways (the passkey approval queue asks the same question). It is deliberately the
+     * ONLY check behind the back-office view: an operation code would make the ability delegable
+     * to roles, and a free-text {@code AuthorizationRule} could forge the matching grant string —
+     * whereas membership of {@code authorization_super_admin} can only be conferred by someone
+     * who can already write that table.
      */
     private static Future<Boolean> isSuperAdmin(String email, EntityStore entityStore) {
-        if (Strings.isEmpty(email))
-            return Future.succeededFuture(false);
-        return entityStore.executeQuery("select AuthorizationSuperAdmin where superAdmin.email=$1 limit 1", email)
-            .map(superAdmins -> !superAdmins.isEmpty());
+        return SuperAdminMembership.isSuperAdminEmail(email, entityStore);
     }
 
     /**

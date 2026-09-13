@@ -5,6 +5,12 @@ public interface ModalityAuthenticationI18nKeys {
 
     Object AuthnNoSuchUserAccountError = "AuthnNoSuchUserAccountError";
     Object AuthnOldPasswordNotMatchingError = "AuthnOldPasswordNotMatchingError";
+    Object AuthnPasskeyAdminNotPermittedError = "AuthnPasskeyAdminNotPermittedError";
+    Object AuthnPasskeyError = "AuthnPasskeyError";
+    Object AuthnPasskeyManagementError = "AuthnPasskeyManagementError";
+    Object AuthnPasskeyNotApprovedError = "AuthnPasskeyNotApprovedError";
+    Object AuthnPasskeyNotConfiguredError = "AuthnPasskeyNotConfiguredError";
+    Object AuthnPasskeyRegistrationError = "AuthnPasskeyRegistrationError";
     Object AuthnUnrecognizedUserIdError = "AuthnUnrecognizedUserIdError";
     Object AuthnUserOrPasswordEmptyError = "AuthnUserOrPasswordEmptyError";
     Object AuthnWrongUserOrPasswordError = "AuthnWrongUserOrPasswordError";
