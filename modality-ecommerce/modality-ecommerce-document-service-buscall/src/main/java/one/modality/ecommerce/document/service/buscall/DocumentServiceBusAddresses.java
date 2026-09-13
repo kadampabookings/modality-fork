@@ -18,4 +18,6 @@ public interface DocumentServiceBusAddresses {
     String LEAVE_EVENT_QUEUE_ADDRESS = "modality/service/document/leaveEventQueue";
 
     String FETCH_EVENT_QUEUE_RESULT_ADDRESS = "modality/service/document/fetchEventQueueResult";
+
+    String MINT_MATE_INVITE_TOKEN_ADDRESS = "modality/service/document/mintMateInviteToken";
 }

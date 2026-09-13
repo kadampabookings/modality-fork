@@ -6,27 +6,18 @@ import dev.webfx.platform.util.Booleans;
 import dev.webfx.platform.util.collection.Collections;
 import dev.webfx.stack.db.query.QueryResult;
 import dev.webfx.stack.orm.dql.sqlcompiler.mapping.QueryRowToEntityMapping;
-import dev.webfx.stack.orm.entity.Entities;
-import dev.webfx.stack.orm.entity.EntityList;
-import dev.webfx.stack.orm.entity.EntityStore;
+import dev.webfx.stack.orm.entity.*;
+import dev.webfx.stack.orm.entity.impl.ThreadLocalEntityLoadingContext;
 import dev.webfx.stack.orm.entity.query_result_to_entities.QueryResultToEntitiesMapper;
 import one.modality.base.shared.entities.*;
 import one.modality.base.shared.entities.util.Rates;
 import one.modality.base.shared.entities.util.ScheduledItems;
 import one.modality.base.shared.knownitems.KnownItemFamily;
 
-import dev.webfx.stack.orm.entity.EntityId;
-import dev.webfx.stack.orm.entity.impl.ThreadLocalEntityLoadingContext;
-
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -362,6 +353,81 @@ public final class PolicyAggregate {
      * is not an item notice). Add a field here only when the family declaring it means "unless the
      * item says otherwise".
      */
+    /**
+     * Field sets that resolve as ONE value rather than independently.
+     *
+     * Scope resolution fills each field from the narrowest scope that sets it, treating null as
+     * "inherit". That is right for independent fields and wrong for a set spread over numbered
+     * columns: an organization pairing a sharing item with {Twin, Double} and an event narrowing
+     * it to {Twin} leaves slots 2-4 null, which would inherit Double straight back and make the
+     * event's removal a no-op. Grouping them means the narrowest scope that fills ANY slot owns
+     * all of them, so a set can be shrunk or replaced. Ownership counts only against strictly
+     * wider scopes; site is not ranked, so two rows can tie, and a tie merges rather than
+     * overrides.
+     *
+     * Adding a group here is a deliberate statement that the columns are one value. Numbered
+     * columns alone do not qualify. Mirrors the TypeScript GROUPED_FIELD_SETS in
+     * kbs3-react/shared/src/domain/policy-aggregate.ts; keep the two in step.
+     */
+    private static final String[][] GROUPED_FIELD_SETS = {
+        {ItemPolicy.pairedItem1, ItemPolicy.pairedItem2, ItemPolicy.pairedItem3, ItemPolicy.pairedItem4},
+        {ItemFamilyPolicy.eventPhaseCoverage1, ItemFamilyPolicy.eventPhaseCoverage2,
+            ItemFamilyPolicy.eventPhaseCoverage3, ItemFamilyPolicy.eventPhaseCoverage4},
+    };
+
+    /**
+     * Fill {@code resolved} from the wider rows: every field the narrower scopes left unset is
+     * taken from the next widest scope that sets it. Shared by the family and item resolutions,
+     * which differ in what they do afterwards but agree exactly on this step.
+     *
+     * Grouped field sets are the one exception: they resolve as a single value, so the narrowest
+     * scope that fills ANY slot owns all of them. Ownership counts only against STRICTLY wider
+     * scopes — scopeLevel deliberately does not rank site, so two rows can tie, and a tie is not
+     * an override. Mirrors fillFromWiderScopes in kbs3-react's policy-aggregate.ts.
+     */
+    private static void fillFromWiderScopes(Entity resolved, List<? extends Entity> widerRowsNarrowestFirst, int baseLevel) {
+        Map<Integer, Integer> groupOwnerLevel = new HashMap<>();
+        for (Map.Entry<String, Integer> entry : FIELD_GROUP_OF.entrySet())
+            if (resolved.getFieldValue(entry.getKey()) != null)
+                groupOwnerLevel.putIfAbsent(entry.getValue(), baseLevel);
+        for (Entity wider : widerRowsNarrowestFirst) {
+            int widerLevel = scopeLevel((PolicyScope) wider.getForeignEntity("scope"));
+            // Groups this row supplies. Recorded only once the whole row is done, so taking slot 1
+            // from a row does not then block slot 2 of that same row.
+            Set<Integer> groupsFromThisRow = new HashSet<>();
+            for (Object field : wider.getLoadedFields()) {
+                if (resolved.getFieldValue(field) != null)
+                    continue; // the narrower scope has spoken
+                Integer group = FIELD_GROUP_OF.get(field.toString());
+                if (group != null) {
+                    Integer ownerLevel = groupOwnerLevel.get(group);
+                    if (ownerLevel != null && ownerLevel > widerLevel)
+                        continue; // a narrower scope owns this set
+                }
+                Object widerValue = wider.getFieldValue(field);
+                if (widerValue != null) {
+                    resolved.setFieldValue(field, widerValue);
+                    if (group != null)
+                        groupsFromThisRow.add(group);
+                }
+            }
+            // Rows are narrowest-first, so the first level to claim a group is the narrowest.
+            for (Integer group : groupsFromThisRow)
+                groupOwnerLevel.putIfAbsent(group, widerLevel);
+        }
+    }
+
+    /** field name -> index of its group in {@link #GROUPED_FIELD_SETS}. Built once. */
+    private static final Map<String, Integer> FIELD_GROUP_OF = buildFieldGroupIndex();
+
+    private static Map<String, Integer> buildFieldGroupIndex() {
+        Map<String, Integer> map = new HashMap<>();
+        for (int i = 0; i < GROUPED_FIELD_SETS.length; i++)
+            for (String field : GROUPED_FIELD_SETS[i])
+                map.put(field, i);
+        return map;
+    }
+
     private static final String[] FAMILY_DEFAULTABLE_FIELDS = {
         ItemPolicy.applicableToInPerson, ItemPolicy.applicableToOnline,
         ItemPolicy.childAllowed, ItemPolicy.youngAdultAllowed, ItemPolicy.adultAllowed,
@@ -390,17 +456,10 @@ public final class PolicyAggregate {
         itemRows.sort((r1, r2) -> scopeLevel(r2.getScope()) - scopeLevel(r1.getScope()));
         ItemPolicy narrowest = itemRows.get(0);
         try (ThreadLocalEntityLoadingContext ignored = ThreadLocalEntityLoadingContext.open(true)) {
-            // Everything the item itself says, narrowest scope first.
-            for (int i = 1; i < itemRows.size(); i++) {
-                ItemPolicy wider = itemRows.get(i);
-                for (Object field : wider.getLoadedFields()) {
-                    if (narrowest.getFieldValue(field) == null) {
-                        Object widerValue = wider.getFieldValue(field);
-                        if (widerValue != null)
-                            narrowest.setFieldValue(field, widerValue);
-                    }
-                }
-            }
+            // Everything the item itself says, narrowest scope first — grouped sets included,
+            // see fillFromWiderScopes.
+            fillFromWiderScopes(narrowest, itemRows.subList(1, itemRows.size()),
+                scopeLevel(narrowest.getScope()));
             if (familyRows.isEmpty())
                 return narrowest;
             // Then the family, but only where it outranks what the item said — a family at a
@@ -442,6 +501,10 @@ public final class PolicyAggregate {
      * dayVisitor pair) can never read as null, so they always resolve to the narrowest row and never
      * inherit. That is exactly right for the two that are statements about their own scope rather
      * than inheritable values, and it makes this a no-op for the rest.
+     *
+     * eventPhaseCoverage1..4 is a grouped set (see GROUPED_FIELD_SETS), so it resolves as one value
+     * rather than slot by slot: an event row naming fewer phases than its organization narrows the
+     * coverage instead of silently inheriting the rest back.
      */
     private static ItemFamilyPolicy mergeFamilyRowsAcrossScopes(List<ItemFamilyPolicy> familyRows) {
         if (familyRows.size() == 1)
@@ -452,16 +515,8 @@ public final class PolicyAggregate {
         familyRows.sort((r1, r2) -> scopeLevel(r2.getScope()) - scopeLevel(r1.getScope()));
         ItemFamilyPolicy narrowest = familyRows.get(0);
         try (ThreadLocalEntityLoadingContext ignored = ThreadLocalEntityLoadingContext.open(true)) {
-            for (int i = 1; i < familyRows.size(); i++) {
-                ItemFamilyPolicy wider = familyRows.get(i);
-                for (Object field : wider.getLoadedFields()) {
-                    if (narrowest.getFieldValue(field) != null)
-                        continue; // the narrower scope has spoken
-                    Object widerValue = wider.getFieldValue(field);
-                    if (widerValue != null)
-                        narrowest.setFieldValue(field, widerValue);
-                }
-            }
+            fillFromWiderScopes(narrowest, familyRows.subList(1, familyRows.size()),
+                scopeLevel(narrowest.getScope()));
         }
         return narrowest;
     }

@@ -54,10 +54,18 @@ public final class SquareRestApiJob implements ApplicationJob {
                 // content to be present in the HTML cache, as set by initiatePayment() just before.
                 String cacheKey = ctx.pathParam("htmlCacheKey");
                 String html = RestApiOneTimeHtmlResponsesCache.getOneTimeHtmlResponse(cacheKey);
-                // And we return that content
-                ctx.response()
-                    .putHeader(HttpHeaders.CONTENT_TYPE, HttpHeaders.TEXT_HTML)
-                    .end(html);
+                // And we return that content, if found (the cache key is one-time, and rejected if malformed)
+                if (html != null)
+                    ctx.response()
+                        .putHeader(HttpHeaders.CONTENT_TYPE, "text/html; charset=UTF-8")
+                        // The form embeds the gateway's client secret for this payment and the payer's billing
+                        // details, so it must not sit in the browser cache after the payment
+                        .putHeader(HttpHeaders.CACHE_CONTROL, "no-store")
+                        .end(html);
+                else // Not found (note: the key is not echoed back in the response)
+                    ctx.response()
+                        .setStatusCode(HttpResponseStatus.BAD_REQUEST_400)
+                        .end("No value for that cache key");
             });
 
         /*=========================================== WEBHOOKS REST API ==============================================*/

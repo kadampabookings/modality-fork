@@ -9,7 +9,6 @@ import dev.webfx.platform.fetch.FetchOptions;
 import dev.webfx.platform.fetch.Headers;
 import dev.webfx.platform.fetch.Response;
 import dev.webfx.platform.resource.Resource;
-import dev.webfx.platform.util.uuid.Uuid;
 import one.modality.ecommerce.payment.*;
 import one.modality.ecommerce.payment.server.gateway.*;
 import static one.modality.ecommerce.payment.server.gateway.impl.util.GatewayEmail.emailOrNull;
@@ -255,13 +254,15 @@ public final class PayPalPaymentGateway implements PaymentGateway {
             .replace("${orderId}",       orderId)
             .replace("${paypalSdkUrl}",  paypalSdkUrl)
             .replace("${fundingSource}", fundingSourceSnippet);
-        String htmlCacheKey = Uuid.randomUuid();
+        String htmlCacheKey = RestApiOneTimeHtmlResponsesCache.generateKey();
         RestApiOneTimeHtmlResponsesCache.registerOneTimeHtmlResponse(htmlCacheKey, paymentFormContent);
         String url = PAYPAL_LOAD_FORM_ENDPOINT.replace(":htmlCacheKey", htmlCacheKey);
         // The approval URL is the redirect fallback: if the embedded PayPal JS SDK is blocked
         // (e.g. by an ad blocker or corporate firewall), the user can still pay via redirect.
         if (DEBUG_LOG)
-            Console.log("[PayPal][DEBUG] initiatePayment - embedded form URL: " + url + ", fallback: " + fallbackRedirectUrl);
+            // Logging the endpoint, not the resolved url: the cache key in it is the only thing protecting the
+            // payment form, so it must not reach the logs (see RestApiOneTimeHtmlResponsesCache.generateKey())
+            Console.log("[PayPal][DEBUG] initiatePayment - embedded form endpoint: " + PAYPAL_LOAD_FORM_ENDPOINT + ", fallback: " + fallbackRedirectUrl);
         return GatewayInitiatePaymentResult.createEmbeddedUrlInitiatePaymentResult(live, false, url, true, live ? null : SANDBOX_CARDS)
             .withFallbackRedirectUrl(fallbackRedirectUrl);
     }

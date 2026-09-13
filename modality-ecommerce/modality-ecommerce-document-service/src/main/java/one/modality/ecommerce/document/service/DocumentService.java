@@ -40,6 +40,10 @@ public final class DocumentService {
         return getProvider().fetchEventQueueResult(queueToken);
     }
 
+    public static Future<String> mintMateInviteToken(Object documentId) {
+        return getProvider().mintMateInviteToken(documentId);
+    }
+
     // Additional top-level utility methods to load a document (not directly implemented by the provider and not directly serialized)
 
     public static Future<DocumentAggregate> loadDocument(Object event, Object userPerson) {

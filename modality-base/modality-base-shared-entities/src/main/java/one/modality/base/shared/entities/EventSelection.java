@@ -6,6 +6,7 @@ import dev.webfx.stack.orm.entity.EntityId;
 import one.modality.base.shared.entities.markers.EntityHasEvent;
 import one.modality.base.shared.entities.markers.EntityHasLabel;
 import one.modality.base.shared.entities.markers.EntityHasName;
+import one.modality.base.shared.entities.markers.EntityHasOrd;
 
 import java.util.List;
 
@@ -16,10 +17,12 @@ public interface EventSelection extends Entity,
     EntityHasEvent,
     EntityHasName,
     EntityHasLabel,
+    EntityHasOrd, // display order on the booking form (null sorts last, by id)
     BoundaryPeriod // Can be used as a BoundaryPeriod when all parts are consecutive (no discontinuity)
 {
     String inPerson = "inPerson";
     String online = "online";
+    String fixed = "fixed";
     String part1 = "part1";
     String part2 = "part2";
     String part3 = "part3";
@@ -40,6 +43,19 @@ public interface EventSelection extends Entity,
 
     default Boolean isOnline() {
         return getBooleanFieldValue(online);
+    }
+
+    default void setFixed(Object value) {
+        setFieldValue(fixed, value);
+    }
+
+    /**
+     * Whether this selection is a fixed single-session product — bought whole, booking exactly the
+     * ScheduledItems its parts anchor (see V0084). Such a selection has no stay: no accommodation,
+     * no date range to refine and no meal choice.
+     */
+    default Boolean isFixed() {
+        return getBooleanFieldValue(fixed);
     }
 
     default void setPart1(Object value) {

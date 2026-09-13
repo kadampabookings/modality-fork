@@ -166,7 +166,7 @@ public final class SquarePaymentGateway implements PaymentGateway {
         if (seamless) {
             embeddedResult = GatewayInitiatePaymentResult.createEmbeddedContentInitiatePaymentResult(live, true, paymentFormContent, false, sandboxCards);
         } else { // In other cases, we embed the page in a WebView/iFrame that can be loaded through https (assuming this server is on https)
-            String htmlCacheKey = Uuid.randomUuid();
+            String htmlCacheKey = RestApiOneTimeHtmlResponsesCache.generateKey();
             RestApiOneTimeHtmlResponsesCache.registerOneTimeHtmlResponse(htmlCacheKey, paymentFormContent);
             String url = SQUARE_PAYMENT_FORM_ENDPOINT.replace(":htmlCacheKey", htmlCacheKey);
             embeddedResult = GatewayInitiatePaymentResult.createEmbeddedUrlInitiatePaymentResult(live, false, url, false, sandboxCards);

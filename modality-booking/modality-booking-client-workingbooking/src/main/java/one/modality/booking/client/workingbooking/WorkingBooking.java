@@ -639,7 +639,7 @@ public final class WorkingBooking {
         }
         // We submit the booking changes
         return DocumentService.submitDocumentChanges(
-            new SubmitDocumentChangesArgument(historyComment, documentChanges.toArray(new AbstractDocumentEvent[0]), queueCapable, null /* should pass clientOrigin - was introduced on React side for guest booking magic link management */)
+            new SubmitDocumentChangesArgument(historyComment, documentChanges.toArray(new AbstractDocumentEvent[0]), queueCapable, null /* clientOrigin - React-only */, null /* inviteToken - React-only */)
         ).compose(result -> {
             if (result.status() != DocumentChangesStatus.APPROVED || !reloadOnApproved) // SOLD_OUT or ENQUEUED
                 return Future.succeededFuture(result);

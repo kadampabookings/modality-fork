@@ -78,7 +78,7 @@ public final class AnetPaymentGateway implements PaymentGateway {
             if (seamless) {
                 return Future.succeededFuture(GatewayInitiatePaymentResult.createEmbeddedContentInitiatePaymentResult(live, true, paymentFormContent, true, sandboxCards));
             } else { // In other cases, we embed the page in a WebView/iFrame that can be loaded through https (assuming this server is on https)
-                String htmlCacheKey = Uuid.randomUuid();
+                String htmlCacheKey = RestApiOneTimeHtmlResponsesCache.generateKey();
                 RestApiOneTimeHtmlResponsesCache.registerOneTimeHtmlResponse(htmlCacheKey, paymentFormContent);
                 String url = AUTHORIZE_PAYMENT_FORM_LOAD_ENDPOINT.replace(":htmlCacheKey", htmlCacheKey);
                 return Future.succeededFuture(GatewayInitiatePaymentResult.createEmbeddedUrlInitiatePaymentResult(live, false, url, true, sandboxCards));

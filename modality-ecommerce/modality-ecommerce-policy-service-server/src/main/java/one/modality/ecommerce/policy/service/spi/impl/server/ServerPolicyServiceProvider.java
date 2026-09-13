@@ -180,9 +180,12 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                     // 4 - Loading event selections (of this event or of the repeated event if set)
                     , DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
                     "with e as (select coalesce(repeatedEvent,id) as finalEvent from Event where id=$1)" +
-                    " select event,name,label,inPerson,online,part1,part2,part3,part4,part5" +
+                    " select event,name,label,inPerson,online,fixed,ord,part1,part2,part3,part4,part5" +
                     " from EventSelection es, e where es.event = e.finalEvent" +
-                    " order by id", eventPk) // Will introduce an ord later
+                    // ord is the organizer's chosen display order (V0084); id breaks ties and
+                    // orders the rows that carry no ord — which, since Postgres sorts nulls last
+                    // in ascending order, keeps an unordered event listing by id exactly as before.
+                    " order by ord,id", eventPk)
                     // 5 - Loading event phases (of this event or of the repeated event if set)
                     , DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
                     "with e as (select coalesce(repeatedEvent,id) as finalEvent from Event where id=$1)" +
@@ -217,6 +220,9 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                     " select scope.(organization,site,eventType,event)" +
                     ",item.(name,label,code,temporal,family.(code,name,label,ord),capacity,share_mate,breakfastIncluded,ord)" +
                     ",applicableToInPerson,applicableToOnline,descriptionLabel,titleLabel,noticeLabel,minDay,wholeEvent,default,genderInfoRequired,earlyAccommodationAllowed,lateAccommodationAllowed,minOccupancy,forceSoldOut,autoBookItem,childAllowed,youngAdultAllowed,adultAllowed" +
+                    // Which accommodation a sharing item pairs with. Bare FKs: the client only
+                    // compares them by id, so there is nothing to expand.
+                    ",pairedItem1,pairedItem2,pairedItem3,pairedItem4" +
                     " from ItemPolicy ip, e where ip.scope.(" +
                     " (organization = e.organization or organization=e.venue_organization)" +
                     " and (site = null or site?.event = null or site?.event = e.finalEvent)" +
