@@ -153,7 +153,7 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
             } else
                 // Loud, because the consequence is silent: the login button in the apps would just
                 // return errors. Unset WEBAUTHN_* means "this environment has no passkeys", on purpose.
-                Console.log(LOG_PREFIX + "Passkey gateway disabled — WEBAUTHN_RP_ID / WEBAUTHN_ALLOWED_ORIGINS not set");
+                Console.log(LOG_PREFIX + "Passkey gateway disabled — WEBAUTHN_RP_ID unset, both WEBAUTHN_FRONTOFFICE_ORIGINS and WEBAUTHN_BACKOFFICE_ORIGINS empty, or an origin malformed (check public-variables.properties)");
         });
     }
 
