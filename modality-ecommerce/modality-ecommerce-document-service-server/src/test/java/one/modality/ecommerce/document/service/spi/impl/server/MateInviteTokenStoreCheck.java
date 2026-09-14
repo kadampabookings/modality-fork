@@ -45,23 +45,32 @@ public class MateInviteTokenStoreCheck {
         // because an inverted branch here would either hide a usable link or advertise a full room —
         // and because nothing else exercises it without a database.
         check("a resolved link with a free bed is usable",
-            MateInviteTokenStore.STATUS_USABLE.equals(MateInviteTokenStore.statusOf(true, false, true)));
+            MateInviteTokenStore.STATUS_USABLE.equals(MateInviteTokenStore.statusOf(true, false, true, false)));
+        // An account already in a triple may be booking a SECOND person into it; JOINED here would stop
+        // the token riding along, and that person would book unlinked.
+        check("a free bed stays usable even for an account already in the room",
+            MateInviteTokenStore.STATUS_USABLE.equals(MateInviteTokenStore.statusOf(true, false, true, true)));
         check("a resolved link with no free bed reads as full, not as broken",
-            MateInviteTokenStore.STATUS_FULL.equals(MateInviteTokenStore.statusOf(true, false, false)));
+            MateInviteTokenStore.STATUS_FULL.equals(MateInviteTokenStore.statusOf(true, false, false, false)));
+        check("a full room reads as joined for an account that already holds one of its beds",
+            MateInviteTokenStore.STATUS_JOINED.equals(MateInviteTokenStore.statusOf(true, false, false, true)));
         check("a token that exists but has lapsed says so",
-            MateInviteTokenStore.STATUS_EXPIRED.equals(MateInviteTokenStore.statusOf(false, true, false)));
+            MateInviteTokenStore.STATUS_EXPIRED.equals(MateInviteTokenStore.statusOf(false, true, false, false)));
         check("an unresolvable token is unknown",
-            MateInviteTokenStore.STATUS_UNKNOWN.equals(MateInviteTokenStore.statusOf(false, false, false)));
+            MateInviteTokenStore.STATUS_UNKNOWN.equals(MateInviteTokenStore.statusOf(false, false, false, false)));
         // A token issued for ANOTHER event does not resolve and has not lapsed, so it reads as
         // unknown — deliberately, since confirming it exists elsewhere discloses more than nothing.
         check("a token belonging to another event is not confirmed",
-            MateInviteTokenStore.STATUS_UNKNOWN.equals(MateInviteTokenStore.statusOf(false, false, true)));
-        check("no status is anything but the four permitted words",
-            java.util.List.of("USABLE", "FULL", "EXPIRED", "UNKNOWN").containsAll(java.util.List.of(
-                MateInviteTokenStore.statusOf(true, false, true),
-                MateInviteTokenStore.statusOf(true, false, false),
-                MateInviteTokenStore.statusOf(false, true, false),
-                MateInviteTokenStore.statusOf(false, false, false))));
+            MateInviteTokenStore.STATUS_UNKNOWN.equals(MateInviteTokenStore.statusOf(false, false, true, false)));
+        check("holding a bed never confirms a token that did not resolve",
+            MateInviteTokenStore.STATUS_UNKNOWN.equals(MateInviteTokenStore.statusOf(false, false, false, true)));
+        check("no status is anything but the five permitted words",
+            java.util.List.of("USABLE", "FULL", "JOINED", "EXPIRED", "UNKNOWN").containsAll(java.util.List.of(
+                MateInviteTokenStore.statusOf(true, false, true, false),
+                MateInviteTokenStore.statusOf(true, false, false, false),
+                MateInviteTokenStore.statusOf(true, false, false, true),
+                MateInviteTokenStore.statusOf(false, true, false, false),
+                MateInviteTokenStore.statusOf(false, false, false, false))));
 
         System.out.println(pass + " passed, " + fail + " failed");
         if (fail > 0)

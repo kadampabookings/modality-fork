@@ -110,7 +110,7 @@ final class MateInviteTokenStore {
         "(share_mate = true or exists (select 1 from item i where i.id = item_id and i.share_mate = true))";
 
     /**
-     * The four things a mate may be told about an invite link, and the whole of what the resolve
+     * The five things a mate may be told about an invite link, and the whole of what the resolve
      * endpoint may disclose.
      *
      * <p>Deliberately uninformative. The endpoint is unauthenticated — the person following a link
@@ -120,6 +120,13 @@ final class MateInviteTokenStore {
      */
     static final String STATUS_USABLE = "USABLE";
     static final String STATUS_FULL = "FULL";
+    /**
+     * The room is full AND the signed-in caller's account already holds one of its beds — typically
+     * the mate reopening the link after booking, who would otherwise read "the room is now full" as
+     * "my booking lost its room". Told only to that account, so it discloses nothing the caller does
+     * not already know; anyone else still reads FULL.
+     */
+    static final String STATUS_JOINED = "JOINED";
     static final String STATUS_EXPIRED = "EXPIRED";
     /** Unknown token — and also a token issued for a DIFFERENT event, which must not be confirmed. */
     static final String STATUS_UNKNOWN = "UNKNOWN";
@@ -133,10 +140,15 @@ final class MateInviteTokenStore {
      * caller passes {@code expired} only when it has separately established that the token exists
      * but has lapsed; otherwise an unresolved token is UNKNOWN, which is also the right answer for
      * a token belonging to another event.
+     *
+     * <p>{@code callerHoldsBed} only refines a FULL room. While a bed is free the link stays USABLE
+     * even for an account already in the room, because that account may be booking a second person
+     * into a triple — and the token is carried into a booking only when the link is USABLE.
      */
-    static String statusOf(boolean resolved, boolean expired, boolean hasFreeBed) {
+    static String statusOf(boolean resolved, boolean expired, boolean hasFreeBed, boolean callerHoldsBed) {
         if (!resolved) return expired ? STATUS_EXPIRED : STATUS_UNKNOWN;
-        return hasFreeBed ? STATUS_USABLE : STATUS_FULL;
+        if (hasFreeBed) return STATUS_USABLE;
+        return callerHoldsBed ? STATUS_JOINED : STATUS_FULL;
     }
 
     /**
@@ -167,6 +179,23 @@ final class MateInviteTokenStore {
                 .setParameters(ownerDocumentLineId)
                 .build())
             .map(rs -> rs.getRowCount() >= 1 && Boolean.TRUE.equals(rs.getValue(0, 0)));
+    }
+
+    /**
+     * Whether {@code accountId} already holds a bed in the room {@code ownerDocumentLineId} names —
+     * either the room itself (the booker's own line) or a live mate line linked to it. Drives JOINED.
+     */
+    static Future<Boolean> accountHoldsBedInRoom(Object ownerDocumentLineId, Object accountId) {
+        return QueryService.executeQuery(new QueryArgumentBuilder()
+                .setDataSourceId(dataSourceId())
+                .setStatement("select 1 from document_line l join document d on d.id = l.document_id " +
+                              "join person p on p.id = d.person_id " +
+                              "where (l.id = $1 or l.share_mate_owner_document_line_id = $1) and not l.cancelled " +
+                              "and p.frontend_account_id = $2 limit 1")
+                .setParameters(ownerDocumentLineId, accountId)
+                .build())
+            // A QUERY's row count is real rows, unlike SubmitResult.getRowCount().
+            .map(rs -> rs.getRowCount() >= 1);
     }
 
     /**

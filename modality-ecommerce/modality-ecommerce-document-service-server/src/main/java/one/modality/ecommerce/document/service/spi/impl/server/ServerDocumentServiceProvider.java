@@ -639,14 +639,21 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
         // see MateInviteTokenStore's status constants.
         if (token == null || token.isBlank() || eventId == null)
             return Future.succeededFuture(MateInviteTokenStore.STATUS_UNKNOWN);
+        // Optional — a guest simply has none. Captured synchronously: the thread-local is gone after
+        // the first async hop. It only ever turns FULL into JOINED for an account already in the room.
+        Object callerAccountId = getUserAccountId(ThreadLocalStateHolder.getUserId());
         return MateInviteTokenStore.resolve(token, eventId).compose(ownerLineId -> {
             if (ownerLineId == null)
                 // Not resolvable: either genuinely unknown, or issued for another event (which must
                 // not be confirmed), or lapsed — only the last is worth telling apart.
                 return MateInviteTokenStore.isExpired(token, eventId)
-                    .map(expired -> MateInviteTokenStore.statusOf(false, expired, false));
-            return MateInviteTokenStore.hasFreeBed(ownerLineId)
-                .map(free -> MateInviteTokenStore.statusOf(true, false, free));
+                    .map(expired -> MateInviteTokenStore.statusOf(false, expired, false, false));
+            return MateInviteTokenStore.hasFreeBed(ownerLineId).compose(free -> {
+                if (free || callerAccountId == null)
+                    return Future.succeededFuture(MateInviteTokenStore.statusOf(true, false, free, false));
+                return MateInviteTokenStore.accountHoldsBedInRoom(ownerLineId, callerAccountId)
+                    .map(holds -> MateInviteTokenStore.statusOf(true, false, false, holds));
+            });
         }).recover(e -> {
             // Left to FAIL rather than answered UNKNOWN: a lookup that errored says nothing about the
             // link, and the client carries the token on a failed lookup but drops it on UNKNOWN — so
