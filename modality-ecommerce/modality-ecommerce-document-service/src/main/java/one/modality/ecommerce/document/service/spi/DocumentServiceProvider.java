@@ -19,7 +19,13 @@ public interface DocumentServiceProvider {
 
     Future<SubmitDocumentChangesResult> fetchEventQueueResult(Object queueToken);
 
-    /** Mints a single-use room-share invite token bound to the given owner accommodation line (steps 4-5). */
+    /** Mints a room-share invite token for the given booking's room (steps 4-5). */
     Future<String> mintMateInviteToken(Object documentId);
+
+    /**
+     * Reports whether a room-share invite link can still be followed, as one of USABLE, FULL,
+     * EXPIRED or UNKNOWN — and nothing else. See {@code MateInviteStatus}.
+     */
+    Future<String> resolveMateInvite(String token, Object eventId);
 
 }

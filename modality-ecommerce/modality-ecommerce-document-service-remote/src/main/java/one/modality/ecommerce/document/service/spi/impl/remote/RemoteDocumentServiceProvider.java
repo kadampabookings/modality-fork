@@ -43,4 +43,11 @@ public class RemoteDocumentServiceProvider implements DocumentServiceProvider {
     public Future<String> mintMateInviteToken(Object documentId) {
         return BusCallService.call(DocumentServiceBusAddresses.MINT_MATE_INVITE_TOKEN_ADDRESS, documentId);
     }
+
+    @Override
+    public Future<String> resolveMateInvite(String token, Object eventId) {
+        // Two arguments over a single-argument bus call: sent as an array, unpacked by the endpoint.
+        return BusCallService.call(DocumentServiceBusAddresses.RESOLVE_MATE_INVITE_ADDRESS,
+            new Object[] { token, eventId });
+    }
 }

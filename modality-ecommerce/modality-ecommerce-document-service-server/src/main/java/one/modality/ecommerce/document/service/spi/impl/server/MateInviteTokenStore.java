@@ -13,18 +13,27 @@ import java.security.SecureRandom;
 import java.util.Base64;
 
 /**
- * Server-internal store for room-share invite tokens (docs/room-mate-booking-plan.md steps 4-5, D5).
+ * Server-internal store for room-share invite tokens. See docs/room-mate-booking-plan.md — steps 4-5
+ * for the original build, and "Plan — one link per room, checked when opened" for the model in force
+ * here, which supersedes D5's single-use decision.
  *
  * <p>The table {@code mate_invite_token} is NOT a domain entity: it is read and written here with raw
  * SQL, so it never appears on the client-queryable DQL surface. Under the open-read exposure (security
  * report A1) that is deliberate, and the row stores only a HASH of the token — a leaked read cannot be
  * turned into a working link.
  *
- * <p>Single-use is enforced by the database: {@link #claim} is one conditional
- * {@code UPDATE ... WHERE used_date IS NULL AND ...} that also stamps the claiming line into
- * {@code used_by_document_line_id}, and the caller reads the row back by that stamp. Only one
- * consumer's stamp can survive the update, so a token resolves at most once. The booking's event is
- * part of that WHERE, so a token offered against another event does not resolve — and is not spent.
+ * <p><b>A link belongs to a ROOM, not to one person.</b> {@link #resolve} is read-only and says only
+ * which booking the token names; whether another mate may actually join is the room's remaining
+ * capacity, tested inside {@link #link} where it can be enforced against concurrent linkers. The
+ * booking's event is part of the resolve test, so a token offered against another event does not
+ * resolve.
+ *
+ * <p>Single use was built first and withdrawn. The reasoning for it was sound — one token, one bed —
+ * but it cannot be explained in a button label: a booker filling a triple had to press the button
+ * once per person with nothing telling them so, and a followed link was dead with no explanation.
+ * Capacity bounds the supply just as well, and bounds it by the fact the booker actually cares
+ * about. {@code used_date} and {@code used_by_document_line_id} survive as an audit of the FIRST
+ * follower only (see {@link #recordFirstUse}), not as a gate.
  *
  * <p><b>Why nothing here trusts a submit's row count.</b> {@code SubmitResult.getRowCount()} is NOT
  * rows-affected: {@code VertxSqlUtil.toWebFxSubmitResult} derives it by walking the RowSet chain,
@@ -87,7 +96,10 @@ final class MateInviteTokenStore {
     private static final String ROOM_HAS_FREE_BED =
         "(select i.capacity is null or (select count(*) from document_line m " +
         "     where m.share_mate_owner_document_line_id = $2 and not m.cancelled) + 1 < i.capacity " +
-        " from document_line o join item i on i.id = o.item_id where o.id = $2)";
+        // A CANCELLED room is not shareable: the subquery then returns no row, the expression is
+        // NULL, and the WHERE fails — which is the answer we want. Without this a booker could
+        // cancel their room and the invite would go on admitting people to it.
+        " from document_line o join item i on i.id = o.item_id where o.id = $2 and not o.cancelled)";
 
     /**
      * A line is a share-mate line by its own flag OR its item's — the rule MateLinkRules already
@@ -97,13 +109,61 @@ final class MateInviteTokenStore {
     private static final String IS_SHARE_MATE_LINE =
         "(share_mate = true or exists (select 1 from item i where i.id = item_id and i.share_mate = true))";
 
+    /**
+     * The four things a mate may be told about an invite link, and the whole of what the resolve
+     * endpoint may disclose.
+     *
+     * <p>Deliberately uninformative. The endpoint is unauthenticated — the person following a link
+     * may have no account yet — so the reply reaches anyone holding the token. A forwarded link is
+     * harmless today precisely because it reveals nothing about whose room it is; adding the
+     * booker's name or the room to a friendlier error page is what would end that.
+     */
+    static final String STATUS_USABLE = "USABLE";
+    static final String STATUS_FULL = "FULL";
+    static final String STATUS_EXPIRED = "EXPIRED";
+    /** Unknown token — and also a token issued for a DIFFERENT event, which must not be confirmed. */
+    static final String STATUS_UNKNOWN = "UNKNOWN";
+
+    /**
+     * Maps a resolve result to the status a mate may see.
+     *
+     * <p>Pure, so the mapping can be checked without a database — it is the kind of logic that
+     * silently inverts. Note that "expired" is NOT distinguished from "unknown" by the lookup
+     * itself: {@link #resolve} filters on expiry, so an expired token simply fails to resolve. The
+     * caller passes {@code expired} only when it has separately established that the token exists
+     * but has lapsed; otherwise an unresolved token is UNKNOWN, which is also the right answer for
+     * a token belonging to another event.
+     */
+    static String statusOf(boolean resolved, boolean expired, boolean hasFreeBed) {
+        if (!resolved) return expired ? STATUS_EXPIRED : STATUS_UNKNOWN;
+        return hasFreeBed ? STATUS_USABLE : STATUS_FULL;
+    }
+
+    /**
+     * Whether a token exists for this event but has lapsed — the one case worth separating from
+     * "unknown", so an invite that simply ran out of time can say so rather than looking invalid.
+     * Discloses nothing beyond that fact.
+     */
+    static Future<Boolean> isExpired(String rawToken, Object eventId) {
+        if (rawToken == null || rawToken.isBlank())
+            return Future.succeededFuture(false);
+        return QueryService.executeQuery(new QueryArgumentBuilder()
+                .setDataSourceId(dataSourceId())
+                .setStatement("select 1 from mate_invite_token " +
+                              "where token_hash = $1 and event_id = $2 and expires_date <= now()")
+                .setParameters(hashToken(rawToken), eventId)
+                .build())
+            .map(rs -> rs.getRowCount() >= 1);
+    }
+
     /** Whether the room on {@code ownerDocumentLineId} can still take another mate. */
     static Future<Boolean> hasFreeBed(Object ownerDocumentLineId) {
         return QueryService.executeQuery(new QueryArgumentBuilder()
                 .setDataSourceId(dataSourceId())
                 .setStatement("select i.capacity is null or (select count(*) from document_line m " +
                               "    where m.share_mate_owner_document_line_id = $1 and not m.cancelled) + 1 < i.capacity " +
-                              "from document_line o join item i on i.id = o.item_id where o.id = $1")
+                              // A cancelled room is not shareable — no row, so the caller reads false.
+                              "from document_line o join item i on i.id = o.item_id where o.id = $1 and not o.cancelled")
                 .setParameters(ownerDocumentLineId)
                 .build())
             .map(rs -> rs.getRowCount() >= 1 && Boolean.TRUE.equals(rs.getValue(0, 0)));
@@ -142,41 +202,49 @@ final class MateInviteTokenStore {
     }
 
     /**
-     * Atomically consumes a token on behalf of {@code mateDocumentLineId}, returning the owner
-     * accommodation line it names, or null when it does not resolve — unknown, already used, expired,
-     * or issued for a different event than the booking being submitted.
+     * Resolves a token to the owner accommodation line it names, or null when it does not resolve —
+     * unknown, expired, or issued for a different event than the booking being submitted.
      *
-     * <p>The update is the whole decision: it marks the token used AND stamps the claiming line into
-     * {@code used_by_document_line_id}, so of two consumers racing on the same token only one leaves
-     * its stamp behind. The follow-up read asks "is the stamp mine?", which is what makes this
-     * single-use without depending on a row count the submit path cannot give honestly.
+     * <p>Read-only, and deliberately NOT single-use. A link belongs to a ROOM, not to one person:
+     * "may another mate join?" is answered by the room's remaining capacity at {@link #link} time,
+     * not by whether this token has been followed before. One link per room is the model people
+     * actually hold, and capacity bounds the supply just as a one-shot token did — by the fact the
+     * booker cares about. See the plan, "one link per room, checked when opened".
      *
-     * <p>Re-running it for the SAME mate line is deliberately idempotent: the row still carries that
-     * line's stamp, so a retried submit re-resolves to the same owner instead of being refused.
+     * <p>The event is part of the test, so a token offered against another event does not resolve.
      */
-    static Future<Object> claim(String rawToken, Object mateDocumentLineId, Object eventId) {
-        if (rawToken == null || rawToken.isBlank() || mateDocumentLineId == null)
+    static Future<Object> resolve(String rawToken, Object eventId) {
+        if (rawToken == null || rawToken.isBlank())
             return Future.succeededFuture(null);
-        String hash = hashToken(rawToken);
-        // event_id is in the WHERE so a token offered against another event neither resolves nor is
-        // spent — the mate can still use it on the event it was issued for.
-        String claimSql =
-            "update mate_invite_token set used_date = now(), used_by_document_line_id = $2 " +
-            "where token_hash = $1 and event_id = $3 and expires_date > now() " +
-            "  and (used_date is null or used_by_document_line_id = $2)";
+        return QueryService.executeQuery(new QueryArgumentBuilder()
+                .setDataSourceId(dataSourceId())
+                .setStatement("select owner_document_line_id from mate_invite_token " +
+                              "where token_hash = $1 and event_id = $2 and expires_date > now()")
+                .setParameters(hashToken(rawToken), eventId)
+                .build())
+            .map(rs -> rs.getRowCount() < 1 ? null : rs.getValue(0, 0));
+    }
+
+    /**
+     * Best-effort audit of the FIRST mate to follow this link.
+     *
+     * <p>Once a link may be followed several times, one column cannot name "the" consumer — so it
+     * names the first and then stops, which still answers "did anyone ever use this?" without a new
+     * table. The columns keep their shape deliberately: V0087 is applied and checksummed, so
+     * changing it would need its own version. Failure here never fails a booking.
+     */
+    static Future<Void> recordFirstUse(String rawToken, Object mateDocumentLineId) {
+        if (rawToken == null || mateDocumentLineId == null)
+            return Future.succeededFuture();
         return SubmitService.executeSubmit(new SubmitArgumentBuilder()
                 .setDataSourceId(dataSourceId())
-                .setStatement(claimSql)
-                .setParameters(hash, mateDocumentLineId, eventId)
+                .setStatement("update mate_invite_token set used_date = coalesce(used_date, now()), " +
+                              "  used_by_document_line_id = coalesce(used_by_document_line_id, $2) " +
+                              "where token_hash = $1")
+                .setParameters(hashToken(rawToken), mateDocumentLineId)
                 .build())
-            // The stamp, not the row count, says whether the claim is ours.
-            .compose(ignored -> QueryService.executeQuery(new QueryArgumentBuilder()
-                    .setDataSourceId(dataSourceId())
-                    .setStatement("select owner_document_line_id from mate_invite_token " +
-                                  "where token_hash = $1 and used_by_document_line_id = $2")
-                    .setParameters(hash, mateDocumentLineId)
-                    .build())
-                .map(rs -> rs.getRowCount() < 1 ? null : rs.getValue(0, 0)));
+            .map(r -> (Void) null)
+            .otherwise(e -> null); // audit only
     }
 
     /**
@@ -195,8 +263,21 @@ final class MateInviteTokenStore {
                 // third person in a twin, which nothing else in the booking path would catch — a
                 // share-mate line is free and carries no capacity of its own.
                 .setStatement(
+                    // Lock the owner line for the length of this statement, so concurrent linkers
+                    // serialise on it. With one link per room rather than one per person, two people
+                    // opening the same message at once stops being a curiosity. The lock is taken
+                    // INSIDE the statement because every submit runs in its own transaction — one
+                    // taken in a separate call would already have been released by the time this ran.
+                    //
+                    // ⚠ NOT YET VERIFIED ON POSTGRES, and it should be before this is trusted as the
+                    // whole guard: the capacity subquery reads this statement's snapshot, so
+                    // serialising the writers may not by itself let the count see a sibling that has
+                    // just committed. It is a strict improvement either way; the durable answer is a
+                    // database-level constraint, or §1c's derived availability doing this properly.
+                    "with owner_locked as (select o.id from document_line o where o.id = $2 for update) " +
                     "update document_line set share_mate_owner_document_line_id = $2 " +
-                    "where id = $1 and " + IS_SHARE_MATE_LINE + " and " + ROOM_HAS_FREE_BED)
+                    "where id = $1 and exists (select 1 from owner_locked) " +
+                    "  and " + IS_SHARE_MATE_LINE + " and " + ROOM_HAS_FREE_BED)
                 .setParameters(mateDocumentLineId, ownerDocumentLineId)
                 .build())
             // Read back rather than trust the submit's row count (see the class note): a line that is

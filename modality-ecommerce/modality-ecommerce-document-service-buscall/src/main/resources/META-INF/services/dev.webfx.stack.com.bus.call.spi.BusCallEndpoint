@@ -1,5 +1,6 @@
 one.modality.ecommerce.document.service.buscall.FetchEventQueueResultDocumentMethodEndpoint
 one.modality.ecommerce.document.service.buscall.MintMateInviteTokenDocumentMethodEndpoint
+one.modality.ecommerce.document.service.buscall.ResolveMateInviteDocumentMethodEndpoint
 one.modality.ecommerce.document.service.buscall.LeaveEventQueueDocumentMethodEndpoint
 one.modality.ecommerce.document.service.buscall.LoadDocumentMethodEndpoint
 one.modality.ecommerce.document.service.buscall.LoadDocumentsMethodEndpoint

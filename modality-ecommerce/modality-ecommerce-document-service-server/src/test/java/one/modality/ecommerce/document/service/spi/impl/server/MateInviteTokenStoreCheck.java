@@ -40,6 +40,29 @@ public class MateInviteTokenStoreCheck {
         check("generated token carries 128 bits (>= 22 base64 chars)", t1.length() >= 22);
         check("two mints differ", !t1.equals(t2));
 
+        // --- The status a mate may be told about a link -------------------------------------------
+        // Pure, and the whole of what the UNAUTHENTICATED resolve endpoint discloses. Worth checking
+        // because an inverted branch here would either hide a usable link or advertise a full room —
+        // and because nothing else exercises it without a database.
+        check("a resolved link with a free bed is usable",
+            MateInviteTokenStore.STATUS_USABLE.equals(MateInviteTokenStore.statusOf(true, false, true)));
+        check("a resolved link with no free bed reads as full, not as broken",
+            MateInviteTokenStore.STATUS_FULL.equals(MateInviteTokenStore.statusOf(true, false, false)));
+        check("a token that exists but has lapsed says so",
+            MateInviteTokenStore.STATUS_EXPIRED.equals(MateInviteTokenStore.statusOf(false, true, false)));
+        check("an unresolvable token is unknown",
+            MateInviteTokenStore.STATUS_UNKNOWN.equals(MateInviteTokenStore.statusOf(false, false, false)));
+        // A token issued for ANOTHER event does not resolve and has not lapsed, so it reads as
+        // unknown — deliberately, since confirming it exists elsewhere discloses more than nothing.
+        check("a token belonging to another event is not confirmed",
+            MateInviteTokenStore.STATUS_UNKNOWN.equals(MateInviteTokenStore.statusOf(false, false, true)));
+        check("no status is anything but the four permitted words",
+            java.util.List.of("USABLE", "FULL", "EXPIRED", "UNKNOWN").containsAll(java.util.List.of(
+                MateInviteTokenStore.statusOf(true, false, true),
+                MateInviteTokenStore.statusOf(true, false, false),
+                MateInviteTokenStore.statusOf(false, true, false),
+                MateInviteTokenStore.statusOf(false, false, false))));
+
         System.out.println(pass + " passed, " + fail + " failed");
         if (fail > 0)
             System.exit(1);

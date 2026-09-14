@@ -20,4 +20,6 @@ public interface DocumentServiceBusAddresses {
     String FETCH_EVENT_QUEUE_RESULT_ADDRESS = "modality/service/document/fetchEventQueueResult";
 
     String MINT_MATE_INVITE_TOKEN_ADDRESS = "modality/service/document/mintMateInviteToken";
+
+    String RESOLVE_MATE_INVITE_ADDRESS = "modality/service/document/resolveMateInvite";
 }
