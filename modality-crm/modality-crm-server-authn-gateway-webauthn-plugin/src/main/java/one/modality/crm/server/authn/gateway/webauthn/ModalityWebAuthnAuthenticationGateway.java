@@ -49,6 +49,7 @@ import one.modality.crm.server.authn.gateway.shared.SuperAdminMembership;
 import one.modality.crm.shared.services.authn.ApprovePasskeyCredentials;
 import one.modality.crm.shared.services.authn.AuthenticateWithPasskeyCredentials;
 import one.modality.crm.shared.services.authn.FinalisePasskeyRegistrationCredentials;
+import one.modality.crm.shared.services.authn.ListAccountPasskeysCredentials;
 import one.modality.crm.shared.services.authn.ListPasskeysCredentials;
 import one.modality.crm.shared.services.authn.ListPendingPasskeysCredentials;
 import one.modality.crm.shared.services.authn.ModalityAuthenticationI18nKeys;
@@ -508,17 +509,37 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
                || updateCredentialsArgument instanceof ListPasskeysCredentials
                || updateCredentialsArgument instanceof RemovePasskeyCredentials
                || updateCredentialsArgument instanceof RenamePasskeyCredentials
-               || updateCredentialsArgument instanceof ListPendingPasskeysCredentials
+               || isSuperAdminOperation(updateCredentialsArgument);
+    }
+
+    /**
+     * The operations a super administrator sends about SOMEBODY ELSE's credentials — the approval
+     * queue, its two decisions, the withdrawal, and the per-account listing the rescue screen reads.
+     *
+     * <p>They are pure database decisions: none of them verifies a signature, so none of them needs
+     * an rpId or an origin, which is why {@link #updateCredentials} lets them through on an
+     * unconfigured gateway. Membership is still re-checked on every one of them.
+     */
+    private static boolean isSuperAdminOperation(Object updateCredentialsArgument) {
+        return updateCredentialsArgument instanceof ListPendingPasskeysCredentials
                || updateCredentialsArgument instanceof ApprovePasskeyCredentials
                || updateCredentialsArgument instanceof RejectPasskeyCredentials
-               || updateCredentialsArgument instanceof RevokeApprovedPasskeyCredentials;
+               || updateCredentialsArgument instanceof RevokeApprovedPasskeyCredentials
+               || updateCredentialsArgument instanceof ListAccountPasskeysCredentials;
     }
 
     @Override
     public Future<?> updateCredentials(Object updateCredentialsArgument) {
         if (!acceptsUpdateCredentialsArgument(updateCredentialsArgument))
             return Future.failedFuture(getClass().getSimpleName() + ".updateCredentials() requires a passkey credentials argument");
-        if (!config.isConfigured())
+        // A CEREMONY needs the relying-party identity; a database decision does not. The
+        // super-administrator operations are decisions — they read and write the credential table
+        // and verify no signature — so they are allowed through on an unconfigured gateway, which is
+        // exactly when they are needed: PasskeySecondFactorVerifier answers ENROLLED for an account
+        // holding a usable row on a gateway that cannot assert anything, so that account's
+        // back-office login is refused and the only way back in is to withdraw those rows. Refusing
+        // the withdrawal here as well would turn one missing variable into a lockout with no exit.
+        if (!config.isConfigured() && !isSuperAdminOperation(updateCredentialsArgument))
             return notConfiguredFailure();
         // Registration and management require a real logged-in account. A support view is a member
         // of staff looking at a customer's account: letting one plant its OWN authenticator there —
@@ -552,9 +573,12 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
                 decidePasskey(principal, cred.passkeyId(), WebAuthnCredentialStore.STATUS_REJECTED));
         if (updateCredentialsArgument instanceof RevokeApprovedPasskeyCredentials cred)
             return requireSuperAdmin(principal).compose(ignored ->
-                revokeApprovedPasskey(principal, cred.passkeyId(), cred.note()));
+                revokePasskey(principal, cred.passkeyId(), cred.note()));
+        if (updateCredentialsArgument instanceof ListAccountPasskeysCredentials cred)
+            return requireSuperAdmin(principal).compose(ignored ->
+                listAccountPasskeysJson(principal, cred.accountId()));
         // Unreachable while acceptsUpdateCredentialsArgument and this chain list the same types —
-        // this arm is what keeps a future tenth type from becoming a ClassCastException
+        // this arm is what keeps a future eleventh type from becoming a ClassCastException
         return managementFailure();
     }
 
@@ -716,28 +740,43 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
         ).map(compositeFuture -> {
             boolean approvalRequired = Boolean.TRUE.equals(compositeFuture.resultAt(0));
             List<WebAuthnCredentialStore.CredentialSummary> credentials = compositeFuture.resultAt(1);
-            AstArray array = AST.createArray();
-            for (WebAuthnCredentialStore.CredentialSummary summary : credentials) {
-                AstObject entry = AST.createObject();
-                entry.set("id", summary.id());
-                entry.set("status", summary.status());
-                if (summary.label() != null)
-                    entry.set("label", summary.label());
-                if (summary.aaguid() != null)
-                    entry.set("aaguid", summary.aaguid());
-                if (summary.transports() != null)
-                    entry.set("transports", summary.transports());
-                if (summary.createdAt() != null)
-                    entry.set("createdAt", summary.createdAt().toString());
-                if (summary.lastUsedAt() != null)
-                    entry.set("lastUsedAt", summary.lastUsedAt().toString());
-                array.push(entry);
-            }
             AstObject response = AST.createObject();
             response.set("approvalRequired", approvalRequired);
-            response.setArray("passkeys", array);
+            response.setArray("passkeys", passkeysJson(credentials));
             return Json.formatObject(response);
         });
+    }
+
+    /**
+     * The {@code passkeys} array, in the ONE per-ROW shape both listings emit — the owner's own and
+     * the super administrator's — so a single client row parser serves both and the two cannot drift
+     * apart into two subtly different rows. The ENVELOPES still differ: the owner's listing wraps
+     * this in {@code {approvalRequired, passkeys}} and the administrator's in {@code {passkeys}},
+     * because the approval switch is something only the owner's UI has anything to say about.
+     *
+     * <p>{@code id} and {@code status} are always present; every other field is omitted when the row
+     * has no value for it, rather than sent as null. Never the credential id, never the public key:
+     * what is here is what a person needs to recognise a device, and nothing that authenticates one.
+     */
+    private static AstArray passkeysJson(List<WebAuthnCredentialStore.CredentialSummary> credentials) {
+        AstArray array = AST.createArray();
+        for (WebAuthnCredentialStore.CredentialSummary summary : credentials) {
+            AstObject entry = AST.createObject();
+            entry.set("id", summary.id());
+            entry.set("status", summary.status());
+            if (summary.label() != null)
+                entry.set("label", summary.label());
+            if (summary.aaguid() != null)
+                entry.set("aaguid", summary.aaguid());
+            if (summary.transports() != null)
+                entry.set("transports", summary.transports());
+            if (summary.createdAt() != null)
+                entry.set("createdAt", summary.createdAt().toString());
+            if (summary.lastUsedAt() != null)
+                entry.set("lastUsedAt", summary.lastUsedAt().toString());
+            array.push(entry);
+        }
+        return array;
     }
 
     // ===== super-administrator approval queue ====================================================
@@ -748,7 +787,8 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
             .compose(isSuperAdmin -> {
                 if (!Boolean.TRUE.equals(isSuperAdmin)) {
                     // Person id, not email: this lands in a log that ships to aggregation
-                    Console.log(LOG_PREFIX + "Passkey approval refused: person " + principal.getUserPersonId() + " is not a super administrator");
+                    Console.log(LOG_PREFIX + "Super-administrator passkey operation refused: person "
+                                + principal.getUserPersonId() + " is not a super administrator");
                     return adminNotPermittedFailure();
                 }
                 return Future.succeededFuture();
@@ -763,7 +803,7 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
      * was on, or before it existed. On them a decision still lands with the switch off: a rejection
      * refuses that passkey everywhere at once, an approval clears it for the day the switch is
      * turned on. Rows enrolled while the switch is off are APPROVED from birth and never queue —
-     * they are reached by {@link #revokeApprovedPasskey} instead, which is the administrator
+     * they are reached by {@link #revokePasskey} instead, which is the administrator
      * revocation this queue used to lack.
      */
     private Future<String> listPendingPasskeysJson(ModalityUserPrincipal approver) {
@@ -793,6 +833,38 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
     }
 
     /**
+     * Another account's passkeys, for the rescue screen: the read that tells a super administrator
+     * which credentials a locked-out member of staff is still carrying, and therefore which rows to
+     * withdraw before the account has no usable factor left.
+     *
+     * <p>The account id is the one the TOTP gateway's lookup returned, and membership has already
+     * been re-checked on this very call ({@link #requireSuperAdmin}) — an ordinary account reaches
+     * this method never, and gets the same generic management error whether the id exists or not.
+     * Shaped {@code {"passkeys": [...]}} with the per-row shape of {@link #passkeysJson}, so the
+     * client reuses the parser it already has for the owner's own listing.
+     *
+     * <p>The approver's OWN account is not excluded here, unlike in every decision below: looking is
+     * not ruling, and a super administrator can already list their own passkeys from their profile.
+     * The refusals stay where they belong — on the decisions, which still match no row of their own
+     * account.
+     *
+     * <p>Nothing personal is logged: the row count and the account id, never a label (a person's
+     * device name) and never a username.
+     */
+    private Future<String> listAccountPasskeysJson(ModalityUserPrincipal approver, Object accountIdArg) {
+        Long accountId = Numbers.toLong(accountIdArg);
+        if (accountId == null)
+            return managementFailure();
+        return credentialStore.findByAccount(accountId).map(credentials -> {
+            Console.log(LOG_PREFIX + "Passkeys of account " + accountId + " listed by person "
+                        + approver.getUserPersonId() + " (" + credentials.size() + " row(s))");
+            AstObject response = AST.createObject();
+            response.setArray("passkeys", passkeysJson(credentials));
+            return Json.formatObject(response);
+        });
+    }
+
+    /**
      * Records the approver's decision; a row that is no longer pending — or that belongs to the
      * approver's own account — yields the generic management error.
      */
@@ -810,26 +882,36 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
     }
 
     /**
-     * Withdraws an already-APPROVED passkey: the decision revisited, which approval alone left no
-     * way to do. Same guards as {@link #decidePasskey} — super administrator re-checked on this
-     * call, never the approver's own account — and the same generic management error for a row that
-     * is not approved, does not exist, or is theirs.
+     * Withdraws a passkey: the decision revisited, which approval alone left no way to do. Same
+     * guards as {@link #decidePasskey} — super administrator re-checked on this call, never the
+     * approver's own account — and the same generic management error for a row that does not exist,
+     * is theirs, or is already REJECTED and so has nothing left to withdraw.
+     *
+     * <p><b>It withdraws a PENDING row as well as an APPROVED one</b> (the record keeps its wire
+     * name, which is now narrower than what it does). The reason is
+     * {@link WebAuthnCredentialStore#opensBackofficeLogin}: while
+     * {@code WEBAUTHN_BACKOFFICE_APPROVAL} is off — the shipped default — a PENDING passkey signs
+     * its owner into the back office exactly as an APPROVED one does, so an APPROVED-only
+     * withdrawal could not clear every usable factor from an account, and clearing every usable
+     * factor is precisely what rescuing a locked-out member of staff requires. The queue's own
+     * {@link RejectPasskeyCredentials} still exists and is unchanged; this is the path that also
+     * works when the account has since been disabled or demoted, which the queue's decision refuses.
      *
      * <p>The note is the approver's record of WHY, and it does not reach the log: a withdrawal is
      * written about a person ("shared their laptop with X", "left on 3 March"), so the log carries
      * only whether one was given. The row ids and the deciding person id are what an operator needs
      * to reconstruct the decision.
      */
-    private Future<?> revokeApprovedPasskey(ModalityUserPrincipal approver, Object passkeyIdArg, String note) {
+    private Future<?> revokePasskey(ModalityUserPrincipal approver, Object passkeyIdArg, String note) {
         Long passkeyId = Numbers.toLong(passkeyIdArg);
         if (passkeyId == null)
             return managementFailure();
         boolean noteSupplied = !Strings.isEmpty(Strings.toSafeString(note).trim());
-        return credentialStore.revokeApproved(passkeyId, Numbers.toLong(approver.getUserPersonId()), accountIdOf(approver))
+        return credentialStore.revoke(passkeyId, Numbers.toLong(approver.getUserPersonId()), accountIdOf(approver))
             .compose(revoked -> {
                 if (!Boolean.TRUE.equals(revoked))
                     return managementFailure();
-                Console.log(LOG_PREFIX + "Approved passkey row " + passkeyId + " revoked ("
+                Console.log(LOG_PREFIX + "Passkey row " + passkeyId + " revoked ("
                             + WebAuthnCredentialStore.STATUS_REJECTED + ") by person " + approver.getUserPersonId()
                             + (noteSupplied ? ", note supplied" : ", NO note supplied"));
                 return Future.succeededFuture();

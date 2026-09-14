@@ -26,3 +26,5 @@ one.modality.crm.shared.services.authn.serial.AuthenticateWithTotpBackupCodeCred
 one.modality.crm.shared.services.authn.serial.CancelSecondFactorCredentialsSerialCodec
 one.modality.crm.shared.services.authn.serial.ResetSecondFactorCredentialsSerialCodec
 one.modality.crm.shared.services.authn.serial.RevokeApprovedPasskeyCredentialsSerialCodec
+one.modality.crm.shared.services.authn.serial.LookupSecondFactorsCredentialsSerialCodec
+one.modality.crm.shared.services.authn.serial.ListAccountPasskeysCredentialsSerialCodec

@@ -168,18 +168,30 @@ final class WebAuthnCredentialStore {
     // The decision REVISITED — the one thing DECIDE_PENDING_SQL cannot do. It only ever lands on a
     // PENDING row, so an APPROVED passkey (approved at the queue, or approved from birth because the
     // gate was off) could never be taken back: a lost or shared authenticator stayed trusted for as
-    // long as the row existed. This moves APPROVED ($4) to REJECTED ($1) and records who decided, so
-    // the transition is exactly the reverse of an approval and nothing else: it cannot resurrect a
-    // REJECTED row, and it cannot pre-empt a PENDING one — that decision belongs to the queue.
-    // The approver's own account ($5) is excluded for the same reason as above: a super
+    // long as the row existed. This moves any row that is not ALREADY REJECTED to REJECTED ($1) and
+    // records who decided.
+    //
+    // WIDENED from "status = APPROVED" to "status <> REJECTED", and the reason is
+    // opensBackofficeLogin above: with WEBAUTHN_BACKOFFICE_APPROVAL off — the shipped default — a
+    // PENDING row opens a back-office login exactly as an APPROVED one does. An APPROVED-only
+    // withdrawal therefore could not clear every factor from an account that holds one, which is
+    // what a super administrator rescuing a locked-out member of staff has to be able to do. It is
+    // also the only way to decide a PENDING row of an account that is no longer a live back-office
+    // one: DECIDE_PENDING_SQL's EXISTS clause refuses those, so until now such a row could be
+    // decided by nothing at all and sprang back to life the day the account was re-promoted.
+    // What the widening does NOT do is matter: the target status is REJECTED and only REJECTED, so
+    // this can never approve anything, never resurrect a rejection (a REJECTED row matches no row
+    // here and the caller reads that as a refusal), and never pre-empt an APPROVAL — the queue keeps
+    // that decision to itself.
+    // The approver's own account ($4) is excluded for the same reason as above: a super
     // administrator must not rule on a credential enrolled behind their own password.
     // NO live-back-office-account EXISTS clause, unlike DECIDE_PENDING_SQL, and the asymmetry is the
     // point: that clause is there to stop an APPROVAL being banked against a back-office grant that
     // has not happened yet, while withdrawing trust from an account that has since been disabled or
     // demoted is precisely when a revocation is wanted.
-    private static final String REVOKE_APPROVED_SQL =
+    private static final String REVOKE_SQL =
         "UPDATE webauthn_credential SET status = $1, decided_by_person_id = $2, decided_at = now()" +
-        " WHERE id = $3 AND status = $4 AND frontend_account_id <> $5" +
+        " WHERE id = $3 AND status <> $1 AND frontend_account_id <> $4" +
         " returning id";
 
     /** Every passkey of one account, oldest first — feeds both the management list and excludeCredentials. */
@@ -276,16 +288,21 @@ final class WebAuthnCredentialStore {
     }
 
     /**
-     * Withdraws an approved credential — APPROVED → REJECTED, with the decision recorded; resolves
-     * to whether a row actually changed (false when it was not approved in the first place, when it
-     * no longer exists, or when it belongs to the approver's own account).
+     * Withdraws a credential — anything not already REJECTED becomes REJECTED, with the decision
+     * recorded; resolves to whether a row actually changed (false when it was already rejected, when
+     * it no longer exists, or when it belongs to the approver's own account).
+     *
+     * <p>PENDING counts as something to withdraw, not only APPROVED: see {@link #REVOKE_SQL} and
+     * {@link #opensBackofficeLogin} — while the approval switch is off a PENDING row signs its owner
+     * in, so leaving it alone would leave a usable factor behind on an account a super administrator
+     * was clearing.
      *
      * <p>The row is kept rather than deleted, as a rejection at the queue is: its owner sees a
      * decision instead of a passkey that silently vanished, and cannot clear it by removing the row
      * themselves (the owner's delete refuses a REJECTED one).
      */
-    Future<Boolean> revokeApproved(long id, Object deciderPersonId, Object deciderAccountId) {
-        return executeRawSubmit(REVOKE_APPROVED_SQL, STATUS_REJECTED, deciderPersonId, id, STATUS_APPROVED, deciderAccountId)
+    Future<Boolean> revoke(long id, Object deciderPersonId, Object deciderAccountId) {
+        return executeRawSubmit(REVOKE_SQL, STATUS_REJECTED, deciderPersonId, id, deciderAccountId)
             .map(WebAuthnCredentialStore::returnedARow);
     }
 

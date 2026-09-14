@@ -15,10 +15,12 @@ import dev.webfx.stack.authn.server.gateway.spi.ServerAuthenticationGateway;
 import dev.webfx.stack.orm.datasourcemodel.service.DataSourceModelService;
 import dev.webfx.stack.orm.domainmodel.DataSourceModel;
 import dev.webfx.stack.orm.domainmodel.HasDataSourceModel;
+import dev.webfx.stack.orm.entity.EntityList;
 import dev.webfx.stack.orm.entity.EntityStore;
 import dev.webfx.stack.push.server.PushServerService;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 import dev.webfx.stack.session.token.AuthenticatedState;
+import one.modality.base.shared.entities.FrontendAccount;
 import one.modality.base.shared.entities.Person;
 import one.modality.crm.server.authn.gateway.shared.PendingSecondFactor;
 import one.modality.crm.server.authn.gateway.shared.PendingSecondFactorStore;
@@ -30,6 +32,7 @@ import one.modality.crm.shared.services.authn.AuthenticateWithTotpCredentials;
 import one.modality.crm.shared.services.authn.CancelSecondFactorCredentials;
 import one.modality.crm.shared.services.authn.ConfirmTotpEnrolmentCredentials;
 import one.modality.crm.shared.services.authn.ListSecondFactorsCredentials;
+import one.modality.crm.shared.services.authn.LookupSecondFactorsCredentials;
 import one.modality.crm.shared.services.authn.ModalityAuthenticationI18nKeys;
 import one.modality.crm.shared.services.authn.ModalityUserPrincipal;
 import one.modality.crm.shared.services.authn.RegenerateTotpBackupCodesCredentials;
@@ -74,6 +77,15 @@ import java.util.Objects;
  * caller ({@link PendingSecondFactorStore#consumeAfterSuccess}), so one password plus one correct
  * code is worth exactly one session however many requests carry it.
  *
+ * <p><b>Two super-administrator operations, and they answer like everything else here.</b> The
+ * lookup ({@code LookupSecondFactorsCredentials}) says what one account is carrying; the reset
+ * ({@code ResetSecondFactorCredentials}) clears it. Both re-check membership on every call — never
+ * an operation code, never a grant the client pushed — and both refuse everyone else with the same
+ * generic management error the rest of that path uses, so the lookup cannot become an
+ * account-exists oracle for anyone who is not a super administrator. The lookup matches one exact
+ * address and never a prefix, so it cannot be walked across the member table either. Its reply
+ * carries an email and a name; neither ever reaches a log line, here or anywhere.
+ *
  * <p><b>Inert without a key.</b> {@link TotpKeys} decides that. Enrolment is then refused, and
  * {@link TotpSecondFactorVerifier} reports accounts that hold a row as ENROLLED so their logins are
  * refused rather than downgraded. Backup codes keep working in that state — they are hashed, not
@@ -93,6 +105,15 @@ public final class ModalityTotpAuthenticationGateway implements ServerAuthentica
     /** What a super-administrator reset may clear — {@code PASSKEY} belongs to the WebAuthn gateway. */
     private static final String WHAT_TOTP = "TOTP";
     private static final String WHAT_BACKUP_CODES = "BACKUP_CODES";
+
+    // The two super-administrator lookup queries differ only in the WHERE clause between these, and
+    // share them so they cannot drift into selecting different fields or breaking a tie differently.
+    // The ordering is the magic-link resolution's: live rows before removed ones, the account owner
+    // before other members of it, then the lowest id. TWO rows, not one: the second is what makes an
+    // address that is on more than one account answerable as ambiguous rather than guessable.
+    private static final String LOOKUP_SELECT =
+        "select firstName,lastName,frontendAccount.(id,username,backoffice,disabled) from Person p where ";
+    private static final String LOOKUP_ORDER = " order by p.removed, p.owner desc, p.id limit 2";
 
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
@@ -336,7 +357,8 @@ public final class ModalityTotpAuthenticationGateway implements ServerAuthentica
                || updateCredentialsArgument instanceof ListSecondFactorsCredentials
                || updateCredentialsArgument instanceof RemoveTotpCredentials
                || updateCredentialsArgument instanceof RegenerateTotpBackupCodesCredentials
-               || updateCredentialsArgument instanceof ResetSecondFactorCredentials;
+               || updateCredentialsArgument instanceof ResetSecondFactorCredentials
+               || updateCredentialsArgument instanceof LookupSecondFactorsCredentials;
     }
 
     @Override
@@ -363,12 +385,17 @@ public final class ModalityTotpAuthenticationGateway implements ServerAuthentica
         if (updateCredentialsArgument instanceof RegenerateTotpBackupCodesCredentials cred)
             return regenerateBackupCodes(accountId, cred.code());
         // Re-checked as a super administrator on EVERY call, never trusted from the client's grant
-        // push, and never delegable through an operation code.
+        // push, and never delegable through an operation code. The check runs BEFORE the argument is
+        // used for anything, so a caller who is not one cannot tell the two apart by how long the
+        // refusal took, nor which one they sent.
         if (updateCredentialsArgument instanceof ResetSecondFactorCredentials cred)
             return requireSuperAdmin(principal).compose(ignored ->
                 resetSecondFactor(principal, accountId, cred.accountId(), cred.what(), cred.note()));
+        if (updateCredentialsArgument instanceof LookupSecondFactorsCredentials cred)
+            return requireSuperAdmin(principal).compose(ignored ->
+                lookupSecondFactors(principal, cred.email()));
         // Unreachable while acceptsUpdateCredentialsArgument and this chain list the same types —
-        // this arm is what keeps a future seventh type from becoming a ClassCastException
+        // this arm is what keeps a future eighth type from becoming a ClassCastException
         return enrolmentFailure();
     }
 
@@ -599,7 +626,7 @@ public final class ModalityTotpAuthenticationGateway implements ServerAuthentica
         return credentialStore.recordUse(row.id(), step);
     }
 
-    // ===== super-administrator reset =============================================================
+    // ===== super-administrator lookup and reset ==================================================
 
     /** Fails with the enrolment key unless the principal's person is a super administrator. */
     private Future<Void> requireSuperAdmin(ModalityUserPrincipal principal) {
@@ -607,12 +634,148 @@ public final class ModalityTotpAuthenticationGateway implements ServerAuthentica
             .compose(isSuperAdmin -> {
                 if (!Boolean.TRUE.equals(isSuperAdmin)) {
                     // Person id, not email: this lands in a log that ships to aggregation
-                    Console.log(LOG_PREFIX + "Second-factor reset refused: person " + principal.getUserPersonId()
-                                + " is not a super administrator");
+                    Console.log(LOG_PREFIX + "Super-administrator second-factor operation refused: person "
+                                + principal.getUserPersonId() + " is not a super administrator");
                     return enrolmentFailure();
                 }
                 return Future.succeededFuture();
             });
+    }
+
+    /**
+     * Finds ONE account by an exact address and reports what it is carrying — the read half of the
+     * rescue, and the reason the reset and the revoke can now be driven from a page instead of by
+     * hand.
+     *
+     * <p><b>Exact, and deliberately useless for sweeping.</b> The whole trimmed string is compared,
+     * case-insensitively, against the account username and the person email; there is no prefix
+     * match, no {@code like} and no wildcard, so one call confirms one address the approver already
+     * had. A super administrator learning that an address is unknown discloses nothing they could
+     * not read in the back office anyway — and nobody else ever reaches this method, because
+     * {@link #requireSuperAdmin} has already refused them with the same generic error a malformed
+     * request gets. "No such account" and "not permitted" are therefore not distinguishable by
+     * anyone for whom the difference would be information.
+     *
+     * <p><b>The login fences are NOT applied</b>, and that is the point: {@code disabled} and
+     * {@code backoffice} are REPORTED rather than filtered on, because an approver asking why
+     * somebody cannot get in needs to see "this account is disabled" instead of "no such account".
+     * The corporation fence stays, as it does on every login query here. Persons are ordered exactly
+     * as the magic-link resolution orders them — live before removed, the account owner before other
+     * members, then the lowest id — so the name shown is the account's owner and not whichever row
+     * happened to be created first.
+     *
+     * <p><b>The username wins over the person email, and that ordering is the whole reason there are
+     * two queries rather than one {@code or}.</b> The username IS the login identity; a person email
+     * is a contact field that is neither unique nor tied to the account it is typed against. Matched
+     * in one disjunction, an owner person whose EMAIL happens to be the typed address could outrank —
+     * on the tiebreak alone — the account whose USERNAME is exactly it, and the approver would then
+     * be looking at, and clearing, the wrong account. So the login identity is asked first and the
+     * email is only a fallback for the address that is not anybody's username.
+     *
+     * <p><b>An email that belongs to two accounts is answered as AMBIGUOUS, never as a pick.</b>
+     * Nothing makes {@code Person.email} unique — it is a contact field, not an identity — and two
+     * accounts that share one look alike on the approver's screen: same person, near-identical
+     * username. Choosing between them on a tiebreak would let an approver clear the factors of the
+     * account the member does NOT log in with, leave them locked out, and show them nothing that
+     * said so. So the email query asks for two rows and, when they name different accounts, the
+     * reply is {@code found:false} with {@code ambiguous:true} — a client that has never heard of
+     * that key reads "not found", which is the safe half of the answer. The username path cannot be
+     * ambiguous: every person it matches shares the one account.
+     *
+     * <p><b>Nothing personal is logged.</b> The searched address, the username and the name are in
+     * the reply and nowhere else; the log line carries the approver's person id and, at most, the
+     * account id that matched.
+     */
+    private Future<?> lookupSecondFactors(ModalityUserPrincipal approver, String email) {
+        String needle = Strings.toSafeString(email).trim();
+        if (needle.isEmpty()) // Nothing to match: answered like any other miss, without a query
+            return Future.succeededFuture(notFoundJson(false));
+        EntityStore entityStore = EntityStore.create(dataSourceModel);
+        return findAccountPersonsByUsername(entityStore, needle).compose(byUsername -> {
+            if (!byUsername.isEmpty())
+                return replyFor(approver, byUsername.get(0));
+            return findAccountPersonsByEmail(entityStore, needle).compose(byEmail -> {
+                if (namesSeveralAccounts(byEmail)) {
+                    // Account ids would be the useful thing to log, and are deliberately left out:
+                    // the interesting fact is that the approver must search by username instead, and
+                    // the ids of two accounts sharing an address are a small step from the address.
+                    Console.log(LOG_PREFIX + "Second-factor lookup by person " + approver.getUserPersonId()
+                                + ": that address is on more than one account — not picking one");
+                    return Future.succeededFuture(notFoundJson(true));
+                }
+                return replyFor(approver, byEmail.isEmpty() ? null : byEmail.get(0));
+            });
+        });
+    }
+
+    /** Whether the matched persons belong to more than one account — see {@link #lookupSecondFactors}. */
+    private static boolean namesSeveralAccounts(List<Person> persons) {
+        for (int i = 1; i < persons.size(); i++)
+            if (!Objects.equals(persons.get(0).getFrontendAccountId(), persons.get(i).getFrontendAccountId()))
+                return true;
+        return false;
+    }
+
+    /** The reply for the one person the lookup settled on, or the miss when it settled on nobody. */
+    private Future<String> replyFor(ModalityUserPrincipal approver, Person person) {
+        // Every matched person joins through frontendAccount, so one is always there — the id check
+        // is belt and braces against a null ever reaching getEntity()
+        FrontendAccount account = person == null || person.getFrontendAccountId() == null
+            ? null : person.getFrontendAccount();
+        if (account == null) {
+            Console.log(LOG_PREFIX + "Second-factor lookup by person " + approver.getUserPersonId() + ": no match");
+            return Future.succeededFuture(notFoundJson(false));
+        }
+        Object accountId = TotpCredentialStore.normaliseId(account.getPrimaryKey());
+        Console.log(LOG_PREFIX + "Second-factor lookup by person " + approver.getUserPersonId()
+                    + ": account " + accountId);
+        return Future.all(
+            credentialStore.findByAccount(accountId),
+            credentialStore.countUnused(accountId)
+        ).map(compositeFuture -> {
+            TotpCredentialStore.TotpRow row = compositeFuture.resultAt(0);
+            Integer backupCodesLeft = compositeFuture.resultAt(1);
+            AstObject response = AST.createObject();
+            response.set("found", Boolean.TRUE);
+            response.setObject("account", accountJson(accountId, account, displayName(person)));
+            // Absent rather than null when the account holds no TOTP row, exactly as the owner's own
+            // listing does it — the client reads the two identically, and it keeps this off the
+            // AST's null-value behaviour across its four platform backends.
+            AstObject totp = totpJson(row);
+            if (totp != null)
+                response.setObject("totp", totp);
+            response.set("backupCodesLeft", backupCodesLeft == null ? 0 : backupCodesLeft);
+            return Json.formatObject(response);
+        });
+    }
+
+    /**
+     * The persons of the account whose LOGIN USERNAME is exactly this address, best first — the
+     * password gateway's own login query, with the fences that answer a question rather than ask one
+     * ({@code !removed}, {@code !disabled}, {@code backoffice}) taken out and reported instead; see
+     * {@link #lookupSecondFactors}.
+     *
+     * <p>Two rows, like the email query, purely so the two read the same; they can only ever name one
+     * account, since the username IS an account's.
+     */
+    private Future<EntityList<Person>> findAccountPersonsByUsername(EntityStore entityStore, String needle) {
+        return entityStore.executeQuery(
+            LOOKUP_SELECT + "frontendAccount.(corporation=$1 and lower(username)=lower($2))" + LOOKUP_ORDER, 1, needle);
+    }
+
+    /**
+     * The persons whose CONTACT email is exactly this address, best first — the fallback for an
+     * address that is nobody's username. Second, and never merged into the query above: see
+     * {@link #lookupSecondFactors} both for why the login identity has to win outright and for why
+     * two rows rather than one come back.
+     *
+     * <p>The corporation fence is spelled flat here rather than inside the {@code frontendAccount.(…)}
+     * group the username query uses, and only because it has to be: {@code email} is the PERSON's
+     * field, so the two halves of this {@code where} live on different entities.
+     */
+    private Future<EntityList<Person>> findAccountPersonsByEmail(EntityStore entityStore, String needle) {
+        return entityStore.executeQuery(
+            LOOKUP_SELECT + "frontendAccount.corporation=$1 and lower(email)=lower($2)" + LOOKUP_ORDER, 1, needle);
     }
 
     /**
@@ -716,6 +879,57 @@ public final class ModalityTotpAuthenticationGateway implements ServerAuthentica
         if (row.lastUsedAt() != null)
             totp.set("lastUsedAt", row.lastUsedAt().toString());
         return totp;
+    }
+
+    /**
+     * The looked-up account as the approver's screen shows it: who it is, and the two flags that
+     * explain a refusal the factors alone would not ({@code disabled}, and {@code backoffice} —
+     * an account without it is refused the back office before any factor is asked for).
+     *
+     * <p>Both flags are reported as a definite true/false rather than omitted when null, because
+     * "we did not say" and "no" would look the same on the screen and they are not the same fact.
+     * The username and the name are personal data; they go to the approver's screen and to no log.
+     */
+    private static AstObject accountJson(Object accountId, FrontendAccount account, String personName) {
+        AstObject json = AST.createObject();
+        json.set("id", Numbers.toLong(accountId));
+        if (account.getUsername() != null)
+            json.set("username", account.getUsername());
+        // Absent for a person with neither name recorded, rather than an empty or "null null" string
+        if (personName != null)
+            json.set("personName", personName);
+        json.set("backoffice", Boolean.TRUE.equals(account.isBackoffice()));
+        json.set("disabled", Boolean.TRUE.equals(account.isDisabled()));
+        return json;
+    }
+
+    /**
+     * The person's display name, assembled from the two fields the domain model's own
+     * {@code fullName} expression uses ({@code firstName + ' ' + lastName}) — but null-safe, which
+     * that expression is not: it is here so an approver can confirm out of band that they have the
+     * right human, and "null null" would defeat exactly that.
+     */
+    private static String displayName(Person person) {
+        String name = (Strings.toSafeString(person.getFirstName()).trim()
+                       + " " + Strings.toSafeString(person.getLastName()).trim()).trim();
+        return name.isEmpty() ? null : name;
+    }
+
+    /**
+     * No account was settled on. Says so and nothing else — no echo of what was searched for.
+     *
+     * <p>{@code ambiguous} is present only when it is true, and means "that address is on more than
+     * one account, so search by the login username instead" rather than "nothing matched". A client
+     * that ignores the key falls back on {@code found:false}, which is the safe reading: it shows no
+     * account and therefore clears none.
+     */
+    private static String notFoundJson(boolean ambiguous) {
+        AstObject response = AST.createObject();
+        response.set("found", Boolean.FALSE);
+        if (ambiguous)
+            response.set("ambiguous", Boolean.TRUE);
+        response.set("backupCodesLeft", 0);
+        return Json.formatObject(response);
     }
 
     /**
