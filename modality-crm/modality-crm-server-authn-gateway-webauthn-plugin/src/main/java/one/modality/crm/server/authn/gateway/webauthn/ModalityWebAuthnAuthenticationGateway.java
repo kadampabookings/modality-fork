@@ -76,6 +76,14 @@ import java.util.Set;
  * applied (corporation, !disabled, backoffice flag for BO origins, owner-first person resolution
  * per the magic-link owner fix).
  *
+ * <p>Super-administrator approval of a passkey for back-office use (migration V0089's status
+ * column and queue) is a switch, {@link WebAuthnConfig#isBackofficeApprovalRequired()} from
+ * {@code WEBAUTHN_BACKOFFICE_APPROVAL}. Off in phase 1: the account's {@code backoffice} flag
+ * alone decides who enters, every passkey is usable at once and the queue lies dormant. On once
+ * the passkey is the factor that matters (phase 2). The queue and its operations work either way;
+ * the switch only changes the status a new passkey is stored with and whether PENDING blocks a
+ * back-office login.
+ *
  * <p>What "accepting a principal" means here (the modality-base-server-max-plugin house rule): a
  * login is granted only after a cryptographic proof of possession of a key whose public half this
  * server stored during an authenticated registration — nothing is taken on the client's word.
@@ -145,7 +153,8 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
             if (config.isConfigured()) {
                 Console.log(LOG_PREFIX + "Passkey gateway enabled (rpId=" + config.getRpId()
                             + ", " + config.getFrontofficeOriginCount() + " front-office + "
-                            + config.getBackofficeOriginCount() + " back-office origin(s))");
+                            + config.getBackofficeOriginCount() + " back-office origin(s), approval="
+                            + (config.isBackofficeApprovalRequired() ? "on" : "off — every passkey is usable at once") + ")");
                 if (config.getBackofficeOriginCount() == 0)
                     // Loud: with no back-office origins every BO passkey login fails with the
                     // generic error, which reads as broken passkeys rather than missing config
@@ -261,20 +270,26 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
                         if (userPerson == null)
                             return genericFailure();
                         // Back-office trust (docs/security/backoffice-second-factor.md, decisions 2
-                        // and 4). A passkey enrolled behind a weak password must not be a free
-                        // upgrade to a strong credential, so back-office sign-in needs a super
-                        // administrator's approval of THIS credential; front-office sign-in does not
-                        // (it grants nothing the password did not already). A rejected passkey signs
-                        // in nowhere. Checked after the signature AND after the account fence above:
-                        // only a caller who holds the key learns anything, what they learn is their
-                        // own status, and an account that can never enter the back office gets the
-                        // same generic refusal as before rather than a promise that approval would
-                        // change that.
+                        // and 4). WHO may enter the back office was settled by the account fence
+                        // above (the backoffice flag, on the verified origin); this is whether THIS
+                        // credential is trusted for it, behind the approval switch. With the switch
+                        // on, a passkey enrolled behind a weak password must not be a free upgrade to
+                        // a strong credential, so back-office sign-in needs a super administrator's
+                        // approval of the credential; front-office sign-in never does (it grants
+                        // nothing the password did not already). With the switch off (phase 1) a
+                        // PENDING row — e.g. one enrolled before the switch existed — is as usable as
+                        // an APPROVED one. A rejected passkey signs in nowhere, switch or no switch:
+                        // a rejection is a decision on record, not a queue state. Checked after the
+                        // signature AND after the account fence: only a caller who holds the key
+                        // learns anything, what they learn is their own status, and an account that
+                        // can never enter the back office gets the same generic refusal as before
+                        // rather than a promise that approval would change that.
                         if (WebAuthnCredentialStore.STATUS_REJECTED.equals(row.status())) {
                             Console.log(LOG_PREFIX + "Assertion with a rejected credential refused (row " + row.id() + ")");
                             return genericFailure();
                         }
-                        if (originIsBackoffice && !WebAuthnCredentialStore.STATUS_APPROVED.equals(row.status()))
+                        if (originIsBackoffice && cfg.isBackofficeApprovalRequired()
+                            && !WebAuthnCredentialStore.STATUS_APPROVED.equals(row.status()))
                             return notApprovedFailure();
                         if (newSignCount != 0 && row.signCount() != 0 && newSignCount <= row.signCount())
                             // Warn-and-accept — see the class javadoc for why this is not a hard fail
@@ -472,8 +487,13 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
         long signCount = registrationData.getAttestationObject().getAuthenticatorData().getSignCount();
         String aaguid = String.valueOf(attested.getAaguid());
         Object accountId = accountIdOf(principal);
+        // The initial status is decided here, from the approval switch as it stands when THIS row
+        // is enrolled: PENDING for the super-administrator queue while the gate is on, APPROVED
+        // otherwise. Turning the switch on later gates new enrolments, not rows already APPROVED.
+        String status = cfg.isBackofficeApprovalRequired()
+            ? WebAuthnCredentialStore.STATUS_PENDING : WebAuthnCredentialStore.STATUS_APPROVED;
         return credentialStore.insert(accountId, credentialIdB64, publicKeyCoseB64, signCount,
-                pending.userHandleB64(), sanitizeTransports(credentials.transports()), aaguid, sanitizeLabel(credentials.label()))
+                pending.userHandleB64(), sanitizeTransports(credentials.transports()), aaguid, sanitizeLabel(credentials.label()), status)
             .recover(e -> {
                 // Most likely the unique credential_id index (credential already registered) —
                 // same generic answer either way, details go to the log only
@@ -485,19 +505,26 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
 
     /**
      * The management list, also returned by a successful registration so the client refreshes in
-     * one call. Shaped {@code {"approvalRequired": bool, "passkeys": [...]}}: approval only
-     * matters to an account that can enter the back office, so the flag lets the owner's UI show
-     * "awaiting approval" to staff and nothing of the sort to members.
+     * one call. Shaped {@code {"approvalRequired": bool, "passkeys": [...]}}: the flag is true
+     * only when the approval switch is on AND the account can enter the back office — the one
+     * case in which a status means anything to the owner — so the client shows status badges and
+     * the "awaiting approval" hint when it is true and nothing of the sort otherwise (members
+     * never, staff only while the gate is on).
      */
     private Future<String> listPasskeysJson(Object accountId) {
+        WebAuthnConfig cfg = config;
+        // The account's backoffice flag only feeds approvalRequired, so with the switch off the
+        // query is not run at all rather than run and ignored
+        Future<Boolean> backofficeAccountFuture = !cfg.isBackofficeApprovalRequired() ? Future.succeededFuture(false)
+            : EntityStore.create(dataSourceModel)
+                .<FrontendAccount>executeQuery("select backoffice from FrontendAccount where id=$1", accountId)
+                .map(accounts -> !accounts.isEmpty() && Boolean.TRUE.equals(accounts.get(0).isBackoffice()));
         return Future.all(
-            EntityStore.create(dataSourceModel)
-                .<FrontendAccount>executeQuery("select backoffice from FrontendAccount where id=$1", accountId),
+            backofficeAccountFuture,
             credentialStore.findByAccount(accountId)
         ).map(compositeFuture -> {
-            List<FrontendAccount> accounts = compositeFuture.resultAt(0);
+            boolean approvalRequired = Boolean.TRUE.equals(compositeFuture.resultAt(0));
             List<WebAuthnCredentialStore.CredentialSummary> credentials = compositeFuture.resultAt(1);
-            boolean backofficeAccount = !accounts.isEmpty() && Boolean.TRUE.equals(accounts.get(0).isBackoffice());
             AstArray array = AST.createArray();
             for (WebAuthnCredentialStore.CredentialSummary summary : credentials) {
                 AstObject entry = AST.createObject();
@@ -516,7 +543,7 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
                 array.push(entry);
             }
             AstObject response = AST.createObject();
-            response.set("approvalRequired", backofficeAccount);
+            response.set("approvalRequired", approvalRequired);
             response.setArray("passkeys", array);
             return Json.formatObject(response);
         });
@@ -537,8 +564,18 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
             });
     }
 
-    /** The approval queue as JSON: pending credentials with the account (username) each belongs to. */
+    /**
+     * The approval queue as JSON, shaped {@code {"approvalEnabled": bool, "pending": [...]}}: the
+     * pending credentials with the account (username) each belongs to, plus the switch state so
+     * the queue page can say the gate is off rather than show an empty queue. The queue is served
+     * either way, but only rows that ARE pending can be decided — those enrolled while the switch
+     * was on, or before it existed. On them a decision still lands with the switch off: a rejection
+     * refuses that passkey everywhere at once, an approval clears it for the day the switch is
+     * turned on. Rows enrolled while the switch is off are APPROVED from birth and never queue, so
+     * there is no administrator revocation for them (a listed follow-up, not an oversight).
+     */
     private Future<String> listPendingPasskeysJson(ModalityUserPrincipal approver) {
+        WebAuthnConfig cfg = config;
         return credentialStore.findPending(accountIdOf(approver)).map(pending -> {
             AstArray array = AST.createArray();
             for (WebAuthnCredentialStore.PendingSummary summary : pending) {
@@ -556,7 +593,10 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
                     entry.set("createdAt", summary.createdAt().toString());
                 array.push(entry);
             }
-            return Json.formatArray(array);
+            AstObject response = AST.createObject();
+            response.set("approvalEnabled", cfg.isBackofficeApprovalRequired());
+            response.setArray("pending", array);
+            return Json.formatObject(response);
         });
     }
 
@@ -639,8 +679,9 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
     }
 
     private static <T> Future<T> notApprovedFailure() {
-        // Specific on purpose: the caller has just proven possession of the key, so telling them
-        // their own credential awaits approval discloses nothing to anyone else
+        // Only reachable with the approval switch on. Specific on purpose: the caller has just
+        // proven possession of the key, so telling them their own credential awaits approval
+        // discloses nothing to anyone else
         return Future.failedFuture("[%s] This passkey has not been approved for back-office use yet".formatted(ModalityAuthenticationI18nKeys.AuthnPasskeyNotApprovedError));
     }
 
