@@ -34,6 +34,13 @@ public interface ScheduledItem extends Entity,
     String resource = "resource";
     // Read-only dynamic field computed by PolicyService
     String maleFemaleAvailabilities = "maleFemaleAvailabilities";
+    // Read-only dynamic field computed by PolicyService: for a room item, the beds still free in this
+    // event's booked rooms of that item (Σ bed capacity − 1 − linked mates); 0 when none is booked.
+    String freeSharedBeds = "freeSharedBeds";
+    // Read-only dynamic field computed by PolicyService, the same on every accommodation row: this event's live
+    // sharing places not linked to a room yet — claims on a free bed that freeSharedBeds cannot see. Event-wide
+    // because a sharing item often has no scheduled item of its own to carry a per-item figure.
+    String pendingSharers = "pendingSharers";
 
     default void setProgramScheduledItem(Object value) {
         setForeignField(programScheduledItem, value);
@@ -129,6 +136,22 @@ public interface ScheduledItem extends Entity,
 
     default Object[] getMaleFemaleAvailabilities() {
         return (Object[]) getFieldValue(maleFemaleAvailabilities);
+    }
+
+    /**
+     * See {@link #freeSharedBeds}. Null when the item has no capacity set (not a whole-room type), or when
+     * the policy was loaded by a server that does not compute it — {@link #getPendingSharers()} tells the two apart.
+     */
+    default Integer getFreeSharedBeds() {
+        return getIntegerFieldValue(freeSharedBeds);
+    }
+
+    /**
+     * See {@link #pendingSharers}. Never null on an accommodation row from a server that computes these
+     * figures (0 when none), so its absence means the server predates them.
+     */
+    default Integer getPendingSharers() {
+        return getIntegerFieldValue(pendingSharers);
     }
 
     default Integer getMaleAvailability() {

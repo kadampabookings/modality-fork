@@ -99,7 +99,10 @@ final class MateInviteTokenStore {
         // A CANCELLED room is not shareable: the subquery then returns no row, the expression is
         // NULL, and the WHERE fails — which is the answer we want. Without this a booker could
         // cancel their room and the invite would go on admitting people to it.
-        " from document_line o join item i on i.id = o.item_id where o.id = $2 and not o.cancelled)";
+        // Cancelling a BOOKING marks the document, not its lines — so the room line alone would still look
+        // live, and an old invite would go on admitting people to a cancelled booking.
+        " from document_line o join item i on i.id = o.item_id where o.id = $2 and not o.cancelled" +
+        "   and exists (select 1 from document od where od.id = o.document_id and not od.cancelled))";
 
     /**
      * A line is a share-mate line by its own flag OR its item's — the rule MateLinkRules already
@@ -175,7 +178,9 @@ final class MateInviteTokenStore {
                 .setStatement("select i.capacity is null or (select count(*) from document_line m " +
                               "    where m.share_mate_owner_document_line_id = $1 and not m.cancelled) + 1 < i.capacity " +
                               // A cancelled room is not shareable — no row, so the caller reads false.
-                              "from document_line o join item i on i.id = o.item_id where o.id = $1 and not o.cancelled")
+                              // As in ROOM_HAS_FREE_BED, a cancelled BOOKING is not shareable either.
+                              "from document_line o join item i on i.id = o.item_id where o.id = $1 and not o.cancelled" +
+                              "  and exists (select 1 from document od where od.id = o.document_id and not od.cancelled)")
                 .setParameters(ownerDocumentLineId)
                 .build())
             .map(rs -> rs.getRowCount() >= 1 && Boolean.TRUE.equals(rs.getValue(0, 0)));
