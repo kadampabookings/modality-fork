@@ -52,6 +52,7 @@ import one.modality.crm.shared.services.authn.ModalityUserPrincipal;
 import one.modality.crm.shared.services.authn.RejectPasskeyCredentials;
 import one.modality.crm.shared.services.authn.RemovePasskeyCredentials;
 import one.modality.crm.shared.services.authn.RenamePasskeyCredentials;
+import one.modality.crm.shared.services.authn.RevokeApprovedPasskeyCredentials;
 import one.modality.crm.shared.services.authn.StartPasskeyAssertionCredentials;
 import one.modality.crm.shared.services.authn.StartPasskeyRegistrationCredentials;
 
@@ -65,8 +66,15 @@ import java.util.Set;
 /**
  * Passkey (WebAuthn) authentication gateway: registration + login ceremonies and self-service
  * credential management, all keyed to the {@code frontend_account} shared by the front office and
- * the back office — which is what lets ONE passkey sign a person into both apps (the rpId spans
- * both origins, see {@link WebAuthnConfig}).
+ * the back office.
+ *
+ * <p><b>Passkeys are a BACK-OFFICE feature (product decision, 2026-09-14).</b> The front office
+ * keeps password, magic link and verification code, and shows no passkey UI at all. The rpId still
+ * spans both origins and must stay that way — it is forever, and every passkey already registered
+ * is bound to its current value — so the enforcement is the ORIGIN allowlist, not the rpId: with
+ * {@code WEBAUTHN_FRONTOFFICE_ORIGINS} unset, a registration or an assertion signed by a
+ * front-office origin fails webauthn4j's signed-origin check and is refused. That is a server-side
+ * refusal, not a hidden button. The boot log states which of the two states the server is in.
  *
  * <p>Verification is delegated to webauthn4j (never hand-rolled): challenge (single-use, from
  * {@link WebAuthnChallengeStore}), origin ∈ configured allowlist, rpId hash, user presence + user
@@ -159,6 +167,16 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
                     // Loud: with no back-office origins every BO passkey login fails with the
                     // generic error, which reads as broken passkeys rather than missing config
                     Console.log(LOG_PREFIX + "⚠️ WEBAUTHN_BACKOFFICE_ORIGINS is empty — back-office passkey login will be refused");
+                // Both front-office states are stated, because since 2026-09-14 the EMPTY one is
+                // the policy rather than a mistake, and silence would leave the operator unable to
+                // tell which of the two a given boot is in. Empty is not a warning: the origin
+                // allowlist is the union of both lists (WebAuthnConfig.fromConfig), so with no
+                // front-office origin a ceremony signed by one fails webauthn4j's signed-origin
+                // check — registration included — which is exactly what enforces the decision.
+                if (config.getFrontofficeOriginCount() == 0)
+                    Console.log(LOG_PREFIX + "WEBAUTHN_FRONTOFFICE_ORIGINS is empty — front-office passkey sign-in AND enrolment are disabled (refused at the signed-origin check). This is the EXPECTED state: passkeys and the TOTP second factor are back-office only (product decision 2026-09-14)");
+                else
+                    Console.log(LOG_PREFIX + "⚠️ WEBAUTHN_FRONTOFFICE_ORIGINS is set — this server still ACCEPTS front-office passkey sign-in and enrolment, which the back-office-only policy of 2026-09-14 says it should not. The front office shows no passkey UI, so nothing reaches it today, but only clearing this variable enforces the decision server-side. Do NOT narrow WEBAUTHN_RP_ID instead: rpId is forever and every registered passkey is bound to its current value");
             } else
                 // Loud, because the consequence is silent: the login button in the apps would just
                 // return errors. Unset WEBAUTHN_* means "this environment has no passkeys", on purpose.
@@ -324,7 +342,8 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
                || updateCredentialsArgument instanceof RenamePasskeyCredentials
                || updateCredentialsArgument instanceof ListPendingPasskeysCredentials
                || updateCredentialsArgument instanceof ApprovePasskeyCredentials
-               || updateCredentialsArgument instanceof RejectPasskeyCredentials;
+               || updateCredentialsArgument instanceof RejectPasskeyCredentials
+               || updateCredentialsArgument instanceof RevokeApprovedPasskeyCredentials;
     }
 
     @Override
@@ -351,9 +370,10 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
             return removePasskey(principal, cred);
         if (updateCredentialsArgument instanceof RenamePasskeyCredentials cred)
             return renamePasskey(principal, cred);
-        // Approval operations: re-checked as super administrator on EVERY call, never trusted
-        // from the client's grant push, and never delegable through operation codes. The
-        // approver's own passkeys are neither listed nor decidable (store WHERE clauses).
+        // Approval and revocation operations: re-checked as super administrator on EVERY call,
+        // never trusted from the client's grant push, and never delegable through operation codes.
+        // The approver's own passkeys are neither listed, decidable nor revocable (store WHERE
+        // clauses).
         if (updateCredentialsArgument instanceof ListPendingPasskeysCredentials)
             return requireSuperAdmin(principal).compose(ignored -> listPendingPasskeysJson(principal));
         if (updateCredentialsArgument instanceof ApprovePasskeyCredentials cred)
@@ -362,8 +382,11 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
         if (updateCredentialsArgument instanceof RejectPasskeyCredentials cred)
             return requireSuperAdmin(principal).compose(ignored ->
                 decidePasskey(principal, cred.passkeyId(), WebAuthnCredentialStore.STATUS_REJECTED));
+        if (updateCredentialsArgument instanceof RevokeApprovedPasskeyCredentials cred)
+            return requireSuperAdmin(principal).compose(ignored ->
+                revokeApprovedPasskey(principal, cred.passkeyId(), cred.note()));
         // Unreachable while acceptsUpdateCredentialsArgument and this chain list the same types —
-        // this arm is what keeps a future ninth type from becoming a ClassCastException
+        // this arm is what keeps a future tenth type from becoming a ClassCastException
         return managementFailure();
     }
 
@@ -571,8 +594,9 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
      * either way, but only rows that ARE pending can be decided — those enrolled while the switch
      * was on, or before it existed. On them a decision still lands with the switch off: a rejection
      * refuses that passkey everywhere at once, an approval clears it for the day the switch is
-     * turned on. Rows enrolled while the switch is off are APPROVED from birth and never queue, so
-     * there is no administrator revocation for them (a listed follow-up, not an oversight).
+     * turned on. Rows enrolled while the switch is off are APPROVED from birth and never queue —
+     * they are reached by {@link #revokeApprovedPasskey} instead, which is the administrator
+     * revocation this queue used to lack.
      */
     private Future<String> listPendingPasskeysJson(ModalityUserPrincipal approver) {
         WebAuthnConfig cfg = config;
@@ -613,6 +637,33 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
                 if (!Boolean.TRUE.equals(decided))
                     return managementFailure();
                 Console.log(LOG_PREFIX + "Passkey row " + passkeyId + " " + newStatus + " by person " + approver.getUserPersonId());
+                return Future.succeededFuture();
+            });
+    }
+
+    /**
+     * Withdraws an already-APPROVED passkey: the decision revisited, which approval alone left no
+     * way to do. Same guards as {@link #decidePasskey} — super administrator re-checked on this
+     * call, never the approver's own account — and the same generic management error for a row that
+     * is not approved, does not exist, or is theirs.
+     *
+     * <p>The note is the approver's record of WHY, and it does not reach the log: a withdrawal is
+     * written about a person ("shared their laptop with X", "left on 3 March"), so the log carries
+     * only whether one was given. The row ids and the deciding person id are what an operator needs
+     * to reconstruct the decision.
+     */
+    private Future<?> revokeApprovedPasskey(ModalityUserPrincipal approver, Object passkeyIdArg, String note) {
+        Long passkeyId = Numbers.toLong(passkeyIdArg);
+        if (passkeyId == null)
+            return managementFailure();
+        boolean noteSupplied = !Strings.isEmpty(Strings.toSafeString(note).trim());
+        return credentialStore.revokeApproved(passkeyId, Numbers.toLong(approver.getUserPersonId()), accountIdOf(approver))
+            .compose(revoked -> {
+                if (!Boolean.TRUE.equals(revoked))
+                    return managementFailure();
+                Console.log(LOG_PREFIX + "Approved passkey row " + passkeyId + " revoked ("
+                            + WebAuthnCredentialStore.STATUS_REJECTED + ") by person " + approver.getUserPersonId()
+                            + (noteSupplied ? ", note supplied" : ", NO note supplied"));
                 return Future.succeededFuture();
             });
     }

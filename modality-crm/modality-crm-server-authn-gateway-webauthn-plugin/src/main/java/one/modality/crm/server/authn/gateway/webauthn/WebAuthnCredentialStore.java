@@ -114,6 +114,23 @@ final class WebAuthnCredentialStore {
         "             AND a.backoffice = true AND a.disabled IS NOT TRUE)" +
         " returning id";
 
+    // The decision REVISITED — the one thing DECIDE_PENDING_SQL cannot do. It only ever lands on a
+    // PENDING row, so an APPROVED passkey (approved at the queue, or approved from birth because the
+    // gate was off) could never be taken back: a lost or shared authenticator stayed trusted for as
+    // long as the row existed. This moves APPROVED ($4) to REJECTED ($1) and records who decided, so
+    // the transition is exactly the reverse of an approval and nothing else: it cannot resurrect a
+    // REJECTED row, and it cannot pre-empt a PENDING one — that decision belongs to the queue.
+    // The approver's own account ($5) is excluded for the same reason as above: a super
+    // administrator must not rule on a credential enrolled behind their own password.
+    // NO live-back-office-account EXISTS clause, unlike DECIDE_PENDING_SQL, and the asymmetry is the
+    // point: that clause is there to stop an APPROVAL being banked against a back-office grant that
+    // has not happened yet, while withdrawing trust from an account that has since been disabled or
+    // demoted is precisely when a revocation is wanted.
+    private static final String REVOKE_APPROVED_SQL =
+        "UPDATE webauthn_credential SET status = $1, decided_by_person_id = $2, decided_at = now()" +
+        " WHERE id = $3 AND status = $4 AND frontend_account_id <> $5" +
+        " returning id";
+
     /** Every passkey of one account, oldest first — feeds both the management list and excludeCredentials. */
     Future<List<CredentialSummary>> findByAccount(Object accountId) {
         return executeRawQuery(SELECT_BY_ACCOUNT_SQL, new Object[]{accountId})
@@ -204,6 +221,20 @@ final class WebAuthnCredentialStore {
      */
     Future<Boolean> decidePending(long id, String newStatus, Object deciderPersonId, Object deciderAccountId) {
         return executeRawSubmit(DECIDE_PENDING_SQL, newStatus, deciderPersonId, id, STATUS_PENDING, deciderAccountId)
+            .map(WebAuthnCredentialStore::returnedARow);
+    }
+
+    /**
+     * Withdraws an approved credential — APPROVED → REJECTED, with the decision recorded; resolves
+     * to whether a row actually changed (false when it was not approved in the first place, when it
+     * no longer exists, or when it belongs to the approver's own account).
+     *
+     * <p>The row is kept rather than deleted, as a rejection at the queue is: its owner sees a
+     * decision instead of a passkey that silently vanished, and cannot clear it by removing the row
+     * themselves (the owner's delete refuses a REJECTED one).
+     */
+    Future<Boolean> revokeApproved(long id, Object deciderPersonId, Object deciderAccountId) {
+        return executeRawSubmit(REVOKE_APPROVED_SQL, STATUS_REJECTED, deciderPersonId, id, STATUS_APPROVED, deciderAccountId)
             .map(WebAuthnCredentialStore::returnedARow);
     }
 

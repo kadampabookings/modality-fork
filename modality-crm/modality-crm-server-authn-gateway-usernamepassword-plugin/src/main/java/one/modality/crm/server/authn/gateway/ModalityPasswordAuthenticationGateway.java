@@ -29,10 +29,16 @@ import one.modality.crm.server.authn.gateway.magiclink.ModalityMagicLinkAuthenti
 import one.modality.crm.server.authn.gateway.shared.GuestPersonLinker;
 import one.modality.crm.server.authn.gateway.shared.LocalizedMailTemplate;
 import one.modality.crm.server.authn.gateway.shared.MagicLinkService;
+import one.modality.crm.server.authn.gateway.shared.PendingSecondFactor;
+import one.modality.crm.server.authn.gateway.shared.PendingSecondFactorStore;
+import one.modality.crm.server.authn.gateway.shared.SecondFactorMarker;
+import one.modality.crm.server.authn.gateway.shared.SecondFactorPolicy;
+import one.modality.crm.server.authn.gateway.shared.SecondFactorVerifiers;
 import one.modality.crm.shared.services.authn.ModalityAuthenticationI18nKeys;
 import one.modality.crm.shared.services.authn.ModalityUserPrincipal;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Objects;
 
 
@@ -84,6 +90,11 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
         // rather than a hole.
         TransactionPreambleRegistry.registerResolver(() ->
             ThreadLocalStateHolder.isBackoffice() ? BACK_OFFICE_TRANSACTION_SQL : FRONT_OFFICE_TRANSACTION_SQL);
+        // Starts the back-office second-factor policy listening for its configuration. It lives in
+        // gateway-shared, which provides no ApplicationModuleBooter of its own; this gateway owns the
+        // mint site the policy guards, so wherever the policy can matter this boot() has run. Idempotent,
+        // and a deployment without this gateway reads no configuration and stays off — what it was before.
+        SecondFactorPolicy.boot();
     }
 
     // The canonical home of these two statements now that the server, not the caller, decides which one
@@ -91,6 +102,12 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
     // pass a preamble explicitly; those go away as each migrates to the marker.
     private static final String FRONT_OFFICE_TRANSACTION_SQL = "select set_transaction_parameters(false)";
     private static final String BACK_OFFICE_TRANSACTION_SQL = "select set_transaction_parameters(true)";
+
+    /** Guesses allowed at the second factor on one runId, advertised to the client in the marker. */
+    private static final int MAX_SECOND_FACTOR_ATTEMPTS = 5;
+
+    /** Shared by every second-factor line this gateway logs, so one grep finds the whole step-up. */
+    private static final String LOG_PREFIX = "[2fa] ";
 
     private static final String CREATE_ACCOUNT_ACTIVITY_PATH_PREFIX = "/create-account";
     private static final String CREATE_ACCOUNT_ACTIVITY_PATH_FULL = CREATE_ACCOUNT_ACTIVITY_PATH_PREFIX + "/:token";
@@ -194,7 +211,7 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
         return Future.failedFuture("[%s] requires a %s argument".formatted(getClass().getSimpleName(), AuthenticateWithUsernamePasswordCredentials.class.getSimpleName()));
     }
 
-    private Future<Void> authenticateWithUsernamePassword(AuthenticateWithUsernamePasswordCredentials credentials) {
+    private Future<?> authenticateWithUsernamePassword(AuthenticateWithUsernamePasswordCredentials credentials) {
         // Capturing the required client state info from thread local (before it will be wiped out by the async call)
         String runId = ThreadLocalStateHolder.getRunId();
         boolean isBackofficeAuthentication = ThreadLocalStateHolder.isBackoffice();
@@ -226,6 +243,9 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
                 Object personId = userPerson.getPrimaryKey();
                 Object accountId = Entities.getPrimaryKey(userPerson.getForeignEntityId("frontendAccount"));
                 ModalityUserPrincipal modalityUserPrincipal = new ModalityUserPrincipal(personId, accountId);
+                // Both linker calls below stay on this side of the second-factor step: they are a data
+                // fix-up keyed on a password that has just been proven, not a session — they push nothing
+                // and grant nothing, and a login that then stops at the step-up leaves them correctly done.
                 // Link any guest Person records with the same email, in case the user booked
                 // as a guest before logging in. Fire-and-forget.
                 GuestPersonLinker.linkGuestPersonsToAccount(normalizedUsername, accountId, dataSourceModel)
@@ -242,9 +262,83 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
                     })
                     // isBackofficeAuthentication was captured at the top of this method, before any async
                     // hop, which is the only place it can be read — see AuthenticatedState.createFor.
-                    .compose(ignored -> AuthenticatedState.createFor(modalityUserPrincipal, isBackofficeAuthentication))
-                    .compose(authenticatedState -> PushServerService.pushState(authenticatedState, runId));
+                    .compose(ignored -> mintOrAskForSecondFactor(modalityUserPrincipal, personId, accountId, isBackofficeAuthentication, runId));
             });
+    }
+
+    /**
+     * The password was right. Either this signs the user in, or it stops one step short and asks for a
+     * second factor.
+     *
+     * <p>Everything before this point is unchanged, and everything after it is the login that always
+     * existed. What sits between is the whole step-up: under a policy that asks for a factor on a
+     * back-office login, an account that HOLDS one gets the pending marker instead of a session —
+     * nothing is minted, nothing is pushed, no {@code auth_session} family is opened, and the client
+     * stays logged out until it answers on the same runId. A session for someone who has proved one
+     * factor would be a session; a "restricted" principal would be one too, and the client renders the
+     * app for any principal at all.
+     *
+     * <p>The four answers, in the order they are decided:
+     * <ul>
+     * <li>policy off, or not a back-office login — mint exactly as before. The requirement attaches to
+     *     back-office authentication, not to the account.</li>
+     * <li>a verifier could not answer — refused, with an honest "temporarily unavailable". An
+     *     unapplied migration, a rotated-away key or a pool timeout must not become a silent,
+     *     organisation-wide downgrade to password-only; see {@link SecondFactorVerifiers}.</li>
+     * <li>a confirmed factor — hold the proven login in {@link PendingSecondFactorStore} and return the
+     *     marker. If the store is full the login fails with the ordinary credentials error rather than
+     *     minting: refusing a login is recoverable, minting a one-factor back-office session is not.</li>
+     * <li>no confirmed factor — refused under {@code required}, minted otherwise. Naming the
+     *     requirement discloses nothing here: the caller has already proved the password.</li>
+     * </ul>
+     */
+    private Future<Object> mintOrAskForSecondFactor(ModalityUserPrincipal principal, Object personId, Object accountId,
+                                                    boolean isBackofficeAuthentication, String runId) {
+        if (!SecondFactorPolicy.get().asksForFactor(isBackofficeAuthentication))
+            return mintAndPush(principal, isBackofficeAuthentication, runId);
+        return SecondFactorVerifiers.enrolmentOf(accountId)
+            .compose(enrolment -> {
+                if (enrolment.unavailable()) {
+                    // FAIL CLOSED. The account may well hold a factor; nothing here can tell, and
+                    // "cannot tell" minted is a one-factor back-office session. The account id and
+                    // the failing method code go to the log — the operator needs both to find the
+                    // cause — while the caller is told the truth and nothing more.
+                    Console.log(LOG_PREFIX + "🛑 Back-office login REFUSED for account " + accountId
+                                + ": second-factor verifier(s) " + enrolment.unavailableMethodsText()
+                                + " could not answer (see the verifier's own line above for why)");
+                    return Future.failedFuture("[%s] Second-factor verification is temporarily unavailable".formatted(ModalityAuthenticationI18nKeys.AuthnSecondFactorUnavailableError));
+                }
+                List<String> methods = enrolment.methods();
+                if (methods.isEmpty()) {
+                    if (SecondFactorPolicy.get().isRequiredNow())
+                        return Future.failedFuture("[%s] This account has no second factor for the back office".formatted(ModalityAuthenticationI18nKeys.AuthnSecondFactorNotEnrolledError));
+                    return mintAndPush(principal, isBackofficeAuthentication, runId);
+                }
+                return holdForSecondFactor(personId, accountId, isBackofficeAuthentication, runId, methods);
+            });
+    }
+
+    /** The login as it has always been: mint the session from the captured back-office flag, then push it. */
+    private Future<Object> mintAndPush(ModalityUserPrincipal principal, boolean isBackofficeAuthentication, String runId) {
+        return AuthenticatedState.createFor(principal, isBackofficeAuthentication)
+            .compose(authenticatedState -> PushServerService.pushState(authenticatedState, runId))
+            .map(ignored -> null);
+    }
+
+    /** Parks the proven login against its runId and tells the client what it may answer with. */
+    private Future<Object> holdForSecondFactor(Object personId, Object accountId, boolean isBackofficeAuthentication,
+                                               String runId, List<String> methods) {
+        PendingSecondFactor pending = new PendingSecondFactor(personId, accountId, isBackofficeAuthentication, methods,
+            System.currentTimeMillis() + PendingSecondFactorStore.TTL_MILLIS, MAX_SECOND_FACTOR_ATTEMPTS);
+        if (!PendingSecondFactorStore.getInstance().put(runId, pending))
+            // Store full (or no runId to key on): the same answer as a wrong password, because the
+            // alternative — minting anyway — is a back-office session on one factor.
+            return Future.failedFuture("[%s] Wrong user or password".formatted(ModalityAuthenticationI18nKeys.AuthnWrongUserOrPasswordError));
+        // The person id and the factor kinds, never the username and never a code: this line says
+        // "somebody's back-office login is waiting", not who typed what.
+        Console.log(LOG_PREFIX + "Second factor required for person " + personId + " (" + String.join(",", methods) + ")");
+        return Future.succeededFuture(SecondFactorMarker.json(methods,
+            PendingSecondFactorStore.TTL_MILLIS / 1000, MAX_SECOND_FACTOR_ATTEMPTS));
     }
 
     /**

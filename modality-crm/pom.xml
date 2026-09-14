@@ -50,6 +50,7 @@
         <module>modality-crm-server-authn-gateway-guest-plugin</module>
         <module>modality-crm-server-authn-gateway-magiclink-plugin</module>
         <module>modality-crm-server-authn-gateway-shared</module>
+        <module>modality-crm-server-authn-gateway-totp-plugin</module>
         <module>modality-crm-server-authn-gateway-usernamepassword-plugin</module>
         <module>modality-crm-server-authn-gateway-webauthn-plugin</module>
         <module>modality-crm-server-authsession-plugin</module>
