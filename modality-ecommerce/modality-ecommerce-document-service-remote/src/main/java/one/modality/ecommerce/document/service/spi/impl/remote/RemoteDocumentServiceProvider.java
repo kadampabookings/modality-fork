@@ -50,4 +50,11 @@ public class RemoteDocumentServiceProvider implements DocumentServiceProvider {
         return BusCallService.call(DocumentServiceBusAddresses.RESOLVE_MATE_INVITE_ADDRESS,
             new Object[] { token, eventId });
     }
+
+    @Override
+    public Future<String> describeMateInviteRoom(String token, Object eventId) {
+        // Same argument shape as resolveMateInvite.
+        return BusCallService.call(DocumentServiceBusAddresses.DESCRIBE_MATE_INVITE_ROOM_ADDRESS,
+            new Object[] { token, eventId });
+    }
 }

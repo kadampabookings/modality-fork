@@ -676,6 +676,28 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
         });
     }
 
+    @Override
+    public Future<String> describeMateInviteRoom(String token, Object eventId) {
+        // No authentication, as for resolveMateInvite: the invited mate may not have an account yet. What
+        // it discloses was agreed for step 7 — the room's accommodation item and the room booking's first
+        // and last day, never a name or a booking reference — so the booking form can choose the matching
+        // sharing option and part of the event for the mate. Only for a link that can still be followed:
+        // an unknown, expired or full link describes nothing.
+        if (token == null || token.isBlank() || eventId == null)
+            return Future.succeededFuture("");
+        return MateInviteTokenStore.resolve(token, eventId).compose(ownerLineId -> {
+            if (ownerLineId == null)
+                return Future.succeededFuture("");
+            return MateInviteTokenStore.hasFreeBed(ownerLineId).compose(free -> free
+                ? MateInviteTokenStore.describeRoom(ownerLineId)
+                : Future.succeededFuture(""));
+        }).recover(e -> {
+            // Generic, as for resolve: the caller is unauthenticated, so the database's message stays here.
+            Console.log("[MateInvite] describe errored: " + e);
+            return Future.failedFuture("[MateInviteError] The invite link could not be checked");
+        });
+    }
+
     /**
      * Refuses, as SOLD_OUT, a new front-office sharing place when no bed is free for it (room-mate plan
      * §1c, step 6). Returns the sold-out result to send back, or null to go ahead.

@@ -79,6 +79,31 @@ final class MateInviteTokenStore {
         }
     }
 
+    /**
+     * What a usable invite link may disclose about its room (room-mate plan step 7, agreed deliberately):
+     * the room's accommodation item and the first and last day the room booking attends, as a small JSON
+     * object such as {@code {"itemId":55,"arrival":"2026-11-27","departure":"2026-12-01"}}. Never a name or
+     * a reference.
+     *
+     * <p>Built by hand from values checked to have the expected shape — digits for the item, ISO dates —
+     * and a value of any other shape is left out, so nothing the database returns can widen what is
+     * disclosed or break the JSON.
+     *
+     * @return the JSON, or "" when there is no item to describe
+     */
+    static String roomDescriptionJson(Object itemId, Object arrival, Object departure) {
+        String item = itemId == null ? null : itemId.toString();
+        if (item == null || !item.matches("[0-9]+"))
+            return "";
+        return "{\"itemId\":" + item + ",\"arrival\":" + isoDateJsonOrNull(arrival)
+               + ",\"departure\":" + isoDateJsonOrNull(departure) + "}";
+    }
+
+    private static String isoDateJsonOrNull(Object date) {
+        String text = date == null ? null : date.toString();
+        return text != null && text.matches("[0-9]{4}-[0-9]{2}-[0-9]{2}") ? "\"" + text + "\"" : "null";
+    }
+
     // --- Database operations -----------------------------------------------------------------------
 
     private static Object dataSourceId() {
@@ -117,9 +142,14 @@ final class MateInviteTokenStore {
      * endpoint may disclose.
      *
      * <p>Deliberately uninformative. The endpoint is unauthenticated — the person following a link
-     * may have no account yet — so the reply reaches anyone holding the token. A forwarded link is
-     * harmless today precisely because it reveals nothing about whose room it is; adding the
-     * booker's name or the room to a friendlier error page is what would end that.
+     * may have no account yet — so the reply reaches anyone holding the token, and must never name
+     * whose room it is.
+     *
+     * <p>One further disclosure was agreed for step 7 ("Accept invitation and book"), and it is the
+     * whole of it: for a USABLE link only, {@link #describeRoom} tells the holder the room's
+     * accommodation item and the room booking's first and last attendance day — never a name or a
+     * booking reference. It is a bounded, deliberate exception, not a precedent: anything more (the
+     * booker's name, the booking, a friendlier error page naming the room) needs its own decision.
      */
     static final String STATUS_USABLE = "USABLE";
     static final String STATUS_FULL = "FULL";
@@ -184,6 +214,26 @@ final class MateInviteTokenStore {
                 .setParameters(ownerDocumentLineId)
                 .build())
             .map(rs -> rs.getRowCount() >= 1 && Boolean.TRUE.equals(rs.getValue(0, 0)));
+    }
+
+    /**
+     * The room on {@code ownerDocumentLineId}, as {@link #roomDescriptionJson} describes it: its item, and
+     * the first and last attendance day of the booking holding it (over that booking's live lines). The
+     * caller must already have established that the link naming this room is usable.
+     */
+    static Future<String> describeRoom(Object ownerDocumentLineId) {
+        return QueryService.executeQuery(new QueryArgumentBuilder()
+                .setDataSourceId(dataSourceId())
+                .setStatement("select o.item_id, " +
+                              "(select min(a.date) from attendance a join document_line l on l.id = a.document_line_id " +
+                              "   where l.document_id = o.document_id and not l.cancelled), " +
+                              "(select max(a.date) from attendance a join document_line l on l.id = a.document_line_id " +
+                              "   where l.document_id = o.document_id and not l.cancelled) " +
+                              "from document_line o where o.id = $1")
+                .setParameters(ownerDocumentLineId)
+                .build())
+            .map(rs -> rs.getRowCount() < 1 ? ""
+                : roomDescriptionJson(rs.getValue(0, 0), rs.getValue(0, 1), rs.getValue(0, 2)));
     }
 
     /**
