@@ -3,6 +3,7 @@ package one.modality.crm.shared.services.authn;
 
 public interface ModalityAuthenticationI18nKeys {
 
+    Object AuthnBackofficeMethodNotAllowedError = "AuthnBackofficeMethodNotAllowedError";
     Object AuthnNoSuchUserAccountError = "AuthnNoSuchUserAccountError";
     Object AuthnOldPasswordNotMatchingError = "AuthnOldPasswordNotMatchingError";
     Object AuthnPasskeyAdminNotPermittedError = "AuthnPasskeyAdminNotPermittedError";
@@ -11,6 +12,11 @@ public interface ModalityAuthenticationI18nKeys {
     Object AuthnPasskeyNotApprovedError = "AuthnPasskeyNotApprovedError";
     Object AuthnPasskeyNotConfiguredError = "AuthnPasskeyNotConfiguredError";
     Object AuthnPasskeyRegistrationError = "AuthnPasskeyRegistrationError";
+    Object AuthnSecondFactorAttemptsExceededError = "AuthnSecondFactorAttemptsExceededError";
+    Object AuthnSecondFactorCodeError = "AuthnSecondFactorCodeError";
+    Object AuthnSecondFactorNotEnrolledError = "AuthnSecondFactorNotEnrolledError";
+    Object AuthnSecondFactorUnavailableError = "AuthnSecondFactorUnavailableError";
+    Object AuthnTotpEnrolmentError = "AuthnTotpEnrolmentError";
     Object AuthnUnrecognizedUserIdError = "AuthnUnrecognizedUserIdError";
     Object AuthnUserOrPasswordEmptyError = "AuthnUserOrPasswordEmptyError";
     Object AuthnWrongUserOrPasswordError = "AuthnWrongUserOrPasswordError";

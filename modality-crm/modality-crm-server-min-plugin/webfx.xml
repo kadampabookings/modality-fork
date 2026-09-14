@@ -14,6 +14,11 @@
         <plugin-module>modality-crm-server-authn-gateway-guest-plugin</plugin-module>
         <plugin-module>modality-crm-server-authn-gateway-magiclink-plugin</plugin-module>
         <plugin-module>modality-crm-server-authn-gateway-webauthn-plugin</plugin-module>
+        <!-- The TOTP second factor. Registering it is what makes a code step possible at all; without
+             it the policy still refuses a back-office login that needs a strong factor (closed by
+             default), so a deployment that forgets this module locks people out visibly rather than
+             letting them in quietly. -->
+        <plugin-module>modality-crm-server-authn-gateway-totp-plugin</plugin-module>
         <plugin-module>modality-crm-server-authz-required-plugin</plugin-module>
         <!-- Without this module the identity token still slides and is still capped, but nothing rotates
              it and a stolen copy stays undetectable — a plugin module is only built in if a list names

@@ -30,6 +30,16 @@
         <provider interface="dev.webfx.stack.com.serial.spi.SerialCodec">one.modality.crm.shared.services.authn.serial.ListPendingPasskeysCredentialsSerialCodec</provider>
         <provider interface="dev.webfx.stack.com.serial.spi.SerialCodec">one.modality.crm.shared.services.authn.serial.ApprovePasskeyCredentialsSerialCodec</provider>
         <provider interface="dev.webfx.stack.com.serial.spi.SerialCodec">one.modality.crm.shared.services.authn.serial.RejectPasskeyCredentialsSerialCodec</provider>
+        <provider interface="dev.webfx.stack.com.serial.spi.SerialCodec">one.modality.crm.shared.services.authn.serial.StartTotpEnrolmentCredentialsSerialCodec</provider>
+        <provider interface="dev.webfx.stack.com.serial.spi.SerialCodec">one.modality.crm.shared.services.authn.serial.ConfirmTotpEnrolmentCredentialsSerialCodec</provider>
+        <provider interface="dev.webfx.stack.com.serial.spi.SerialCodec">one.modality.crm.shared.services.authn.serial.ListSecondFactorsCredentialsSerialCodec</provider>
+        <provider interface="dev.webfx.stack.com.serial.spi.SerialCodec">one.modality.crm.shared.services.authn.serial.RemoveTotpCredentialsSerialCodec</provider>
+        <provider interface="dev.webfx.stack.com.serial.spi.SerialCodec">one.modality.crm.shared.services.authn.serial.RegenerateTotpBackupCodesCredentialsSerialCodec</provider>
+        <provider interface="dev.webfx.stack.com.serial.spi.SerialCodec">one.modality.crm.shared.services.authn.serial.AuthenticateWithTotpCredentialsSerialCodec</provider>
+        <provider interface="dev.webfx.stack.com.serial.spi.SerialCodec">one.modality.crm.shared.services.authn.serial.AuthenticateWithTotpBackupCodeCredentialsSerialCodec</provider>
+        <provider interface="dev.webfx.stack.com.serial.spi.SerialCodec">one.modality.crm.shared.services.authn.serial.CancelSecondFactorCredentialsSerialCodec</provider>
+        <provider interface="dev.webfx.stack.com.serial.spi.SerialCodec">one.modality.crm.shared.services.authn.serial.ResetSecondFactorCredentialsSerialCodec</provider>
+        <provider interface="dev.webfx.stack.com.serial.spi.SerialCodec">one.modality.crm.shared.services.authn.serial.RevokeApprovedPasskeyCredentialsSerialCodec</provider>
     </providers>
     <java-ui-api package="one.modality.crm.shared.services.authn" prefix="ModalityAuthentication">
         <i18n/>

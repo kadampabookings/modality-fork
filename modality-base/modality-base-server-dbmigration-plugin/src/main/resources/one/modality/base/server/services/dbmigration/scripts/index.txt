@@ -89,3 +89,4 @@ V0087__mate_invite_token.sql
 V0088__webauthn_credential.sql
 V0089__webauthn_credential_approval.sql
 V0090__migration_created_table_ownership.sql
+V0091__totp_credential.sql

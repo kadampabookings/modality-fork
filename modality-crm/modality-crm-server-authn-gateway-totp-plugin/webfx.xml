@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project>
+
+    <description>Server-side TOTP (RFC 6238) second-factor authentication gateway.</description>
+
+    <exported-packages>
+        <source-packages/>
+    </exported-packages>
+
+    <dependencies>
+        <used-by-source-modules/>
+    </dependencies>
+
+    <providers>
+        <provider interface="dev.webfx.stack.authn.server.gateway.spi.ServerAuthenticationGateway">one.modality.crm.server.authn.gateway.totp.ModalityTotpAuthenticationGateway</provider>
+        <!-- The second-factor SPI the shared module discovers with MultipleServiceProviders: it answers
+             "is this account enrolled in TOTP?" for the policy, and nothing else. Deliberately no
+             verify method — this plugin completes its own code step, so the shared module never
+             handles a secret. -->
+        <provider interface="one.modality.crm.server.authn.gateway.shared.SecondFactorVerifier">one.modality.crm.server.authn.gateway.totp.TotpSecondFactorVerifier</provider>
+    </providers>
+
+</project>

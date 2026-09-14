@@ -8,9 +8,15 @@ module modality.crm.server.authn.gateway.shared {
     requires modality.base.shared.entities;
     requires modality.base.shared.util;
     requires modality.crm.shared.authn;
+    requires webfx.platform.ast;
+    requires webfx.platform.ast.json.plugin;
     requires webfx.platform.async;
+    requires webfx.platform.conf;
     requires webfx.platform.console;
     requires webfx.platform.resource;
+    requires webfx.platform.scheduler;
+    requires webfx.platform.service;
+    requires webfx.platform.substitution;
     requires webfx.platform.util;
     requires webfx.stack.authn;
     requires webfx.stack.mail;
@@ -20,5 +26,8 @@ module modality.crm.server.authn.gateway.shared {
 
     // Exported packages
     exports one.modality.crm.server.authn.gateway.shared;
+
+    // Used services
+    uses one.modality.crm.server.authn.gateway.shared.SecondFactorVerifier;
 
 }

@@ -16,3 +16,13 @@ one.modality.crm.shared.services.authn.serial.RenamePasskeyCredentialsSerialCode
 one.modality.crm.shared.services.authn.serial.ListPendingPasskeysCredentialsSerialCodec
 one.modality.crm.shared.services.authn.serial.ApprovePasskeyCredentialsSerialCodec
 one.modality.crm.shared.services.authn.serial.RejectPasskeyCredentialsSerialCodec
+one.modality.crm.shared.services.authn.serial.StartTotpEnrolmentCredentialsSerialCodec
+one.modality.crm.shared.services.authn.serial.ConfirmTotpEnrolmentCredentialsSerialCodec
+one.modality.crm.shared.services.authn.serial.ListSecondFactorsCredentialsSerialCodec
+one.modality.crm.shared.services.authn.serial.RemoveTotpCredentialsSerialCodec
+one.modality.crm.shared.services.authn.serial.RegenerateTotpBackupCodesCredentialsSerialCodec
+one.modality.crm.shared.services.authn.serial.AuthenticateWithTotpCredentialsSerialCodec
+one.modality.crm.shared.services.authn.serial.AuthenticateWithTotpBackupCodeCredentialsSerialCodec
+one.modality.crm.shared.services.authn.serial.CancelSecondFactorCredentialsSerialCodec
+one.modality.crm.shared.services.authn.serial.ResetSecondFactorCredentialsSerialCodec
+one.modality.crm.shared.services.authn.serial.RevokeApprovedPasskeyCredentialsSerialCodec
