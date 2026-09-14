@@ -16,7 +16,9 @@ import java.util.Set;
  * annotated list, so a misconfiguration is visible instead of behavioural: the boot log prints
  * both counts, and "0 back-office origins" reads as the mistake it is — whereas a mistagged
  * entry in a combined list would keep front-office logins working and fail every back-office
- * login with the generic error. The ceremony allowlist is the union of both.
+ * login with the generic error. The ceremony allowlist is the union of both — but each count in
+ * the boot log comes from its own list, never from the union, which hides an origin written into
+ * both (see the fields).
  *
  * <p>Unset or unresolved values leave the gateway inert rather than half-configured: with no rpId
  * or no allowed origin nothing can be verified, so every passkey operation is refused with a clear
@@ -37,22 +39,30 @@ final class WebAuthnConfig {
 
     private final String rpId;
     private final String rpName;
-    private final Set<Origin> allowedOrigins;    // union of both lists — what the ceremonies accept
-    private final Set<Origin> backofficeOrigins; // the back-office subset, from its own config key
+    private final Set<Origin> allowedOrigins;     // union of both lists — what the ceremonies accept
+    // BOTH parsed lists are kept, not just the union and one side: the two may OVERLAP (the same
+    // origin written into both variables), and the union dedupes it. Deriving one count by
+    // subtracting the other from the union would then report 0 front-office origins for a server
+    // that in fact accepts one — the boot log would announce the back-office-only policy as
+    // enforced while it is not, which is the one thing that line exists to tell the operator.
+    // Each set is therefore reported from its own parse; only the allowlist is a union.
+    private final Set<Origin> frontofficeOrigins; // the front-office list, from its own config key
+    private final Set<Origin> backofficeOrigins;  // the back-office list, from its own config key
     private final boolean backofficeApprovalRequired; // the approval switch — see isBackofficeApprovalRequired()
 
-    private WebAuthnConfig(String rpId, String rpName, Set<Origin> allowedOrigins, Set<Origin> backofficeOrigins,
-                           boolean backofficeApprovalRequired) {
+    private WebAuthnConfig(String rpId, String rpName, Set<Origin> allowedOrigins, Set<Origin> frontofficeOrigins,
+                           Set<Origin> backofficeOrigins, boolean backofficeApprovalRequired) {
         this.rpId = rpId;
         this.rpName = rpName;
         this.allowedOrigins = Collections.unmodifiableSet(allowedOrigins);
+        this.frontofficeOrigins = Collections.unmodifiableSet(frontofficeOrigins);
         this.backofficeOrigins = Collections.unmodifiableSet(backofficeOrigins);
         this.backofficeApprovalRequired = backofficeApprovalRequired;
     }
 
     /** An inert configuration: {@link #isConfigured()} is false, every origin set is empty, approval is off. */
     static WebAuthnConfig unconfigured() {
-        return new WebAuthnConfig(null, null, new LinkedHashSet<>(), new LinkedHashSet<>(), false);
+        return new WebAuthnConfig(null, null, new LinkedHashSet<>(), new LinkedHashSet<>(), new LinkedHashSet<>(), false);
     }
 
     /**
@@ -79,8 +89,8 @@ final class WebAuthnConfig {
         // Only "on" (any case) enables the gate — not "true": the declare@ file documents on|off, and
         // the class javadoc says why every other value is off
         boolean backofficeApprovalRequired = "on".equalsIgnoreCase(resolvedOrNull(config.getString("backofficeApproval")));
-        return new WebAuthnConfig(rpId, rpName != null ? rpName : "Kadampa Booking System", allowed, backoffice,
-            backofficeApprovalRequired);
+        return new WebAuthnConfig(rpId, rpName != null ? rpName : "Kadampa Booking System", allowed, frontoffice,
+            backoffice, backofficeApprovalRequired);
     }
 
     /** Parses a comma-separated origin list; empty/unset gives an empty set, a malformed entry gives null. */
@@ -123,12 +133,18 @@ final class WebAuthnConfig {
         return allowedOrigins;
     }
 
-    /** How many configured origins are front-office ones (for the boot log). */
+    /**
+     * How many origins the front-office list holds (for the boot log). Read from that list itself,
+     * never from {@code allowedOrigins.size() - backofficeOrigins.size()}: an origin present in
+     * BOTH lists collapses in the union, and the subtraction would then report 0 — i.e. announce
+     * "front-office passkeys disabled" for a server that accepts one. Zero here means the list was
+     * empty, which since 2026-09-14 is the enforcement of the back-office-only policy.
+     */
     int getFrontofficeOriginCount() {
-        return allowedOrigins.size() - backofficeOrigins.size();
+        return frontofficeOrigins.size();
     }
 
-    /** How many configured origins are back-office ones (for the boot log). */
+    /** How many origins the back-office list holds (for the boot log). Same rule: its own list, not a difference. */
     int getBackofficeOriginCount() {
         return backofficeOrigins.size();
     }

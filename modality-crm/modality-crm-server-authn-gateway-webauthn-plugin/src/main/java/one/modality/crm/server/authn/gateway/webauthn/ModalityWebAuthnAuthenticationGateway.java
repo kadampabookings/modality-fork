@@ -66,8 +66,15 @@ import java.util.Set;
 /**
  * Passkey (WebAuthn) authentication gateway: registration + login ceremonies and self-service
  * credential management, all keyed to the {@code frontend_account} shared by the front office and
- * the back office — which is what lets ONE passkey sign a person into both apps (the rpId spans
- * both origins, see {@link WebAuthnConfig}).
+ * the back office.
+ *
+ * <p><b>Passkeys are a BACK-OFFICE feature (product decision, 2026-09-14).</b> The front office
+ * keeps password, magic link and verification code, and shows no passkey UI at all. The rpId still
+ * spans both origins and must stay that way — it is forever, and every passkey already registered
+ * is bound to its current value — so the enforcement is the ORIGIN allowlist, not the rpId: with
+ * {@code WEBAUTHN_FRONTOFFICE_ORIGINS} unset, a registration or an assertion signed by a
+ * front-office origin fails webauthn4j's signed-origin check and is refused. That is a server-side
+ * refusal, not a hidden button. The boot log states which of the two states the server is in.
  *
  * <p>Verification is delegated to webauthn4j (never hand-rolled): challenge (single-use, from
  * {@link WebAuthnChallengeStore}), origin ∈ configured allowlist, rpId hash, user presence + user
@@ -160,6 +167,16 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
                     // Loud: with no back-office origins every BO passkey login fails with the
                     // generic error, which reads as broken passkeys rather than missing config
                     Console.log(LOG_PREFIX + "⚠️ WEBAUTHN_BACKOFFICE_ORIGINS is empty — back-office passkey login will be refused");
+                // Both front-office states are stated, because since 2026-09-14 the EMPTY one is
+                // the policy rather than a mistake, and silence would leave the operator unable to
+                // tell which of the two a given boot is in. Empty is not a warning: the origin
+                // allowlist is the union of both lists (WebAuthnConfig.fromConfig), so with no
+                // front-office origin a ceremony signed by one fails webauthn4j's signed-origin
+                // check — registration included — which is exactly what enforces the decision.
+                if (config.getFrontofficeOriginCount() == 0)
+                    Console.log(LOG_PREFIX + "WEBAUTHN_FRONTOFFICE_ORIGINS is empty — front-office passkey sign-in AND enrolment are disabled (refused at the signed-origin check). This is the EXPECTED state: passkeys and the TOTP second factor are back-office only (product decision 2026-09-14)");
+                else
+                    Console.log(LOG_PREFIX + "⚠️ WEBAUTHN_FRONTOFFICE_ORIGINS is set — this server still ACCEPTS front-office passkey sign-in and enrolment, which the back-office-only policy of 2026-09-14 says it should not. The front office shows no passkey UI, so nothing reaches it today, but only clearing this variable enforces the decision server-side. Do NOT narrow WEBAUTHN_RP_ID instead: rpId is forever and every registered passkey is bound to its current value");
             } else
                 // Loud, because the consequence is silent: the login button in the apps would just
                 // return errors. Unset WEBAUTHN_* means "this environment has no passkeys", on purpose.
