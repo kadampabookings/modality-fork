@@ -26,6 +26,7 @@ public final class SubmitDocumentChangesResultSerialCodec extends SerialCodecBas
     private static final String QUEUE_TOTAL_KEY = "queueTotal";
     private static final String PRIORITY_KEY = "priority";
     private static final String ERROR_KEY = "error";
+    private static final String MATE_INVITE_KEY = "mateInvite";
 
     public SubmitDocumentChangesResultSerialCodec() {
         super(SubmitDocumentChangesResult.class, CODEC_ID);
@@ -48,6 +49,8 @@ public final class SubmitDocumentChangesResultSerialCodec extends SerialCodecBas
         if (arg.priority())
             encodeBoolean(serial, PRIORITY_KEY,             true);
         encodeObject(serial, ERROR_KEY,                     arg.errorMessage());
+        if (arg.mateInvite() != null)
+            encodeString(serial, MATE_INVITE_KEY,           arg.mateInvite());
     }
 
     @Override
@@ -65,7 +68,8 @@ public final class SubmitDocumentChangesResultSerialCodec extends SerialCodecBas
             decodeObject(serial, QUEUE_TOKEN_KEY),
             decodeInteger(serial, QUEUE_TOTAL_KEY, 0),
             decodeBoolean(serial, PRIORITY_KEY, false),
-            decodeString(serial, ERROR_KEY)
+            decodeString(serial, ERROR_KEY),
+            decodeString(serial, MATE_INVITE_KEY)
             );
     }
 

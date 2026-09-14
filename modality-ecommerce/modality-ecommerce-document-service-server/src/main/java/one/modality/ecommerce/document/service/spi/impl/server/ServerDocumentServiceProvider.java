@@ -686,26 +686,43 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
             // Resolving is read-only and carries the event. Whether another mate may join is NOT
             // decided here — a link belongs to the room, so that question is the room's remaining
             // capacity, tested inside link() where it can be enforced against concurrent linkers.
+            // From here the booking holds a sharing place the mate expects to be linked, so the outcome
+            // is reported back either way: a mate left unlinked must be TOLD, or they walk away
+            // believing they share the room. (Both tabs of one link booking the last bed is how.)
             return MateInviteTokenStore.resolve(token, request.eventPrimaryKey()).compose(ownerLineId -> {
                 if (ownerLineId == null) {
                     Console.log("[MateInvite] token did not resolve (unknown, expired, or another event); booking left unlinked");
-                    return Future.succeededFuture(result);
+                    return Future.succeededFuture(SubmitDocumentChangesResult.withMateInvite(result, SubmitDocumentChangesResult.MATE_INVITE_NOT_LINKED));
                 }
                 return MateInviteTokenStore.link(mateLineId, ownerLineId).compose(linked -> {
                     if (!linked) { // the room filled or was cancelled after the invite was sent
                         Console.log("[MateInvite] link refused (no free bed, room cancelled, or not a share-mate line); booking left unlinked");
-                        return Future.succeededFuture(result);
+                        return Future.succeededFuture(SubmitDocumentChangesResult.withMateInvite(result, SubmitDocumentChangesResult.MATE_INVITE_NOT_LINKED));
                     }
                     // Linked: record the first follower for audit, and label the line with the
-                    // owner's real name — the mate may have typed it wrong.
+                    // owner's real name — the mate may have typed it wrong. Neither undoes the link,
+                    // so a failure in them still reports LINKED.
                     return MateInviteTokenStore.recordFirstUse(token, mateLineId)
                         .compose(ignored -> MateInviteTokenStore.stampOwnerName(mateLineId, ownerLineId))
-                        .map(ignored -> result);
+                        .otherwise(e -> {
+                            Console.log("[MateInvite] linked, but recording first use or the owner name failed: " + e);
+                            return null;
+                        })
+                        .map(ignored -> SubmitDocumentChangesResult.withMateInvite(result, SubmitDocumentChangesResult.MATE_INVITE_LINKED));
                 });
+            }).otherwise(e -> {
+                // Resolving or linking errored after the booking took a sharing place: it is unlinked
+                // just as surely as a refusal, and the mate must be told just the same.
+                Console.log("[MateInvite] resolve or link errored; booking left unlinked: " + e);
+                return SubmitDocumentChangesResult.withMateInvite(result, SubmitDocumentChangesResult.MATE_INVITE_NOT_LINKED);
             });
         }).otherwise(e -> {
+            // Errored before the outcome was known — in practice while finding the share-mate line, since
+            // the paths after it handle their own errors. The token rides only a usable invite, so the
+            // mate almost certainly chose the sharing place and expects to be placed: say NOT_LINKED
+            // rather than leave them believing they share the room.
             Console.log("[MateInvite] token consume errored; booking left unlinked: " + e);
-            return result;
+            return SubmitDocumentChangesResult.withMateInvite(result, SubmitDocumentChangesResult.MATE_INVITE_NOT_LINKED);
         });
     }
 }
