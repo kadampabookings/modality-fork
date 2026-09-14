@@ -24,8 +24,10 @@ import java.util.List;
  * ModalityWebPushSubscriptionStore for SubmitService writes. Raw-SQL results are read by column
  * POSITION, in SELECT order — they carry values, not usable column names.
  *
- * <p>{@code status} is the credential's back-office trust (added by V0089): PENDING until a super
- * administrator decides, then APPROVED or REJECTED. Only the gateway interprets it.
+ * <p>{@code status} is the credential's back-office trust (added by V0089): APPROVED, or PENDING
+ * until a super administrator decides (APPROVED or REJECTED). Which one a new row starts with, and
+ * whether PENDING blocks a back-office login, is the gateway's approval switch — only the gateway
+ * interprets it; this store just reads and writes it.
  *
  * @author Claude Code
  */
@@ -61,8 +63,9 @@ final class WebAuthnCredentialStore {
     private static final int C_ID = 0, C_ACCOUNT_ID = 1, C_PUBLIC_KEY = 2, C_SIGN_COUNT = 3, C_USER_HANDLE = 4, C_STATUS = 5;
 
     // The approval queue: pending credentials of BACK-OFFICE accounts, with the account each
-    // belongs to. Members' passkeys start PENDING too but are not listed — there is nothing to
-    // decide until the account is granted back-office access, at which point they appear here.
+    // belongs to. Members' passkeys start PENDING too (while approval is on) but are not
+    // listed — there is nothing to decide until the account is granted back-office access, at
+    // which point they appear here.
     // The approver's own account ($2) is excluded: a super administrator must not certify a
     // credential enrolled behind their own password, so another one has to. The username is the
     // account's login email — personal data, shown only to super administrators and never
@@ -74,8 +77,9 @@ final class WebAuthnCredentialStore {
         " ORDER BY c.created_at, c.id";
     private static final int P_ID = 0, P_USERNAME = 1, P_LABEL = 2, P_AAGUID = 3, P_TRANSPORTS = 4, P_CREATED_AT = 5;
 
-    // status is bound explicitly (the column DEFAULT is only a safety net) so that the constants
-    // above are the one place the initial state is decided
+    // status is bound explicitly (the column DEFAULT is only a safety net): the gateway decides
+    // the initial state from its approval switch — PENDING for the queue, APPROVED when the gate
+    // is off — so the database default never silently decides it
     private static final String INSERT_SQL =
         "INSERT INTO webauthn_credential" +
         " (frontend_account_id, credential_id, public_key_cose, sign_count, user_handle, transports, aaguid, label, status)" +
@@ -168,10 +172,11 @@ final class WebAuthnCredentialStore {
             });
     }
 
+    /** Stores a new credential with the initial {@code status} the gateway decided (one of the STATUS_ constants). */
     Future<?> insert(Object accountId, String credentialIdB64, String publicKeyCoseB64, long signCount,
-                     String userHandleB64, String transports, String aaguid, String label) {
+                     String userHandleB64, String transports, String aaguid, String label, String status) {
         return executeRawSubmit(INSERT_SQL,
-            accountId, credentialIdB64, publicKeyCoseB64, signCount, userHandleB64, transports, aaguid, label, STATUS_PENDING);
+            accountId, credentialIdB64, publicKeyCoseB64, signCount, userHandleB64, transports, aaguid, label, status);
     }
 
     /** Fire-and-forget usage stamp after a successful assertion; a failure must not fail the login. */

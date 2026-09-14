@@ -24,6 +24,13 @@ import java.util.Set;
  * comes back as the literal template text, not null, so it is detected with
  * {@link Substitutor#areValuesNonNullAndResolved} exactly as the session-token initializer does.
  *
+ * <p>{@code backofficeApproval} is the one policy key: whether a passkey must be approved by a
+ * super administrator before it opens the back office. Only {@code on} (case-insensitive) enables
+ * it — unset, unresolved or anything else, {@code true} included, is off, because the gate is
+ * dormant in phase 1 (the account's {@code backoffice} flag alone decides who enters) and the
+ * failure mode of a typo should be that phase-1 behaviour, visible in the boot log, rather than a
+ * surprise. The declare@ file spells out what the switch does and does not decide.
+ *
  * @author Claude Code
  */
 final class WebAuthnConfig {
@@ -32,17 +39,20 @@ final class WebAuthnConfig {
     private final String rpName;
     private final Set<Origin> allowedOrigins;    // union of both lists — what the ceremonies accept
     private final Set<Origin> backofficeOrigins; // the back-office subset, from its own config key
+    private final boolean backofficeApprovalRequired; // the approval switch — see isBackofficeApprovalRequired()
 
-    private WebAuthnConfig(String rpId, String rpName, Set<Origin> allowedOrigins, Set<Origin> backofficeOrigins) {
+    private WebAuthnConfig(String rpId, String rpName, Set<Origin> allowedOrigins, Set<Origin> backofficeOrigins,
+                           boolean backofficeApprovalRequired) {
         this.rpId = rpId;
         this.rpName = rpName;
         this.allowedOrigins = Collections.unmodifiableSet(allowedOrigins);
         this.backofficeOrigins = Collections.unmodifiableSet(backofficeOrigins);
+        this.backofficeApprovalRequired = backofficeApprovalRequired;
     }
 
-    /** An inert configuration: {@link #isConfigured()} is false and every origin set is empty. */
+    /** An inert configuration: {@link #isConfigured()} is false, every origin set is empty, approval is off. */
     static WebAuthnConfig unconfigured() {
-        return new WebAuthnConfig(null, null, new LinkedHashSet<>(), new LinkedHashSet<>());
+        return new WebAuthnConfig(null, null, new LinkedHashSet<>(), new LinkedHashSet<>(), false);
     }
 
     /**
@@ -66,7 +76,11 @@ final class WebAuthnConfig {
         allowed.addAll(backoffice);
         if (allowed.isEmpty())
             return unconfigured();
-        return new WebAuthnConfig(rpId, rpName != null ? rpName : "Kadampa Booking System", allowed, backoffice);
+        // Only "on" (any case) enables the gate — not "true": the declare@ file documents on|off, and
+        // the class javadoc says why every other value is off
+        boolean backofficeApprovalRequired = "on".equalsIgnoreCase(resolvedOrNull(config.getString("backofficeApproval")));
+        return new WebAuthnConfig(rpId, rpName != null ? rpName : "Kadampa Booking System", allowed, backoffice,
+            backofficeApprovalRequired);
     }
 
     /** Parses a comma-separated origin list; empty/unset gives an empty set, a malformed entry gives null. */
@@ -122,5 +136,14 @@ final class WebAuthnConfig {
     /** Whether the browser-verified origin of a ceremony is one of the configured back-office origins. */
     boolean isBackofficeOrigin(Origin origin) {
         return origin != null && backofficeOrigins.contains(origin);
+    }
+
+    /**
+     * Whether a passkey must be approved by a super administrator before it opens the back office
+     * ({@code backofficeApproval = on}). Off in phase 1: a new passkey is stored APPROVED, and a
+     * PENDING one is as usable as an APPROVED one. REJECTED is refused whatever the switch says.
+     */
+    boolean isBackofficeApprovalRequired() {
+        return backofficeApprovalRequired;
     }
 }
