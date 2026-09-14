@@ -1,6 +1,7 @@
 package one.modality.crm.server.authn.gateway.webauthn;
 
 import dev.webfx.platform.async.Future;
+import dev.webfx.platform.util.Numbers;
 import dev.webfx.stack.db.query.QueryArgument;
 import dev.webfx.stack.db.query.QueryResult;
 import dev.webfx.stack.db.query.QueryService;
@@ -36,6 +37,56 @@ final class WebAuthnCredentialStore {
     static final String STATUS_PENDING = "PENDING";
     static final String STATUS_APPROVED = "APPROVED";
     static final String STATUS_REJECTED = "REJECTED";
+
+    /**
+     * Whether a credential with this status can complete a BACK-OFFICE assertion <b>today</b> — the
+     * one place the back-office APPROVAL rule is written, read by the gateway's approval gate and by
+     * {@link PasskeySecondFactorVerifier}'s enrolment answer.
+     *
+     * <p>({@link #STATUS_REJECTED} is also refused on its own line in the assertion path, before this
+     * is consulted, because a rejection must refuse a FRONT-office assertion too and this predicate
+     * answers only the back-office question. So the REJECTED half is written twice on purpose — once
+     * here, where it keeps the two back-office callers in step, and once there, where it covers the
+     * origin this predicate says nothing about.)
+     *
+     * <p>It exists because those two must never disagree. "Enrolled in a passkey" is what decides
+     * whether a password login is held for a second step and what the pending marker advertises; if
+     * it said yes where the assertion path says no, the owner would be asked for a factor the server
+     * refuses — locked out — and if it said no where the assertion path says yes, the account would
+     * be quietly downgraded to password-only. Two copies of the rule is two answers waiting to drift
+     * apart, so there is one.
+     *
+     * <p>The rule, and it depends on the switch the gateway holds:
+     * <ul>
+     * <li>{@link #STATUS_REJECTED} — never, whatever the switch says. A rejection is a decision on
+     *     record, not a queue state, and it signs in nowhere.</li>
+     * <li>approval required ({@code WEBAUTHN_BACKOFFICE_APPROVAL} on) — only
+     *     {@link #STATUS_APPROVED}: a PENDING row is waiting for a super administrator and opens
+     *     nothing until it has one.</li>
+     * <li>approval off (phase 1) — any row that is not REJECTED, PENDING included: with the gate
+     *     dormant the account's own {@code backoffice} flag is what decides who enters.</li>
+     * </ul>
+     *
+     * <p>An unrecognised status follows the same two lines rather than a rule of its own, so the two
+     * callers stay identical for a value neither expects (the V0089 CHECK constraint makes one
+     * unreachable from the database anyway).
+     */
+    static boolean opensBackofficeLogin(String status, boolean approvalRequired) {
+        if (STATUS_REJECTED.equals(status))
+            return false;
+        return !approvalRequired || STATUS_APPROVED.equals(status);
+    }
+
+    /**
+     * An id normalised to Long for raw-SQL binding, mirroring {@code TotpCredentialStore.normaliseId}:
+     * ids deserialized from a session token can come back as Byte/Short for small values, which DQL
+     * coerces but the pg driver's raw Tuple binding refuses. Also what makes two ids from two
+     * different sources — a raw-SQL row and an entity query — comparable with {@code equals}.
+     */
+    static Object normaliseId(Object id) {
+        Long normalised = Numbers.toLong(id);
+        return normalised != null ? normalised : id;
+    }
 
     /** One credential row as needed at assertion time (lookup by credential id). */
     record CredentialRow(long id, Object accountId, String publicKeyCose, long signCount, String userHandle, String status) {

@@ -32,5 +32,6 @@ module modality.crm.server.authn.gateway.webauthn.plugin {
 
     // Provided services
     provides dev.webfx.stack.authn.server.gateway.spi.ServerAuthenticationGateway with one.modality.crm.server.authn.gateway.webauthn.ModalityWebAuthnAuthenticationGateway;
+    provides one.modality.crm.server.authn.gateway.shared.SecondFactorVerifier with one.modality.crm.server.authn.gateway.webauthn.PasskeySecondFactorVerifier;
 
 }

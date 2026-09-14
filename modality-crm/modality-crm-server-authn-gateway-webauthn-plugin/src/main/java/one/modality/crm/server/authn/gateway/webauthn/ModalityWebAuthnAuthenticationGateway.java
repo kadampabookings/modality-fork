@@ -41,6 +41,10 @@ import dev.webfx.stack.session.token.AuthenticatedState;
 import one.modality.base.shared.entities.FrontendAccount;
 import one.modality.base.shared.entities.Person;
 import one.modality.crm.server.authn.gateway.shared.LoginPersonResolver;
+import one.modality.crm.server.authn.gateway.shared.PendingSecondFactor;
+import one.modality.crm.server.authn.gateway.shared.PendingSecondFactorStore;
+import one.modality.crm.server.authn.gateway.shared.SecondFactorAttemptLimiter;
+import one.modality.crm.server.authn.gateway.shared.SecondFactorMethod;
 import one.modality.crm.server.authn.gateway.shared.SuperAdminMembership;
 import one.modality.crm.shared.services.authn.ApprovePasskeyCredentials;
 import one.modality.crm.shared.services.authn.AuthenticateWithPasskeyCredentials;
@@ -92,6 +96,13 @@ import java.util.Set;
  * the switch only changes the status a new passkey is stored with and whether PENDING blocks a
  * back-office login.
  *
+ * <p><b>Two ways an assertion signs somebody in.</b> On its own it is the whole login — user
+ * verification makes it possession and the person in one gesture. On a connection whose password
+ * step is waiting ({@code PendingSecondFactorStore} holds an entry for this runId) the very same
+ * assertion is instead the SECOND step of that login: it completes it, for the account both halves
+ * agree on, and nothing else about it changes. {@link PasskeySecondFactorVerifier} is the other half
+ * of that — it is what makes the password step ask for a passkey at all.
+ *
  * <p>What "accepting a principal" means here (the modality-base-server-max-plugin house rule): a
  * login is granted only after a cryptographic proof of possession of a key whose public half this
  * server stored during an authenticated registration — nothing is taken on the client's word.
@@ -138,8 +149,12 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
     private final DataSourceModel dataSourceModel;
     private final WebAuthnChallengeStore challengeStore = new WebAuthnChallengeStore();
     private final WebAuthnCredentialStore credentialStore = new WebAuthnCredentialStore();
-    // Written once by the config-loaded callback, read by every ceremony — volatile is the contract
-    private volatile WebAuthnConfig config = WebAuthnConfig.unconfigured();
+    // Written once by the config-loaded callback, read by every ceremony — volatile is the contract.
+    // STATIC because it has a second reader that holds no gateway: PasskeySecondFactorVerifier is a
+    // separate ServiceLoader instance and must answer from the SAME switch this gateway enforces,
+    // never from a configuration read of its own. The value is global anyway — ConfigLoader hands
+    // every instance of this class the same one — so sharing it adds no state, only an address.
+    private static volatile WebAuthnConfig config = WebAuthnConfig.unconfigured();
 
     public ModalityWebAuthnAuthenticationGateway() {
         this(DataSourceModelService.getDefaultDataSourceModel());
@@ -152,6 +167,17 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
     @Override
     public DataSourceModel getDataSourceModel() {
         return dataSourceModel;
+    }
+
+    /**
+     * The configuration this gateway loaded, for {@link PasskeySecondFactorVerifier} — which decides
+     * "is this account enrolled in a passkey?" and must decide it from the same approval switch the
+     * assertion path enforces. {@link WebAuthnConfig#unconfigured()} until {@link #boot()}'s callback
+     * has run, which is the fail-closed reading: unconfigured means no assertion can succeed, and the
+     * verifier says so loudly rather than reporting "no factor".
+     */
+    static WebAuthnConfig currentConfig() {
+        return config;
     }
 
     @Override
@@ -222,6 +248,23 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
         return Future.succeededFuture(Json.formatObject(options));
     }
 
+    /**
+     * An assertion: either a login in its own right, or the SECOND step of one whose password has
+     * already passed — the difference is whether {@link PendingSecondFactorStore} holds an entry for
+     * this runId, and nothing else about the request.
+     *
+     * <p><b>Why the ordinary path is unchanged.</b> A passkey assertion carries user verification, so
+     * it is possession AND the person in one gesture: an assertion that arrives with no pending entry
+     * is already both factors and mints exactly as it always has. The step-up arm adds no strength to
+     * it — it only settles WHICH account the resulting session is for when a password step is waiting,
+     * and marks that step complete so no second credential can also claim it.
+     *
+     * <p><b>And a pending entry weakens nothing.</b> Every fence below runs in the order it always
+     * did — the challenge, the signature, the user handle, the verified-origin cross-check,
+     * {@code LoginPersonResolver}'s account fence, the REJECTED refusal and the approval gate — and a
+     * fence that refuses leaves the entry in place (minus the attempt it charged), so its owner can
+     * still finish with their other factor.
+     */
     private Future<?> authenticateWithPasskey(AuthenticateWithPasskeyCredentials credentials) {
         // Capturing the required client state info from thread local (before it will be wiped out by the async call)
         String runId = ThreadLocalStateHolder.getRunId();
@@ -229,6 +272,33 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
         WebAuthnConfig cfg = config;
         if (runId == null)
             return genericFailure();
+        // THE ATTEMPT IS CHARGED FIRST, before a single byte is verified — the TOTP gateway's rule,
+        // and it has to be this gateway's too or the five-attempt budget a password step opens would
+        // be spendable for free through this door. recordAttempt is also the LOOKUP: the store has no
+        // peek by design, so one call both finds the pending login and spends one of its attempts.
+        //
+        // Null therefore means three things at once — no entry for this runId, one that expired, or
+        // one whose attempts are gone — and all three take the ordinary path below. That is safe
+        // precisely because the ordinary path is a full login: the assertion still has to pass every
+        // fence, and what it mints is a session for the account the KEY proves, never for the one the
+        // spent entry named. A stale entry left behind is removed by the store's own sweep.
+        PendingSecondFactor pendingSecondFactor = PendingSecondFactorStore.getInstance().recordAttempt(runId);
+        if (pendingSecondFactor != null) {
+            // THE FACTOR MUST BE ONE THIS LOGIN ADVERTISED — the mirror of the TOTP gateway's guard.
+            // The password step asked every registered verifier what the account holds and stored the
+            // answer; this gateway may satisfy the step only when its own method is in that list.
+            // Without it, an account enrolled in TOTP alone would have its step completed by a passkey
+            // nothing asked it for. The entry is NOT consumed here: this is a malformed second step,
+            // not a failed one, and its owner must still be able to answer with the factor that WAS
+            // advertised. The attempt above is spent either way.
+            List<String> advertisedMethods = pendingSecondFactor.methods();
+            if (advertisedMethods == null || !advertisedMethods.contains(SecondFactorMethod.PASSKEY)) {
+                Console.log(LOG_PREFIX + "Second-step assertion refused for account " + pendingSecondFactor.accountId()
+                            + ": this login advertised [" + (advertisedMethods == null ? "" : String.join(",", advertisedMethods))
+                            + "] and " + SecondFactorMethod.PASSKEY + " was attempted");
+                return genericFailure();
+            }
+        }
         WebAuthnChallengeStore.Pending pending = challengeStore.consume(runId + ASSERTION_PURPOSE);
         if (pending == null)
             return genericFailure();
@@ -306,8 +376,11 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
                             Console.log(LOG_PREFIX + "Assertion with a rejected credential refused (row " + row.id() + ")");
                             return genericFailure();
                         }
-                        if (originIsBackoffice && cfg.isBackofficeApprovalRequired()
-                            && !WebAuthnCredentialStore.STATUS_APPROVED.equals(row.status()))
+                        // The status rule itself lives in the store, as ONE method, because
+                        // PasskeySecondFactorVerifier has to answer "is this account enrolled?" by
+                        // exactly the same rule: a verifier that said yes where this says no would
+                        // ask an owner for a factor this line then refuses.
+                        if (originIsBackoffice && !WebAuthnCredentialStore.opensBackofficeLogin(row.status(), cfg.isBackofficeApprovalRequired()))
                             return notApprovedFailure();
                         if (newSignCount != 0 && row.signCount() != 0 && newSignCount <= row.signCount())
                             // Warn-and-accept — see the class javadoc for why this is not a hard fail
@@ -317,6 +390,10 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
                         credentialStore.updateUsage(row.id(), newSignCount)
                             .onFailure(e -> Console.log(LOG_PREFIX + "Usage update failed for credential row " + row.id() + ": " + e.getMessage()));
                         ModalityUserPrincipal principal = new ModalityUserPrincipal(userPerson.getPrimaryKey(), row.accountId());
+                        if (pendingSecondFactor != null)
+                            // This assertion is the second step of a password login: it completes
+                            // that one rather than opening one of its own.
+                            return completeSecondFactorStep(runId, principal, row.accountId(), originIsBackoffice);
                         // The session TIER (which lifetime policy applies, and what auth_session records)
                         // is decided by the flag passed here, and it must be passed explicitly: by now
                         // the thread-local has been restored by the database round trips above, so
@@ -329,6 +406,97 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
                             .compose(authenticatedState -> PushServerService.pushState(authenticatedState, runId));
                     });
             });
+    }
+
+    /**
+     * Claims the pending login this assertion has just satisfied and mints from it — password plus
+     * passkey, which would be {@code pwd,pk} once {@code $amr} exists (design milestone M1). TODAY
+     * THE MINTED SESSION RECORDS NEITHER: {@code AuthenticatedState.createFor} takes a principal and
+     * a back-office flag and no method argument, so what this produces is indistinguishable from a
+     * passkey-only or a password-only session. The strength is in having required both, not in
+     * anything the token says.
+     *
+     * <p>The consume is the gate, not a tidy-up ({@code ModalityTotpAuthenticationGateway} says the
+     * same of its own): {@link PendingSecondFactorStore#consumeAfterSuccess} releases the entry to
+     * exactly ONE caller, so one password plus one assertion is worth exactly one session however
+     * many requests carry it, and the OTHER advertised factor — a TOTP code typed in the same
+     * seconds — finds nothing left to complete and is refused cleanly.
+     *
+     * <p><b>And the entry released must be the same login the key proved.</b> {@code runId} is the
+     * client's own string and {@code put} REPLACES on it, so a password step for a different account
+     * can land on this runId while the fences above are in their database round trips. Minting
+     * whatever the store holds at that instant would sign the caller into that other account on a
+     * factor it never presented — the step inverted. So the account is compared, and a mismatch mints
+     * nothing; the entry is spent all the same, because a released entry is single-use whatever the
+     * caller then decides. Both logins restart from their password, which is the safe end for both.
+     *
+     * <p>The mismatch is not only a race, and the 🛑 in its log line should not send anybody hunting
+     * for one: two people sharing a machine reach it with no concurrency at all — A types a password
+     * and is asked for a factor, B picks their own passkey from the browser's account chooser (the
+     * assertion is discoverable, so every passkey on the device is offered), and B's login is refused
+     * once while A's pending step is spent. B succeeds on a retry and A types their password again.
+     *
+     * <p>The back-office flag comes from the ENTRY — the one the password step captured before its
+     * first async hop — and is required to agree with the origin the signature proved. They can only
+     * disagree if a client reused one runId across the two apps, since a runId is one running page;
+     * refusing that is what keeps "mint with the entry's flag" from ever minting a back-office tier
+     * for a session whose person fence was resolved for the front office.
+     *
+     * @param assertedAccountId the account the credential belongs to — proven by the signature
+     * @param originIsBackoffice the app context proven by the verified origin, already cross-checked
+     *                           against the connection's claim
+     */
+    private Future<Void> completeSecondFactorStep(String runId, ModalityUserPrincipal principal,
+                                                  Object assertedAccountId, boolean originIsBackoffice) {
+        PendingSecondFactor released = PendingSecondFactorStore.getInstance().consumeAfterSuccess(runId);
+        if (released == null) {
+            // Nothing left to mint FOR: another request already completed this login, the user
+            // cancelled it, or it expired while the assertion was being verified.
+            Console.log(LOG_PREFIX + "Verified assertion for account " + assertedAccountId
+                        + " arrived with no pending login left (already completed, cancelled or expired) — not minting");
+            return genericFailure();
+        }
+        Object releasedAccountId = WebAuthnCredentialStore.normaliseId(released.accountId());
+        if (!Objects.equals(releasedAccountId, WebAuthnCredentialStore.normaliseId(assertedAccountId))) {
+            // Account ids only — never a username, never a credential id.
+            Console.log(LOG_PREFIX + "🛑 The pending login on this runId is for another account (asserted "
+                        + assertedAccountId + ", found " + releasedAccountId + ") — not minting");
+            return genericFailure();
+        }
+        // ...and the same PERSON. The account is what the key proves, but an account can hold
+        // several persons, and the two halves of this login resolved one independently: the password
+        // gateway's own login query named `released.personId()`, and `LoginPersonResolver` named the
+        // one in `principal` a moment ago. Both end in `order by owner desc, id limit 1` over the
+        // same fences, so today they always agree — which is exactly why a disagreement means one of
+        // those queries has drifted from the other, or the account's person rows changed under the
+        // login, and neither is a thing to mint through. The ASSERTION's person is the one kept when
+        // they do agree: it was resolved after the signature, against the live account, so it is the
+        // fresher of the two fences rather than one up to five minutes old.
+        if (!Objects.equals(WebAuthnCredentialStore.normaliseId(released.personId()),
+                            WebAuthnCredentialStore.normaliseId(principal.getUserPersonId()))) {
+            Console.log(LOG_PREFIX + "🛑 The pending login on this runId resolved a different person (password step "
+                        + released.personId() + ", assertion " + principal.getUserPersonId() + ", account "
+                        + releasedAccountId + ") — not minting");
+            return genericFailure();
+        }
+        if (released.backoffice() != originIsBackoffice) {
+            Console.log(LOG_PREFIX + "🛑 The pending login on this runId was taken in the "
+                        + (released.backoffice() ? "back" : "front") + " office and the assertion was signed by a "
+                        + (originIsBackoffice ? "back" : "front") + "-office origin (account " + releasedAccountId
+                        + ") — not minting");
+            return genericFailure();
+        }
+        // A factor was ACCEPTED, so the account's failure budget is forgiven — the limiter's own
+        // contract ("a bad day costs nothing later"), and what ModalityTotpAuthenticationGateway
+        // does on its own success. Without this, somebody who fumbles three codes and then signs in
+        // with their passkey carries those three failures toward a lockout they did nothing to earn.
+        // Safe from here because reaching this line took a signature over a server-issued single-use
+        // challenge for a credential of this very account — a stronger proof than the codes the
+        // budget counts, and one a guesser of codes cannot produce. Keyed by the normalised id, which
+        // is what the TOTP gateway counts under, so the two spell the same account the same way.
+        SecondFactorAttemptLimiter.clear(releasedAccountId);
+        return AuthenticatedState.createFor(principal, released.backoffice())
+            .compose(authenticatedState -> PushServerService.pushState(authenticatedState, runId));
     }
 
     // ===== updateCredentials path (logged-in registration + management) ==========================
@@ -752,8 +920,7 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
      * small values, which DQL coerces but the pg driver's raw Tuple binding refuses.
      */
     private static Object accountIdOf(ModalityUserPrincipal principal) {
-        Long normalised = Numbers.toLong(principal.getUserAccountId());
-        return normalised != null ? normalised : principal.getUserAccountId();
+        return WebAuthnCredentialStore.normaliseId(principal.getUserAccountId());
     }
 
     /** User-supplied display name: trimmed, capped, empty collapsed to null. */

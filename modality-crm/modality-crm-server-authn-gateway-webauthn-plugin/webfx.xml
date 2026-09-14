@@ -13,6 +13,13 @@
 
     <providers>
         <provider interface="dev.webfx.stack.authn.server.gateway.spi.ServerAuthenticationGateway">one.modality.crm.server.authn.gateway.webauthn.ModalityWebAuthnAuthenticationGateway</provider>
+        <!-- The second-factor SPI the shared module discovers with MultipleServiceProviders: it answers
+             "is this account enrolled in a passkey that could open the back office today?" for the
+             policy, and nothing else. Without it an account whose only strong factor is a passkey
+             looks factor-less to the password gateway and is never asked for anything. Deliberately no
+             verify method — this plugin completes its own assertion step, so the shared module never
+             handles a signature. -->
+        <provider interface="one.modality.crm.server.authn.gateway.shared.SecondFactorVerifier">one.modality.crm.server.authn.gateway.webauthn.PasskeySecondFactorVerifier</provider>
     </providers>
 
     <required-libraries>
