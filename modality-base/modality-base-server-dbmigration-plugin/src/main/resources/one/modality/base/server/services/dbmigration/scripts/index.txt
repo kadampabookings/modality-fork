@@ -90,3 +90,4 @@ V0088__webauthn_credential.sql
 V0089__webauthn_credential_approval.sql
 V0090__migration_created_table_ownership.sql
 V0091__totp_credential.sql
+V0092__rate_tie_break_prefers_specific.sql

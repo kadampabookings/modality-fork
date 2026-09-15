@@ -282,6 +282,10 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                     "with e as (select coalesce(repeatedEvent,id) as finalEvent,coalesce(repeatedEvent?.type,type) as finalEventType,organization,startDate,endDate,venue,venue.organization as venue_organization from Event where id=$1)" +
                     " select site,item,withItem,withAccommodation,earlyBird,breakfastIncluded,price,perDay,perPerson,applicableToInPerson,applicableToOnline,arrivingOrLeaving,facilityFee_price,facilityFee_discount,startDate,endDate,onDate,offDate,minDeposit" +
                     ",cutoffDate,minDeposit2" +
+                    // The client only tests whether these are set, to prefer an event or event-type
+                    // rate over an equally priced generic one (same rule as V0092). `.id` emits the
+                    // FK column with no join; a bare FK would join in Event/EventType display fields.
+                    ",event.id,eventType.id" +
                     ",age1_max,age1_price,age1_discount,age2_max,age2_price,age2_discount" +
                     ",resident_price,resident_discount,resident2_price,resident2_discount" +
                     " from Rate r, e where (" +
