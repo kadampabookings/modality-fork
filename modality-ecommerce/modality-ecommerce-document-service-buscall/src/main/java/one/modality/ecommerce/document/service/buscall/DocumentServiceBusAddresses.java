@@ -22,4 +22,6 @@ public interface DocumentServiceBusAddresses {
     String MINT_MATE_INVITE_TOKEN_ADDRESS = "modality/service/document/mintMateInviteToken";
 
     String RESOLVE_MATE_INVITE_ADDRESS = "modality/service/document/resolveMateInvite";
+
+    String DESCRIBE_MATE_INVITE_ROOM_ADDRESS = "modality/service/document/describeMateInviteRoom";
 }

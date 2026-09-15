@@ -33,11 +33,13 @@ import dev.webfx.stack.orm.entity.Entities;
 import dev.webfx.stack.orm.entity.Entity;
 import one.modality.ecommerce.document.service.events.registration.documentline.PriceDocumentLineEvent;
 import one.modality.ecommerce.document.service.spi.DocumentServiceProvider;
+import one.modality.ecommerce.document.service.util.SharingPlaceAvailability;
 import one.modality.ecommerce.history.server.HistoryRecorder;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -357,6 +359,15 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
     }
 
     static Future<SubmitDocumentChangesResult> submitDocumentChangesNow(DocumentSubmitRequest request) {
+        // A sharing place with no bed left is refused first. Here rather than before the queue: a booking
+        // opening's burst is absorbed before any policy is loaded, the count is as fresh as it can be, and
+        // by now the event is known even for a modification.
+        return refuseSharingPlaceWithoutFreeBed(request).compose(soldOut -> soldOut != null
+            ? Future.succeededFuture(soldOut)
+            : submitDocumentChangesAfterChecks(request));
+    }
+
+    private static Future<SubmitDocumentChangesResult> submitDocumentChangesAfterChecks(DocumentSubmitRequest request) {
         // Use the userId captured at request-creation time (in DocumentSubmitRequest.create) rather than
         // re-reading ThreadLocalStateHolder here. When a booking is deferred through the event queue and
         // processed later by DocumentSubmitEventQueue, the Vert.x context has changed and the ThreadLocal
@@ -665,6 +676,171 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
         });
     }
 
+    @Override
+    public Future<String> describeMateInviteRoom(String token, Object eventId) {
+        // No authentication, as for resolveMateInvite: the invited mate may not have an account yet. What
+        // it discloses was agreed for step 7 — the room's accommodation item and the room booking's first
+        // and last day, never a name or a booking reference — so the booking form can choose the matching
+        // sharing option and part of the event for the mate. Only for a link that can still be followed:
+        // an unknown, expired or full link describes nothing.
+        if (token == null || token.isBlank() || eventId == null)
+            return Future.succeededFuture("");
+        return MateInviteTokenStore.resolve(token, eventId).compose(ownerLineId -> {
+            if (ownerLineId == null)
+                return Future.succeededFuture("");
+            return MateInviteTokenStore.hasFreeBed(ownerLineId).compose(free -> free
+                ? MateInviteTokenStore.describeRoom(ownerLineId)
+                : Future.succeededFuture(""));
+        }).recover(e -> {
+            // Generic, as for resolve: the caller is unauthenticated, so the database's message stays here.
+            Console.log("[MateInvite] describe errored: " + e);
+            return Future.failedFuture("[MateInviteError] The invite link could not be checked");
+        });
+    }
+
+    /**
+     * Refuses, as SOLD_OUT, a new front-office sharing place when no bed is free for it (room-mate plan
+     * §1c, step 6). Returns the sold-out result to send back, or null to go ahead.
+     *
+     * <p>Needed because a sharing line never reaches the database's allocation check: the defer-allocate
+     * trigger skips share-mate items, so without this only the browser stood between a stale page (or a
+     * crafted request) and a sharing booking with no bed to take.
+     *
+     * <p>Runs in submitDocumentChangesNow, after the event queue. Each added sharing line is judged against
+     * its OWN booking's event — a submit can name several documents — and all of a submit's sharing lines
+     * for one event are counted together against that event's free beds, so one crafted submit cannot put
+     * several sharers on one bed. The policy is loaded once per event.
+     *
+     * <p>Not applied to a back-office submit, which is authoritative for placement as it is for the
+     * allocation check itself. When the submit adds a single sharing line to an event, an invite token that
+     * resolves to a room of that event which STILL has a free bed stands in for the count: the link names that
+     * room, and linking places the mate in it whatever sharing item they picked (it copies the room onto their
+     * line). A token for a full room, or one that does not resolve, stands in for nothing — otherwise any
+     * forwarded link would unlock places with no bed behind them — and with several lines it is not used.
+     */
+    private static Future<SubmitDocumentChangesResult> refuseSharingPlaceWithoutFreeBed(DocumentSubmitRequest request) {
+        if (request.backoffice())
+            return Future.succeededFuture(null);
+        // Documents created by this very submit name their event; any other document is looked up.
+        Map<Object, Object> createdDocumentEvents = new HashMap<>();
+        List<AddDocumentLineEvent> addedLines = new ArrayList<>();
+        for (AbstractDocumentEvent documentEvent : request.argument().documentEvents()) {
+            if (documentEvent instanceof AddDocumentEvent addDocument)
+                createdDocumentEvents.put(addDocument.getDocumentPrimaryKey(), addDocument.getEventPrimaryKey());
+            else if (documentEvent instanceof AddDocumentLineEvent add && add.getItemPrimaryKey() != null)
+                addedLines.add(add);
+        }
+        if (addedLines.isEmpty())
+            return Future.succeededFuture(null);
+        List<Object> itemPks = new ArrayList<>();
+        for (AddDocumentLineEvent add : addedLines)
+            if (!itemPks.contains(add.getItemPrimaryKey()))
+                itemPks.add(add.getItemPrimaryKey());
+        return sharingItemsAmong(itemPks, 0, new ArrayList<>()).compose(sharingItemPks -> {
+            List<AddDocumentLineEvent> sharingLines = new ArrayList<>();
+            for (AddDocumentLineEvent add : addedLines)
+                if (sharingItemPks.contains(add.getItemPrimaryKey()))
+                    sharingLines.add(add);
+            if (sharingLines.isEmpty())
+                return Future.succeededFuture(null);
+            return groupByEvent(sharingLines, 0, createdDocumentEvents, new HashMap<>(), new LinkedHashMap<>())
+                .compose(linesByEvent -> refuseEventsFrom(request, new ArrayList<>(linesByEvent.values()), 0));
+        });
+    }
+
+    /** A submit's sharing lines for one event. */
+    private record EventSharingLines(Object eventPk, List<AddDocumentLineEvent> lines) {
+    }
+
+    /**
+     * Groups the sharing lines by their own booking's event, looking each document's event up once. Keyed by
+     * the key's text, so a new document's event key and an existing document's compare equal whatever number
+     * type each arrived as. A line whose booking cannot be found is left out: it cannot be written either.
+     */
+    private static Future<Map<String, EventSharingLines>> groupByEvent(List<AddDocumentLineEvent> lines, int index,
+                                                                      Map<Object, Object> createdDocumentEvents,
+                                                                      Map<Object, Object> eventByDocumentPk,
+                                                                      Map<String, EventSharingLines> linesByEvent) {
+        if (index >= lines.size())
+            return Future.succeededFuture(linesByEvent);
+        AddDocumentLineEvent line = lines.get(index);
+        Object documentPk = line.getDocumentPrimaryKey();
+        Future<Object> eventOfLine = eventByDocumentPk.containsKey(documentPk)
+            ? Future.succeededFuture(eventByDocumentPk.get(documentPk))
+            : eventOfDocument(documentPk, createdDocumentEvents).map(eventPk -> {
+                eventByDocumentPk.put(documentPk, eventPk);
+                return eventPk;
+            });
+        return eventOfLine.compose(eventPk -> {
+            if (eventPk != null)
+                linesByEvent.computeIfAbsent(String.valueOf(eventPk), key -> new EventSharingLines(eventPk, new ArrayList<>()))
+                    .lines().add(line);
+            return groupByEvent(lines, index + 1, createdDocumentEvents, eventByDocumentPk, linesByEvent);
+        });
+    }
+
+    /**
+     * The event of the document a line is added to. A modification adds lines to an existing booking without
+     * naming its event, and only the queue path looks it up for the request as a whole — so it is looked up
+     * here, per document, or a modification sent outside the queue would never be checked at all.
+     */
+    private static Future<Object> eventOfDocument(Object documentPk, Map<Object, Object> createdDocumentEvents) {
+        if (documentPk == null)
+            return Future.succeededFuture(null);
+        if (createdDocumentEvents.containsKey(documentPk))
+            return Future.succeededFuture(createdDocumentEvents.get(documentPk));
+        return EntityStore.create().<Document>executeQuery("select event from Document where id=$1", documentPk)
+            .map(documents -> documents.isEmpty() ? null : Entities.getPrimaryKey(documents.get(0).getEventId()));
+    }
+
+    /** Judges each event's sharing lines, one event after another; the first refusal ends the walk. */
+    private static Future<SubmitDocumentChangesResult> refuseEventsFrom(DocumentSubmitRequest request, List<EventSharingLines> events, int index) {
+        if (index >= events.size())
+            return Future.succeededFuture(null);
+        return refuseEventSharingLines(request, events.get(index))
+            .compose(soldOut -> soldOut != null ? Future.succeededFuture(soldOut) : refuseEventsFrom(request, events, index + 1));
+    }
+
+    private static Future<SubmitDocumentChangesResult> refuseEventSharingLines(DocumentSubmitRequest request, EventSharingLines event) {
+        Object eventPk = event.eventPk();
+        Map<Object, Integer> requestedLinesByItemPk = new LinkedHashMap<>();
+        Map<Object, AddDocumentLineEvent> firstLineByItemPk = new HashMap<>();
+        for (AddDocumentLineEvent line : event.lines()) {
+            requestedLinesByItemPk.merge(line.getItemPrimaryKey(), 1, Integer::sum);
+            firstLineByItemPk.putIfAbsent(line.getItemPrimaryKey(), line);
+        }
+        // An invited mate sends exactly one sharing line. Only then does a usable link stand in for the count —
+        // with more lines, which only a crafted submit sends, every line is counted, so a link cannot carry extras.
+        String token = request.argument().inviteToken();
+        boolean singleLine = event.lines().size() == 1;
+        Future<Boolean> invitedToFreeBed = !singleLine || token == null || token.isBlank() ? Future.succeededFuture(false)
+            : MateInviteTokenStore.resolve(token, eventPk).compose(ownerLineId -> ownerLineId == null
+                ? Future.succeededFuture(false)
+                : MateInviteTokenStore.hasFreeBed(ownerLineId));
+        return invitedToFreeBed
+            // The link stands in for the bed count only; the item must still be one this event offers.
+            .compose(invited -> SharingPlaceAvailability.firstOverbooked(eventPk, requestedLinesByItemPk, !invited))
+            .map(refusedItemPk -> {
+                if (refusedItemPk == null)
+                    return null;
+                Console.log("[SharingAvailability] refused a sharing place with no free bed: event=" + eventPk + " item=" + refusedItemPk);
+                return SubmitDocumentChangesResult.createSoldOutResult(firstLineByItemPk.get(refusedItemPk).getSitePrimaryKey(), refusedItemPk);
+            });
+    }
+
+    /** The keys among {@code itemPks} that are sharing items, checked one after another (a submit adds few). */
+    private static Future<List<Object>> sharingItemsAmong(List<Object> itemPks, int index, List<Object> sharingItemPks) {
+        if (index >= itemPks.size())
+            return Future.succeededFuture(sharingItemPks);
+        Object itemPk = itemPks.get(index);
+        return EntityStore.create().<Item>executeQuery("select share_mate from Item where id=$1", itemPk)
+            .compose(items -> {
+                if (!items.isEmpty() && Boolean.TRUE.equals(items.get(0).isShare_mate()))
+                    sharingItemPks.add(itemPk);
+                return sharingItemsAmong(itemPks, index + 1, sharingItemPks);
+            });
+    }
+
     /**
      * If this submit carried a room-share invite token (steps 4-5), consume it: validate it and link the
      * just-created mate line to the room booker the token names. The booking is already committed and
@@ -686,26 +862,43 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
             // Resolving is read-only and carries the event. Whether another mate may join is NOT
             // decided here — a link belongs to the room, so that question is the room's remaining
             // capacity, tested inside link() where it can be enforced against concurrent linkers.
+            // From here the booking holds a sharing place the mate expects to be linked, so the outcome
+            // is reported back either way: a mate left unlinked must be TOLD, or they walk away
+            // believing they share the room. (Both tabs of one link booking the last bed is how.)
             return MateInviteTokenStore.resolve(token, request.eventPrimaryKey()).compose(ownerLineId -> {
                 if (ownerLineId == null) {
                     Console.log("[MateInvite] token did not resolve (unknown, expired, or another event); booking left unlinked");
-                    return Future.succeededFuture(result);
+                    return Future.succeededFuture(SubmitDocumentChangesResult.withMateInvite(result, SubmitDocumentChangesResult.MATE_INVITE_NOT_LINKED));
                 }
                 return MateInviteTokenStore.link(mateLineId, ownerLineId).compose(linked -> {
                     if (!linked) { // the room filled or was cancelled after the invite was sent
                         Console.log("[MateInvite] link refused (no free bed, room cancelled, or not a share-mate line); booking left unlinked");
-                        return Future.succeededFuture(result);
+                        return Future.succeededFuture(SubmitDocumentChangesResult.withMateInvite(result, SubmitDocumentChangesResult.MATE_INVITE_NOT_LINKED));
                     }
                     // Linked: record the first follower for audit, and label the line with the
-                    // owner's real name — the mate may have typed it wrong.
+                    // owner's real name — the mate may have typed it wrong. Neither undoes the link,
+                    // so a failure in them still reports LINKED.
                     return MateInviteTokenStore.recordFirstUse(token, mateLineId)
                         .compose(ignored -> MateInviteTokenStore.stampOwnerName(mateLineId, ownerLineId))
-                        .map(ignored -> result);
+                        .otherwise(e -> {
+                            Console.log("[MateInvite] linked, but recording first use or the owner name failed: " + e);
+                            return null;
+                        })
+                        .map(ignored -> SubmitDocumentChangesResult.withMateInvite(result, SubmitDocumentChangesResult.MATE_INVITE_LINKED));
                 });
+            }).otherwise(e -> {
+                // Resolving or linking errored after the booking took a sharing place: it is unlinked
+                // just as surely as a refusal, and the mate must be told just the same.
+                Console.log("[MateInvite] resolve or link errored; booking left unlinked: " + e);
+                return SubmitDocumentChangesResult.withMateInvite(result, SubmitDocumentChangesResult.MATE_INVITE_NOT_LINKED);
             });
         }).otherwise(e -> {
+            // Errored before the outcome was known — in practice while finding the share-mate line, since
+            // the paths after it handle their own errors. The token rides only a usable invite, so the
+            // mate almost certainly chose the sharing place and expects to be placed: say NOT_LINKED
+            // rather than leave them believing they share the room.
             Console.log("[MateInvite] token consume errored; booking left unlinked: " + e);
-            return result;
+            return SubmitDocumentChangesResult.withMateInvite(result, SubmitDocumentChangesResult.MATE_INVITE_NOT_LINKED);
         });
     }
 }

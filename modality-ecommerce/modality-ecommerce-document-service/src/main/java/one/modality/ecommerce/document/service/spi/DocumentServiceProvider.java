@@ -28,4 +28,12 @@ public interface DocumentServiceProvider {
      */
     Future<String> resolveMateInvite(String token, Object eventId);
 
+    /**
+     * For a room-share invite link that can still be followed, describes the room it joins — its
+     * accommodation item and the room booking's first and last attendance day, as a small JSON object —
+     * so the booking form can answer its first page for the invited mate (step 7). Empty for any other
+     * link. Never names anyone.
+     */
+    Future<String> describeMateInviteRoom(String token, Object eventId);
+
 }

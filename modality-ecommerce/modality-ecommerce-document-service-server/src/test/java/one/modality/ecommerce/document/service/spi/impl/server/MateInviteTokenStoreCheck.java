@@ -72,6 +72,22 @@ public class MateInviteTokenStoreCheck {
                 MateInviteTokenStore.statusOf(false, true, false, false),
                 MateInviteTokenStore.statusOf(false, false, false, false))));
 
+        // --- What a usable link may disclose about its room (step 7) ---------------------------------
+        // The unauthenticated describe endpoint returns exactly this: an item and two dates, nothing more.
+        check("a room is described by its item and the booking's first and last day",
+            "{\"itemId\":55,\"arrival\":\"2026-11-27\",\"departure\":\"2026-12-01\"}".equals(
+                MateInviteTokenStore.roomDescriptionJson(55, java.time.LocalDate.of(2026, 11, 27), java.time.LocalDate.of(2026, 12, 1))));
+        check("a booking with no attendance describes its item with no dates",
+            "{\"itemId\":55,\"arrival\":null,\"departure\":null}".equals(MateInviteTokenStore.roomDescriptionJson(55, null, null)));
+        check("no item means nothing is described",
+            "".equals(MateInviteTokenStore.roomDescriptionJson(null, java.time.LocalDate.of(2026, 11, 27), null)));
+        // Values of an unexpected shape never reach the JSON, so they cannot widen the disclosure or break it.
+        check("an item that is not a plain number is not passed through",
+            "".equals(MateInviteTokenStore.roomDescriptionJson("55,\"name\":\"x\"", null, null)));
+        check("a date that is not an ISO date is left out",
+            "{\"itemId\":55,\"arrival\":null,\"departure\":null}".equals(
+                MateInviteTokenStore.roomDescriptionJson(55, "27/11/2026\",\"x\":\"y", "not a date")));
+
         System.out.println(pass + " passed, " + fail + " failed");
         if (fail > 0)
             System.exit(1);

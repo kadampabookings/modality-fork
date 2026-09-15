@@ -75,6 +75,39 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
         // physical unit with only one applicable config per day.
         " where (x.event=$1 or x.event=null and !exists(select ResourceConfiguration where resource=x.resource and event=$1))" +
         " and exists(select ScheduledItem si2 where bookableScheduledItem=id and si2.site=x.resource.site and (si2.event=(select e.finalEvent from e) or si2.event=null and si2.site=(select e.venue from e))))" +
+        // Beds still free for sharers, per room item, resolved ONCE (room-mate plan §1c). For each live
+        // whole-room booking of this event (share_owner): the item's bed capacity — the same figure the
+        // invite link's guard uses, so a card never offers a bed that linking would refuse — minus the
+        // booker's own bed minus the mates linked to it, floored at 0 per room so an over-linked room cannot
+        // eat another room's free bed. A mate whose booking was cancelled keeps counting until unlinked, as
+        // in the link guard: reinstating that booking must not overfill the room. A sharing card sums this
+        // over the room items it pairs with. Only counts leave the server — never who booked. The mate count
+        // is an index probe (document_line_share_mate_owner_document_line_id_idx).
+        // The item is As-ALIASED (like rcSite above): only an aliased CTE column is referenced by its literal
+        // name. A bare `o.item` is resolved through the domain model as sb.item_id, which this grouped CTE
+        // does not produce — "column sb.item_id does not exist".
+        // Beds are capped at the room's PUBLIC beds once it is allocated — its max less its reserved beds, as in
+        // RC_AVAIL_EXPR — so a room whose beds are all reserved offers nothing to public sharers. The cap only
+        // ever lowers the item's capacity, so a card still never offers a bed the invite link's guard refuses.
+        ", sb as materialized (select o.item.id as sbItem, sum(greatest(least(o.item.capacity," +
+        " coalesce(o.resourceConfiguration?.max - coalesce(o.resourceConfiguration?.maxReserved, 0), o.item.capacity)) - 1" +
+        " - (select count(1) from DocumentLine m where m.share_mate_ownerDocumentLine=o and !m.cancelled), 0)) as freeBeds" +
+        " from DocumentLine o where o.share_owner and !o.cancelled and o.item.family.code='acco' and o.document.(!cancelled and event=$1)" +
+        // A room allocated to an OFFLINE configuration is not on offer to the public — the regular room cards
+        // count its beds as 0 (RC_AVAIL_EXPR) — so its empty bed is not offered to sharers either. A booking not
+        // allocated yet still counts: it will normally land in an online room. (An invite link names its room
+        // and is checked on its own, so a mate invited into an offline room is unaffected.)
+        " and (o.resourceConfiguration=null or o.resourceConfiguration?.online)" +
+        " group by o.item.id)" +
+        // Sharing places booked but not linked yet, for the WHOLE event: each is a claim on a free bed that the
+        // count above cannot see — an uninvited sharer is only linked later, by the back office — so every card
+        // subtracts them, or one free bed could be sold to every sharer who asks. Event-wide and carried on every
+        // accommodation row, because a sharing item often has no scheduled item of its own (staging event 1957's
+        // "Sharing a room" has none): a per-item figure on its own rows never reached the booking form. It can
+        // only err towards offering too little once pairings are configured, never a bed twice.
+        ", ps as materialized (select count(1) as claims" +
+        " from DocumentLine l where l.item.share_mate and l.share_mate_ownerDocumentLine=null and !l.cancelled" +
+        " and l.item.family.code='acco' and l.document.(!cancelled and event=$1))" +
         " select name,label,comment,site.(name,terminal,selfArranged,label),arrivalSite.(name,terminal,selfArranged,label),item.(name,label,perResourceLabel,code,temporal,family.(code,name,label,ord),capacity,share_mate,breakfastIncluded,ord),date,startTime,endTime,timeline?.(site,item,startTime,endTime),cancelled,resource,buddha.hyt" +
         // Availability: for each applicable configuration (from the rc CTE above, matched on the
         // scheduled item's site & item), LATERAL computes availability once, then distributes it
@@ -110,6 +143,11 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
         // meaning "not resource-managed") for items that have no resource configuration.
         " group by rc.item)" +
         " as " + ScheduledItem.maleFemaleAvailabilities +
+        // 0 when no room of this item is booked. Null when the item has no capacity set: it is not a whole-room
+        // type (a dormitory, a per-person room), and clients leave it out. pendingSharers, just below, is never
+        // null here — which is how a client tells this server from an older one that sends neither.
+        ",(si.item.capacity=null ? null : coalesce((select sb.freeBeds from sb sb where sb.sbItem=si.item), 0)) as " + ScheduledItem.freeSharedBeds +
+        ",coalesce((select ps.claims from ps ps), 0) as " + ScheduledItem.pendingSharers +
         " from ScheduledItem si" +
         " where bookableScheduledItem=id" +
         // bound to this event (or its repeatedEvent), or unbound but happening at the event venue during the event period.

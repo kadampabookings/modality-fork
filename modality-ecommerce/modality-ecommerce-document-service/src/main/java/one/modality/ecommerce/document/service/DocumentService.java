@@ -48,6 +48,10 @@ public final class DocumentService {
         return getProvider().resolveMateInvite(token, eventId);
     }
 
+    public static Future<String> describeMateInviteRoom(String token, Object eventId) {
+        return getProvider().describeMateInviteRoom(token, eventId);
+    }
+
     // Additional top-level utility methods to load a document (not directly implemented by the provider and not directly serialized)
 
     public static Future<DocumentAggregate> loadDocument(Object event, Object userPerson) {
