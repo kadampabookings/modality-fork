@@ -89,10 +89,17 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
         // Beds are capped at the room's PUBLIC beds once it is allocated — its max less its reserved beds, as in
         // RC_AVAIL_EXPR — so a room whose beds are all reserved offers nothing to public sharers. The cap only
         // ever lowers the item's capacity, so a card still never offers a bed the invite link's guard refuses.
+        // No item-family filter, although only accommodation rows read this figure. `o.item.family.code='acco'`
+        // lets Postgres start from the ~400 accommodation items and read every line of each across ALL events
+        // (~143k lines for staging event 1898: 28.5s, most of the policy load) before checking the event on the
+        // 7.7k room bookings among them. Without it the plan starts from this event's documents
+        // (document_event_id_idx, then document_line_document_id_idx): 119ms. The extra groups are harmless:
+        // share_owner is also set on parking, teaching and meal lines, but those items have no capacity (so their
+        // rows below read null) and clients read freeSharedBeds on accommodation rows only.
         ", sb as materialized (select o.item.id as sbItem, sum(greatest(least(o.item.capacity," +
         " coalesce(o.resourceConfiguration?.max - coalesce(o.resourceConfiguration?.maxReserved, 0), o.item.capacity)) - 1" +
         " - (select count(1) from DocumentLine m where m.share_mate_ownerDocumentLine=o and !m.cancelled), 0)) as freeBeds" +
-        " from DocumentLine o where o.share_owner and !o.cancelled and o.item.family.code='acco' and o.document.(!cancelled and event=$1)" +
+        " from DocumentLine o where o.share_owner and !o.cancelled and o.document.(!cancelled and event=$1)" +
         // A room allocated to an OFFLINE configuration is not on offer to the public — the regular room cards
         // count its beds as 0 (RC_AVAIL_EXPR) — so its empty bed is not offered to sharers either. A booking not
         // allocated yet still counts: it will normally land in an online room. (An invite link names its room
@@ -105,9 +112,11 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
         // accommodation row, because a sharing item often has no scheduled item of its own (staging event 1957's
         // "Sharing a room" has none): a per-item figure on its own rows never reached the booking form. It can
         // only err towards offering too little once pairings are configured, never a bed twice.
+        // No item-family filter here either, for the same reason as above: every sharing item is an accommodation
+        // item, so it would narrow nothing, yet it lets the plan start from the items rather than this event's documents.
         ", ps as materialized (select count(1) as claims" +
         " from DocumentLine l where l.item.share_mate and l.share_mate_ownerDocumentLine=null and !l.cancelled" +
-        " and l.item.family.code='acco' and l.document.(!cancelled and event=$1))" +
+        " and l.document.(!cancelled and event=$1))" +
         " select name,label,comment,site.(name,terminal,selfArranged,label),arrivalSite.(name,terminal,selfArranged,label),item.(name,label,perResourceLabel,code,temporal,family.(code,name,label,ord),capacity,share_mate,breakfastIncluded,ord),date,startTime,endTime,timeline?.(site,item,startTime,endTime),cancelled,resource,buddha.hyt" +
         // Availability: for each applicable configuration (from the rc CTE above, matched on the
         // scheduled item's site & item), LATERAL computes availability once, then distributes it
