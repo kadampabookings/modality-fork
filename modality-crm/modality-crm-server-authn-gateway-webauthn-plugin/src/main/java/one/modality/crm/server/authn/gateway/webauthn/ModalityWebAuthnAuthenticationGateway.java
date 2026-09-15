@@ -334,8 +334,12 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
                     AuthenticationParameters parameters = new AuthenticationParameters(
                         serverProperty(cfg, pending.challenge()), credentialRecord, null, true, true);
                     authenticationData = WEBAUTHN_MANAGER.verify(request, parameters);
-                } catch (RuntimeException e) {
-                    Console.log(LOG_PREFIX + "Assertion verification failed for credential row " + row.id() + ": " + e.getMessage());
+                } catch (RuntimeException | LinkageError e) {
+                    // LinkageError for the same reason as the registration site above: this is the
+                    // same webauthn4j/Jackson code path, so a classpath mismatch breaks passkey
+                    // SIGN-IN identically, and must not escape as a raw JVM message either.
+                    Console.log(LOG_PREFIX + "Assertion verification failed for credential row " + row.id()
+                                + ": " + e.getClass().getSimpleName() + ": " + e.getMessage());
                     return genericFailure();
                 }
                 // The authenticator's user handle must be the one registration stored on this row
@@ -687,8 +691,16 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
             RegistrationParameters parameters = new RegistrationParameters(
                 serverProperty(cfg, pending.challenge()), PUB_KEY_CRED_PARAMS, true, true);
             registrationData = WEBAUTHN_MANAGER.verify(request, parameters);
-        } catch (RuntimeException e) {
-            Console.log(LOG_PREFIX + "Registration verification failed: " + e.getMessage());
+        } catch (RuntimeException | LinkageError e) {
+            // LinkageError as well as RuntimeException, because a Jackson/webauthn4j version
+            // mismatch surfaces as NoSuchMethodError - an Error, NOT a RuntimeException. Uncaught,
+            // it escaped this method altogether: nothing was written under [webauthn], so the log
+            // said the ceremony had never happened, and the raw JVM message (an internal class
+            // signature) was handed straight to the browser. Production did exactly that on every
+            // passkey registration until the CBOR pin came back - see webfx.xml. Catching it here
+            // keeps a classpath fault loud in the log and generic on the wire.
+            Console.log(LOG_PREFIX + "Registration verification failed: "
+                        + e.getClass().getSimpleName() + ": " + e.getMessage());
             return registrationFailure();
         }
         AttestedCredentialData attested = registrationData.getAttestationObject() == null ? null
