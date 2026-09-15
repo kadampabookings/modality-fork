@@ -3,15 +3,16 @@ package one.modality.ecommerce.shared.pricecalculator;
 import dev.webfx.platform.util.Booleans;
 import dev.webfx.platform.util.Objects;
 import dev.webfx.platform.util.collection.Collections;
-import dev.webfx.platform.util.time.Times;
 import one.modality.base.shared.entities.Document;
 import one.modality.base.shared.entities.DocumentLine;
+import one.modality.base.shared.entities.Event;
 import one.modality.base.shared.entities.Item;
 import one.modality.base.shared.entities.Person;
 import one.modality.base.shared.entities.Rate;
 import one.modality.base.shared.entities.Site;
 import one.modality.base.shared.entities.SiteItem;
 import dev.webfx.stack.orm.entity.Entities;
+import dev.webfx.stack.orm.entity.EntityId;
 import one.modality.base.shared.entities.util.Rates;
 import one.modality.ecommerce.document.service.DocumentAggregate;
 import one.modality.ecommerce.document.service.events.registration.documentline.PriceDocumentLineEvent;
@@ -31,6 +32,9 @@ import java.util.stream.Collectors;
  */
 public final class SiteItemBill {
 
+    /** Deposit percentage when a rate leaves it unset (the default of compute_rate_min_deposit). */
+    private static final int DEFAULT_MIN_DEPOSIT_PERCENT = 25;
+
     private final SiteItem siteItem;
     private final PriceDocumentLineEvent priceDocumentLineEvent;
     private final List<AttendanceBill> attendanceBills = new ArrayList<>();
@@ -38,6 +42,10 @@ public final class SiteItemBill {
 
     private int totalPrice = -1;
     private int minDeposit = -1;
+    // Pass that set the price in the last real-total computation (true per-day, false fixed, null no
+    // rate applied), reused by the min-deposit computation once totalPassRun is set.
+    private Boolean totalPassPerDayWins;
+    private boolean totalPassRun;
 
     SiteItemBill(SiteItem siteItem, PriceDocumentLineEvent priceDocumentLineEvent) {
         this.siteItem = siteItem;
@@ -93,17 +101,37 @@ public final class SiteItemBill {
         else if (Objects.areEquals(price_discount, 100, true))
             price = 0;
         else {
-            int perDayRatesPrice = computeBlockPriceWithRates(documentBill, minDeposit, true);
-            int fixedRatesPrice = computeBlockPriceWithRates(documentBill, minDeposit, false);
-            if (perDayRatesPrice == Integer.MIN_VALUE) {
-                if (fixedRatesPrice == Integer.MIN_VALUE)
-                    price = 0;
-                else
-                    price = fixedRatesPrice;
-            } else if (fixedRatesPrice == Integer.MIN_VALUE)
-                price = perDayRatesPrice;
-            else
-                price = Math.min(perDayRatesPrice, fixedRatesPrice);
+            // The per-day and fixed passes are priced separately and one of them sets the price. The min
+            // deposit must come from that same pass: the lower of the two deposits could come from rates
+            // that did not set the price (compute_document_prices takes each deposit from the rate that
+            // priced it). The min-deposit computation reuses the pass chosen by the last real-total one,
+            // decided under the same pricing state (getRatePrice sets childRateApplied), and prices the
+            // totals itself only when no total was computed first.
+            Boolean perDayWins;
+            int perDayTotal = 0, fixedTotal = 0;
+            if (minDeposit && totalPassRun)
+                perDayWins = totalPassPerDayWins;
+            else {
+                List<Rate> perDayPicked = new ArrayList<>();
+                List<Rate> fixedPicked = new ArrayList<>();
+                perDayTotal = computeBlockPriceWithRates(documentBill, false, true, perDayPicked);
+                fixedTotal = computeBlockPriceWithRates(documentBill, false, false, fixedPicked);
+                perDayWins = perDayPassWins(perDayTotal, fixedTotal, perDayPicked, fixedPicked);
+                if (!minDeposit) {
+                    totalPassPerDayWins = perDayWins;
+                    totalPassRun = true;
+                }
+            }
+            if (perDayWins == null)
+                price = 0;
+            else if (minDeposit) {
+                // Both deposit passes run, in the original order, so the attendance prices they leave
+                // behind are the same as before.
+                int perDayDeposit = computeBlockPriceWithRates(documentBill, true, true, null);
+                int fixedDeposit = computeBlockPriceWithRates(documentBill, true, false, null);
+                price = perDayWins ? perDayDeposit : fixedDeposit;
+            } else
+                price = perDayWins ? perDayTotal : fixedTotal;
             if (price_discount != null)
                 price = price * (100 - price_discount.intValue()) / 100;
             if (price_custom != null)
@@ -153,7 +181,11 @@ public final class SiteItemBill {
         return nights;
     }
 
-    private int computeBlockPriceWithRates(DocumentBill documentBill, boolean minDeposit, boolean perDayRates) {
+    /**
+     * Prices this bill with either the per-day or the fixed rates; Integer.MIN_VALUE when none applies.
+     * When {@code pickedRatesOut} is not null, the rates chosen for the attendances are added to it.
+     */
+    private int computeBlockPriceWithRates(DocumentBill documentBill, boolean minDeposit, boolean perDayRates, List<Rate> pickedRatesOut) {
         List<AttendanceBill> bas = attendanceBills;
         int blockLength = bas.size();
         int remainingDays = blockLength;
@@ -175,18 +207,31 @@ public final class SiteItemBill {
         PolicyAggregate policyAggregate = documentAggregate.getPolicyAggregate();
         boolean inPerson = documentAggregate.getDocument().isInPerson();
         Instant creationInstant = Objects.coalesce(documentAggregate.getDocument().getCreationDate(), Instant.now());
-        ZoneId eventZoneId = documentAggregate.getEvent().getEventZoneId();
+        Event event = documentAggregate.getEvent();
+        ZoneId eventZoneId = event == null ? null : event.getEventZoneId();
         if (eventZoneId == null)
             eventZoneId = ZoneOffset.UTC;
         LocalDateTime creationDateTime = LocalDateTime.ofInstant(creationInstant, eventZoneId);
         LocalDate creationDate = creationDateTime.toLocalDate();
         boolean documentEarlyBird = Booleans.isTrue(documentAggregate.getDocument().isEarlyBird());
         List<Rate> rates = policyAggregate.filterRatesStreamOfSiteAndItem(siteItem.getSite(), siteItem.getItem(), perDayRates)
+            // Only rates compute_document_prices would consider for this booking (rate_matches_document).
+            // The policy loader is broader: it also loads a repeated event's rates and every rate on the
+            // event's own sites.
+            .filter(r -> matchesBookedEvent(r, event))
             .filter(r -> inPerson ? r.isApplicableToInPerson() : r.isApplicableToOnline())
             .filter(r -> !Booleans.isTrue(r.isEarlyBird()) || (documentEarlyBird && !documentBill.ignoreEarlyBirdRates))
             .filter(r -> Rates.isAndApplicableAtDateAndOverPeriod(r, creationDateTime, firstDay, lastDay))
-            //.filter(r -> r.getRateMatchesDocument(bill.getDocument()))
-            .collect(Collectors.toList());
+            .collect(Collectors.toCollection(ArrayList::new));
+        // Most specific first, then lower id. The loop below keeps the first of equally priced
+        // candidates, and the chosen rate also supplies the min deposit: a "Day Course" copy of a
+        // generic meal rate exists precisely to require a different deposit, so it must win its tie.
+        // Same order as the rate ORDER BY of compute_document_prices (V0092).
+        rates.sort(SiteItemBill::compareRateSpecificity);
+        // Stay length each rate's minDay is compared with: fixed for this block, so computed once per rate.
+        Map<Rate, Integer> rateBlockLengths = new IdentityHashMap<>();
+        for (Rate rate : rates)
+            rateBlockLengths.put(rate, rateBlockLength(bas, rate.getStartDate(), rate.getEndDate(), Objects.coalesce(rate.getMinDay(), 1)));
         boolean thisItemTemporal = Booleans.isTrue(siteItem.getItem().isTemporal());
         // Pre-compute attendance dates for each withItem referenced by the rates (once, before
         // the while loop). IdentityHashMap is correct here: within the same policy store, the
@@ -274,11 +319,11 @@ public final class SiteItemBill {
                     int ratePrice = getRatePrice(rate, documentAggregate) * quantity;
                     int minDay = Objects.coalesce(rate.getMinDay(), 1);
                     int maxDay = rate.isPerDay() ? 1 : Objects.coalesce(rate.getMaxDay(), 10000);
-                    // Ignoring rates whose minDay is not honored
-                    if (blockLength < minDay) {
-                        /* Commented for now in KBS3
-                        if (!rate.minDayCeiling)
-                            continue;*/
+                    // minDay, as compute_document_prices applies it: the stay is counted within the rate's
+                    // date range, and a stay shorter than minDay drops the rate when minDayCeiling is false.
+                    if (rateBlockLengths.get(rate) < minDay) {
+                        if (Boolean.FALSE.equals(rate.isMinDayCeiling()))
+                            continue;
                         // When a rate defines a new lower daily price that applies after a minimum of days (ex: 30% discount when >= 14 days),
                         // we need to ensure that people approaching that number of days (ex: 12 or 13 days)
                         // don't pay more with the previous rate than people staying that minimum of days (ex: 14 days)
@@ -289,6 +334,17 @@ public final class SiteItemBill {
                         }
                     }
                     int consumableDays = Math.min(remainingDays, maxDay);
+                    // Cap by the rate's endDate: without this a 3-day rate ending on July 26 would claim all 4
+                    // days of a July 24-27 block and win on daily price while leaving July 27 uncovered
+                    // (same as the React SiteItemBill).
+                    if (endDate != null) {
+                        int daysInRange = 0;
+                        for (int j = consumedDays; j < bas.size() && !bas.get(j).getDate().isAfter(endDate); j++)
+                            daysInRange++;
+                        consumableDays = Math.min(consumableDays, daysInRange);
+                        if (consumableDays == 0)
+                            continue;
+                    }
                     // withItem temporal overlap: per-day → cap to consecutive overlap;
                     // fixed → all-or-nothing (skip if companion doesn't cover all days).
                     if (withItem != null && thisItemTemporal && withItemTemporal) {
@@ -313,16 +369,23 @@ public final class SiteItemBill {
                     if (rate.id === 27510 && remainingDays === maxDay) // £120 rate with 22 remaining days
                         dailyPrice = ratePrice / (maxDay + 1);*/ // Changing the daily price comparison to £180 / 23 to make it the cheapest
                     PriceMemo memo = new PriceMemo(rate, dailyPrice, ratePrice, consumableDays);
+                    // Prefer the candidate covering more days, then the lower daily price compared exactly:
+                    // int daily prices can round to false ties, which the specificity order would then settle
+                    // for a dearer rate. Same rule as the React SiteItemBill: a rate covering 4 days at £21
+                    // beats one covering 3 days at £15 for a 4-day block, which would leave a day to price
+                    // with a second rate.
                     if (cheapest == null)
                         cheapest = memo;
-                    else if (dailyPrice < cheapest.dailyPrice()) {
+                    else if (consumableDays > cheapest.consumableDays() || consumableDays == cheapest.consumableDays() && isCheaperPerDay(memo, cheapest)) {
                         second = cheapest;
                         cheapest = memo;
-                    } else if (second == null || dailyPrice < second.dailyPrice())
+                    } else if (second == null || isCheaperPerDay(memo, second))
                         second = memo;
                 }
                 if (cheapest == null) // Happens when no rate is finally applicable
                     break;
+                if (pickedRatesOut != null)
+                    pickedRatesOut.add(cheapest.rate());
                 // applying the found cheapest rate on the next consumable days (applicable for this rate)
                 var remainingPrice = cheapest.price();
                 if (second == null)
@@ -338,10 +401,7 @@ public final class SiteItemBill {
                 // updating the block price
                 int deltaPrice = cheapest.price();
                 if (minDeposit) {
-                    int minDepositPercent = Objects.coalesce(cheapest.rate().getMinDeposit(), 25);
-                    LocalDate cutoffDate = cheapest.rate().getCutoffDate();
-                    if (cutoffDate != null && Times.isPastOrToday(cutoffDate))
-                        minDepositPercent = Objects.coalesce(cheapest.rate().getMinDeposit2(), 25);
+                    int minDepositPercent = rateMinDepositPercent(cheapest.rate(), LocalDate.now());
                     deltaPrice = deltaPrice * minDepositPercent / 100;
                 }
                 if (price == Integer.MIN_VALUE)
@@ -370,6 +430,126 @@ public final class SiteItemBill {
             }
         }*/
         return price;
+    }
+
+    /**
+     * Whether the per-day pass sets this bill's price rather than the fixed pass; null when neither
+     * pass found an applicable rate. The cheaper pass wins. An exact tie follows the candidate order of
+     * compute_document_prices, which keeps the first of equally priced rates: the higher price per max
+     * day first, then the more specific rate, and the per-day pass when those are equal too.
+     */
+    private static Boolean perDayPassWins(int perDayTotal, int fixedTotal, List<Rate> perDayPicked, List<Rate> fixedPicked) {
+        if (perDayTotal == Integer.MIN_VALUE && fixedTotal == Integer.MIN_VALUE)
+            return null;
+        if (fixedTotal == Integer.MIN_VALUE)
+            return true;
+        if (perDayTotal == Integer.MIN_VALUE)
+            return false;
+        if (perDayTotal != fixedTotal)
+            return perDayTotal < fixedTotal;
+        int perDayKey = maxOrderKey(perDayPicked), fixedKey = maxOrderKey(fixedPicked);
+        if (perDayKey != fixedKey)
+            return perDayKey > fixedKey;
+        return maxSpecificity(fixedPicked) <= maxSpecificity(perDayPicked);
+    }
+
+    /**
+     * Highest first ORDER BY key of compute_document_prices among a pass's rates: the price divided by
+     * the rate's max days (1 per day, maxDay or 1 when fixed), in integer division like the SQL. It
+     * reads the listed price, where the SQL uses the booker's unit price after discounts.
+     */
+    private static int maxOrderKey(List<Rate> rates) {
+        int max = Integer.MIN_VALUE;
+        for (Rate rate : rates) {
+            int days = Booleans.isTrue(rate.isPerDay()) ? 1 : Objects.coalesce(rate.getMaxDay(), 1);
+            max = Math.max(max, Objects.coalesce(rate.getPrice(), 0) / days);
+        }
+        return max;
+    }
+
+    /** Whether memo prices its days more cheaply than other, compared exactly (no int rounding). */
+    private static boolean isCheaperPerDay(PriceMemo memo, PriceMemo other) {
+        return (long) memo.price() * other.consumableDays() < (long) other.price() * memo.consumableDays();
+    }
+
+    /**
+     * Event criteria of rate_matches_document: a rate bound to an event applies only to that event, a
+     * rate bound to an event type only to events of that type (never to an event without a type).
+     * Nothing is filtered when the booked event is unknown.
+     */
+    private static boolean matchesBookedEvent(Rate rate, Event bookedEvent) {
+        if (bookedEvent == null)
+            return true;
+        // samePrimaryKey compares numeric keys by value (an Integer and a Long id can hold the same key)
+        EntityId rateEventId = rate.getEventId();
+        if (rateEventId != null && !Entities.samePrimaryKey(rateEventId, bookedEvent))
+            return false;
+        EntityId rateEventTypeId = rate.getEventTypeId();
+        return rateEventTypeId == null || Entities.samePrimaryKey(rateEventTypeId, bookedEvent.getTypeId()); // false when the event has no type
+    }
+
+    /** How specifically a rate is bound: 2 to an event, 1 to an event type, 0 generic. */
+    private static int rateSpecificity(Rate rate) {
+        if (rate.getEventId() != null)
+            return 2;
+        if (rate.getEventTypeId() != null)
+            return 1;
+        return 0;
+    }
+
+    /** Highest specificity among the rates a pass picked (0 when it picked none). */
+    private static int maxSpecificity(List<Rate> rates) {
+        int max = 0;
+        for (Rate rate : rates)
+            max = Math.max(max, rateSpecificity(rate));
+        return max;
+    }
+
+    /**
+     * Orders rate candidates for tie-breaking: the more specific rate first, then the lower id - the
+     * same keys as the rate ORDER BY of compute_document_prices (V0092). Only the order among equally
+     * priced candidates matters, since the selection loop compares prices strictly.
+     */
+    private static int compareRateSpecificity(Rate r1, Rate r2) {
+        int result = Integer.compare(rateSpecificity(r2), rateSpecificity(r1));
+        return result != 0 ? result : Long.compare(primaryKeyAsLong(r1), primaryKeyAsLong(r2));
+    }
+
+    private static long primaryKeyAsLong(Rate rate) {
+        Object primaryKey = Entities.getPrimaryKey(rate);
+        return primaryKey instanceof Number ? ((Number) primaryKey).longValue() : 0;
+    }
+
+    /**
+     * The stay length compared with a rate's minDay (rate_block_length in compute_document_prices):
+     * once the block reaches minDay, days outside the rate's [startDate, endDate] are not counted -
+     * e.g. a discount valid 3-11 August with minDay 9 ignores a free day on 2 August.
+     */
+    private static int rateBlockLength(List<AttendanceBill> bas, LocalDate startDate, LocalDate endDate, int minDay) {
+        if (bas.size() < minDay)
+            return bas.size();
+        int length = 0;
+        for (AttendanceBill ba : bas) {
+            LocalDate date = ba.getDate();
+            if ((startDate == null || !date.isBefore(startDate)) && (endDate == null || !date.isAfter(endDate)))
+                length++;
+        }
+        return length;
+    }
+
+    /**
+     * The rate's min deposit percentage on a given day, as compute_rate_min_deposit computes it: before
+     * cutoffDate minDeposit applies, then minDeposit2 until cutoffDate2, and so on up to minDeposit6; an
+     * unset cutoff date ends the sequence. An unset percentage falls back to the default. A negative
+     * value, which compute_document_prices reads as a fixed amount, is not supported here.
+     */
+    private static int rateMinDepositPercent(Rate rate, LocalDate date) {
+        LocalDate[] cutoffDates = { rate.getCutoffDate(), rate.getCutoffDate2(), rate.getCutoffDate3(), rate.getCutoffDate4(), rate.getCutoffDate5() };
+        Integer[] minDeposits = { rate.getMinDeposit(), rate.getMinDeposit2(), rate.getMinDeposit3(), rate.getMinDeposit4(), rate.getMinDeposit5(), rate.getMinDeposit6() };
+        int tier = 0;
+        while (tier < cutoffDates.length && cutoffDates[tier] != null && !date.isBefore(cutoffDates[tier]))
+            tier++;
+        return Objects.coalesce(minDeposits[tier], DEFAULT_MIN_DEPOSIT_PERCENT);
     }
 
     /** Collects all attendance dates for the given item across all site/item bills in the document. */

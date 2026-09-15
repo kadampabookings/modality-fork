@@ -286,6 +286,9 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                     // rate over an equally priced generic one (same rule as V0092). `.id` emits the
                     // FK column with no join; a bare FK would join in Event/EventType display fields.
                     ",event.id,eventType.id" +
+                    // Min-stay and deposit-tier fields: the client calculators apply them as
+                    // compute_document_prices does, so the booking form shows the stored price and deposit
+                    ",minDay,maxDay,minDayCeiling,cutoffDate2,minDeposit3,cutoffDate3,minDeposit4,cutoffDate4,minDeposit5,cutoffDate5,minDeposit6" +
                     ",age1_max,age1_price,age1_discount,age2_max,age2_price,age2_discount" +
                     ",resident_price,resident_discount,resident2_price,resident2_discount" +
                     " from Rate r, e where (" +
