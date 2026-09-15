@@ -1670,6 +1670,7 @@
     },
     "nationality": "string",
     "neverBooked": "boolean",
+    "occasional": "boolean",
     "ordained": "boolean",
     "organization": "Organization",
     "organizationDeprecatedDate": "Temporal.PlainDate",
