@@ -1,5 +1,8 @@
 // File managed by WebFX (DO NOT EDIT MANUALLY)
 
+/**
+ * Server-side TOTP (RFC 6238) second-factor authentication gateway.
+ */
 module modality.crm.server.authn.gateway.totp.plugin {
 
     // Direct dependencies modules

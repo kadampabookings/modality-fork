@@ -1,5 +1,8 @@
 // File managed by WebFX (DO NOT EDIT MANUALLY)
 
+/**
+ * Server-side passkey (WebAuthn) authentication gateway.
+ */
 module modality.crm.server.authn.gateway.webauthn.plugin {
 
     // Direct dependencies modules

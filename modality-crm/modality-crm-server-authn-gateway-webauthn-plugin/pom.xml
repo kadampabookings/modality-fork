@@ -13,22 +13,9 @@
 
     <artifactId>modality-crm-server-authn-gateway-webauthn-plugin</artifactId>
 
+    <description>Server-side passkey (WebAuthn) authentication gateway.</description>
+
     <dependencies>
-
-        <dependency>
-            <groupId>com.webauthn4j</groupId>
-            <artifactId>webauthn4j-core</artifactId>
-            <version>0.29.1.RELEASE</version>
-        </dependency>
-
-        <!-- Pinned to the jackson version the server actually runs (see webfx.xml for why):
-             webauthn4j asks for 2.19.0 while databind resolves to 2.17.2 via a nearer path,
-             and a 2.19 CBOR module on a 2.17 core breaks passkey registration at runtime. -->
-        <dependency>
-            <groupId>com.fasterxml.jackson.dataformat</groupId>
-            <artifactId>jackson-dataformat-cbor</artifactId>
-            <version>2.17.2</version>
-        </dependency>
 
         <dependency>
             <groupId>one.modality</groupId>
@@ -46,6 +33,12 @@
             <groupId>one.modality</groupId>
             <artifactId>modality-crm-shared-authn</artifactId>
             <version>1.0.0-SNAPSHOT</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.webauthn4j</groupId>
+            <artifactId>webauthn4j-core</artifactId>
+            <version>0.29.1.RELEASE</version>
         </dependency>
 
         <dependency>
