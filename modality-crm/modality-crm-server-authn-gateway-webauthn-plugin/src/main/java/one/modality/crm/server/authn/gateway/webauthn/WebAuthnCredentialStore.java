@@ -1,6 +1,7 @@
 package one.modality.crm.server.authn.gateway.webauthn;
 
 import dev.webfx.platform.async.Future;
+import dev.webfx.platform.util.Numbers;
 import dev.webfx.stack.db.query.QueryArgument;
 import dev.webfx.stack.db.query.QueryResult;
 import dev.webfx.stack.db.query.QueryService;
@@ -36,6 +37,56 @@ final class WebAuthnCredentialStore {
     static final String STATUS_PENDING = "PENDING";
     static final String STATUS_APPROVED = "APPROVED";
     static final String STATUS_REJECTED = "REJECTED";
+
+    /**
+     * Whether a credential with this status can complete a BACK-OFFICE assertion <b>today</b> — the
+     * one place the back-office APPROVAL rule is written, read by the gateway's approval gate and by
+     * {@link PasskeySecondFactorVerifier}'s enrolment answer.
+     *
+     * <p>({@link #STATUS_REJECTED} is also refused on its own line in the assertion path, before this
+     * is consulted, because a rejection must refuse a FRONT-office assertion too and this predicate
+     * answers only the back-office question. So the REJECTED half is written twice on purpose — once
+     * here, where it keeps the two back-office callers in step, and once there, where it covers the
+     * origin this predicate says nothing about.)
+     *
+     * <p>It exists because those two must never disagree. "Enrolled in a passkey" is what decides
+     * whether a password login is held for a second step and what the pending marker advertises; if
+     * it said yes where the assertion path says no, the owner would be asked for a factor the server
+     * refuses — locked out — and if it said no where the assertion path says yes, the account would
+     * be quietly downgraded to password-only. Two copies of the rule is two answers waiting to drift
+     * apart, so there is one.
+     *
+     * <p>The rule, and it depends on the switch the gateway holds:
+     * <ul>
+     * <li>{@link #STATUS_REJECTED} — never, whatever the switch says. A rejection is a decision on
+     *     record, not a queue state, and it signs in nowhere.</li>
+     * <li>approval required ({@code WEBAUTHN_BACKOFFICE_APPROVAL} on) — only
+     *     {@link #STATUS_APPROVED}: a PENDING row is waiting for a super administrator and opens
+     *     nothing until it has one.</li>
+     * <li>approval off (phase 1) — any row that is not REJECTED, PENDING included: with the gate
+     *     dormant the account's own {@code backoffice} flag is what decides who enters.</li>
+     * </ul>
+     *
+     * <p>An unrecognised status follows the same two lines rather than a rule of its own, so the two
+     * callers stay identical for a value neither expects (the V0089 CHECK constraint makes one
+     * unreachable from the database anyway).
+     */
+    static boolean opensBackofficeLogin(String status, boolean approvalRequired) {
+        if (STATUS_REJECTED.equals(status))
+            return false;
+        return !approvalRequired || STATUS_APPROVED.equals(status);
+    }
+
+    /**
+     * An id normalised to Long for raw-SQL binding, mirroring {@code TotpCredentialStore.normaliseId}:
+     * ids deserialized from a session token can come back as Byte/Short for small values, which DQL
+     * coerces but the pg driver's raw Tuple binding refuses. Also what makes two ids from two
+     * different sources — a raw-SQL row and an entity query — comparable with {@code equals}.
+     */
+    static Object normaliseId(Object id) {
+        Long normalised = Numbers.toLong(id);
+        return normalised != null ? normalised : id;
+    }
 
     /** One credential row as needed at assertion time (lookup by credential id). */
     record CredentialRow(long id, Object accountId, String publicKeyCose, long signCount, String userHandle, String status) {
@@ -117,18 +168,30 @@ final class WebAuthnCredentialStore {
     // The decision REVISITED — the one thing DECIDE_PENDING_SQL cannot do. It only ever lands on a
     // PENDING row, so an APPROVED passkey (approved at the queue, or approved from birth because the
     // gate was off) could never be taken back: a lost or shared authenticator stayed trusted for as
-    // long as the row existed. This moves APPROVED ($4) to REJECTED ($1) and records who decided, so
-    // the transition is exactly the reverse of an approval and nothing else: it cannot resurrect a
-    // REJECTED row, and it cannot pre-empt a PENDING one — that decision belongs to the queue.
-    // The approver's own account ($5) is excluded for the same reason as above: a super
+    // long as the row existed. This moves any row that is not ALREADY REJECTED to REJECTED ($1) and
+    // records who decided.
+    //
+    // WIDENED from "status = APPROVED" to "status <> REJECTED", and the reason is
+    // opensBackofficeLogin above: with WEBAUTHN_BACKOFFICE_APPROVAL off — the shipped default — a
+    // PENDING row opens a back-office login exactly as an APPROVED one does. An APPROVED-only
+    // withdrawal therefore could not clear every factor from an account that holds one, which is
+    // what a super administrator rescuing a locked-out member of staff has to be able to do. It is
+    // also the only way to decide a PENDING row of an account that is no longer a live back-office
+    // one: DECIDE_PENDING_SQL's EXISTS clause refuses those, so until now such a row could be
+    // decided by nothing at all and sprang back to life the day the account was re-promoted.
+    // What the widening does NOT do is matter: the target status is REJECTED and only REJECTED, so
+    // this can never approve anything, never resurrect a rejection (a REJECTED row matches no row
+    // here and the caller reads that as a refusal), and never pre-empt an APPROVAL — the queue keeps
+    // that decision to itself.
+    // The approver's own account ($4) is excluded for the same reason as above: a super
     // administrator must not rule on a credential enrolled behind their own password.
     // NO live-back-office-account EXISTS clause, unlike DECIDE_PENDING_SQL, and the asymmetry is the
     // point: that clause is there to stop an APPROVAL being banked against a back-office grant that
     // has not happened yet, while withdrawing trust from an account that has since been disabled or
     // demoted is precisely when a revocation is wanted.
-    private static final String REVOKE_APPROVED_SQL =
+    private static final String REVOKE_SQL =
         "UPDATE webauthn_credential SET status = $1, decided_by_person_id = $2, decided_at = now()" +
-        " WHERE id = $3 AND status = $4 AND frontend_account_id <> $5" +
+        " WHERE id = $3 AND status <> $1 AND frontend_account_id <> $4" +
         " returning id";
 
     /** Every passkey of one account, oldest first — feeds both the management list and excludeCredentials. */
@@ -225,16 +288,21 @@ final class WebAuthnCredentialStore {
     }
 
     /**
-     * Withdraws an approved credential — APPROVED → REJECTED, with the decision recorded; resolves
-     * to whether a row actually changed (false when it was not approved in the first place, when it
-     * no longer exists, or when it belongs to the approver's own account).
+     * Withdraws a credential — anything not already REJECTED becomes REJECTED, with the decision
+     * recorded; resolves to whether a row actually changed (false when it was already rejected, when
+     * it no longer exists, or when it belongs to the approver's own account).
+     *
+     * <p>PENDING counts as something to withdraw, not only APPROVED: see {@link #REVOKE_SQL} and
+     * {@link #opensBackofficeLogin} — while the approval switch is off a PENDING row signs its owner
+     * in, so leaving it alone would leave a usable factor behind on an account a super administrator
+     * was clearing.
      *
      * <p>The row is kept rather than deleted, as a rejection at the queue is: its owner sees a
      * decision instead of a passkey that silently vanished, and cannot clear it by removing the row
      * themselves (the owner's delete refuses a REJECTED one).
      */
-    Future<Boolean> revokeApproved(long id, Object deciderPersonId, Object deciderAccountId) {
-        return executeRawSubmit(REVOKE_APPROVED_SQL, STATUS_REJECTED, deciderPersonId, id, STATUS_APPROVED, deciderAccountId)
+    Future<Boolean> revoke(long id, Object deciderPersonId, Object deciderAccountId) {
+        return executeRawSubmit(REVOKE_SQL, STATUS_REJECTED, deciderPersonId, id, deciderAccountId)
             .map(WebAuthnCredentialStore::returnedARow);
     }
 
