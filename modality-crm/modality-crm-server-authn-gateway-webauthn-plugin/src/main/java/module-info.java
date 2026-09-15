@@ -6,6 +6,7 @@
 module modality.crm.server.authn.gateway.webauthn.plugin {
 
     // Direct dependencies modules
+    requires com.fasterxml.jackson.dataformat.cbor;
     requires com.webauthn4j.core;
     requires modality.base.shared.entities;
     requires modality.crm.server.authn.gateway.shared;

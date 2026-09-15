@@ -8,7 +8,28 @@
     </exported-packages>
 
     <dependencies>
-        <used-by-source-modules/>
+        <used-by-source-modules>
+            <!-- webauthn4j-core's module-info declares `requires transitive
+                 com.fasterxml.jackson.dataformat.cbor`, so every module that requires
+                 com.webauthn4j.core needs CBOR resolvable on the COMPILE module path - even though
+                 nothing here imports the package, which is why webfx's source scan cannot see it.
+                 <undetected-module> is exactly that case, and it emits a compile-scope dependency;
+                 <plugin-module> would not, because the CLI hardcodes it to `runtime` and javac then
+                 fails the module graph with "module not found:
+                 com.fasterxml.jackson.dataformat.cbor".
+
+                 Declaring it here also makes it a depth-1 dependency, which is the point: webauthn4j
+                 0.29.1 asks for CBOR 2.19.0 while jackson-core/databind resolve to 2.17.2 by a
+                 nearer path, and Jackson does not support mixing minor versions across its modules.
+                 CBOR decoding is the passkey registration path, so the mismatch surfaces as a
+                 runtime NoSuchMethodError on the first registration - which is what reached
+                 production. Without this line `webfx update` prunes the <library> below as unused
+                 (commit 22491ce73 did exactly that) and the pin silently disappears.
+
+                 If the server's jackson version moves, move the <library> version with it - check
+                 with `mvn dependency:tree -pl kbs3/kbs-server-application-vertx | grep jackson`. -->
+            <undetected-module>com.fasterxml.jackson.dataformat.cbor</undetected-module>
+        </used-by-source-modules>
     </dependencies>
 
     <providers>
