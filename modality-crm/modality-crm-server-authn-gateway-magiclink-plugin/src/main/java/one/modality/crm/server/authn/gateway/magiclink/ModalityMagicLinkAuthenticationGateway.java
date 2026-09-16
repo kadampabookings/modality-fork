@@ -350,7 +350,7 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
                                 agentPrincipal.getUserPersonId(), VIEW_AS_CUSTOMER_OPERATION_CODE));
                             return Future.failedFuture("[%s] You are not permitted to open a support view".formatted(ModalityAuthenticationI18nKeys.SupportViewNotPermittedError));
                         }
-                        return loadSupportViewTarget(targetPersonId, entityStore)
+                        return loadSupportViewTarget(targetPersonId, agentEmail, entityStore)
                             .compose(targetUsername -> MagicLinkService.createSupportViewLink(
                                     targetUsername,
                                     agentUsername,
@@ -374,30 +374,100 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
     /**
      * Resolves the account a support view may be opened on, or fails.
      *
-     * <p>Refusing back-office accounts is the important one. A support view is read-only, but the
-     * account it opens is also the account whose authorizations the session inherits — so allowing
-     * a staff account as the target would let a junior member borrow a senior member's grants. The
-     * mechanism is for looking at customers.
+     * <p>A back-office account is a target for a super admin and nobody else, and the bar is that
+     * high for a concrete reason rather than a cautious one. The session's authorizations are
+     * computed from the TARGET's email: {@code ModalityAuthorizationServerServiceProvider}
+     * resolves every other grant against the session's {@code backoffice} flag, but its
+     * super-admin branch is keyed on the email alone and REPLACES the rest with
+     * {@code operation:*} + {@code route:*}. So a support view aimed at a super admin hands the
+     * agent the full grant set, front office or not. {@code ViewAsCustomer} is delegable to
+     * roles; super-admin membership is not (see {@link #isSuperAdmin}), which makes it the only
+     * safe key for the caller — the same one {@link #requestBackOfficeView} uses, and safe for the
+     * reason given there: a super admin holds every grant already, so there is nothing left to
+     * escalate to.
      *
+     * <p>Be precise about what this closes, because the two keys are not the same key. The check
+     * below is on the TARGET's {@code FrontendAccount.backoffice} flag, while the wildcard grant
+     * above is on the target's membership of {@code authorization_super_admin}. Nothing in the
+     * schema ties one to the other, so a super admin whose account is NOT flagged remains openable
+     * by any {@code ViewAsCustomer} holder, exactly as before this method learned to say yes. That
+     * gap predates this rule and is not narrowed by it; closing it would mean keying on the
+     * target's membership as well as on the flag, at the cost of a super-admin lookup on the
+     * ordinary customer path too. Left as it stands deliberately, and recorded here so the next
+     * reader does not mistake the flag check for a membership check.
+     *
+     * <p>Do not relax this on the grounds that the {@code ViewAsCustomer} operation row is never
+     * seeded. That row is created by hand per environment, so it is a deployment fact and not an
+     * invariant of this code; an environment that has seeded it would get the escalation above
+     * the moment this check went unconditional.
+     *
+     * <p>The refusal keeps {@code SupportViewInvalidTargetError} rather than the not-permitted
+     * key: the caller may well hold {@code ViewAsCustomer} and be perfectly entitled to open
+     * customers, so "you do not have permission to view customer accounts" would be a lie. It is
+     * this account that cannot be opened by them, which is what the invalid-target message says.
+     *
+     * <p>This replaced a flat refusal of back-office accounts. Note what that flat rule was also
+     * silently providing, and what now has to stand on its own: the SUPPORT_VIEW / BACKOFFICE_VIEW
+     * separation in {@code ModalityPasswordAuthenticationGateway.queryModalityUserPerson} used to
+     * have the {@code backoffice} column as a second line of defence, because a front-office
+     * target could never hold the flag. It can now, so that separation rests on the live
+     * {@code magic_link} row's type alone — see the comment there.
+     *
+     * @param agentEmail the caller's {@code Person.email}, which is what super-admin membership is
+     *                   keyed on (never the account username — see {@link #hasViewAsCustomerPermission})
      * @return the target account's username
      */
-    private Future<String> loadSupportViewTarget(Object targetPersonId, EntityStore entityStore) {
+    private Future<String> loadSupportViewTarget(Object targetPersonId, String agentEmail, EntityStore entityStore) {
         return entityStore.<Person>executeQuery(
                 "select frontendAccount.(username, backoffice, disabled), removed from Person where id=$1 limit 1", targetPersonId)
             .map(Collections::first)
             .compose(person -> {
                 FrontendAccount account = person == null ? null : person.getFrontendAccount();
                 if (account == null)
-                    return Future.failedFuture("[%s] This person has no front-office account".formatted(ModalityAuthenticationI18nKeys.SupportViewInvalidTargetError));
+                    return refuseSupportViewTarget(targetPersonId, "person has no front-office account",
+                        "[%s] This person has no front-office account".formatted(ModalityAuthenticationI18nKeys.SupportViewInvalidTargetError));
                 if (Boolean.TRUE.equals(person.isRemoved()) || Boolean.TRUE.equals(account.isDisabled()))
-                    return Future.failedFuture("[%s] This account is disabled".formatted(ModalityAuthenticationI18nKeys.SupportViewInvalidTargetError));
-                if (Boolean.TRUE.equals(account.isBackoffice()))
-                    return Future.failedFuture("[%s] Back-office accounts cannot be opened in support view".formatted(ModalityAuthenticationI18nKeys.SupportViewInvalidTargetError));
+                    return refuseSupportViewTarget(targetPersonId, "person removed or account disabled",
+                        "[%s] This account is disabled".formatted(ModalityAuthenticationI18nKeys.SupportViewInvalidTargetError));
                 String username = account.getUsername();
+                // Ahead of the back-office branch, where it used to sit behind it: a nameless
+                // account is refused either way, and this spares the extra query below.
                 if (Strings.isEmpty(username))
-                    return Future.failedFuture("[%s] This account has no username".formatted(ModalityAuthenticationI18nKeys.SupportViewInvalidTargetError));
-                return Future.succeededFuture(username);
+                    return refuseSupportViewTarget(targetPersonId, "account has no username",
+                        "[%s] This account has no username".formatted(ModalityAuthenticationI18nKeys.SupportViewInvalidTargetError));
+                if (!Boolean.TRUE.equals(account.isBackoffice()))
+                    return Future.succeededFuture(username);
+                // Only reached for a staff account — 28 of them on production against ~49k accounts —
+                // so the ordinary customer path costs exactly what it did before.
+                return isSuperAdmin(agentEmail, entityStore)
+                    .compose(superAdmin -> {
+                        if (!Boolean.TRUE.equals(superAdmin))
+                            return refuseSupportViewTarget(targetPersonId, "back-office target, caller is not a super admin",
+                                "[%s] Only a super admin can open a back-office account in support view".formatted(ModalityAuthenticationI18nKeys.SupportViewInvalidTargetError));
+                        // Worth being able to find afterwards: one member of staff looked at another
+                        // member of staff's front office, rather than at a customer's.
+                        Console.log("🔎 Support view target is a back-office account: person %s (caller is a super admin)".formatted(targetPersonId));
+                        return Future.succeededFuture(username);
+                    });
             });
+    }
+
+    /**
+     * Refuses a support-view target, saying in the log which rule fired.
+     *
+     * <p>A target refusal used to log nothing at all. Every one of them reaches the agent as the
+     * same single sentence ("This account cannot be opened in support view"), so the one fact an
+     * operator needs — WHICH rule fired — was the one fact recorded nowhere, and answering it
+     * meant reading this method.
+     *
+     * <p>Person ids, not emails, and no username: these lines land in a rolling log file that
+     * ships to aggregation and backups, which neither the anonymiser nor the erasure tooling can
+     * reach. Same discipline as {@link #requestSupportView}; the durable audit record stays the
+     * {@code magic_link} row, inside the database, where both tools do reach it.
+     */
+    private static Future<String> refuseSupportViewTarget(Object targetPersonId, String reason, String failureMessage) {
+        Console.log("🚫 Support view refused: target person %s — %s".formatted(targetPersonId, reason));
+        return Future.failedFuture(failureMessage);
     }
 
     /**
@@ -494,8 +564,8 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
                     //             (requestSupportView), so this never granted anything it should not
                     //             have -- it misattributed it, which is the failure this mechanism
                     //             exists to prevent.
-                    entityStore.<Person>executeQuery("select frontendAccount.id from Person p where lower(frontendAccount.username)=lower($1) order by p.removed, p.owner desc, p.id limit 1", targetUsername),
-                    entityStore.<Person>executeQuery("select id from Person p where lower(frontendAccount.username)=lower($1) order by p.removed, p.owner desc, p.id limit 1", agentUsername)
+                    entityStore.<Person>executeQuery("select frontendAccount.(id, backoffice, disabled), removed from Person p where lower(frontendAccount.username)=lower($1) order by p.removed, p.owner desc, p.id limit 1", targetUsername),
+                    entityStore.<Person>executeQuery("select id, email from Person p where lower(frontendAccount.username)=lower($1) order by p.removed, p.owner desc, p.id limit 1", agentUsername)
                 ).compose(compositeFuture -> {
                     EntityList<Person> targets = compositeFuture.resultAt(0);
                     EntityList<Person> agents = compositeFuture.resultAt(1);
@@ -503,14 +573,36 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
                     Person agentPerson = Collections.first(agents);
                     if (targetPerson == null || agentPerson == null)
                         return Future.failedFuture("[%s] Invalid support view pass".formatted(ModalityAuthenticationI18nKeys.SupportViewLinkInvalidError));
-                    Object accountId = Entities.getPrimaryKey(targetPerson.getForeignEntityId("frontendAccount"));
-                    ModalityUserPrincipal userId = new ModalityUserPrincipal(
-                        targetPerson.getPrimaryKey(), accountId, agentPerson.getPrimaryKey());
-                    Console.log("🔎 Support view opened: person %s → person %s".formatted(
-                        agentPerson.getPrimaryKey(), targetPerson.getPrimaryKey()));
-                    return AuthenticatedState.createFor(userId, backofficeSession)
-                        .compose(authenticatedState -> PushServerService.pushState(authenticatedState, usageRunId))
-                        .map(ignored -> Strings.toSafeString(magicLink.getRequestedPath()));
+                    // Re-vet what was vetted at mint time, as the back-office flavour already does:
+                    // the two minutes between mint and redeem are exactly when an admin revoking
+                    // someone's access expects it to take effect. That matters more now that a
+                    // back-office target is legal, because the rule it has to satisfy depends on
+                    // WHO is looking: a pass minted by a mere ViewAsCustomer holder onto an ordinary
+                    // customer must not open a session just because the toggle on that same screen
+                    // granted the customer back-office access in between.
+                    FrontendAccount targetAccount = targetPerson.getFrontendAccount();
+                    if (targetAccount == null
+                        || Boolean.TRUE.equals(targetPerson.isRemoved())
+                        || Boolean.TRUE.equals(targetAccount.isDisabled())) {
+                        Console.log("🚫 Support view pass refused at redeem: target account no longer eligible (magicLinkId=%s)".formatted(magicLink.getPrimaryKey()));
+                        return Future.failedFuture("[%s] Invalid support view pass".formatted(ModalityAuthenticationI18nKeys.SupportViewLinkInvalidError));
+                    }
+                    Future<Boolean> targetStillAllowed = Boolean.TRUE.equals(targetAccount.isBackoffice())
+                        ? isSuperAdmin(agentPerson.getEmail(), entityStore) // the mint-time rule, re-asked
+                        : Future.succeededFuture(true);
+                    return targetStillAllowed.compose(allowed -> {
+                        if (!Boolean.TRUE.equals(allowed)) {
+                            Console.log("🚫 Support view pass refused at redeem: target became a back-office account and the agent is not a super admin (magicLinkId=%s)".formatted(magicLink.getPrimaryKey()));
+                            return Future.failedFuture("[%s] Invalid support view pass".formatted(ModalityAuthenticationI18nKeys.SupportViewLinkInvalidError));
+                        }
+                        ModalityUserPrincipal userId = new ModalityUserPrincipal(
+                            targetPerson.getPrimaryKey(), targetAccount.getPrimaryKey(), agentPerson.getPrimaryKey());
+                        Console.log("🔎 Support view opened: person %s → person %s".formatted(
+                            agentPerson.getPrimaryKey(), targetPerson.getPrimaryKey()));
+                        return AuthenticatedState.createFor(userId, backofficeSession)
+                            .compose(authenticatedState -> PushServerService.pushState(authenticatedState, usageRunId))
+                            .map(ignored -> Strings.toSafeString(magicLink.getRequestedPath()));
+                    });
                 });
             });
     }
@@ -591,11 +683,13 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
     /**
      * Resolves the account a back-office view may be opened on, or fails.
      *
-     * <p>The inversion of {@link #loadSupportViewTarget}: the target MUST have back-office access,
-     * because "see what this staff member sees" is meaningless for an account the back office would
-     * refuse to sign in anyway (the login and re-verification queries both filter on the
-     * {@code backoffice} flag). Disabled accounts and removed persons are refused for the same
-     * reason as the front-office flavour: a pass onto a dead account is only ever a mistake.
+     * <p>Stricter than {@link #loadSupportViewTarget} on the same flag, and no longer its mirror:
+     * there, a back-office account is one permitted kind of target; here it is the ONLY kind. The
+     * target MUST have back-office access, because "see what this staff member sees" is meaningless
+     * for an account the back office would refuse to sign in anyway (the login and re-verification
+     * queries both filter on the {@code backoffice} flag). Disabled accounts and removed persons
+     * are refused for the same reason as the front-office flavour: a pass onto a dead account is
+     * only ever a mistake.
      *
      * @return the target account's username
      */
