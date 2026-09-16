@@ -534,22 +534,31 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
                 // live magic_link row's type is the only separator, so the context the session
                 // presents under picks the type the row must have. That yields mutual exclusion in
                 // both directions: a front-office pass presented under the back-office flag finds
-                // no live BACKOFFICE_VIEW row and dies here (it also fails the backoffice filter in
-                // the person query above, since front-office targets never hold the flag), and a
-                // back-office pass presented without the flag finds no live SUPPORT_VIEW row.
+                // no live BACKOFFICE_VIEW row and dies here, and a back-office pass presented
+                // without the flag finds no live SUPPORT_VIEW row.
                 // This replaced the earlier flat refusal of support views in the back office, which
                 // predated the BACKOFFICE_VIEW flavour: a support view is no longer only a
                 // front-office affordance, but each pass still opens exactly the door it was
                 // minted for.
                 //
-                // Known residual, accepted: the old refusal was unconditional, this one depends on
-                // DB state. If the SAME (target, agent) pair holds live rows of BOTH flavours in
-                // one 30-minute window — the target's backoffice flag granted mid-window and the
-                // same super admin minting both passes — a tampered front-office session claiming
-                // the backoffice flag could ride the BO row's liveness. No privilege is gained
-                // (the agent already holds every grant; writes stay blocked), and closing it would
-                // need the principal to carry its flavour, which the identity-binding token will
-                // eventually provide.
+                // The row type is now the ONLY separator, where it used to have the backoffice
+                // column behind it: this comment said a front-office pass under the back-office
+                // flag "also fails the backoffice filter in the person query above, since
+                // front-office targets never hold the flag". They can hold it now — a super admin
+                // may open a staff account's front office (loadSupportViewTarget in the magic-link
+                // gateway), so that second line of defence is gone and only the type check stands.
+                //
+                // Known residual, accepted, and wider than it was: the old refusal was
+                // unconditional, this one depends on DB state. If the SAME (target, agent) pair
+                // holds live rows of BOTH flavours in one 30-minute window — previously that
+                // needed the target's backoffice flag granted mid-window, now it needs only the
+                // same super admin to mint both passes — a tampered front-office session claiming
+                // the backoffice flag could ride the BO row's liveness. Still no privilege gained,
+                // and for a sharper reason than before: the only caller who can reach this is a
+                // super admin, who can mint a back-office view openly anyway (and writes stay
+                // blocked either way). Closing it would need the principal to carry its flavour,
+                // which the identity-binding token will eventually provide — milestone M1 of
+                // docs/security/backoffice-second-factor-totp-design.md.
                 return checkSupportViewStillLive(modalityUserPrincipal,
                         isBackofficeAuthentication ? MagicLinkType.BACKOFFICE_VIEW : MagicLinkType.SUPPORT_VIEW)
                     .map(ignored -> userPerson);
