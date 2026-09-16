@@ -36,6 +36,7 @@ public interface Person extends Entity, EntityHasPersonalDetails, EntityHasEvent
     String longitude = "longitude";
     String removed = "removed";
     String neverBooked = "neverBooked";
+    String occasional = "occasional";
     String organizationName = "organizationName";
     String nationality = "nationality";
     String passport = "passport";
@@ -292,6 +293,16 @@ public interface Person extends Entity, EntityHasPersonalDetails, EntityHasEvent
 
     default Boolean isNeverBooked() {
         return getBooleanFieldValue(neverBooked);
+    }
+
+    // Occasional flag (V0094): booked for without being kept as a member, so the member pickers hide
+    // them and /members groups them apart. Not a soft delete — see removed.
+    default void setOccasional(Boolean value) {
+        setFieldValue(occasional, value);
+    }
+
+    default Boolean isOccasional() {
+        return getBooleanFieldValue(occasional);
     }
 
     // Organization name

@@ -1,6 +1,8 @@
 package one.modality.base.shared.entities;
 
 import one.modality.base.shared.entities.markers.EntityHasArrivalSiteAndItem;
+import one.modality.base.shared.entities.markers.EntityHasEvent;
+import one.modality.base.shared.entities.markers.EntityHasEventType;
 import one.modality.base.shared.entities.markers.EntityHasIcon;
 import one.modality.base.shared.entities.markers.EntityHasSiteAndItem;
 
@@ -12,7 +14,9 @@ import java.time.LocalDate;
 public interface Rate extends
     EntityHasIcon,
     EntityHasSiteAndItem,
-    EntityHasArrivalSiteAndItem {
+    EntityHasArrivalSiteAndItem,
+    EntityHasEvent,
+    EntityHasEventType {
 
     String startDate = "startDate";
     String endDate = "endDate";
@@ -20,6 +24,7 @@ public interface Rate extends
     String offDate = "offDate";
     String minDay = "minDay";
     String maxDay = "maxDay";
+    String minDayCeiling = "minDayCeiling";
     String perDay = "perDay";
     String perPerson = "perPerson";
     String applicableToInPerson = "applicableToInPerson";
@@ -29,6 +34,14 @@ public interface Rate extends
     String minDeposit = "minDeposit";
     String cutoffDate = "cutoffDate";
     String minDeposit2 = "minDeposit2";
+    String cutoffDate2 = "cutoffDate2";
+    String minDeposit3 = "minDeposit3";
+    String cutoffDate3 = "cutoffDate3";
+    String minDeposit4 = "minDeposit4";
+    String cutoffDate4 = "cutoffDate4";
+    String minDeposit5 = "minDeposit5";
+    String cutoffDate5 = "cutoffDate5";
+    String minDeposit6 = "minDeposit6";
     String age1_max = "age1_max";
     String age1_price = "age1_price";
     String age1_discount = "age1_discount";
@@ -107,6 +120,18 @@ public interface Rate extends
         return getIntegerFieldValue(maxDay);
     }
 
+    default void setMinDayCeiling(Boolean value) {
+        setFieldValue(minDayCeiling, value);
+    }
+
+    /**
+     * For a stay shorter than minDay: false drops the rate; true (or null, as compute_document_prices
+     * reads it) keeps it, a per-day rate then becoming a fixed price capped at minDay days.
+     */
+    default Boolean isMinDayCeiling() {
+        return getBooleanFieldValue(minDayCeiling);
+    }
+
     default void setPerDay(Boolean value) {
         setFieldValue(perDay, value);
     }
@@ -178,6 +203,70 @@ public interface Rate extends
 
     default Integer getMinDeposit2() {
         return getIntegerFieldValue(minDeposit2);
+    }
+
+    default void setCutoffDate2(Object value) {
+        setFieldValue(cutoffDate2, value);
+    }
+
+    default LocalDate getCutoffDate2() {
+        return getLocalDateFieldValue(cutoffDate2);
+    }
+
+    default void setMinDeposit3(Object value) {
+        setFieldValue(minDeposit3, value);
+    }
+
+    default Integer getMinDeposit3() {
+        return getIntegerFieldValue(minDeposit3);
+    }
+
+    default void setCutoffDate3(Object value) {
+        setFieldValue(cutoffDate3, value);
+    }
+
+    default LocalDate getCutoffDate3() {
+        return getLocalDateFieldValue(cutoffDate3);
+    }
+
+    default void setMinDeposit4(Object value) {
+        setFieldValue(minDeposit4, value);
+    }
+
+    default Integer getMinDeposit4() {
+        return getIntegerFieldValue(minDeposit4);
+    }
+
+    default void setCutoffDate4(Object value) {
+        setFieldValue(cutoffDate4, value);
+    }
+
+    default LocalDate getCutoffDate4() {
+        return getLocalDateFieldValue(cutoffDate4);
+    }
+
+    default void setMinDeposit5(Object value) {
+        setFieldValue(minDeposit5, value);
+    }
+
+    default Integer getMinDeposit5() {
+        return getIntegerFieldValue(minDeposit5);
+    }
+
+    default void setCutoffDate5(Object value) {
+        setFieldValue(cutoffDate5, value);
+    }
+
+    default LocalDate getCutoffDate5() {
+        return getLocalDateFieldValue(cutoffDate5);
+    }
+
+    default void setMinDeposit6(Object value) {
+        setFieldValue(minDeposit6, value);
+    }
+
+    default Integer getMinDeposit6() {
+        return getIntegerFieldValue(minDeposit6);
     }
 
     default void setAge1Max(Integer value) {
