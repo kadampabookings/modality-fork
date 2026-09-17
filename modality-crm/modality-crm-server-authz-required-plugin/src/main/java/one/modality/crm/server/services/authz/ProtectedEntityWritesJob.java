@@ -149,9 +149,15 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
             preFilterNames.toArray(String[]::new));
         ProtectedEntityWriteRegistry.registerWriteObserver(ProtectedEntityWritesJob::onProtectedWriteSucceeded);
         ProtectedEntityWriteRegistry.registerRawStatementObserver(ProtectedEntityWritesJob::onNonDqlSubmit);
+        // Step 0 of the front-office write plan: learn what the clients write before writing the rule
+        // that refuses the rest. Registered here rather than as its own ApplicationJob so that the
+        // module's generated service declarations stay untouched — one registration line is a smaller
+        // thing to own than a regenerated module-info.
+        ProtectedEntityWriteRegistry.registerWriteInspector(new ClientWriteInventory());
         Console.log("🛡 Write authorization active on " + REQUIRED_OPERATIONS.size() + " entities and "
                     + REQUIRED_OPERATIONS_BY_FIELD.size() + " fields"
                     + (ENFORCING ? " — ENFORCING" : " — observing only, nothing is refused yet"));
+        Console.log("🛡 Client write inventory recording — shapes only, no values, nothing refused");
     }
 
     /**
