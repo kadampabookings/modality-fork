@@ -142,6 +142,20 @@ public final class ModalityAuthSessionStore implements SessionFamilyStore {
     // Column order of the two statements above — a raw-SQL QueryResult carries values but no names.
     private static final int REVOKED_FAMILY_ID = 0, REVOKED_MILLIS = 1, REVOKED_STAMP = 2;
 
+    /**
+     * The live families of one person, except the caller's own — read before ending them so the caller
+     * can be told which ids to refuse on sight.
+     *
+     * <p>{@code auth_session_person_live} is {@code (person_id) where revoked is null}, which is this
+     * predicate exactly.
+     */
+    private static final String OTHER_LIVE_FAMILIES_SQL =
+        "select id from auth_session where person_id = $1::int and revoked is null and id <> $2";
+
+    private static final String REVOKE_OTHERS_SQL =
+        "update auth_session set revoked = now(), revoked_reason = $3" +
+        " where person_id = $1::int and revoked is null and id <> $2";
+
     private static final String REVOKE_SQL =
         "update auth_session set revoked = now(), revoked_reason = $2 where id = $1 and revoked is null";
 
@@ -278,6 +292,41 @@ public final class ModalityAuthSessionStore implements SessionFamilyStore {
             next = new RevocationCursor(result.getValue(row, REVOKED_STAMP), familyId);
         }
         return new RevocationPage(revocations, next);
+    }
+
+    @Override
+    public Future<List<String>> revokeOtherFamilies(Object principal, String exceptFamilyId, String reason) {
+        Integer personId = personIdOf(principal);
+        // A guest has a principal and no Person row. Without this the statement would run with a null
+        // person_id, which matches nothing today — but a predicate that means "nobody" is one edit away
+        // from meaning "everybody", and this is the statement where that would be worst.
+        if (personId == null)
+            return Future.succeededFuture(List.of());
+        // An id that is never a real family, so the SQL keeps one shape: `id <> $2` with a null $2 is
+        // null for every row, and would end nothing at all.
+        String except = exceptFamilyId == null ? "" : exceptFamilyId;
+        return asServer(() -> QueryService.executeQuery(new QueryArgumentBuilder()
+                .setDataSourceId(dataSourceId())
+                .setStatement(OTHER_LIVE_FAMILIES_SQL)
+                .setParameters(personId, except)
+                .build()))
+            .compose(result -> {
+                List<String> familyIds = new ArrayList<>();
+                int rows = result == null ? 0 : result.getRowCount();
+                for (int row = 0; row < rows; row++) {
+                    String familyId = result.getValue(row, 0);
+                    if (familyId != null)
+                        familyIds.add(familyId);
+                }
+                if (familyIds.isEmpty()) // nothing to end, and nothing to say
+                    return Future.succeededFuture(familyIds);
+                return asServer(() -> SubmitService.executeSubmit(new SubmitArgumentBuilder()
+                        .setDataSourceId(dataSourceId())
+                        .setStatement(REVOKE_OTHERS_SQL)
+                        .setParameters(personId, except, reason)
+                        .build()))
+                    .map(ignored -> familyIds);
+            });
     }
 
     /**
