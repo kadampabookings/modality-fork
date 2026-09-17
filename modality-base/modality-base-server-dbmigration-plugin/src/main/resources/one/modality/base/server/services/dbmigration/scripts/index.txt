@@ -84,6 +84,7 @@ V0081__letter_type_id_index.sql
 V0082__sold_out_item_in_allocation_trigger.sql
 V0083__auth_session.sql
 V0084__event_selection_fixed_and_ord.sql
+V0085__auth_session_revoked_index.sql
 V0086__item_policy_paired_items.sql
 V0087__mate_invite_token.sql
 V0088__webauthn_credential.sql

@@ -3,6 +3,7 @@ package one.modality.crm.server.authsession;
 import dev.webfx.platform.async.Future;
 import dev.webfx.platform.console.Console;
 import dev.webfx.platform.util.uuid.Uuid;
+import dev.webfx.stack.db.query.QueryArgument;
 import dev.webfx.stack.db.query.QueryArgumentBuilder;
 import dev.webfx.stack.db.query.QueryResult;
 import dev.webfx.stack.db.query.QueryService;
@@ -15,6 +16,9 @@ import dev.webfx.stack.session.token.SessionFamilyStore;
 import dev.webfx.stack.session.token.SessionLifetime;
 import dev.webfx.stack.session.token.SessionTier;
 import one.modality.crm.shared.services.authn.ModalityUserPrincipal;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Keeps each login session's generation counter in the {@code auth_session} table (V0083).
@@ -91,6 +95,53 @@ public final class ModalityAuthSessionStore implements SessionFamilyStore {
     private static final int RENEWED_GENERATION = 0, RENEWED_ABSOLUTE = 1, SNAPSHOT_GENERATION = 2,
         REVOKED = 3, EXPIRED = 4, MILLIS_SINCE_RENEWAL = 5, SNAPSHOT_ABSOLUTE = 6;
 
+    /**
+     * The revocations another instance may have performed, oldest first, in two forms.
+     *
+     * <p>The WINDOW form reads everything since a moment; the CURSOR form resumes strictly after the row a
+     * full page ended on. Both are needed and {@code RevocationPoll} explains why: a window cannot walk
+     * through thousands of families revoked by one statement, since they share a timestamp to the
+     * microsecond, and a cursor cannot pick up a transaction that committed late behind one.
+     *
+     * <p>{@code revoked::text} rides along as the cursor's position. Milliseconds would not do: they are a
+     * rounding of a microsecond timestamp and can land HALF A MILLISECOND PAST the row they came from,
+     * which would skip the rows the cursor exists to resume from. The text form round-trips exactly.
+     *
+     * <p><b>It goes back in as {@code $1::text::timestamptz}, never {@code $1::timestamptz}.</b> Postgres
+     * types a parameter from its cast, and the Vert.x client then refuses to encode anything but the Java
+     * type it maps that SQL type to — a String bound to a {@code timestamptz} parameter fails with
+     * "can not be coerced to the expected class OffsetDateTime" before the query is sent. Casting through
+     * text makes the parameter text, so the stamp is sent as the string it is and parsed by the server
+     * that produced it.
+     *
+     * <p>Ordered by {@code (revoked, id)} — the id breaks the tie that a mass revocation creates, and
+     * makes the ordering total, which is what lets the cursor be a position rather than a guess.
+     *
+     * <p><b>The ORDER BY is qualified, and the stamp column is aliased, and both matter.</b> An
+     * unqualified {@code order by revoked} binds to an OUTPUT column of that name before it binds to the
+     * table's — so with {@code revoked::text} unaliased in the select list, the rows came back sorted by
+     * TEXT: a sequential scan and a sort instead of the index, and an order that is not the one the
+     * cursor's {@code (revoked, id)} comparison uses. Postgres trims trailing zeros from a timestamp's
+     * text, so the two orders genuinely differ, and a cursor stepping through one while the rows arrive
+     * in the other can step over rows. Verified against a real server: qualified, it is an index scan.
+     */
+    private static final String REVOKED_SINCE_WINDOW_SQL =
+        "select id, (extract(epoch from revoked) * 1000)::bigint as revoked_millis, revoked::text as revoked_stamp" +
+        "  from auth_session" +
+        " where revoked is not null and revoked > to_timestamp($1::bigint / 1000.0)" +
+        " order by auth_session.revoked, auth_session.id" +
+        " limit " + REVOCATION_PAGE_SIZE;
+
+    private static final String REVOKED_AFTER_CURSOR_SQL =
+        "select id, (extract(epoch from revoked) * 1000)::bigint as revoked_millis, revoked::text as revoked_stamp" +
+        "  from auth_session" +
+        " where revoked is not null and (revoked, id) > ($1::text::timestamptz, $2)" +
+        " order by auth_session.revoked, auth_session.id" +
+        " limit " + REVOCATION_PAGE_SIZE;
+
+    // Column order of the two statements above — a raw-SQL QueryResult carries values but no names.
+    private static final int REVOKED_FAMILY_ID = 0, REVOKED_MILLIS = 1, REVOKED_STAMP = 2;
+
     private static final String REVOKE_SQL =
         "update auth_session set revoked = now(), revoked_reason = $2 where id = $1 and revoked is null";
 
@@ -98,6 +149,10 @@ public final class ModalityAuthSessionStore implements SessionFamilyStore {
      * Retention is deletion, not history. A day's grace keeps a row around long enough to explain a
      * session that has just ended, and no longer: this table records when each member was online, which
      * is personal data with no purpose once the session it describes is over.
+     *
+     * <p>This interval is also what a restarted instance can re-learn: it backfills the prompt-refusal
+     * set from these rows, so {@code RevokedFamilies.RETENTION_MILLIS} is held to the same day. Lengthen
+     * one without the other and two instances disagree about which tokens to refuse on sight.
      *
      * <p>Revoked rows are swept on the same clock rather than being kept until their original bound —
      * which for a member would be a year. Nothing needs them: a family that has been deleted and one that
@@ -191,6 +246,40 @@ public final class ModalityAuthSessionStore implements SessionFamilyStore {
             .mapEmpty();
     }
 
+    @Override
+    public Future<RevocationPage> revokedSince(long sinceMillis, RevocationCursor after) {
+        boolean catchingUp = after != null;
+        QueryArgumentBuilder builder = new QueryArgumentBuilder()
+            .setDataSourceId(dataSourceId())
+            .setStatement(catchingUp ? REVOKED_AFTER_CURSOR_SQL : REVOKED_SINCE_WINDOW_SQL)
+            // Droppable by construction, and the admission control should treat it that way: this poll
+            // runs on every instance every twenty seconds, including through a deploy's reconnection
+            // storm, and its own failure path is "refuse these families at renewal instead, for another
+            // twenty seconds". Shedding it costs promptness; taking a connection from a member's booking
+            // at capacity costs them the booking.
+            .setShedWhenBusy(true);
+        QueryArgument query = (catchingUp ? builder.setParameters(after.stamp(), after.familyId())
+                                          : builder.setParameters(sinceMillis)).build();
+        return asServer(() -> QueryService.executeQuery(query))
+            .map(ModalityAuthSessionStore::toPage);
+    }
+
+    private static RevocationPage toPage(QueryResult result) {
+        int rows = result == null ? 0 : result.getRowCount();
+        if (rows == 0)
+            return RevocationPage.EMPTY;
+        List<Revocation> revocations = new ArrayList<>(rows);
+        RevocationCursor next = null;
+        for (int row = 0; row < rows; row++) {
+            String familyId = result.getValue(row, REVOKED_FAMILY_ID);
+            if (familyId == null) // a row with no id is not a family anything can be told about
+                continue;
+            revocations.add(new Revocation(familyId, longAt(result, row, REVOKED_MILLIS)));
+            next = new RevocationCursor(result.getValue(row, REVOKED_STAMP), familyId);
+        }
+        return new RevocationPage(revocations, next);
+    }
+
     /**
      * Removes rows whose session ended long enough ago to be of no further use, and reports how many.
      *
@@ -252,7 +341,11 @@ public final class ModalityAuthSessionStore implements SessionFamilyStore {
 
     /** A bigint column comes back as whatever the driver chose; read it as a number, not by cast. */
     private static long longAt(QueryResult result, int columnIndex) {
-        Object value = result.getValue(0, columnIndex);
+        return longAt(result, 0, columnIndex);
+    }
+
+    private static long longAt(QueryResult result, int rowIndex, int columnIndex) {
+        Object value = result.getValue(rowIndex, columnIndex);
         return value instanceof Number number ? number.longValue() : 0;
     }
 }

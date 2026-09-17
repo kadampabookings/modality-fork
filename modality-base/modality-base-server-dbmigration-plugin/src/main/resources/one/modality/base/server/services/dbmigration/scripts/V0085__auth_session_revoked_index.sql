@@ -1,0 +1,34 @@
+-- The index behind prompt revocation. See docs/security/session-revocation-spec.md.
+--
+-- WHAT READS IT. Each server instance polls "what has been revoked since I last looked" every twenty
+-- seconds, because the instances share this database and nothing else — no clustered event bus — so a
+-- revocation performed while handling a message on one of them is otherwise invisible to the other.
+-- During a blue/green deploy that other instance holds half the clients, chosen by nothing more
+-- meaningful than which task each socket landed on.
+--
+-- WHY V0083's INDEXES DO NOT SERVE IT. auth_session_person_live is (person_id) WHERE revoked IS NULL —
+-- the live sessions of one person, the exact opposite predicate — and auth_session_absolute_expiry
+-- answers the retention sweep. Neither can answer "revoked since", which without an index is a
+-- sequential scan of the whole table every twenty seconds, on every instance.
+--
+-- PARTIAL, because the rows it must find are the minority and the ones it must skip are every live
+-- session in the system. It is also self-limiting: retention deletes a revoked row a day after it was
+-- revoked, so the indexed set stays roughly one day of endings rather than growing with the table.
+--
+-- (revoked, id) AND NOT (revoked) ALONE, because the poll pages by both. "Sign out everywhere" revokes
+-- every row in one statement, so thousands of families share a timestamp to the microsecond and the id
+-- is what lets a cursor step through them. Measured on a real server against 12,000 such rows: with the
+-- id in the index the cursor page is an index-only scan with the comparison pushed into the index; with
+-- revoked alone it is an index scan plus an incremental sort on every page.
+--
+-- PLAIN CREATE INDEX, NOT CONCURRENTLY, like every other index migration here: DbMigrationRunner runs
+-- each script in one transaction and CONCURRENTLY cannot run inside one. Building it takes a SHARE lock
+-- that blocks the ROW EXCLUSIVE every login, logout and renewal needs, while the other instance is still
+-- serving — bounded rather than hoped for, since the runner sets lock_timeout to 5s and retries a lock
+-- timeout three times. auth_session holds one row per live session and is swept daily, so this builds in
+-- milliseconds today; if it ever stops being small, this is the line to revisit.
+--
+-- No personal data is added here — an index over a column that already exists.
+
+CREATE INDEX IF NOT EXISTS auth_session_revoked
+    ON public.auth_session (revoked, id) WHERE revoked IS NOT NULL;
