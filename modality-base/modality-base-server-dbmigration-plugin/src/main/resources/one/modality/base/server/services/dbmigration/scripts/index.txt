@@ -96,3 +96,4 @@ V0093__most_specific_rate_prices_attendance.sql
 V0094__person_occasional.sql
 V0095__mate_invite_token_delete_rules.sql
 V0096__account_sign_in_restriction.sql
+V0097__username_sync_on_real_email_change.sql

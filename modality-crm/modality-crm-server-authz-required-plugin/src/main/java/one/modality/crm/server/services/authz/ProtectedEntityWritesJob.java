@@ -176,6 +176,9 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         // exception would be only as strong as the weakest way to obtain the grant. Consequence, accepted: the
         // legacy scheduled-item generator (ScheduledItemGenerationView), which sends generated SQL, no longer runs.
         ClientSubmitGuard.registerRawStatementPolicy(ProtectedEntityWritesJob::isAllowedLegacyRawStatement);
+        // And the one row rule that cannot wait for person ownership: an owner's email is their login (V0062
+        // trigger), so a client may not change it, nor make somebody an owner. See OwnerLoginWritePolicy.
+        ClientSubmitGuard.registerWritePolicy(new OwnerLoginWritePolicy());
         Console.log("🛡 Write authorization active on " + REQUIRED_OPERATIONS.size() + " entities and "
                     + REQUIRED_OPERATIONS_BY_FIELD.size() + " fields"
                     + (ENFORCING ? " — ENFORCING" : " — observing only, nothing is refused yet"));
