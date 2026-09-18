@@ -140,7 +140,7 @@ public final class ModalityAuthorizationServerServiceProvider extends Authorizat
         // the booking form. Either way, naming a super admin's address was enough to be handed their grants.
         // A guest has no person, so holds only what every signed-in caller holds.
         // The id is only as good as the person a sign-in resolves to, which is chosen among the account's persons:
-        // hence GrantHolderMovePolicy, which stops a client moving a grant holder into an account it controls. And
+        // hence PersonAccountMovePolicy, which stops a client moving a person into an account it controls. And
         // it is only as good as the principal itself, which production accepts unbound until identity binding is on.
         Object personId = ModalityUserPrincipal.getUserPersonId(userId);
         EntityStore entityStore = EntityStore.create(DataSourceModelService.getDefaultDataSourceModel());

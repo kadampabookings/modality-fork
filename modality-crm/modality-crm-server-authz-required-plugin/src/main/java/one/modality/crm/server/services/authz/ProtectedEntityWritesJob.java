@@ -194,10 +194,11 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         //   owner. See OwnerLoginWritePolicy.
         // - the grant tables themselves: while the rule on them above only observes, any client could insert a
         //   super-admin row naming its own person. See GrantTableWritePolicy.
-        // - and the person a grant is matched on: a client may not move a grant holder into an account it controls,
-        //   which would make its sign-in resolve to them. See GrantHolderMovePolicy.
+        // - and the person a sign-in resolves to: a client may not move somebody's person into an account it controls,
+        //   which would make its sign-in resolve to them - their bookings, and their grants if any. Staff only, and
+        //   a grant holder by a super admin only. See PersonAccountMovePolicy.
         ClientSubmitGuard.registerWritePolicy(new ClientWritePolicies(
-            new OwnerLoginWritePolicy(), new GrantTableWritePolicy(), new GrantHolderMovePolicy()));
+            new OwnerLoginWritePolicy(), new GrantTableWritePolicy(), new PersonAccountMovePolicy()));
         Console.log("🛡 Write authorization active on " + REQUIRED_OPERATIONS.size() + " entities and "
                     + REQUIRED_OPERATIONS_BY_FIELD.size() + " fields"
                     + (ENFORCING ? " — ENFORCING" : " — observing only, nothing is refused yet"));

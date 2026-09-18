@@ -11,7 +11,6 @@ import dev.webfx.stack.authn.server.gateway.spi.ServerAuthenticationGateway;
 import dev.webfx.stack.orm.datasourcemodel.service.DataSourceModelService;
 import dev.webfx.stack.orm.domainmodel.DataSourceModel;
 import dev.webfx.stack.orm.domainmodel.HasDataSourceModel;
-import dev.webfx.stack.orm.entity.Entities;
 import dev.webfx.stack.orm.entity.EntityList;
 import dev.webfx.stack.orm.entity.EntityStore;
 import dev.webfx.stack.push.server.PushServerService;
@@ -21,13 +20,13 @@ import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 import one.modality.base.shared.entities.FrontendAccount;
 import one.modality.base.shared.entities.MagicLink;
 import one.modality.base.shared.entities.MagicLinkType;
-import one.modality.base.shared.entities.Operation;
 import one.modality.base.shared.entities.Person;
 import one.modality.base.shared.util.ActivityHashUtil;
 import one.modality.crm.server.authn.gateway.shared.GuestPersonLinker;
 import one.modality.crm.server.authn.gateway.shared.LocalizedMailTemplate;
 import one.modality.crm.server.authn.gateway.shared.MagicLinkService;
 import one.modality.crm.server.authn.gateway.shared.RecoveryWindow;
+import one.modality.crm.server.authn.gateway.shared.RoleOperationMembership;
 import one.modality.crm.server.authn.gateway.shared.SetPasswordAfterRecoveryCredentials;
 import one.modality.crm.server.authn.gateway.shared.SuperAdminMembership;
 import one.modality.crm.shared.services.authn.AuthenticateWithBackOfficeViewCredentials;
@@ -475,9 +474,7 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
      *
      * <p>Deliberately mirrors what {@code ModalityAuthorizationServerServiceProvider} pushes to the
      * client — a super admin holds everything, and otherwise the operation must be granted to one of
-     * the member's roles, directly or through the operation's group. Resolving the operation first
-     * keeps both branches flat: a correlated {@code exists} is a shape the DQL parser is known to
-     * handle (the authorization provider uses the same one), nested ones are not.
+     * the member's roles, directly or through the operation's group (RoleOperationMembership).
      */
     private Future<Boolean> hasViewAsCustomerPermission(Object agentPersonId, EntityStore entityStore) {
         // Grants are keyed on the principal's person id and nothing else, exactly as the authorization
@@ -485,22 +482,9 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
         // so a match on it was a match on whatever the caller had typed there.
         return Future.all(
             isSuperAdmin(agentPersonId, entityStore),
-            entityStore.<Operation>executeQuery("select group.id from Operation where operationCode=$1 limit 1", VIEW_AS_CUSTOMER_OPERATION_CODE)
-        ).compose(compositeFuture -> {
-            Boolean superAdmin = compositeFuture.resultAt(0);
-            if (Boolean.TRUE.equals(superAdmin))
-                return Future.succeededFuture(true);
-            EntityList<Operation> operations = compositeFuture.resultAt(1);
-            Operation operation = Collections.first(operations);
-            if (operation == null) // the operation has not been seeded yet => nobody holds it
-                return Future.succeededFuture(false);
-            Object operationGroupId = Entities.getPrimaryKey(operation.getGroupId());
-            return entityStore.executeQuery(
-                    "select AuthorizationRoleOperation ro where (ro.operation=$1 or ro.operationGroup=$2)"
-                    + " and exists(select AuthorizationOrganizationUserAccess ua where ua.role=ro.role and ua.user=$3) limit 1",
-                    operation.getPrimaryKey(), operationGroupId, agentPersonId)
-                .map(roleOperations -> !roleOperations.isEmpty());
-        });
+            RoleOperationMembership.holdsThroughRole(agentPersonId, VIEW_AS_CUSTOMER_OPERATION_CODE, entityStore)
+        ).map(compositeFuture -> Boolean.TRUE.equals(compositeFuture.resultAt(0))
+                                 || Boolean.TRUE.equals(compositeFuture.resultAt(1)));
     }
 
     /**
