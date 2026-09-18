@@ -9,6 +9,8 @@ import dev.webfx.stack.db.submit.SubmitArgument;
 import dev.webfx.stack.db.submit.SubmitResult;
 import dev.webfx.stack.db.submit.SubmitService;
 import dev.webfx.stack.orm.datasourcemodel.service.DataSourceModelService;
+import dev.webfx.stack.session.token.RevokedFamilies;
+import dev.webfx.stack.session.token.SessionFamilyStore;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -246,12 +248,17 @@ final class TotpCredentialStore {
         "INSERT INTO second_factor_reset (frontend_account_id, what, reset_by_person_id, note, sessions_revoked)" +
         " VALUES ($1, $2, $3, $4, $5)";
 
-    // Counted before the revoke, because the count cannot be read out of the revoke itself: the
-    // submit layer collects at most ONE generated key per statement (VertxSqlUtil.toWebFxSubmitResult),
-    // so a multi-row " returning id" says "at least one" and no more. The number is an audit note on
-    // the reset row; the UPDATE below is the part that has to be right.
-    private static final String COUNT_LIVE_SESSIONS_SQL =
-        "SELECT count(*) FROM auth_session WHERE person_id = $1 AND revoked IS NULL";
+    // Read before the revoke, because none of this can be read out of the revoke itself: the submit
+    // layer collects at most ONE generated key per statement (VertxSqlUtil.toWebFxSubmitResult), so a
+    // multi-row " returning id" says "at least one" and no more.
+    //
+    // Ids rather than a count, though the count is what the audit row wants, because auth_session.id IS
+    // the session family id — so the same read that says how many also says WHICH, and the families can
+    // then be refused on sight here and their devices told at once. Counting alone would leave the one
+    // revocation that exists because somebody lost a device as the slowest in the system: unannounced,
+    // and refused only after this instance polls its own write back.
+    private static final String LIVE_SESSION_FAMILIES_SQL =
+        "SELECT id FROM auth_session WHERE person_id = $1 AND revoked IS NULL";
 
     // Raw SQL from here rather than through the authsession plugin, which owns this table otherwise
     // (ModalityAuthSessionStore): that store revokes ONE family by id, and a by-person revoke would
@@ -265,13 +272,35 @@ final class TotpCredentialStore {
      * Ends every live session of one person, and reports how many there were.
      *
      * <p>A reset exists because somebody lost control of a factor, so a session opened by whoever
-     * caused it must not outlive the reset. The count can be stale by whatever opened or expired
-     * between the two statements; the revoke is unconditional either way.
+     * caused it must not outlive the reset. The list can be stale by whatever opened or expired between
+     * the two statements; the revoke is unconditional either way.
+     *
+     * <p>The families are noted AFTER the update succeeds, never before: noting is what makes them
+     * refused on sight and what tells their devices, and doing either on the strength of a write that
+     * then failed would end sessions this table still considers live — a logout no record explains.
      */
     Future<Integer> revokeLiveSessions(Object personId) {
-        return executeRawQuery(COUNT_LIVE_SESSIONS_SQL, new Object[]{personId})
-            .map(result -> result.getRowCount() == 1 ? (int) longValue(result.getValue(0, 0)) : 0)
-            .compose(count -> executeRawSubmit(REVOKE_SESSIONS_SQL, personId).map(ignored -> count));
+        return executeRawQuery(LIVE_SESSION_FAMILIES_SQL, new Object[]{personId})
+            .compose(result -> {
+                List<SessionFamilyStore.Revocation> families = new ArrayList<>();
+                long now = System.currentTimeMillis();
+                int rows = result == null ? 0 : result.getRowCount();
+                for (int row = 0; row < rows; row++) {
+                    // Read as the String the column holds, exactly as ModalityAuthSessionStore reads the
+                    // same column: a family id is compared against the one inside a token, so it must not
+                    // go through a second rendering that could differ from the one that was minted.
+                    String familyId = result.getValue(row, 0);
+                    if (familyId != null)
+                        families.add(new SessionFamilyStore.Revocation(familyId, now));
+                }
+                return executeRawSubmit(REVOKE_SESSIONS_SQL, personId)
+                    .map(ignored -> {
+                        // Refused on sight from here on, and their devices told at once rather than at
+                        // their next click — the same treatment every other revocation gets.
+                        RevokedFamilies.noteAll(families);
+                        return families.size();
+                    });
+            });
     }
 
     /** Records what was reset, by whom, on whose word, and how many sessions it ended. */

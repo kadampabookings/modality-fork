@@ -19,6 +19,7 @@ module modality.crm.server.authsession.plugin {
     requires webfx.stack.db.submit;
     requires webfx.stack.orm.datasourcemodel.service;
     requires webfx.stack.session.state;
+    requires webfx.stack.session.state.server;
     requires webfx.stack.session.token;
 
     // Exported packages

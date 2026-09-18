@@ -5,6 +5,7 @@ import dev.webfx.platform.console.Console;
 import dev.webfx.platform.scheduler.Scheduled;
 import dev.webfx.platform.scheduler.Scheduler;
 import dev.webfx.stack.db.datasource.LocalDataSourceService;
+import dev.webfx.stack.session.state.server.RevokedFamilyLogoutPush;
 import dev.webfx.stack.session.token.RevocationPoll;
 import dev.webfx.stack.session.token.RevokedFamilies;
 import dev.webfx.stack.session.token.SessionFamilyStoreRegistry;
@@ -79,6 +80,10 @@ public final class ModalityAuthSessionStoreInitializer implements ApplicationJob
     @Override
     public void onInit() {
         SessionFamilyStoreRegistry.register(store);
+        // Registered beside the store because the two answer the same question from opposite ends: the store
+        // is where a revocation is RECORDED, and this is how the sessions it ends are TOLD. A deployment
+        // without the store has no families to revoke, so there would be nothing here to announce either.
+        RevokedFamilyLogoutPush.install();
     }
 
     @Override
