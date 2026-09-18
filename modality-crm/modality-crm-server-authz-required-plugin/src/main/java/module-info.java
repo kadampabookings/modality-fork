@@ -7,6 +7,8 @@ module modality.crm.server.authz.required.plugin {
 
     // Direct dependencies modules
     requires modality.base.shared.entities;
+    requires modality.crm.server.authn.gateway.shared;
+    requires modality.crm.shared.authn;
     requires webfx.extras.operation;
     requires webfx.platform.async;
     requires webfx.platform.boot;

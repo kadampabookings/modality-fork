@@ -327,21 +327,19 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
 
         EntityStore entityStore = EntityStore.create(dataSourceModel);
         // Both identities are needed, and they are NOT interchangeable:
-        //  - email is what the authorization system keys grants on (AuthorizationSuperAdmin.superAdmin.email,
-        //    AuthorizationOrganizationUserAccess.user.email — and ModalityAuthorizationServerServiceProvider
-        //    reaches them via getUserClaims().email(), which returns Person.email).
+        //  - the principal's person id is what the authorization system keys grants on
+        //    (AuthorizationSuperAdmin.superAdmin, AuthorizationOrganizationUserAccess.user — the same key
+        //    ModalityAuthorizationServerServiceProvider uses for what it pushes).
         //  - frontendAccount.username is what identifies the ACCOUNT, and is what the grant row records.
-        // People routinely have a different Person.email from their account username, so checking the
-        // permission against the username would silently deny staff the authorization push had granted.
+        Object agentPersonId = agentPrincipal.getUserPersonId();
         return entityStore.<Person>executeQuery(
-                "select email, frontendAccount.username from Person where id=$1 limit 1", agentPrincipal.getUserPersonId())
+                "select frontendAccount.username from Person where id=$1 limit 1", agentPersonId)
             .map(Collections::first)
             .compose(agentPerson -> {
                 String agentUsername = agentPerson == null ? null : agentPerson.evaluate("frontendAccount.username");
-                String agentEmail = agentPerson == null ? null : agentPerson.getEmail();
                 if (Strings.isEmpty(agentUsername))
                     return Future.failedFuture("[%s] Your account could not be identified".formatted(ModalityAuthenticationI18nKeys.SupportViewNotPermittedError));
-                return hasViewAsCustomerPermission(agentEmail, agentUsername, entityStore)
+                return hasViewAsCustomerPermission(agentPersonId, entityStore)
                     .compose(permitted -> {
                         if (!permitted) {
                             // Person ids, not emails: this line lands in a rolling log file that
@@ -352,7 +350,7 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
                                 agentPrincipal.getUserPersonId(), VIEW_AS_CUSTOMER_OPERATION_CODE));
                             return Future.failedFuture("[%s] You are not permitted to open a support view".formatted(ModalityAuthenticationI18nKeys.SupportViewNotPermittedError));
                         }
-                        return loadSupportViewTarget(targetPersonId, agentEmail, entityStore)
+                        return loadSupportViewTarget(targetPersonId, agentPersonId, entityStore)
                             .compose(targetUsername -> MagicLinkService.createSupportViewLink(
                                     targetUsername,
                                     agentUsername,
@@ -378,9 +376,9 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
      *
      * <p>A back-office account is a target for a super admin and nobody else, and the bar is that
      * high for a concrete reason rather than a cautious one. The session's authorizations are
-     * computed from the TARGET's email: {@code ModalityAuthorizationServerServiceProvider}
+     * computed from the TARGET's person: {@code ModalityAuthorizationServerServiceProvider}
      * resolves every other grant against the session's {@code backoffice} flag, but its
-     * super-admin branch is keyed on the email alone and REPLACES the rest with
+     * super-admin branch is keyed on the person alone and REPLACES the rest with
      * {@code operation:*} + {@code route:*}. So a support view aimed at a super admin hands the
      * agent the full grant set, front office or not. {@code ViewAsCustomer} is delegable to
      * roles; super-admin membership is not (see {@link #isSuperAdmin}), which makes it the only
@@ -415,11 +413,11 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
      * target could never hold the flag. It can now, so that separation rests on the live
      * {@code magic_link} row's type alone — see the comment there.
      *
-     * @param agentEmail the caller's {@code Person.email}, which is what super-admin membership is
-     *                   keyed on (never the account username — see {@link #hasViewAsCustomerPermission})
+     * @param agentPersonId the caller's person id, from the principal, which is what super-admin
+     *                      membership is keyed on
      * @return the target account's username
      */
-    private Future<String> loadSupportViewTarget(Object targetPersonId, String agentEmail, EntityStore entityStore) {
+    private Future<String> loadSupportViewTarget(Object targetPersonId, Object agentPersonId, EntityStore entityStore) {
         return entityStore.<Person>executeQuery(
                 "select frontendAccount.(username, backoffice, disabled), removed from Person where id=$1 limit 1", targetPersonId)
             .map(Collections::first)
@@ -441,7 +439,7 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
                     return Future.succeededFuture(username);
                 // Only reached for a staff account — 28 of them on production against ~49k accounts —
                 // so the ordinary customer path costs exactly what it did before.
-                return isSuperAdmin(agentEmail, entityStore)
+                return isSuperAdmin(agentPersonId, entityStore)
                     .compose(superAdmin -> {
                         if (!Boolean.TRUE.equals(superAdmin))
                             return refuseSupportViewTarget(targetPersonId, "back-office target, caller is not a super admin",
@@ -481,19 +479,12 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
      * keeps both branches flat: a correlated {@code exists} is a shape the DQL parser is known to
      * handle (the authorization provider uses the same one), nested ones are not.
      */
-    private Future<Boolean> hasViewAsCustomerPermission(String agentEmail, String agentUsername, EntityStore entityStore) {
-        // Grants are keyed on Person.email and nothing else, exactly as the authorization provider
-        // resolves them. No fallback to the account username: that asks a DIFFERENT question — it
-        // would match a grant held by whatever person happens to have this account's username as
-        // their email, which on a shared account is a different human. When the caller's person
-        // record has no email the authorization system grants them nothing, so neither do we.
-        if (Strings.isEmpty(agentEmail)) {
-            Console.log("🚫 Support view refused: caller has no Person.email to resolve grants against");
-            return Future.succeededFuture(false);
-        }
-        String grantEmail = agentEmail;
+    private Future<Boolean> hasViewAsCustomerPermission(Object agentPersonId, EntityStore entityStore) {
+        // Grants are keyed on the principal's person id and nothing else, exactly as the authorization
+        // provider resolves them. Not on Person.email, as they once were: a client can write that field,
+        // so a match on it was a match on whatever the caller had typed there.
         return Future.all(
-            isSuperAdmin(grantEmail, entityStore),
+            isSuperAdmin(agentPersonId, entityStore),
             entityStore.<Operation>executeQuery("select group.id from Operation where operationCode=$1 limit 1", VIEW_AS_CUSTOMER_OPERATION_CODE)
         ).compose(compositeFuture -> {
             Boolean superAdmin = compositeFuture.resultAt(0);
@@ -506,14 +497,14 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
             Object operationGroupId = Entities.getPrimaryKey(operation.getGroupId());
             return entityStore.executeQuery(
                     "select AuthorizationRoleOperation ro where (ro.operation=$1 or ro.operationGroup=$2)"
-                    + " and exists(select AuthorizationOrganizationUserAccess ua where ua.role=ro.role and ua.user.email=$3) limit 1",
-                    operation.getPrimaryKey(), operationGroupId, grantEmail)
+                    + " and exists(select AuthorizationOrganizationUserAccess ua where ua.role=ro.role and ua.user=$3) limit 1",
+                    operation.getPrimaryKey(), operationGroupId, agentPersonId)
                 .map(roleOperations -> !roleOperations.isEmpty());
         });
     }
 
     /**
-     * Whether this email belongs to a super admin — the same row the authorization provider keys the
+     * Whether this person is a super admin — the same row the authorization provider keys the
      * {@code operation:*} wildcard on, asked of the database rather than the client.
      *
      * <p>Delegates to {@link SuperAdminMembership}, the one definition of "is super admin" across
@@ -523,8 +514,8 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
      * whereas membership of {@code authorization_super_admin} can only be conferred by someone
      * who can already write that table.
      */
-    private static Future<Boolean> isSuperAdmin(String email, EntityStore entityStore) {
-        return SuperAdminMembership.isSuperAdminEmail(email, entityStore);
+    private static Future<Boolean> isSuperAdmin(Object personId, EntityStore entityStore) {
+        return SuperAdminMembership.isSuperAdminPerson(personId, entityStore);
     }
 
     /**
@@ -567,7 +558,7 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
                     //             have -- it misattributed it, which is the failure this mechanism
                     //             exists to prevent.
                     entityStore.<Person>executeQuery("select frontendAccount.(id, backoffice, disabled), removed from Person p where lower(frontendAccount.username)=lower($1) order by p.removed, p.owner desc, p.id limit 1", targetUsername),
-                    entityStore.<Person>executeQuery("select id, email from Person p where lower(frontendAccount.username)=lower($1) order by p.removed, p.owner desc, p.id limit 1", agentUsername)
+                    entityStore.<Person>executeQuery("select id from Person p where lower(frontendAccount.username)=lower($1) order by p.removed, p.owner desc, p.id limit 1", agentUsername)
                 ).compose(compositeFuture -> {
                     EntityList<Person> targets = compositeFuture.resultAt(0);
                     EntityList<Person> agents = compositeFuture.resultAt(1);
@@ -589,8 +580,12 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
                         Console.log("🚫 Support view pass refused at redeem: target account no longer eligible (magicLinkId=%s)".formatted(magicLink.getPrimaryKey()));
                         return Future.failedFuture("[%s] Invalid support view pass".formatted(ModalityAuthenticationI18nKeys.SupportViewLinkInvalidError));
                     }
+                    // Re-asked of the agent account's first person, which is the person a password sign-in
+                    // gets. The pass records the agent's username, not the person minted against, so an
+                    // agent who signed in as a different person of their account, holding the membership
+                    // there, is refused here. That errs the safe way.
                     Future<Boolean> targetStillAllowed = Boolean.TRUE.equals(targetAccount.isBackoffice())
-                        ? isSuperAdmin(agentPerson.getEmail(), entityStore) // the mint-time rule, re-asked
+                        ? isSuperAdmin(agentPerson.getPrimaryKey(), entityStore) // the mint-time rule, re-asked
                         : Future.succeededFuture(true);
                     return targetStillAllowed.compose(allowed -> {
                         if (!Boolean.TRUE.equals(allowed)) {
@@ -645,17 +640,17 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
             return Future.failedFuture("[%s] No user specified".formatted(ModalityAuthenticationI18nKeys.SupportViewInvalidTargetError));
 
         EntityStore entityStore = EntityStore.create(dataSourceModel);
-        // Same email-vs-username split as requestSupportView: grants (including super-admin
-        // membership) are keyed on Person.email; the grant row records account usernames.
+        // Same person-vs-username split as requestSupportView: grants (including super-admin
+        // membership) are keyed on the principal's person id; the grant row records account usernames.
+        Object agentPersonId = agentPrincipal.getUserPersonId();
         return entityStore.<Person>executeQuery(
-                "select email, frontendAccount.username from Person where id=$1 limit 1", agentPrincipal.getUserPersonId())
+                "select frontendAccount.username from Person where id=$1 limit 1", agentPersonId)
             .map(Collections::first)
             .compose(agentPerson -> {
                 String agentUsername = agentPerson == null ? null : agentPerson.evaluate("frontendAccount.username");
-                String agentEmail = agentPerson == null ? null : agentPerson.getEmail();
                 if (Strings.isEmpty(agentUsername))
                     return Future.failedFuture("[%s] Your account could not be identified".formatted(ModalityAuthenticationI18nKeys.SupportViewNotPermittedError));
-                return isSuperAdmin(agentEmail, entityStore)
+                return isSuperAdmin(agentPersonId, entityStore)
                     .compose(superAdmin -> {
                         if (!Boolean.TRUE.equals(superAdmin)) {
                             // Person ids, not emails — same log-file discipline as requestSupportView.

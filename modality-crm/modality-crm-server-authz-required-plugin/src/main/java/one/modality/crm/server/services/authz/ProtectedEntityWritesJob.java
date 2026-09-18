@@ -95,6 +95,19 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
     );
 
     /**
+     * The privilege-bearing entities — those gated on {@link #MANAGE_AUTHORIZATIONS} above. The one list: the client
+     * rule that enforces on them now, ahead of the switch below ({@link GrantTableWritePolicy}), reads it from here.
+     */
+    static java.util.Set<String> privilegeBearingEntities() {
+        java.util.Set<String> entities = new java.util.HashSet<>();
+        REQUIRED_OPERATIONS.forEach((entity, codes) -> {
+            if (java.util.Arrays.asList(codes).contains(MANAGE_AUTHORIZATIONS))
+                entities.add(entity);
+        });
+        return java.util.Set.copyOf(entities);
+    }
+
+    /**
      * Fields that are privileged on rows that otherwise are not — keyed "Entity.field".
      *
      * <p>FrontendAccount is the case that makes this necessary. Signup creates the row, and a member
@@ -176,9 +189,15 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         // exception would be only as strong as the weakest way to obtain the grant. Consequence, accepted: the
         // legacy scheduled-item generator (ScheduledItemGenerationView), which sends generated SQL, no longer runs.
         ClientSubmitGuard.registerRawStatementPolicy(ProtectedEntityWritesJob::isAllowedLegacyRawStatement);
-        // And the one row rule that cannot wait for person ownership: an owner's email is their login (V0062
-        // trigger), so a client may not change it, nor make somebody an owner. See OwnerLoginWritePolicy.
-        ClientSubmitGuard.registerWritePolicy(new OwnerLoginWritePolicy());
+        // And the row rules that cannot wait for the switch below, asked together because the guard holds one:
+        // - an owner's email is their login (V0062 trigger), so a client may not change it, nor make somebody an
+        //   owner. See OwnerLoginWritePolicy.
+        // - the grant tables themselves: while the rule on them above only observes, any client could insert a
+        //   super-admin row naming its own person. See GrantTableWritePolicy.
+        // - and the person a grant is matched on: a client may not move a grant holder into an account it controls,
+        //   which would make its sign-in resolve to them. See GrantHolderMovePolicy.
+        ClientSubmitGuard.registerWritePolicy(new ClientWritePolicies(
+            new OwnerLoginWritePolicy(), new GrantTableWritePolicy(), new GrantHolderMovePolicy()));
         Console.log("🛡 Write authorization active on " + REQUIRED_OPERATIONS.size() + " entities and "
                     + REQUIRED_OPERATIONS_BY_FIELD.size() + " fields"
                     + (ENFORCING ? " — ENFORCING" : " — observing only, nothing is refused yet"));

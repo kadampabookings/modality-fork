@@ -5,7 +5,6 @@ import dev.webfx.platform.async.CompositeFuture;
 import dev.webfx.platform.async.Future;
 import dev.webfx.platform.util.Strings;
 import dev.webfx.stack.authn.AuthenticationService;
-import dev.webfx.stack.authn.UserClaims;
 import dev.webfx.stack.authz.core.InMemoryAuthorizationRuleRegistry;
 import dev.webfx.stack.authz.core.operation.OperationAuthorizationRuleParser;
 import dev.webfx.stack.authz.server.spi.impl.AuthorizationServerServiceProviderBase;
@@ -18,6 +17,8 @@ import dev.webfx.stack.push.server.PushServerService;
 import dev.webfx.stack.session.state.LogoutUserId;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 import one.modality.base.shared.entities.*;
+import one.modality.crm.server.authn.gateway.shared.SuperAdminMembership;
+import one.modality.crm.shared.services.authn.ModalityUserPrincipal;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.List;
@@ -121,26 +122,39 @@ public final class ModalityAuthorizationServerServiceProvider extends Authorizat
             return entityStore.<Operation>executeQuery("select operationCode, grantRoute from Operation op where ($1 and backoffice or !$1 and frontoffice) and public", backoffice)
                 .map(operations -> grantOperations(operations, new StringBuilder("logout\n")).toString());
         }
-        // Otherwise reading the authorizations from the database:
-        // Step 1: we ask the user claims, so we can identify the user by his email
+        // Otherwise reading the authorizations from the database.
+        // Step 1: we ask the user claims. Not for what they say (see step 2) but because asking is the live check on
+        // the session: the gateway fails it for a person that no longer exists, a disabled account, or a back-office
+        // session on an account without back-office access, and no grants are computed for any of those.
         return AuthenticationService.getUserClaims()
             // Step 2: we load the user authorizations from the database
-            .compose(userClaims ->
-                loadUserAuthorizations(userClaims, backoffice)
+            .compose(ignoredClaims ->
+                loadUserAuthorizations(userId, backoffice)
             );
     }
 
-    private Future<String> loadUserAuthorizations(UserClaims userClaims, boolean backoffice) {
-        String userEmail = userClaims.email();
+    private Future<String> loadUserAuthorizations(Object userId, boolean backoffice) {
+        // Grants are held by a person, and matched on the person id the server minted into the principal at sign-in
+        // - never on an email address. They used to be matched on the claims' email, which is Person.email for a
+        // registered user (a field clients can still write) and, for a guest, whatever address the booker typed on
+        // the booking form. Either way, naming a super admin's address was enough to be handed their grants.
+        // A guest has no person, so holds only what every signed-in caller holds.
+        // The id is only as good as the person a sign-in resolves to, which is chosen among the account's persons:
+        // hence GrantHolderMovePolicy, which stops a client moving a grant holder into an account it controls. And
+        // it is only as good as the principal itself, which production accepts unbound until identity binding is on.
+        Object personId = ModalityUserPrincipal.getUserPersonId(userId);
         EntityStore entityStore = EntityStore.create(DataSourceModelService.getDefaultDataSourceModel());
+        // Public and guest operations are automatically granted to all logged-in users (registered or guest users).
+        // Non-public/guest operations require explicit grant access from administrators.
+        Future<String> loggedInGrantsFuture = entityStore.<Operation>executeQuery("select operationCode, grantRoute from Operation op where ($1 and backoffice or !$1 and frontoffice) and (public or guest)", backoffice)
+            .map(operations -> grantOperations(operations, new StringBuilder()).toString());
+        if (personId == null)
+            return loggedInGrantsFuture;
         return Future.all(
-            // Public and guest operations are automatically granted to all logged-in users (registered or guest users).
-            // Non-public/guest operations require explicit grant access from administrators.
-            entityStore.<Operation>executeQuery("select operationCode, grantRoute from Operation op where ($1 and backoffice or !$1 and frontoffice) and (public or guest)", backoffice)
-                .map(operations -> grantOperations(operations, new StringBuilder()).toString()),
+            loggedInGrantsFuture,
             // Loading operations and rules granted to the user
             entityStore.<AuthorizationOrganizationUserAccess>executeQuery(
-                    "select organization.id,event.id,role.id from AuthorizationOrganizationUserAccess where user.email=$1 order by organization.id,event?.id", userEmail)
+                    "select organization.id,event.id,role.id from AuthorizationOrganizationUserAccess where user=$1 order by organization.id,event?.id", personId)
                 .compose(userAccesses -> {
                     int n = userAccesses.size();
                     return new Batch<>(userAccesses.toArray(new AuthorizationOrganizationUserAccess[n]))
@@ -167,7 +181,7 @@ public final class ModalityAuthorizationServerServiceProvider extends Authorizat
                         });
                 }),
             // If the user is also the admin of an organization, we grant him the permissions to manage the organization
-            entityStore.<AuthorizationOrganizationAdmin>executeQuery("select organization.id from AuthorizationOrganizationAdmin where admin.email=$1 order by organization.id", userEmail)
+            entityStore.<AuthorizationOrganizationAdmin>executeQuery("select organization.id from AuthorizationOrganizationAdmin where admin=$1 order by organization.id", personId)
                 .map(organizationAdmins -> {
                     StringBuilder sb = new StringBuilder();
                     organizationAdmins.forEach(organizationAdmin -> {
@@ -178,9 +192,9 @@ public final class ModalityAuthorizationServerServiceProvider extends Authorizat
                     return sb.toString();
                 }),
             // If the user is a super admin, we grant him universal permissions
-            entityStore.<AuthorizationSuperAdmin>executeQuery("select AuthorizationSuperAdmin where superAdmin.email=$1 limit 1", userEmail)
-                .map(superAdmins -> {
-                    if (superAdmins.isEmpty())
+            SuperAdminMembership.isSuperAdminPerson(personId, entityStore)
+                .map(superAdmin -> {
+                    if (!superAdmin)
                         return "";
                     return """
                         context:any
