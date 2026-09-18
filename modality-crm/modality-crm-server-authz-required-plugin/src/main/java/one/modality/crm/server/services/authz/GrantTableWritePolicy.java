@@ -44,6 +44,7 @@ import java.util.Set;
 final class GrantTableWritePolicy implements ClientSubmitGuard.WritePolicy {
 
     static final String REFUSED = "Only a super admin can change authorizations";
+    static final String RULES_OFF_REFUSED = "Authorization rules are switched off: they can be deleted, not created or changed";
 
     private static final Set<String> GRANT_TABLES = ProtectedEntityWritesJob.privilegeBearingEntities();
 
@@ -60,7 +61,26 @@ final class GrantTableWritePolicy implements ClientSubmitGuard.WritePolicy {
     static String refusalWithoutLookup(ProtectedEntityWriteRegistry.WriteRequest write, Object userId) {
         if (!isGrantTableWrite(write))
             return null;
-        return callerPersonId(userId) == null ? REFUSED : null;
+        if (callerPersonId(userId) == null)
+            return REFUSED;
+        return writesSwitchedOffRule(write) ? RULES_OFF_REFUSED : null;
+    }
+
+    /**
+     * Whether this write creates or changes an authorization rule while rules are switched off - for anybody, super
+     * admins included: a rule written now would grant nothing, look as if it did, and all come back to life the day
+     * rules were switched on again. Deleting one is allowed, and so is unassigning one from its role (role=null),
+     * which deleting a role does first.
+     */
+    static boolean writesSwitchedOffRule(ProtectedEntityWriteRegistry.WriteRequest write) {
+        if (ModalityAuthorizationServerServiceProvider.RULE_GRANTS_APPLIED || !"AuthorizationRule".equals(write.entityName()))
+            return false;
+        if (write.verb() == ProtectedEntityWriteRegistry.WriteVerb.DELETE)
+            return false;
+        boolean unassignsOnly = write.verb() == ProtectedEntityWriteRegistry.WriteVerb.UPDATE
+            && write.writtenFields() != null && write.writtenFields().length == 1 && "role".equals(write.writtenFields()[0])
+            && write.writtenValues() != null && write.writtenValues().get("role") == null;
+        return !unassignsOnly;
     }
 
     /** The person a caller acts as, or null for one who has none of their own to act as: anonymous, guest, support view. */

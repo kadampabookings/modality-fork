@@ -41,6 +41,27 @@ public final class ModalityAuthorizationServerServiceProvider extends Authorizat
     // Above this size, expired entries are swept on lookup (the map otherwise only replaces entries in place).
     private static final int AUTHZ_CACHE_PRUNE_SIZE = 100;
 
+    /**
+     * Whether a role's free-text AuthorizationRule rows are added to the grants it pushes. Switched off on 2026-09-18.
+     *
+     * <p>A rule's text is pasted as it is, line by line, after its role's context line, so it can grant anything, and a
+     * rule containing a line break can open a context of its own and escape its role's organization. Nothing else reads
+     * rules: the server-side checks (SuperAdminMembership, RoleOperationMembership), the data audits and the role
+     * screens all reason about the operations granted to a role, so a power granted by rule was invisible to every one
+     * of them. One role used rules - a "Super user" granting operation:* and route:* - whose holder is to be given
+     * operations or super-admin membership by hand. The rows are kept; while this is false GrantTableWritePolicy
+     * refuses creating or changing one, and the back office stops offering to (its RULES_APPLIED).
+     *
+     * <p>Revokes go too: a rule is the only place a {@code revoke} line can come from, so any access a rule took away
+     * comes back. Check that no rule revokes anything before relying on this.
+     *
+     * <p>To switch rules back on: first refuse rule text that holds a line break or starts a line with
+     * {@code context:} (the registry treats any such line as a context switch, so it would escape its role's
+     * organization), then teach RoleOperationMembership and the audits to read rules, and only then set this to true
+     * - with the back office's RULES_APPLIED.
+     */
+    static final boolean RULE_GRANTS_APPLIED = false;
+
     // The public principal has no userId; this sentinel keys its 2 cache entries (frontoffice & backoffice)
     private static final Object PUBLIC_PRINCIPAL = "PUBLIC";
 
@@ -152,7 +173,7 @@ public final class ModalityAuthorizationServerServiceProvider extends Authorizat
             return loggedInGrantsFuture;
         return Future.all(
             loggedInGrantsFuture,
-            // Loading operations and rules granted to the user
+            // Loading operations (and rules, while RULE_GRANTS_APPLIED) granted to the user
             entityStore.<AuthorizationOrganizationUserAccess>executeQuery(
                     "select organization.id,event.id,role.id from AuthorizationOrganizationUserAccess where user=$1 order by organization.id,event?.id", personId)
                 .compose(userAccesses -> {
@@ -161,7 +182,9 @@ public final class ModalityAuthorizationServerServiceProvider extends Authorizat
                         .executeParallel(CompositeFuture[]::new, userAccess ->
                             Future.all(
                                 entityStore.executeQuery("select operationCode, grantRoute from Operation op where ($1 and backoffice or !$1 and frontoffice) and exists(select AuthorizationRoleOperation ro where ro.role=$2 and (ro.operation = op or ro.operationGroup = op.group))", backoffice, userAccess.getRole()),
-                                entityStore.executeQuery("select rule from AuthorizationRule where role=$1", userAccess.getRole())
+                                RULE_GRANTS_APPLIED
+                                    ? entityStore.<AuthorizationRule>executeQuery("select rule from AuthorizationRule where role=$1", userAccess.getRole())
+                                    : Future.<EntityList<AuthorizationRule>>succeededFuture(null)
                             )
                         ).map(batch -> {
                             StringBuilder sb = new StringBuilder();
@@ -175,7 +198,8 @@ public final class ModalityAuthorizationServerServiceProvider extends Authorizat
                                     sb.append(",eventId=").append(eventId);
                                 sb.append("\n");
                                 grantOperations(operations, sb);
-                                rules.forEach(rule -> sb.append(rule.getRule()).append("\n"));
+                                if (rules != null)
+                                    rules.forEach(rule -> sb.append(rule.getRule()).append("\n"));
                             }
                             return sb.toString();
                         });
