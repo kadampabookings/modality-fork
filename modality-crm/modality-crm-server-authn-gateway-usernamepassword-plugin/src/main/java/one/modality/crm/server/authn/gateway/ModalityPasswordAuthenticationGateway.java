@@ -26,6 +26,7 @@ import one.modality.base.shared.entities.MagicLink;
 import one.modality.base.shared.entities.MagicLinkType;
 import one.modality.base.shared.entities.Person;
 import one.modality.crm.server.authn.gateway.magiclink.ModalityMagicLinkAuthenticationGateway;
+import one.modality.crm.server.authn.gateway.shared.AccountSignInRestrictionStore;
 import one.modality.crm.server.authn.gateway.shared.GuestPersonLinker;
 import one.modality.crm.server.authn.gateway.shared.LocalizedMailTemplate;
 import one.modality.crm.server.authn.gateway.shared.MagicLinkService;
@@ -233,37 +234,69 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
                     return Future.failedFuture("[%s] Wrong user or password".formatted(ModalityAuthenticationI18nKeys.AuthnWrongUserOrPasswordError));
                 Person userPerson = persons.get(0);
                 FrontendAccount fa = userPerson.getFrontendAccount();
-                if (!isTypedPasswordCorrect(password, fa.getPassword(), fa.getSalt())) {
-                    // Deliberately not logging what was typed. A failed attempt is very often a real
-                    // password — the one for another account, or the right one with a typo — and
-                    // logging it wrote live credentials into logs/server.log in clear, where they
-                    // outlive the session, get shipped to log aggregation, and sit in backups.
-                    return Future.failedFuture("[%s] Wrong user or password".formatted(ModalityAuthenticationI18nKeys.AuthnWrongUserOrPasswordError));
-                }
-                Object personId = userPerson.getPrimaryKey();
                 Object accountId = Entities.getPrimaryKey(userPerson.getForeignEntityId("frontendAccount"));
-                ModalityUserPrincipal modalityUserPrincipal = new ModalityUserPrincipal(personId, accountId);
-                // Both linker calls below stay on this side of the second-factor step: they are a data
-                // fix-up keyed on a password that has just been proven, not a session — they push nothing
-                // and grant nothing, and a login that then stops at the step-up leaves them correctly done.
-                // Link any guest Person records with the same email, in case the user booked
-                // as a guest before logging in. Fire-and-forget.
-                GuestPersonLinker.linkGuestPersonsToAccount(normalizedUsername, accountId, dataSourceModel)
-                    .onFailure(err -> Console.log("GuestPersonLinker failed on login for " + normalizedUsername + ": " + err));
-                // Attach the person-less guest bookings the React front office makes under this
-                // address to the owner Person — only if THIS session verified the address by
-                // redeeming a link or code for it (a password proves the account, not the
-                // address; see the linker). Awaited before the login push so the first /orders
-                // load already sees them, but a failure must never keep anyone from signing in.
-                return GuestPersonLinker.linkGuestDocumentsToPerson(normalizedUsername, personId, false, runId, dataSourceModel)
-                    .otherwise(err -> {
-                        Console.log("GuestPersonLinker (documents) failed on login for " + normalizedUsername + ": " + err);
-                        return null;
-                    })
-                    // isBackofficeAuthentication was captured at the top of this method, before any async
-                    // hop, which is the only place it can be read — see AuthenticatedState.createFor.
-                    .compose(ignored -> mintOrAskForSecondFactor(modalityUserPrincipal, personId, accountId, isBackofficeAuthentication, runId));
+                // "Stop my password working" (V0096). Asked BEFORE the password is checked, and answered
+                // with the SAME error as a wrong one, which is the whole of the design here: a distinct
+                // message after a successful check would tell whoever typed it that the password is
+                // CORRECT — and a password that is right here is very often the same password somewhere
+                // else, so confirming it hands an attacker the one thing this control was supposed to take
+                // away. The owner's confusion is handled where it belongs, on the login page and on the
+                // Security page that shows them what they turned on; it is not worth an oracle.
+                //
+                // It does widen an existing timing difference, and that is accepted rather than unnoticed:
+                // an unknown username already returned above without so much as an MD5, and a known one now
+                // costs a database round trip before anything else, which is easier to measure than the
+                // hash was. Equalising it would mean running this query for every unknown username too —
+                // one database call per attempt in a credential-stuffing flood, to hide a distinction the
+                // recovery flow does not hide either. The cheaper leak is the one we keep.
+                return AccountSignInRestrictionStore.isPasswordClosed(accountId)
+                    .compose(passwordClosed -> {
+                        if (passwordClosed) {
+                            // Logged without the username: this is a refusal an operator may want to see,
+                            // and naming the person would put an account under a security restriction into
+                            // logs/server.log, which travels further than the table it came from.
+                            Console.log("🛡 Password sign-in refused — the account's owner has closed it");
+                            return Future.failedFuture("[%s] Wrong user or password".formatted(ModalityAuthenticationI18nKeys.AuthnWrongUserOrPasswordError));
+                        }
+                        return continueAfterPasswordRestrictionCheck(userPerson, fa, accountId, password, normalizedUsername, runId, isBackofficeAuthentication);
+                    });
             });
+    }
+
+    /** The rest of the password login, once the account is known not to have closed this way in. */
+    private Future<?> continueAfterPasswordRestrictionCheck(Person userPerson, FrontendAccount fa, Object accountId,
+                                                            String password, String normalizedUsername, String runId,
+                                                            boolean isBackofficeAuthentication) {
+        if (!isTypedPasswordCorrect(password, fa.getPassword(), fa.getSalt())) {
+            // Deliberately not logging what was typed. A failed attempt is very often a real
+            // password — the one for another account, or the right one with a typo — and
+            // logging it wrote live credentials into logs/server.log in clear, where they
+            // outlive the session, get shipped to log aggregation, and sit in backups.
+            return Future.failedFuture("[%s] Wrong user or password".formatted(ModalityAuthenticationI18nKeys.AuthnWrongUserOrPasswordError));
+        }
+        Object personId = userPerson.getPrimaryKey();
+        ModalityUserPrincipal modalityUserPrincipal = new ModalityUserPrincipal(personId, accountId);
+        // Both linker calls below stay on this side of the second-factor step: they are a data
+        // fix-up keyed on a password that has just been proven, not a session — they push nothing
+        // and grant nothing, and a login that then stops at the step-up leaves them correctly done.
+        // Link any guest Person records with the same email, in case the user booked
+        // as a guest before logging in. Fire-and-forget.
+        GuestPersonLinker.linkGuestPersonsToAccount(normalizedUsername, accountId, dataSourceModel)
+            .onFailure(err -> Console.log("GuestPersonLinker failed on login for " + normalizedUsername + ": " + err));
+        // Attach the person-less guest bookings the React front office makes under this
+        // address to the owner Person — only if THIS session verified the address by
+        // redeeming a link or code for it (a password proves the account, not the
+        // address; see the linker). Awaited before the login push so the first /orders
+        // load already sees them, but a failure must never keep anyone from signing in.
+        return GuestPersonLinker.linkGuestDocumentsToPerson(normalizedUsername, personId, false, runId, dataSourceModel)
+            .otherwise(err -> {
+                Console.log("GuestPersonLinker (documents) failed on login for " + normalizedUsername + ": " + err);
+                return null;
+            })
+            // isBackofficeAuthentication was captured at the top of authenticateWithUsernamePassword,
+            // before any async hop, which is the only place it can be read — see AuthenticatedState.createFor,
+            // and why it is threaded through here rather than re-read.
+            .compose(ignored -> mintOrAskForSecondFactor(modalityUserPrincipal, personId, accountId, isBackofficeAuthentication, runId));
     }
 
     /**

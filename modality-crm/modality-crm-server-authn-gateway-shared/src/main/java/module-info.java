@@ -19,7 +19,10 @@ module modality.crm.server.authn.gateway.shared {
     requires webfx.platform.substitution;
     requires webfx.platform.util;
     requires webfx.stack.authn;
+    requires webfx.stack.db.query;
+    requires webfx.stack.db.submit;
     requires webfx.stack.mail;
+    requires webfx.stack.orm.datasourcemodel.service;
     requires webfx.stack.orm.domainmodel;
     requires webfx.stack.orm.entity;
     requires webfx.stack.session.state;
