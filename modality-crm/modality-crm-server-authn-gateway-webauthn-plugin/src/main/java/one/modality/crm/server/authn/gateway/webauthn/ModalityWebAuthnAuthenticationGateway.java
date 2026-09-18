@@ -40,6 +40,7 @@ import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 import dev.webfx.stack.session.token.AuthenticatedState;
 import one.modality.base.shared.entities.FrontendAccount;
 import one.modality.base.shared.entities.Person;
+import one.modality.crm.server.authn.gateway.shared.CredentialChangeProof;
 import one.modality.crm.server.authn.gateway.shared.LoginPersonResolver;
 import one.modality.crm.server.authn.gateway.shared.PendingSecondFactor;
 import one.modality.crm.server.authn.gateway.shared.PendingSecondFactorStore;
@@ -553,8 +554,8 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
         Object userId = ThreadLocalStateHolder.getUserId();
         if (!(userId instanceof ModalityUserPrincipal principal) || principal.isSupportView())
             return managementFailure();
-        if (updateCredentialsArgument instanceof StartPasskeyRegistrationCredentials)
-            return startPasskeyRegistration(principal);
+        if (updateCredentialsArgument instanceof StartPasskeyRegistrationCredentials cred)
+            return startPasskeyRegistration(principal, cred);
         if (updateCredentialsArgument instanceof FinalisePasskeyRegistrationCredentials cred)
             return finalisePasskeyRegistration(principal, cred);
         if (updateCredentialsArgument instanceof ListPasskeysCredentials)
@@ -586,7 +587,7 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
         return managementFailure();
     }
 
-    private Future<String> startPasskeyRegistration(ModalityUserPrincipal principal) {
+    private Future<String> startPasskeyRegistration(ModalityUserPrincipal principal, StartPasskeyRegistrationCredentials credentials) {
         // Capturing the required client state info from thread local (before it will be wiped out by the async call)
         String runId = ThreadLocalStateHolder.getRunId();
         boolean isBackoffice = ThreadLocalStateHolder.isBackoffice();
@@ -594,10 +595,17 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
         if (runId == null)
             return registrationFailure();
         Object accountId = accountIdOf(principal);
+        // No ceremony until the session proves it may add one: the current password, or a recovery minutes
+        // old. A passkey is lasting access — a session that could add its own would turn a taken laptop into
+        // an account the thief signs back into after every session has ended. Gating the start is enough:
+        // finalise only completes a ceremony this start opened, for this account. Started here, on the
+        // caller's thread, because it reads the caller from it; its refusal passes through unchanged so the
+        // client can tell a wrong password from a failed ceremony. See CredentialChangeProof.
+        Future<Void> proved = CredentialChangeProof.require(credentials.currentPassword(), dataSourceModel);
         // The two reads are independent (both key on ids already at hand) — run them in parallel.
         // The person query carries the same fences as getUserClaims: the session's person must
         // still exist on that account.
-        return Future.all(
+        return proved.compose(ignoredProof -> Future.all(
             EntityStore.create(dataSourceModel)
                 .<Person>executeQuery("select frontendAccount.username from Person where id=$1 and frontendAccount.(id=$2 and !disabled and ($3=false or backoffice))",
                     principal.getUserPersonId(), accountId, isBackoffice),
@@ -625,7 +633,7 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
             if (pending == null) // store full — see WebAuthnChallengeStore's overload policy
                 return registrationFailure();
             return Future.succeededFuture(buildCreationOptionsJson(cfg, username, userHandleB64, pending.challenge(), existingCredentials));
-        });
+        }));
     }
 
     private String buildCreationOptionsJson(WebAuthnConfig cfg, String username, String userHandleB64,

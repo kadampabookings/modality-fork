@@ -299,7 +299,7 @@ public final class MagicLinkService {
             findFuture = entityStore.<MagicLink>executeQuery(
                 // LOGIN rows only, in SQL too: a BOOKING_ACCESS row minted later with the same six
                 // digits must not shadow the genuine code (the Java check below is belt and braces).
-                "select loginRunId,email,creationDate,usageDate,usageRunId,requestedPath,oldEmail,linkType from MagicLink where verificationCode=$1 and linkType=$2 order by id desc limit 1",
+                "select loginRunId,email,creationDate,usageDate,usageRunId,requestedPath,oldEmail,linkType,lang from MagicLink where verificationCode=$1 and linkType=$2 order by id desc limit 1",
                 tokenOrVerificationCode, MagicLinkType.LOGIN.name())
                 .map(Collections::first)
                 .map(ml -> {
@@ -323,7 +323,7 @@ public final class MagicLinkService {
             // BOOKING_ACCESS links are multi-use (usageDate is set after first use), so we do NOT
             // filter by usageDate=null here; the validity check below uses type-appropriate expiry.
             findFuture = entityStore.<MagicLink>executeQuery(
-                "select loginRunId,email,creationDate,usageDate,usageRunId,requestedPath,oldEmail,linkType from MagicLink where token=$1 order by id desc limit 1",
+                "select loginRunId,email,creationDate,usageDate,usageRunId,requestedPath,oldEmail,linkType,lang from MagicLink where token=$1 order by id desc limit 1",
                 tokenOrVerificationCode)
                 .map(Collections::first);
         }

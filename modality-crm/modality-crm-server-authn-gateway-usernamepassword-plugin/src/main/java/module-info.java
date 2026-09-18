@@ -16,7 +16,6 @@ module modality.crm.server.authn.gateway.usernamepassword.plugin {
     requires webfx.stack.authn;
     requires webfx.stack.authn.logout.server;
     requires webfx.stack.authn.server.gateway;
-    requires webfx.stack.hash.md5;
     requires webfx.stack.orm.datasourcemodel.service;
     requires webfx.stack.orm.domainmodel;
     requires webfx.stack.orm.entity;

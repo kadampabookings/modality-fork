@@ -35,4 +35,10 @@ package one.modality.crm.server.authn.gateway.shared;
  * @author Claude Code
  */
 public record SetPasswordAfterRecoveryCredentials(String newPassword) {
+
+    /** Redacted: a record's generated toString() would print the password into any message or log it reaches. */
+    @Override
+    public String toString() {
+        return "SetPasswordAfterRecoveryCredentials[newPassword=***]";
+    }
 }

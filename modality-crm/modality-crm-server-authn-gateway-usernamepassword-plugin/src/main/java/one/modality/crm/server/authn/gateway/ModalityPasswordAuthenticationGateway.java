@@ -7,7 +7,6 @@ import dev.webfx.platform.util.collection.Collections;
 import dev.webfx.stack.authn.*;
 import dev.webfx.stack.authn.logout.server.LogoutPush;
 import dev.webfx.stack.authn.server.gateway.spi.ServerAuthenticationGateway;
-import dev.webfx.stack.hash.md5.Md5;
 import dev.webfx.stack.orm.datasourcemodel.service.DataSourceModelService;
 import dev.webfx.stack.orm.domainmodel.DataSourceModel;
 import dev.webfx.stack.orm.domainmodel.HasDataSourceModel;
@@ -27,10 +26,13 @@ import one.modality.base.shared.entities.MagicLinkType;
 import one.modality.base.shared.entities.Person;
 import one.modality.crm.server.authn.gateway.magiclink.ModalityMagicLinkAuthenticationGateway;
 import one.modality.crm.server.authn.gateway.shared.AccountSignInRestrictionStore;
+import one.modality.crm.server.authn.gateway.shared.CredentialChangeProof;
+import one.modality.crm.server.authn.gateway.shared.EmailChangeNotice;
 import one.modality.crm.server.authn.gateway.shared.GuestPersonLinker;
 import one.modality.crm.server.authn.gateway.shared.LocalizedMailTemplate;
 import one.modality.crm.server.authn.gateway.shared.MagicLinkService;
 import one.modality.crm.server.authn.gateway.shared.SetPasswordAfterRecoveryCredentials;
+import one.modality.crm.server.authn.gateway.shared.StoredPasswords;
 import one.modality.crm.server.authn.gateway.shared.PendingSecondFactor;
 import one.modality.crm.server.authn.gateway.shared.PendingSecondFactorStore;
 import one.modality.crm.server.authn.gateway.shared.SecondFactorMarker;
@@ -271,13 +273,17 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
     private Future<?> continueAfterPasswordRestrictionCheck(Person userPerson, FrontendAccount fa, Object accountId,
                                                             String password, String normalizedUsername, String runId,
                                                             boolean isBackofficeAuthentication) {
-        if (!isTypedPasswordCorrect(password, fa.getPassword(), fa.getSalt())) {
+        if (!StoredPasswords.matches(password, fa.getPassword(), fa.getSalt())) {
             // Deliberately not logging what was typed. A failed attempt is very often a real
             // password — the one for another account, or the right one with a typo — and
             // logging it wrote live credentials into logs/server.log in clear, where they
             // outlive the session, get shipped to log aggregation, and sit in backups.
             return Future.failedFuture("[%s] Wrong user or password".formatted(ModalityAuthenticationI18nKeys.AuthnWrongUserOrPasswordError));
         }
+        // This tab has just proved the password: for a few minutes it may add a passkey or change the email
+        // without typing it again — what lets the back office offer a passkey straight after this sign-in.
+        // Usable only once a session for this account exists in this tab. See CredentialChangeProof.
+        CredentialChangeProof.notePasswordProved(runId, accountId);
         Object personId = userPerson.getPrimaryKey();
         ModalityUserPrincipal modalityUserPrincipal = new ModalityUserPrincipal(personId, accountId);
         // Both linker calls below stay on this side of the second-factor step: they are a data
@@ -378,25 +384,6 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
             PendingSecondFactorStore.TTL_MILLIS / 1000, MAX_SECOND_FACTOR_ATTEMPTS));
     }
 
-    /**
-     * Whether the password typed by the user matches the one stored for the account.
-     *
-     * <p>This used to have a second branch accepting the <em>stored hash itself</em> as a valid
-     * password, so that support could copy a hash out of the back office and sign in as the
-     * customer. That made the hash a permanent, transferable credential and turned any dump of
-     * {@code frontend_account} into a plaintext password list — inverting the entire point of
-     * storing passwords hashed — while leaving no record that support had signed in at all.
-     *
-     * <p>Support now uses {@code RequestSupportViewCredentials}, which issues a pass of its own:
-     * short-lived, single-use, read-only, tied to one named customer and one named member of staff,
-     * and recorded. See {@code ModalityMagicLinkAuthenticationGateway}.
-     */
-    private boolean isTypedPasswordCorrect(String typedPassword, String storedEncryptedPassword, String salt) {
-        // The typed password is not encrypted, so we encrypt it to compare it with the stored one
-        String typedEncryptedPassword = encryptPassword(typedPassword, salt);
-        return Objects.equals(typedEncryptedPassword, storedEncryptedPassword);
-    }
-
     private Future<Void> sendAccountCreationLink(InitiateAccountCreationCredentials credentials) {
         // We check that the requested account doesn't exist in the database. If it doesn't exist, we send an
         // "Account creation" email as requested. But if it exists, we send an "Account already exists" email instead.
@@ -465,7 +452,7 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
                 String salt = email; // like KBS2 for now
                 fa.setUsername(email);
                 fa.setSalt(salt);
-                fa.setPassword(encryptPassword(credentials.password(), salt));
+                fa.setPassword(StoredPasswords.encrypt(credentials.password(), salt));
                 fa.setCorporation(1);
                 // Consume the credential in the same transaction as the account it creates: a code is
                 // single-use from here on, and neither write can land without the other.
@@ -488,7 +475,14 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
         String runId = ThreadLocalStateHolder.getRunId();
         // Render the email in the user's current language — mirrors what they saw in the profile page.
         String lang = Strings.toSafeString(credentials.getLanguage());
-        return getUserClaims() // to get the old email (the passed credential contains the new email)
+        // Nothing is sent until the change is proved: the current password, or a recovery minutes old.
+        // Changing the sign-in email changes who can recover the account — whoever holds the new address can
+        // then use "forgot password" — so a session alone must not be able to do it. See CredentialChangeProof.
+        // Both futures are started here, on the caller's thread, because both read the caller from it.
+        Future<Void> proved = CredentialChangeProof.require(credentials.getCurrentPassword(), dataSourceModel);
+        Future<UserClaims> claims = getUserClaims(); // to get the old email (the passed credential contains the new email)
+        return proved
+            .compose(ignored -> claims)
             .compose(userClaims -> MagicLinkService.createAndSendMagicLink(
                     runId,
                     credentials, // contains the new email (the one to send the link to)
@@ -508,19 +502,22 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
         return MagicLinkService.loadMagicLinkFromTokenAndMarkAsUsed(credentials.magicLinkTokenOrVerificationCode(), dataSourceModel)
             .compose(magicLink -> MagicLinkService.loadUserPersonFromMagicLink(magicLink)
                 .compose(userPerson -> {
+                    // No account at the link's old address any more — a second pending change clicked after
+                    // the first took effect. A refusal, not an exception: an exception here leaves the bus
+                    // call with no reply at all, and the person watching a spinner until it times out.
+                    if (userPerson == null)
+                        return Future.failedFuture("[%s] No such user account".formatted(ModalityAuthenticationI18nKeys.AuthnNoSuchUserAccountError));
                     // We change the email in both the account, and the user person
                     UpdateStore updateStore = UpdateStore.create(dataSourceModel);
                     updateStore.updateEntity(userPerson.getFrontendAccount()).setUsername(magicLink.getEmail());
                     updateStore.updateEntity(userPerson).setEmail(magicLink.getEmail());
+                    // Once committed, the previous address is told: the confirmation link went to the NEW one,
+                    // so otherwise the address the owner still reads hears nothing. Not awaited — the change is
+                    // done whether or not the mail goes, and the notice logs its own failure (EmailChangeNotice).
                     return updateStore.submitChanges()
+                        .onSuccess(ignored -> EmailChangeNotice.send(magicLink.getOldEmail(), magicLink.getEmail(), magicLink.getLang()))
                         .map(ignored -> null);
                 }));
-    }
-
-    private String encryptPassword(String password, String salt) {
-        // KBS2 way of encrypting the password
-        String toEncrypt = salt + ":" + Md5.hash(password);
-        return Md5.hash(toEncrypt); // encrypted
     }
 
     @Override
@@ -694,9 +691,9 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
                         // back. The owner lifts it deliberately, on the Security page.
                         if (passwordClosed)
                             return Future.failedFuture("[%s] Password sign-in is closed on this account".formatted(ModalityAuthenticationI18nKeys.AuthnPasswordSignInClosedError));
-                        if (!afterRecovery && !isTypedPasswordCorrect(oldPassword, fa.getPassword(), fa.getSalt()))
+                        if (!afterRecovery && !StoredPasswords.matches(oldPassword, fa.getPassword(), fa.getSalt()))
                             return Future.failedFuture("[%s] The old password is not matching".formatted(ModalityAuthenticationI18nKeys.AuthnOldPasswordNotMatchingError));
-                        String storedEncryptedPassword = encryptPassword(newPassword, fa.getSalt());
+                        String storedEncryptedPassword = StoredPasswords.encrypt(newPassword, fa.getSalt());
                         UpdateStore updateStore = UpdateStore.createAbove(fa.getStore());
                         FrontendAccount ufa = updateStore.updateEntity(fa);
                         ufa.setPassword(storedEncryptedPassword);

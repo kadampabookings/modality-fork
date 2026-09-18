@@ -27,6 +27,7 @@ import one.modality.base.shared.util.ActivityHashUtil;
 import one.modality.crm.server.authn.gateway.shared.GuestPersonLinker;
 import one.modality.crm.server.authn.gateway.shared.LocalizedMailTemplate;
 import one.modality.crm.server.authn.gateway.shared.MagicLinkService;
+import one.modality.crm.server.authn.gateway.shared.RecoveryWindow;
 import one.modality.crm.server.authn.gateway.shared.SetPasswordAfterRecoveryCredentials;
 import one.modality.crm.server.authn.gateway.shared.SuperAdminMembership;
 import one.modality.crm.shared.services.authn.AuthenticateWithBackOfficeViewCredentials;

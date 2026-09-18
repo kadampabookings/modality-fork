@@ -11,6 +11,7 @@ import one.modality.crm.shared.services.authn.StartPasskeyRegistrationCredential
 public final class StartPasskeyRegistrationCredentialsSerialCodec extends SerialCodecBase<StartPasskeyRegistrationCredentials> {
 
     private static final String CODEC_ID = "StartPasskeyRegistrationCredentials";
+    private static final String CURRENT_PASSWORD_KEY = "currentPassword";
 
     public StartPasskeyRegistrationCredentialsSerialCodec() {
         super(StartPasskeyRegistrationCredentials.class, CODEC_ID);
@@ -18,11 +19,12 @@ public final class StartPasskeyRegistrationCredentialsSerialCodec extends Serial
 
     @Override
     public void encode(StartPasskeyRegistrationCredentials arg, AstObject serial) {
-        // No fields — the server chooses every ceremony parameter
+        // Nothing about the ceremony — the server chooses every parameter of it; only the proof
+        encodeString(serial, CURRENT_PASSWORD_KEY, arg.currentPassword());
     }
 
     @Override
     public StartPasskeyRegistrationCredentials decode(ReadOnlyAstObject serial) {
-        return new StartPasskeyRegistrationCredentials();
+        return new StartPasskeyRegistrationCredentials(decodeString(serial, CURRENT_PASSWORD_KEY));
     }
 }

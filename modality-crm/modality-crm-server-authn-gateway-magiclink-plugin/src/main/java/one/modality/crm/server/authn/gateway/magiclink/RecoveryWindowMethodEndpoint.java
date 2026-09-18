@@ -2,6 +2,7 @@ package one.modality.crm.server.authn.gateway.magiclink;
 
 import dev.webfx.stack.com.bus.call.spi.AsyncFunctionBusCallEndpoint;
 import dev.webfx.stack.orm.datasourcemodel.service.DataSourceModelService;
+import one.modality.crm.server.authn.gateway.shared.RecoveryWindow;
 
 /**
  * Answers how long the caller's recovery window has left, in milliseconds — 0 when there is none.

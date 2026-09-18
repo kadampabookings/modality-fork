@@ -1,4 +1,4 @@
-package one.modality.crm.server.authn.gateway.magiclink;
+package one.modality.crm.server.authn.gateway.shared;
 
 import dev.webfx.platform.async.Future;
 import dev.webfx.platform.util.Numbers;
@@ -7,7 +7,6 @@ import dev.webfx.stack.orm.entity.EntityStore;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 import one.modality.base.shared.entities.MagicLink;
 import one.modality.base.shared.entities.MagicLinkType;
-import one.modality.crm.server.authn.gateway.shared.MagicLinkService;
 import one.modality.crm.shared.services.authn.ModalityUserPrincipal;
 
 import java.time.Duration;
@@ -16,8 +15,10 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * The short window after a tab redeems an emailed sign-in link or code, during which THAT tab may set a new
- * password without naming the old one — the one exception to "a password change proves the current password".
+ * The short window after a tab redeems an emailed sign-in link or code, during which THAT tab may change how
+ * the account is reached — set a new password, change the sign-in email, add a passkey — without naming the
+ * current password. The one exception to "a credential change proves the current password" (see
+ * {@link CredentialChangeProof}).
  *
  * <h3>What opens it, and for whom</h3>
  *
@@ -34,30 +35,33 @@ import java.util.concurrent.ConcurrentHashMap;
  * </ul>
  * Anything else is "no window", deliberately one answer: the caller learns nothing about which it was.
  *
- * <h3>Used once</h3>
+ * <h3>A password set uses it up</h3>
  *
  * <p>Setting a password spends the window ({@link #claim}). Otherwise a tab left open after a reset would
  * let whoever reached it next set another password without knowing the one just chosen, for the rest of
- * the fifteen minutes. Held in memory rather than in the table: the column that would record it,
+ * the fifteen minutes. Changing the email or adding a passkey does not spend it: neither leaves the person
+ * knowing a password, so spending it would send somebody who forgot theirs, added a passkey first and then
+ * came to set a password back to their inbox. After a password set every other change is proved by that
+ * password, which they now know. Held in memory rather than in the table: the column that would record it,
  * {@code usageRunId}, is also how guest bookings recognise a redeemed address later in the same tab, so it
  * cannot be cleared, and a new column is a migration for a fifteen-minute fact. The cost of memory is that
  * a redeploy inside the window forgets it — the window then reopens for its remaining minutes, to the same
  * tab and account only, which is where it stood before this existed.
  */
-final class RecoveryWindow {
+public final class RecoveryWindow {
 
     /**
      * Fifteen minutes because it is the lifetime of the emailed code itself: long enough to finish choosing a
      * password after signing in with it, short enough that a tab left open afterwards is not a standing
      * licence. The front office tells people "15 minutes" in its copy; change both together.
      */
-    static final Duration LENGTH = Duration.ofMinutes(15);
+    public static final Duration LENGTH = Duration.ofMinutes(15);
 
     /** Links whose window has been spent, by id, with when — dropped once their window would have closed anyway. */
     private static final Map<String, Instant> SPENT = new ConcurrentHashMap<>();
 
     /** An open window: the link that opened it, the account it is for, and when it closes. */
-    record Open(MagicLink magicLink, ModalityUserPrincipal target, Instant closesAt) {}
+    public record Open(MagicLink magicLink, ModalityUserPrincipal target, Instant closesAt) {}
 
     private RecoveryWindow() {}
 
@@ -67,7 +71,7 @@ final class RecoveryWindow {
      * <p>MUST be called on the caller's thread: it reads the run id and principal before its first async step,
      * because {@link ThreadLocalStateHolder} is restored once the synchronous part of the call returns.
      */
-    static Future<Open> findForCaller(DataSourceModel dataSourceModel) {
+    public static Future<Open> findForCaller(DataSourceModel dataSourceModel) {
         String usageRunId = ThreadLocalStateHolder.getRunId();
         Object caller = ThreadLocalStateHolder.getUserId();
         // A support view redeems a grant of its own, which stamps this same usageRunId onto that row — so
@@ -122,7 +126,7 @@ final class RecoveryWindow {
      * right after an emailed sign-in, so it can offer the password form without the old-password field.
      * Same threading rule as {@link #findForCaller}.
      */
-    static Future<Integer> remainingMillisForCaller(DataSourceModel dataSourceModel) {
+    public static Future<Integer> remainingMillisForCaller(DataSourceModel dataSourceModel) {
         return findForCaller(dataSourceModel)
             .map(open -> open == null ? 0 : (int) Math.max(0, Duration.between(Instant.now(), open.closesAt()).toMillis()));
     }
@@ -131,7 +135,7 @@ final class RecoveryWindow {
      * Spends the window, atomically: true for the one caller that may now set a password, false for any
      * other — a second tab of the same run, or a second click racing the first.
      */
-    static boolean claim(MagicLink magicLink) {
+    public static boolean claim(MagicLink magicLink) {
         Instant now = Instant.now();
         // Nothing here can outlive LENGTH usefully: once the window would have closed, the date check refuses anyway.
         SPENT.values().removeIf(spentAt -> spentAt.plus(LENGTH).isBefore(now));
@@ -139,7 +143,7 @@ final class RecoveryWindow {
     }
 
     /** Gives the window back after a password set that did not happen, so the person can try again. */
-    static void release(MagicLink magicLink) {
+    public static void release(MagicLink magicLink) {
         SPENT.remove(keyOf(magicLink));
     }
 

@@ -21,6 +21,7 @@ module modality.crm.server.authn.gateway.shared {
     requires webfx.stack.authn;
     requires webfx.stack.db.query;
     requires webfx.stack.db.submit;
+    requires webfx.stack.hash.md5;
     requires webfx.stack.mail;
     requires webfx.stack.orm.datasourcemodel.service;
     requires webfx.stack.orm.domainmodel;
@@ -29,6 +30,9 @@ module modality.crm.server.authn.gateway.shared {
 
     // Exported packages
     exports one.modality.crm.server.authn.gateway.shared;
+
+    // Resources packages
+    opens one.modality.crm.server.authn.gateway.shared;
 
     // Used services
     uses one.modality.crm.server.authn.gateway.shared.SecondFactorVerifier;
