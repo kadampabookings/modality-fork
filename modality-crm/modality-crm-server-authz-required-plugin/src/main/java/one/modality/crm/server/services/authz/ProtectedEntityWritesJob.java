@@ -154,6 +154,9 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         // module's generated service declarations stay untouched — one registration line is a smaller
         // thing to own than a regenerated module-info.
         ProtectedEntityWriteRegistry.registerWriteInspector(new ClientWriteInventory());
+        // The read half of the same item, narrowly: not read authorisation, which is later, but the columns whose
+        // disclosure is a way in. Registered here for the same reason as the inventory above.
+        ClientReadSecrets.declare();
         Console.log("🛡 Write authorization active on " + REQUIRED_OPERATIONS.size() + " entities and "
                     + REQUIRED_OPERATIONS_BY_FIELD.size() + " fields"
                     + (ENFORCING ? " — ENFORCING" : " — observing only, nothing is refused yet"));
