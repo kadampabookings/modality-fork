@@ -27,6 +27,7 @@ import one.modality.base.shared.util.ActivityHashUtil;
 import one.modality.crm.server.authn.gateway.shared.GuestPersonLinker;
 import one.modality.crm.server.authn.gateway.shared.LocalizedMailTemplate;
 import one.modality.crm.server.authn.gateway.shared.MagicLinkService;
+import one.modality.crm.server.authn.gateway.shared.SetPasswordAfterRecoveryCredentials;
 import one.modality.crm.server.authn.gateway.shared.SuperAdminMembership;
 import one.modality.crm.shared.services.authn.AuthenticateWithBackOfficeViewCredentials;
 import one.modality.crm.shared.services.authn.AuthenticateWithSupportViewCredentials;
@@ -830,67 +831,33 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
         if (!(updateCredentialsArgument instanceof UpdatePasswordFromMagicLinkCredentials update)) {
             return Future.failedFuture("%s.updateCredentials() requires a %s argument".formatted(getClass().getSimpleName(), UpdatePasswordFromMagicLinkCredentials.class.getSimpleName()));
         }
-        String usageRunId = ThreadLocalStateHolder.getRunId();
-        // A support view must not reach this path at all. It redeems a grant of its own, which stamps
-        // this same usageRunId onto that row — so without this guard the agent's tab satisfies the
-        // "you recently redeemed a link" precondition below, on a row whose email is the CUSTOMER's,
-        // and could reset the customer's password from inside a session that is supposed to be
-        // read-only. Checked here, before the async hop, while the calling principal is still known.
+        // A support view is refused with its own answer, so the agent is told why rather than that a link is
+        // missing. RecoveryWindow refuses it too; this is only the clearer message. Checked on this thread,
+        // before the async hop, while the calling principal is still known.
         if (ThreadLocalStateHolder.getUserId() instanceof ModalityUserPrincipal callerPrincipal && callerPrincipal.isSupportView())
             return Future.failedFuture("[%s] A support view cannot change this account's password".formatted(ModalityAuthenticationI18nKeys.SupportViewLinkInvalidError));
-        // 1) Loading the email for the magic link normally associated with this magic link app userId from the database
-        // This will be used to identify the account we need to change the password for.
-        //
-        // Scoped to LOGIN rows IN THE QUERY, not just in the Java check below: one tab (one runId)
-        // can legitimately stamp usageRunId onto more than one row — the account-creation-from-
-        // booking flows mark BOOKING_ACCESS links as used with the same runId — and an unordered
-        // `limit 1` over that set is a coin toss. Before the type check tightened to LOGIN-only
-        // the coin toss was invisible (either row passed); with it, drawing the BOOKING_ACCESS row
-        // would refuse a perfectly legitimate password change. The column is NOT NULL DEFAULT
-        // 'LOGIN', so the SQL filter cannot miss legacy rows, and `order by id desc` keeps the
-        // answer deterministic even so.
-        return EntityStore.create(dataSourceModel)
-            .<MagicLink>executeQuery("select email,linkType from MagicLink where usageRunId=$1 and linkType=$2 order by id desc limit 1", usageRunId, MagicLinkType.LOGIN.name())
-            .compose(magicLinks -> {
-                if (magicLinks.isEmpty())
+        // Every other refusal — no link redeemed by this tab, one redeemed too long ago, one already used to
+        // set a password, one for another account — is the same answer, so the caller learns nothing about
+        // which it was, and the client falls back to asking for the current password. See RecoveryWindow.
+        return RecoveryWindow.findForCaller(dataSourceModel)
+            .compose(open -> {
+                if (open == null || !RecoveryWindow.claim(open.magicLink()))
                     return Future.failedFuture("[%s] Magic link not found!".formatted(ModalityAuthenticationI18nKeys.LoginLinkUnrecognisedError));
-                MagicLink magicLink = magicLinks.get(0);
-                // Belt and braces for the query filter above and the principal guard before it:
-                // only a LOGIN link authorises a password change — stated as an allowlist so a
-                // support pass of either flavour (or any future type) is refused without this line
-                // needing to know about it. linkType is selected explicitly because an unselected
-                // field reads as null, which getLinkType() would charitably interpret as LOGIN.
-                if (magicLink.getLinkType() != MagicLinkType.LOGIN)
-                    return Future.failedFuture("[%s] Magic link not found!".formatted(ModalityAuthenticationI18nKeys.LoginLinkUnrecognisedError));
-                // 3) Reading the user person
-                return MagicLinkService.loadUserPersonFromMagicLink(magicLink)
-                    .compose(userPerson -> {
-                        if (userPerson == null)
-                            return Future.failedFuture("[%s] No such user account".formatted(ModalityAuthenticationI18nKeys.AuthnNoSuchUserAccountError));
-                        // 4) Preparing the userId = ModalityUserPrincipal for registered users, ModalityGuestPrincipal for unregistered users
-                        ModalityUserPrincipal targetUserId = new ModalityUserPrincipal(userPerson.getPrimaryKey(), userPerson.getForeignEntity("frontendAccount").getPrimaryKey());
-                        // 5) Pushing the userId to the original client from which the magic link request was made.
-                        // The original client is identified by runId. Pushing the userId will cause a login, and
-                        // subsequently a push of the authorizations.
-                        UpdatePasswordCredentials updatePasswordCredentials = new UpdatePasswordCredentials(
-                            // No old password: redeeming the emailed link IS the proof of identity, exactly as
-                            // the React front-office profile page relies on the authenticated session.
-                            //
-                            // This used to pass the stored hash, which only worked because the password check
-                            // accepted a stored hash as if it were the password typed — the same branch that let
-                            // support log in as a customer with a copied hash. That branch is gone, so this had
-                            // to stop depending on it. Passing null is not a weakening: updateCredentials already
-                            // resolves the account from the session it was invoked under (runAsUser below), and
-                            // has always skipped the check for a null old password.
-                            null,
-                            update.newPassword() // new password
-                        );
-                        Promise<Void> promise = Promise.promise();
-                        ThreadLocalStateHolder.runAsUser(targetUserId,
-                            () -> promise.handle(AuthenticationService.updateCredentials(updatePasswordCredentials).mapEmpty())
-                        );
-                        return promise.future();
-                    });
+                // No old password: redeeming the emailed link IS the proof of identity. Said with a type of
+                // its own rather than a null in UpdatePasswordCredentials, because a session change MUST name
+                // the current password — and a null there is exactly what a stolen session would send to skip
+                // that. This type has no serial codec, so no client message can produce it; only this line
+                // can. See SetPasswordAfterRecoveryCredentials.
+                SetPasswordAfterRecoveryCredentials updatePasswordCredentials =
+                    new SetPasswordAfterRecoveryCredentials(update.newPassword());
+                Promise<Void> promise = Promise.promise();
+                ThreadLocalStateHolder.runAsUser(open.target(),
+                    () -> promise.handle(AuthenticationService.updateCredentials(updatePasswordCredentials).mapEmpty())
+                );
+                // Spent only if the password was actually set: a refusal (a closed password, a weak one, the
+                // database) leaves the person free to try again within the same window.
+                return promise.future()
+                    .onFailure(e -> RecoveryWindow.release(open.magicLink()));
             });
     }
 

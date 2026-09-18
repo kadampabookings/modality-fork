@@ -13,6 +13,7 @@ module modality.crm.server.authn.gateway.magiclink.plugin {
     requires webfx.stack.authn;
     requires webfx.stack.authn.logout.server;
     requires webfx.stack.authn.server.gateway;
+    requires webfx.stack.com.bus.call;
     requires webfx.stack.orm.datasourcemodel.service;
     requires webfx.stack.orm.domainmodel;
     requires webfx.stack.orm.entity;
@@ -28,5 +29,6 @@ module modality.crm.server.authn.gateway.magiclink.plugin {
 
     // Provided services
     provides dev.webfx.stack.authn.server.gateway.spi.ServerAuthenticationGateway with one.modality.crm.server.authn.gateway.magiclink.ModalityMagicLinkAuthenticationGateway;
+    provides dev.webfx.stack.com.bus.call.spi.BusCallEndpoint with one.modality.crm.server.authn.gateway.magiclink.RecoveryWindowMethodEndpoint;
 
 }

@@ -22,12 +22,14 @@ import dev.webfx.stack.orm.datasourcemodel.service.DataSourceModelService;
  * and costs nothing, because the passkey still works — which is the entire reason this exists as a
  * separate, calmer control.
  *
- * <h3>Password is to mean password AND recovery — one half of that is built</h3>
+ * <h3>Password means password AND recovery</h3>
  *
- * <p>Both routes are to be closed by one restriction, and that is the point rather than an extra: a
- * password that cannot be used to sign in but can be replaced from an email has not stopped working, it
- * has moved house. <b>Today only the sign-in half has a reader</b>, the password gateway; closing recovery
- * is the next increment, and until the writer lands with it this table has no writer at all.
+ * <p>Both routes are closed by one restriction, and that is the point rather than an extra: a password
+ * that cannot be used to sign in but can be replaced from an email has not stopped working, it has moved
+ * house. The password gateway reads it in two places: on sign-in ({@link #isPasswordClosed}, fail-open),
+ * and before ANY password is set, from a session or after a recovery link ({@link #readPasswordClosed},
+ * fail-closed). A change to this table or its query therefore reaches every password change as well as
+ * every password sign-in. It has no writer yet: that lands with the Security page control.
  *
  * <p>The consequence, for whoever writes that: with recovery closed the ways back are a passkey or a
  * super administrator, so nothing may create one of these for an account that has no usable passkey.
@@ -51,11 +53,11 @@ public final class AccountSignInRestrictionStore {
     public static final String PASSWORD_METHOD = "password";
 
     /**
-     * Whether this account's password is closed — the read on the sign-in path.
+     * Whether this account's password is closed.
      *
-     * <p>One index-only probe beside a query that already runs there. Asked on the password path today and
-     * on the recovery path when that lands, and on neither is a cached answer good enough: the whole value
-     * of the control is that it takes effect on the next attempt.
+     * <p>One index-only probe beside a query that already runs there. Asked on password sign-in and before
+     * every password set, and on neither is a cached answer good enough: the whole value of the control is
+     * that it takes effect on the next attempt.
      */
     private static final String IS_RESTRICTED_SQL =
         "select 1 from account_sign_in_restriction" +
@@ -89,14 +91,32 @@ public final class AccountSignInRestrictionStore {
      * attacker unless they already had it. Do NOT copy this posture to a check that is somebody's last line.
      */
     public static Future<Boolean> isPasswordClosed(Object frontendAccountId) {
+        // No account, no restriction to read: a "no" here, where readPasswordClosed() would refuse.
         if (frontendAccountId == null)
             return Future.succeededFuture(false);
-        return executeRawQuery(IS_RESTRICTED_SQL, normaliseId(frontendAccountId), PASSWORD_METHOD)
-            .map(result -> result != null && result.getRowCount() > 0)
+        return readPasswordClosed(frontendAccountId)
             .otherwise(e -> {
                 Console.log("⚠️ Could not read sign-in restrictions — letting the attempt proceed: " + e);
                 return false;
             });
+    }
+
+    /**
+     * The same question, but a failure to answer is a FAILURE, not a "no".
+     *
+     * <p>For every caller where refusing on a blip is cheap and proceeding is not — which is every caller
+     * except the sign-in read above. Setting a password is the case that motivated it: if this table cannot
+     * be read, a restricted account must not be allowed to put a password back on the strength of a query
+     * that did not run. The person retries a minute later; the alternative is a control that quietly stops
+     * holding exactly when the database is struggling.
+     */
+    public static Future<Boolean> readPasswordClosed(Object frontendAccountId) {
+        // Fail-closed extends to the question itself: an account id that did not arrive is a caller that
+        // could not say whose password this is, which is not the same as an account with no restriction.
+        if (frontendAccountId == null)
+            return Future.failedFuture("readPasswordClosed() needs an account id");
+        return executeRawQuery(IS_RESTRICTED_SQL, normaliseId(frontendAccountId), PASSWORD_METHOD)
+            .map(result -> result != null && result.getRowCount() > 0);
     }
 
     /**

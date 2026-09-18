@@ -12,6 +12,7 @@
 
     <providers>
         <provider interface="dev.webfx.stack.authn.server.gateway.spi.ServerAuthenticationGateway">one.modality.crm.server.authn.gateway.magiclink.ModalityMagicLinkAuthenticationGateway</provider>
+        <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.crm.server.authn.gateway.magiclink.RecoveryWindowMethodEndpoint</provider>
     </providers>
 
 </project>

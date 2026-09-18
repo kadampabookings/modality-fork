@@ -30,6 +30,7 @@ import one.modality.crm.server.authn.gateway.shared.AccountSignInRestrictionStor
 import one.modality.crm.server.authn.gateway.shared.GuestPersonLinker;
 import one.modality.crm.server.authn.gateway.shared.LocalizedMailTemplate;
 import one.modality.crm.server.authn.gateway.shared.MagicLinkService;
+import one.modality.crm.server.authn.gateway.shared.SetPasswordAfterRecoveryCredentials;
 import one.modality.crm.server.authn.gateway.shared.PendingSecondFactor;
 import one.modality.crm.server.authn.gateway.shared.PendingSecondFactorStore;
 import one.modality.crm.server.authn.gateway.shared.SecondFactorMarker;
@@ -47,6 +48,9 @@ import java.util.Objects;
  * @author Bruno Salmon
  */
 public final class ModalityPasswordAuthenticationGateway implements ServerAuthenticationGateway, HasDataSourceModel {
+
+    /** The shortest new password the server accepts — the front office's own minimum, so no form it offers is refused. */
+    private static final int MIN_NEW_PASSWORD_LENGTH = 8;
 
     /**
      * Teaches the stack how to read an actor id out of a Modality principal.
@@ -635,43 +639,73 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
 
     @Override
     public boolean acceptsUpdateCredentialsArgument(Object updateCredentialsArgument) {
-        return updateCredentialsArgument instanceof UpdatePasswordCredentials;
+        // The second type has no serial codec, so only server code — the magic-link gateway, after a
+        // redeemed recovery link — can hand one over. See SetPasswordAfterRecoveryCredentials.
+        return updateCredentialsArgument instanceof UpdatePasswordCredentials
+               || updateCredentialsArgument instanceof SetPasswordAfterRecoveryCredentials;
     }
 
     @Override
     public Future<?> updateCredentials(Object updateCredentialsArgument) {
         if (!acceptsUpdateCredentialsArgument(updateCredentialsArgument))
             return Future.failedFuture(getClass().getSimpleName() + ".updateCredentials() requires a " + UpdatePasswordCredentials.class.getSimpleName() + " argument");
-        UpdatePasswordCredentials passwordUpdate = (UpdatePasswordCredentials) updateCredentialsArgument;
+        // Which proof of identity came with this change. A recovery flow has already matched a redeemed
+        // link to this runId; a session has proved only that it was opened by the owner, at some point.
+        boolean afterRecovery = updateCredentialsArgument instanceof SetPasswordAfterRecoveryCredentials;
+        String oldPassword = afterRecovery ? null : ((UpdatePasswordCredentials) updateCredentialsArgument).oldPassword();
+        String newPassword = afterRecovery
+            ? ((SetPasswordAfterRecoveryCredentials) updateCredentialsArgument).newPassword()
+            : ((UpdatePasswordCredentials) updateCredentialsArgument).newPassword();
         // A support view may look, not change. Checked here, synchronously, while the calling
         // principal is still on the thread — see refuseIfSupportView().
         Future<?> refusal = refuseIfSupportView();
         if (refusal != null)
             return refusal;
-        // 1) We first check that the passed old password matches with the one in the database
+        // A floor on the new password here, not only in the browser: the browser's rules are UX, and the
+        // recovery route reaches this line with nothing else checked. An empty one would be stored — and then
+        // accepted by every password sign-in — and a null would throw inside the hash. Only the length:
+        // the fuller rules (a capital, a digit, a symbol) belong to the forms that can explain them.
+        if (newPassword == null || newPassword.length() < MIN_NEW_PASSWORD_LENGTH)
+            return Future.failedFuture("[%s] The new password is too short".formatted(ModalityAuthenticationI18nKeys.AuthnNewPasswordTooShortError));
+        // A change from a SESSION must name the current password, and there is no exception for an
+        // account that has none.
+        //
+        // The reason is the stolen laptop. A session is bounded — hours idle, a day at most, and ended by
+        // "sign out my other devices" — while a password is not. Letting a session set one turns a taken
+        // session into an account, which outlives every control on the Security page. That is equally true
+        // of an account with no password yet: a thief holding its session could create one. So a session
+        // proves the old password or changes nothing; somebody who has none sets their first through the
+        // emailed link, where the mailbox is the proof. Refused here rather than handed to the hash, which
+        // would throw on a null (Md5 calls getBytes on it) instead of refusing.
+        if (!afterRecovery && Strings.isEmpty(oldPassword))
+            return Future.failedFuture("[%s] The old password is not matching".formatted(ModalityAuthenticationI18nKeys.AuthnOldPasswordNotMatchingError));
         return queryModalityUserPerson("frontendAccount.(username, password, salt)")
             .compose(userPerson -> {
-                String oldPassword = passwordUpdate.oldPassword();
-                // Note: in case of resetting the password from a magic link, the old password is not typed by the user
-                // but loaded again from the database (by the MagicLink gateway) and is therefore already encrypted.
-                // When the password change originates from the legacy JavaFX user profile, the old password is in clear
-                // (what the user directly typed). The React front-office profile page omits the old password entirely
-                // (oldPassword == null) because the active authenticated session is sufficient proof of identity —
-                // queryModalityUserPerson() above already resolved the user via the session, so we can skip the check.
                 FrontendAccount fa = userPerson.getFrontendAccount();
-                // isTypedPasswordCorrect() is handling both cases (oldPassword in clear or already encrypted)
-                if (oldPassword != null && !isTypedPasswordCorrect(oldPassword, fa.getPassword(), fa.getSalt()))
-                    return Future.failedFuture("[%s] The old password is not matching".formatted(ModalityAuthenticationI18nKeys.AuthnOldPasswordNotMatchingError));
-                // 2) We update the password in the database
-                String storedEncryptedPassword = encryptPassword(passwordUpdate.newPassword(), fa.getSalt());
-                UpdateStore updateStore = UpdateStore.createAbove(fa.getStore());
-                FrontendAccount ufa = updateStore.updateEntity(fa);
-                ufa.setPassword(storedEncryptedPassword);
-                // Map the SubmitChangesResult to null — the client only needs success/failure,
-                // and SubmitChangesResult has no registered SerialCodec so returning it would
-                // cause the bus-call reply to throw IllegalArgumentException during encode,
-                // leaving the client's Promise un-resolved until its 30 s timeout.
-                return updateStore.submitChanges().map(ignored -> null);
+                Object accountId = Entities.getPrimaryKey(userPerson.getForeignEntityId("frontendAccount"));
+                // Read with the FAIL-CLOSED variant, unlike the sign-in path: if the restriction cannot be
+                // read, refuse. A person retries in a minute; a restricted account that got a password
+                // back because the database was slow is the control quietly failing when it matters.
+                return AccountSignInRestrictionStore.readPasswordClosed(accountId)
+                    .compose(passwordClosed -> {
+                        // "Stop my password working" (V0096) closes this too, from EITHER route. From a
+                        // session that is the point of refusing; from recovery it is what closing recovery
+                        // means in practice — the link can still be redeemed, but it cannot put a password
+                        // back. The owner lifts it deliberately, on the Security page.
+                        if (passwordClosed)
+                            return Future.failedFuture("[%s] Password sign-in is closed on this account".formatted(ModalityAuthenticationI18nKeys.AuthnPasswordSignInClosedError));
+                        if (!afterRecovery && !isTypedPasswordCorrect(oldPassword, fa.getPassword(), fa.getSalt()))
+                            return Future.failedFuture("[%s] The old password is not matching".formatted(ModalityAuthenticationI18nKeys.AuthnOldPasswordNotMatchingError));
+                        String storedEncryptedPassword = encryptPassword(newPassword, fa.getSalt());
+                        UpdateStore updateStore = UpdateStore.createAbove(fa.getStore());
+                        FrontendAccount ufa = updateStore.updateEntity(fa);
+                        ufa.setPassword(storedEncryptedPassword);
+                        // Map the SubmitChangesResult to null — the client only needs success/failure,
+                        // and SubmitChangesResult has no registered SerialCodec so returning it would
+                        // cause the bus-call reply to throw IllegalArgumentException during encode,
+                        // leaving the client's Promise un-resolved until its 30 s timeout.
+                        return updateStore.submitChanges().map(ignored -> null);
+                    });
             });
     }
 

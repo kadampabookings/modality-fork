@@ -6,6 +6,8 @@ public interface ModalityAuthenticationI18nKeys {
     Object AuthnBackofficeMethodNotAllowedError = "AuthnBackofficeMethodNotAllowedError";
     Object AuthnNoSuchUserAccountError = "AuthnNoSuchUserAccountError";
     Object AuthnOldPasswordNotMatchingError = "AuthnOldPasswordNotMatchingError";
+    Object AuthnPasswordSignInClosedError = "AuthnPasswordSignInClosedError";
+    Object AuthnNewPasswordTooShortError = "AuthnNewPasswordTooShortError";
     Object AuthnPasskeyAdminNotPermittedError = "AuthnPasskeyAdminNotPermittedError";
     Object AuthnPasskeyError = "AuthnPasskeyError";
     Object AuthnPasskeyManagementError = "AuthnPasskeyManagementError";
