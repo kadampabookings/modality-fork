@@ -7,6 +7,7 @@ import dev.webfx.platform.console.Console;
 import dev.webfx.stack.authz.server.AuthorizationServerService;
 import dev.webfx.stack.authz.server.spi.AuthorizationServerServiceProvider;
 import dev.webfx.stack.authz.server.spi.impl.AuthorizationServerServiceProviderBase;
+import dev.webfx.stack.db.submit.ClientSubmitGuard;
 import dev.webfx.stack.db.submit.ProtectedEntityWriteRegistry;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 
@@ -37,6 +38,15 @@ import java.util.Map;
 public final class ProtectedEntityWritesJob implements ApplicationJob {
 
     private static final String MANAGE_AUTHORIZATIONS = "ManageAuthorizations";
+
+    /**
+     * The raw statements a client may still send: the transaction prefixes the legacy JavaFX/GWT clients put at the
+     * head of a batch (Triggers.backOfficeTransaction / frontOfficeTransaction). Matched exactly, with no parameters.
+     * The React apps send none — they ask for the server's preamble instead.
+     */
+    private static final java.util.Set<String> LEGACY_RAW_STATEMENTS = java.util.Set.of(
+        "select set_transaction_parameters(true)",
+        "select set_transaction_parameters(false)");
 
     /**
      * Which operation codes authorize writing each protected entity — ANY of them is enough.
@@ -157,6 +167,15 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         // The read half of the same item, narrowly: not read authorisation, which is later, but the columns whose
         // disclosure is a way in. Registered here for the same reason as the inventory above.
         ClientReadSecrets.declare();
+        // And the write half of that: the account columns no client may set, enforced now rather than observed —
+        // see ClientWriteSecrets for why the observe-only switch below does not apply to them.
+        ClientWriteSecrets.declare();
+        // Raw statements from a client skip every check that reads what a statement touches, the one above
+        // included, so they are refused — except the two fixed transaction prefixes the legacy clients still send,
+        // which keep those clients working exactly as before. Not decided by WHO is asking: a grant-based
+        // exception would be only as strong as the weakest way to obtain the grant. Consequence, accepted: the
+        // legacy scheduled-item generator (ScheduledItemGenerationView), which sends generated SQL, no longer runs.
+        ClientSubmitGuard.registerRawStatementPolicy(ProtectedEntityWritesJob::isAllowedLegacyRawStatement);
         Console.log("🛡 Write authorization active on " + REQUIRED_OPERATIONS.size() + " entities and "
                     + REQUIRED_OPERATIONS_BY_FIELD.size() + " fields"
                     + (ENFORCING ? " — ENFORCING" : " — observing only, nothing is refused yet"));
@@ -182,6 +201,18 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
             base.invalidateAllRuleRegistries();
             Console.log("🛡 " + verb + " on " + entityName + " — cached authorizations discarded on this instance");
         }
+    }
+
+    /**
+     * Whether a client's raw statement is one of the legacy transaction prefixes — exactly, with nothing appended and
+     * no parameters. Package-private for the same reason as isLetterContentField: it is the decision a check can
+     * verify without a running stack (scripts/checks/client-write-guard).
+     */
+    static boolean isAllowedLegacyRawStatement(dev.webfx.stack.db.submit.SubmitArgument argument) {
+        return argument != null
+               && argument.getStatement() != null
+               && LEGACY_RAW_STATEMENTS.contains(argument.getStatement().trim())
+               && (argument.getParameters() == null || argument.getParameters().length == 0);
     }
 
     /**

@@ -480,13 +480,17 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
         // then use "forgot password" — so a session alone must not be able to do it. See CredentialChangeProof.
         // Both futures are started here, on the caller's thread, because both read the caller from it.
         Future<Void> proved = CredentialChangeProof.require(credentials.getCurrentPassword(), dataSourceModel);
-        Future<UserClaims> claims = getUserClaims(); // to get the old email (the passed credential contains the new email)
+        Future<UserClaims> claims = getUserClaims(); // to get the account's current sign-in name (the credential holds the new email)
         return proved
             .compose(ignored -> claims)
             .compose(userClaims -> MagicLinkService.createAndSendMagicLink(
                     runId,
                     credentials, // contains the new email (the one to send the link to)
-                    userClaims.email(), // current email for this account (= old email)
+                    // The account's USERNAME, not the person's email: confirming the link finds the account by this
+                    // value, so it must name the requester's own account. A person's email is a field a client can
+                    // write and may differ from the login — set to somebody else's sign-in address, it made the
+                    // confirmed change land on THEIR account. The username is only written by the server.
+                    userClaims.username(),
                     UPDATE_EMAIL_ACTIVITY_PATH_FULL,
                 MAIL_FROM_NAME,
                 UPDATE_EMAIL_MAIL_FROM,
@@ -497,10 +501,28 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
             );
     }
 
+    /**
+     * The person whose account asked for this change: the one whose username is EXACTLY the link's oldEmail, which
+     * sendEmailUpdateLink copied from the requesting account itself.
+     *
+     * <p>Exact, not the case-insensitive match sign-in links use: the unique constraint on (corporation, username) is
+     * case-sensitive, so {@code lower()} could name ANOTHER account whose username differs only in case — and the
+     * confirmed change would then rewrite that account's login. A link with no oldEmail is not an email change at
+     * all, and changes nothing.
+     */
+    private static Future<Person> loadRequesterOfEmailChange(MagicLink magicLink) {
+        String requesterUsername = magicLink.getOldEmail();
+        if (requesterUsername == null)
+            return Future.succeededFuture(null);
+        return magicLink.getStore()
+            .<Person>executeQuery("select frontendAccount.id from Person where frontendAccount.(corporation=$1 and username=$2 and !disabled) order by removed, owner desc, id limit 1", 1, requesterUsername)
+            .map(persons -> persons.isEmpty() ? null : persons.get(0));
+    }
+
     private Future<Void> finaliseEmailUpdate(FinaliseEmailUpdateCredentials credentials) {
         // We check the validity of the token, and if valid, we load the user person
         return MagicLinkService.loadMagicLinkFromTokenAndMarkAsUsed(credentials.magicLinkTokenOrVerificationCode(), dataSourceModel)
-            .compose(magicLink -> MagicLinkService.loadUserPersonFromMagicLink(magicLink)
+            .compose(magicLink -> loadRequesterOfEmailChange(magicLink)
                 .compose(userPerson -> {
                     // No account at the link's old address any more — a second pending change clicked after
                     // the first took effect. A refusal, not an exception: an exception here leaves the bus
