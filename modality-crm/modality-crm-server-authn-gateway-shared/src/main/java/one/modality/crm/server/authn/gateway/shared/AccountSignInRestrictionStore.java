@@ -13,6 +13,7 @@ import dev.webfx.stack.orm.datasourcemodel.service.DataSourceModelService;
 import one.modality.crm.shared.services.authn.ModalityAuthenticationI18nKeys;
 
 import java.security.SecureRandom;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Which ways into an account its owner has deliberately closed — {@code account_sign_in_restriction}, V0096.
@@ -96,6 +97,14 @@ public final class AccountSignInRestrictionStore {
      * first, then the lowest id), so that with two accounts whose usernames differ only in case, the one asked
      * about is the one the link would open.
      */
+    /** Is V0100's trigger actually on the table? Asked at a close — see {@link #warnIfKbs2CanStillWriteAPassword}. */
+    private static final String PASSWORD_WRITE_TRIGGER_SQL =
+        "select 1 from pg_trigger where tgrelid = 'public.frontend_account'::regclass" +
+        " and tgname = 'refuse_password_while_closed' and not tgisinternal limit 1";
+
+    /** Asked once per server run, unless the asking itself failed. */
+    private static final AtomicBoolean PASSWORD_WRITE_TRIGGER_CHECKED = new AtomicBoolean();
+
     private static final String IS_RESTRICTED_BY_USERNAME_SQL =
         "select 1 from account_sign_in_restriction r" +
         " where r.method = $2 and r.lifted_at is null and r.frontend_account_id = (" +
@@ -232,7 +241,35 @@ public final class AccountSignInRestrictionStore {
     public static Future<Boolean> closePassword(Object frontendAccountId, Object createdByPersonId, String note) {
         return executeRawSubmit(RESTRICT_SQL, normaliseId(frontendAccountId), PASSWORD_METHOD,
                                 normaliseId(createdByPersonId), note, newWipedPassword())
-            .map(AccountSignInRestrictionStore::returnedARow);
+            .map(AccountSignInRestrictionStore::returnedARow)
+            .onSuccess(closed -> { if (Boolean.TRUE.equals(closed)) warnIfKbs2CanStillWriteAPassword(); });
+    }
+
+    /**
+     * Says so, once per server run, if V0100's trigger is not on the table — the one thing that stops KBS2
+     * writing a password onto a closed account (V0098 explains why KBS2 can).
+     *
+     * <p>V0100 installs it, but it is the one part of this control that a deploy may legitimately skip: a busy
+     * {@code frontend_account} makes the migration warn and carry on rather than fail the deploy, leaving
+     * scripts/refuse-password-while-closed-trigger.sql to be run by hand. A warning in a deploy log nobody was
+     * watching would be the end of it, so the question is asked again here — at a close, which is when the gap
+     * starts to matter, and rarely enough that a query costs nothing. Fire-and-forget: this must never affect
+     * the close, which has already succeeded.
+     */
+    private static void warnIfKbs2CanStillWriteAPassword() {
+        if (!PASSWORD_WRITE_TRIGGER_CHECKED.compareAndSet(false, true))
+            return;
+        executeRawQuery(PASSWORD_WRITE_TRIGGER_SQL)
+            .onFailure(e -> {
+                PASSWORD_WRITE_TRIGGER_CHECKED.set(false); // could not tell — ask again at the next close
+                Console.log("Could not check whether the password-write trigger is installed: " + e.getMessage());
+            })
+            .onSuccess(result -> {
+                if (result == null)
+                    PASSWORD_WRITE_TRIGGER_CHECKED.set(false); // no answer is not an answer — ask again
+                else if (result.getRowCount() == 0)
+                    Console.log("⚠️ The refuse_password_while_closed trigger is NOT installed on frontend_account: a KBS2 session opened before a close, or KBS2 staff, can still set a password on an account whose password is closed. Run scripts/refuse-password-while-closed-trigger.sql (V0100 installs it too, but skips it when the table is busy)");
+            });
     }
 
     /**
