@@ -11,8 +11,6 @@ import dev.webfx.stack.db.submit.SubmitArgument;
 import dev.webfx.stack.db.submit.SubmitArgumentBuilder;
 import dev.webfx.stack.db.submit.SubmitService;
 import dev.webfx.stack.orm.datasourcemodel.service.DataSourceModelService;
-import dev.webfx.stack.session.state.StateAccessor;
-import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 import one.modality.crm.server.authn.gateway.shared.RouteAccessGuard;
 
 import java.util.ArrayList;
@@ -34,7 +32,7 @@ import java.util.function.Supplier;
  *
  * <p>Raw SQL rather than DQL, because these are set-based rewrites across thirty tables. Allowed here and
  * refused from a browser — {@code ClientSubmitGuard} refuses client-origin raw statements, and this runs as
- * the server (see {@link #asServer}). Every statement is assembled from constants in
+ * the server (see {@link ServerWrite}). Every statement is assembled from constants in
  * {@link PersonReferences}; the two ids are bound as parameters and nothing a caller sends is ever
  * concatenated into SQL.
  *
@@ -105,7 +103,7 @@ final class PersonMergeCascade {
             return RouteAccessGuard.refused();
         if (keptId.equals(duplicateId))
             return refusal(SAME_PERSON_KEY);
-        return asServer(() -> QueryService.executeQuery(new QueryArgumentBuilder()
+        return ServerWrite.asServer(() -> QueryService.executeQuery(new QueryArgumentBuilder()
                 .setDataSourceId(DataSourceModelService.getDefaultDataSourceId())
                 .setStatement(STATE_SQL)
                 .setParameters(keptId, duplicateId)
@@ -147,7 +145,7 @@ final class PersonMergeCascade {
 
     /** Refuses when the database names a person from somewhere this build has never heard of. */
     private static Future<Boolean> checkReferencesThenMerge(Object keptId, Object duplicateId, Object callerUserId) {
-        return asServer(() -> QueryService.executeQuery(new QueryArgumentBuilder()
+        return ServerWrite.asServer(() -> QueryService.executeQuery(new QueryArgumentBuilder()
                 .setDataSourceId(DataSourceModelService.getDefaultDataSourceId())
                 .setStatement(REFERENCES_SQL)
                 .build()))
@@ -190,7 +188,7 @@ final class PersonMergeCascade {
                 .setStatement(statement) // assembled from constants; the ids below are the only input
                 .setParameters(keptId, duplicateId)
                 .build());
-        return asServerActingFor(callerUserId, () -> SubmitService.executeSubmitBatch(new Batch<>(arguments.toArray(new SubmitArgument[0]))))
+        return ServerWrite.asServerActingFor(callerUserId, () -> SubmitService.executeSubmitBatch(new Batch<>(arguments.toArray(new SubmitArgument[0]))))
             .map(ignored -> {
                 Console.log("🗑 Person " + duplicateId + " merged into " + keptId
                             + " (" + statements.size() + " statements, one transaction)");
@@ -275,30 +273,4 @@ final class PersonMergeCascade {
         return value instanceof Number number ? number.longValue() : 0;
     }
 
-    /**
-     * Runs as the server rather than as the caller, which is what the write path requires of a raw
-     * statement — and the reason this endpoint exists at all.
-     */
-    private static <T> T asServer(Supplier<T> call) {
-        return ThreadLocalStateHolder.runWithState(StateAccessor.createEmptyState(), call);
-    }
-
-    /**
-     * As the server, but still SAYING WHO ASKED — for the batch, and only for the batch.
-     *
-     * <p>{@code person} carries audit triggers, and {@code trigger_person_audit_link_change} stamps
-     * {@code changed_by_person_id} from {@code kbs.audit_person_id}, which the submit path sets from the
-     * principal on the state it runs under. Under {@link #asServer} there is no principal, so every
-     * {@code person_link_change} row a merge produced would name nobody — the screen it replaced recorded
-     * the member of staff, so moving the work to the server would have quietly emptied that column.
-     *
-     * <p>The state carries the principal and NOT the client-origin stamp, which is the distinction that
-     * matters: the stamp is what refuses a raw statement, the principal is what names the actor. A
-     * support-view principal is refused further down as it should be, and never reaches here anyway —
-     * {@code RouteAccessGuard} turns it away first.
-     */
-    private static <T> T asServerActingFor(Object callerUserId, Supplier<T> call) {
-        Object state = StateAccessor.setUserId(StateAccessor.createEmptyState(), callerUserId);
-        return ThreadLocalStateHolder.runWithState(state, call);
-    }
 }

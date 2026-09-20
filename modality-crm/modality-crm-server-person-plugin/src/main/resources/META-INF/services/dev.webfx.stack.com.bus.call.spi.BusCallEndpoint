@@ -1,1 +1,2 @@
 one.modality.crm.server.person.MergeDuplicatePersonsEndpoint
+one.modality.crm.server.person.RevokeLinkEndpoint

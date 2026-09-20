@@ -13,6 +13,7 @@
     <dependencies>
         <used-by-source-modules/>
         <source-module>modality-crm-server-authn-gateway-shared</source-module>
+        <source-module>modality-crm-shared-authn</source-module>
         <source-module>webfx-stack-com-bus-call</source-module>
         <source-module>webfx-stack-db-query</source-module>
         <source-module>webfx-stack-db-submit</source-module>
@@ -20,8 +21,14 @@
         <source-module>webfx-stack-session-state</source-module>
     </dependencies>
 
+    <!-- ApproveInvitationEndpoint is written and deliberately NOT registered: approving trusts
+         invitation.inviter, and nothing yet stops a client inserting an invitation that names somebody
+         else as inviter. Registering it before invitation CREATION is gated would make this service the
+         escalation it exists to prevent. See PersonLinkCheck, which fails if it is switched on. -->
+
     <providers>
         <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.crm.server.person.MergeDuplicatePersonsEndpoint</provider>
+        <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.crm.server.person.RevokeLinkEndpoint</provider>
     </providers>
 
 </project>
