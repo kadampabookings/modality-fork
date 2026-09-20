@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project>
+
+    <!-- Merging a duplicate person into the one being kept, as an endpoint rather than as the loop of raw
+         updates the customers screen used to send (front-office write-authorization plan, step 1 — the
+         last of its six statements). It keeps the modality/service/person address that PersonService will
+         carry in step 2. -->
+
+    <exported-packages>
+        <source-packages/>
+    </exported-packages>
+
+    <dependencies>
+        <used-by-source-modules/>
+        <source-module>modality-crm-server-authn-gateway-shared</source-module>
+        <source-module>webfx-stack-com-bus-call</source-module>
+        <source-module>webfx-stack-db-query</source-module>
+        <source-module>webfx-stack-db-submit</source-module>
+        <source-module>webfx-stack-orm-datasourcemodel</source-module>
+        <source-module>webfx-stack-session-state</source-module>
+    </dependencies>
+
+    <providers>
+        <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.crm.server.person.MergeDuplicatePersonsEndpoint</provider>
+    </providers>
+
+</project>
