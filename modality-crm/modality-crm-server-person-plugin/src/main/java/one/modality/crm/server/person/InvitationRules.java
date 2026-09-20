@@ -50,7 +50,6 @@ final class InvitationRules {
     static final String CANNOT_INVITE_YOURSELF_KEY = "InvitationSelfError";
     /** An alias longer than the column, which is a caller sending something unusable. */
     static final String ALIAS_TOO_LONG_KEY = "InvitationAliasTooLongError";
-    static final String ALREADY_PENDING_KEY = "InvitationAlreadyPendingError";
     static final String NOT_CREATED_KEY = "InvitationNotCreatedError";
 
     /**
@@ -64,10 +63,6 @@ final class InvitationRules {
     private static final String INVITEE_SQL =
         "select count(*) from person where id = $1 and removed = false";
 
-    /** Same pair, same direction, still waiting — the request that already exists. */
-    private static final String PENDING_SQL =
-        "select count(*) from invitation where inviter_id = $1 and invitee_id = $2" +
-        "  and inviter_payer = $3 and pending = true";
 
     /**
      * The row, with the duplicate guard inside it.
@@ -117,15 +112,14 @@ final class InvitationRules {
                 // it invites somebody it just listed.
                 if (countAt(invitee) == 0)
                     return MemberSessionGuard.refused();
-                return ServerWrite.asServer(() -> QueryService.executeQuery(new QueryArgumentBuilder()
-                        .setDataSourceId(DataSourceModelService.getDefaultDataSourceId())
-                        .setStatement(PENDING_SQL)
-                        .setParameters(callerPersonId, inviteeId, inviterPays)
-                        .build()))
-                    .compose(pending -> countAt(pending) > 0
-                        ? refusal(ALREADY_PENDING_KEY)
-                        : createAndReadBackToken(inviteeId, inviterPays, aliasFirstName, aliasLastName,
-                            callerPersonId, callerUserId));
+                // No "already pending" refusal. The insert below cannot create a second one (its guard
+                // says so) and the read-back returns whichever is pending — so asking twice returns the
+                // SAME token rather than failing. That matters because the invitation and the email it
+                // needs are no longer one transaction: the row commits here, the mail is flushed by the
+                // caller, and a mail that failed used to leave the inviter permanently unable to ask
+                // again. The screens keep their own "already pending" message; this is about retries.
+                return createAndReadBackToken(inviteeId, inviterPays, aliasFirstName, aliasLastName,
+                    callerPersonId, callerUserId);
             });
     }
 

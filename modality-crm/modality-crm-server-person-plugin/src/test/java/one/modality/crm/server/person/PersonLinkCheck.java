@@ -76,12 +76,21 @@ public class PersonLinkCheck {
         check("sameId is false for a mismatch", !PersonLinkRules.sameId(42, 43));
         check("sameId is false for null", !PersonLinkRules.sameId(null, null) && !PersonLinkRules.sameId(42, null));
 
-        // --- the endpoint that must not be switched on yet ---
-        // Approving trusts invitation.inviter, and invitation creation is still an ordinary client write:
-        // anyone can insert one naming somebody else as inviter and approve it as themselves. Registering
-        // the endpoint before creation is gated would make this service the escalation it prevents. This
-        // assertion is what stops that happening quietly, and it should be deleted in the same change that
-        // gates creation -- not before.
+        // --- what the endpoints are registered ON ---
+        // These were held back while a client could still author an invitation: approving trusts
+        // invitation.inviter, so registering them then would have made this service the escalation it
+        // prevents. ClientWriteSecrets now denies a client `token` (NOT NULL, so no client can insert
+        // one at all), `inviter_id` and `invitee_id`. That deny list is the precondition for these two
+        // being registered, which is why it is asserted HERE rather than only beside itself.
+        // Found by walking up from wherever this was started, because it is run both from the plugin
+        // and from the repository root.
+        String secrets = readClientWriteSecrets();
+        check("the invitation deny rules were found", secrets.contains("denyColumn(\"invitation\""));
+        // The exact list, not each name on its own: "token" also occurs in pwdreset_token, so a
+        // per-column contains() could not fail for the one column that matters most.
+        check("clients may not write invitation token or authorship",
+            secrets.contains("\"token\", \"inviter_id\", \"invitee_id\""));
+
         String services = "";
         try (java.io.InputStream in = PersonLinkCheck.class.getClassLoader()
                 .getResourceAsStream("META-INF/services/dev.webfx.stack.com.bus.call.spi.BusCallEndpoint")) {
@@ -91,14 +100,37 @@ public class PersonLinkCheck {
             services = "(unreadable: " + e + ")";
         }
         check("the services file was read", !services.isEmpty() && !services.startsWith("(unreadable"));
-        check("ApproveInvitationEndpoint is NOT registered while invitation creation is ungated",
-            !services.contains("ApproveInvitationEndpoint"));
-        check("CreateInvitationEndpoint is NOT registered while clients can still insert invitations",
-            !services.contains("CreateInvitationEndpoint"));
+        check("CreateInvitationEndpoint IS registered", services.contains("CreateInvitationEndpoint"));
+        check("ApproveInvitationEndpoint IS registered", services.contains("ApproveInvitationEndpoint"));
         check("RevokeLinkEndpoint IS registered", services.contains("RevokeLinkEndpoint"));
 
         System.out.println(pass + " passed, " + fail + " failed");
         if (fail > 0)
             System.exit(1);
+    }
+
+    /**
+     * The deny-list declaration, found by walking up from wherever this check was launched.
+     *
+     * <p>Read from a sibling module's source rather than from its runtime state, because nothing in a
+     * check JVM runs the boot job that would populate the list. Textual, and therefore weaker than
+     * asking the list itself — but the assertion it supports is about a PRECONDITION holding at the
+     * time these endpoints were switched on, which a reader of this file needs to be told about at all.
+     */
+    static String readClientWriteSecrets() {
+        String relative = "modality-fork/modality-crm/modality-crm-server-authz-required-plugin/src/main/java/"
+                          + "one/modality/crm/server/services/authz/ClientWriteSecrets.java";
+        java.nio.file.Path here = java.nio.file.Path.of(System.getProperty("user.dir")).toAbsolutePath();
+        for (java.nio.file.Path at = here; at != null; at = at.getParent()) {
+            java.nio.file.Path candidate = at.resolve(relative);
+            if (java.nio.file.Files.exists(candidate)) {
+                try {
+                    return java.nio.file.Files.readString(candidate);
+                } catch (Exception e) {
+                    return "(unreadable: " + e + ")";
+                }
+            }
+        }
+        return "(not found from " + here + ")";
     }
 }

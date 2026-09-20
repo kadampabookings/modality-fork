@@ -14,6 +14,11 @@ import dev.webfx.stack.db.submit.ClientWriteDenyList;
  * {@code disabled} could undo the control that stops a stolen session. So no client writes them; the server does,
  * through the flows that prove who is asking.
  *
+ * <p>{@code invitation}'s authorship is closed for the same reason one step removed: an invitation is
+ * the evidence PersonService accepts that somebody asked for a link to their bookings, and evidence a
+ * client can author is not evidence. Denying {@code token} — which is NOT NULL — is what stops a client
+ * creating one at all.
+ *
  * <p>{@code magic_link} is closed entirely: a client able to insert a row there could mint a sign-in link for any
  * account and follow it. No client writes it; the server creates, stamps and retires every row.
  *
@@ -47,6 +52,24 @@ final class ClientWriteSecrets {
         for (String column : new String[] { "admin", "developer", "security", "tester", "translator",
                                             "trigger_send_password", "trigger_send_password_event_id" })
             ClientWriteDenyList.denyColumn("frontend_account", column);
-        Console.log("🛡 Client writes may not touch sign-in links, nor set the account's sign-in, status or privilege columns (1 table, 14 columns)");
+        // An invitation is what PersonService accepts as evidence that somebody asked for a link, and
+        // approving one gives an account sight of another person's bookings and recordings. It is only
+        // evidence if the client cannot author it: a client able to set `inviter_id` could name anybody
+        // as the asker and approve it as itself. `token` is the capability the email carries, and it is
+        // NOT NULL — denying it is therefore what stops a client inserting an invitation at all, which
+        // is the point rather than a side effect. Invitations are created by
+        // modality/service/person/createInvitation, which takes the inviter from the session.
+        //
+        // `pending` and `accepted` are deliberately NOT denied: declining still happens client-side, and
+        // setting them establishes no link on its own.
+        //
+        // Checked against both apps before being listed, as the account columns were: the React front
+        // office creates invitations through the endpoint, and the React back office writes none. The
+        // legacy JavaFX front office DOES still insert them (InvitationLinkService), and would be
+        // refused — but only the back-office GWT app is built and deployed, so nothing live reaches it.
+        for (String column : new String[] { "token", "inviter_id", "invitee_id" })
+            ClientWriteDenyList.denyColumn("invitation", column);
+        Console.log("🛡 Client writes may not touch sign-in links or invitation authorship, nor set the"
+                    + " account's sign-in, status or privilege columns (1 table, 17 columns)");
     }
 }

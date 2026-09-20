@@ -18,6 +18,6 @@ module modality.crm.server.person.plugin {
     exports one.modality.crm.server.person;
 
     // Provided services
-    provides dev.webfx.stack.com.bus.call.spi.BusCallEndpoint with one.modality.crm.server.person.MergeDuplicatePersonsEndpoint, one.modality.crm.server.person.RevokeLinkEndpoint;
+    provides dev.webfx.stack.com.bus.call.spi.BusCallEndpoint with one.modality.crm.server.person.MergeDuplicatePersonsEndpoint, one.modality.crm.server.person.RevokeLinkEndpoint, one.modality.crm.server.person.CreateInvitationEndpoint, one.modality.crm.server.person.ApproveInvitationEndpoint;
 
 }
