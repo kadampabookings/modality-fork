@@ -98,7 +98,7 @@ final class PersonMergeCascade {
      * their organizations, check the catalogue holds no reference this build does not know about, then run
      * the batch.
      */
-    static Future<Boolean> mergeDuplicatePerson(Object rawKeptId, Object rawDuplicateId, PersonScopeAuthorizer authorizer) {
+    static Future<Boolean> mergeDuplicatePerson(Object rawKeptId, Object rawDuplicateId, Object callerUserId, PersonScopeAuthorizer authorizer) {
         Object keptId = Numbers.toLong(rawKeptId);
         Object duplicateId = Numbers.toLong(rawDuplicateId);
         if (keptId == null || duplicateId == null)
@@ -140,13 +140,13 @@ final class PersonMergeCascade {
                         // with nobody able to sign in. Merging the ACCOUNTS is a different screen.
                         if (state.getValue(0, 4) != null)
                             return refusal(HAS_ACCOUNT_KEY);
-                        return checkReferencesThenMerge(keptId, duplicateId);
+                        return checkReferencesThenMerge(keptId, duplicateId, callerUserId);
                     }));
             });
     }
 
     /** Refuses when the database names a person from somewhere this build has never heard of. */
-    private static Future<Boolean> checkReferencesThenMerge(Object keptId, Object duplicateId) {
+    private static Future<Boolean> checkReferencesThenMerge(Object keptId, Object duplicateId, Object callerUserId) {
         return asServer(() -> QueryService.executeQuery(new QueryArgumentBuilder()
                 .setDataSourceId(DataSourceModelService.getDefaultDataSourceId())
                 .setStatement(REFERENCES_SQL)
@@ -161,7 +161,7 @@ final class PersonMergeCascade {
                                 + ". Add them to PersonReferences (repoint, refuse, or record as cascading).");
                     return refusal(PersonReferences.UNKNOWN_REFERENCE_KEY);
                 }
-                return runMerge(keptId, duplicateId);
+                return runMerge(keptId, duplicateId, callerUserId);
             });
     }
 
@@ -181,7 +181,7 @@ final class PersonMergeCascade {
         return unknown;
     }
 
-    private static Future<Boolean> runMerge(Object keptId, Object duplicateId) {
+    private static Future<Boolean> runMerge(Object keptId, Object duplicateId, Object callerUserId) {
         List<String> statements = mergeStatements();
         List<SubmitArgument> arguments = new ArrayList<>(statements.size());
         for (String statement : statements)
@@ -190,7 +190,7 @@ final class PersonMergeCascade {
                 .setStatement(statement) // assembled from constants; the ids below are the only input
                 .setParameters(keptId, duplicateId)
                 .build());
-        return asServer(() -> SubmitService.executeSubmitBatch(new Batch<>(arguments.toArray(new SubmitArgument[0]))))
+        return asServerActingFor(callerUserId, () -> SubmitService.executeSubmitBatch(new Batch<>(arguments.toArray(new SubmitArgument[0]))))
             .map(ignored -> {
                 Console.log("🗑 Person " + duplicateId + " merged into " + keptId
                             + " (" + statements.size() + " statements, one transaction)");
@@ -276,10 +276,29 @@ final class PersonMergeCascade {
     }
 
     /**
-     * Runs as the server rather than as the caller, which is what {@code ClientSubmitGuard} requires of a
-     * raw statement — and the reason this endpoint exists at all.
+     * Runs as the server rather than as the caller, which is what the write path requires of a raw
+     * statement — and the reason this endpoint exists at all.
      */
     private static <T> T asServer(Supplier<T> call) {
         return ThreadLocalStateHolder.runWithState(StateAccessor.createEmptyState(), call);
+    }
+
+    /**
+     * As the server, but still SAYING WHO ASKED — for the batch, and only for the batch.
+     *
+     * <p>{@code person} carries audit triggers, and {@code trigger_person_audit_link_change} stamps
+     * {@code changed_by_person_id} from {@code kbs.audit_person_id}, which the submit path sets from the
+     * principal on the state it runs under. Under {@link #asServer} there is no principal, so every
+     * {@code person_link_change} row a merge produced would name nobody — the screen it replaced recorded
+     * the member of staff, so moving the work to the server would have quietly emptied that column.
+     *
+     * <p>The state carries the principal and NOT the client-origin stamp, which is the distinction that
+     * matters: the stamp is what refuses a raw statement, the principal is what names the actor. A
+     * support-view principal is refused further down as it should be, and never reaches here anyway —
+     * {@code RouteAccessGuard} turns it away first.
+     */
+    private static <T> T asServerActingFor(Object callerUserId, Supplier<T> call) {
+        Object state = StateAccessor.setUserId(StateAccessor.createEmptyState(), callerUserId);
+        return ThreadLocalStateHolder.runWithState(state, call);
     }
 }

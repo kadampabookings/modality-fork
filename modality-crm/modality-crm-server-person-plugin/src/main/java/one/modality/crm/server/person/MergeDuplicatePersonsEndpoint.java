@@ -2,6 +2,7 @@ package one.modality.crm.server.person;
 
 import dev.webfx.platform.util.Arrays;
 import dev.webfx.stack.com.bus.call.spi.AsyncFunctionBusCallEndpoint;
+import dev.webfx.stack.session.state.StateAccessor;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 import one.modality.crm.server.authn.gateway.shared.RouteAccessGuard;
 
@@ -45,7 +46,11 @@ public final class MergeDuplicatePersonsEndpoint extends AsyncFunctionBusCallEnd
             // Read on THIS thread and carried into each guard: the guards run once the organizations are
             // known, which is after a database read, and by then the thread no longer holds the caller.
             Object state = ThreadLocalStateHolder.getThreadLocalState();
-            return PersonMergeCascade.mergeDuplicatePerson(ids[0], ids[1],
+            // Read here too, and for a different reason than the guard: person carries audit triggers
+            // that stamp who changed a link, and the batch runs without the caller's state. Carried
+            // explicitly so the trail still names them.
+            Object callerUserId = StateAccessor.getUserId(state);
+            return PersonMergeCascade.mergeDuplicatePerson(ids[0], ids[1], callerUserId,
                 (organizationId, eventId, work) -> ThreadLocalStateHolder.runWithState(state,
                     () -> RouteAccessGuard.whenCallerMayReach("/customers", organizationId, eventId, work)));
         });
