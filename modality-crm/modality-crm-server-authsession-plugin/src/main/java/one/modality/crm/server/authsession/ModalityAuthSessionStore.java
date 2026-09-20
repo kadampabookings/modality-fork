@@ -12,11 +12,13 @@ import dev.webfx.stack.db.submit.SubmitService;
 import dev.webfx.stack.orm.datasourcemodel.service.DataSourceModelService;
 import dev.webfx.stack.session.state.StateAccessor;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
+import dev.webfx.stack.session.token.SecurityAlarm;
 import dev.webfx.stack.session.token.SessionFamilyStore;
 import dev.webfx.stack.session.token.SessionLifetime;
 import dev.webfx.stack.session.token.SessionTier;
 import one.modality.crm.shared.services.authn.ModalityUserPrincipal;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -156,6 +158,23 @@ public final class ModalityAuthSessionStore implements SessionFamilyStore {
         "update auth_session set revoked = now(), revoked_reason = $3" +
         " where person_id = $1::int and revoked is null and id <> $2";
 
+    /**
+     * What alarm mode is in force: the furthest expiry still ahead of now, or nothing.
+     *
+     * <p>Read by every instance on its own poll, which is how they agree — see SecurityAlarm for why this
+     * is a row rather than a message, and an expiry rather than a flag.
+     */
+    private static final String ALARM_EXPIRY_SQL =
+        "select extract(epoch from max(expires_at)) * 1000 from security_alarm where expires_at > now()";
+
+    /**
+     * Raises it, or extends it. One row per raise, kept: the history answers "who raised it, and when",
+     * which is what somebody asks afterwards about a posture that costs the whole system something.
+     */
+    private static final String RAISE_ALARM_SQL =
+        "insert into security_alarm (expires_at, raised_by_person_id)" +
+        " values (to_timestamp($1::double precision / 1000), $2::int)";
+
     private static final String REVOKE_SQL =
         "update auth_session set revoked = now(), revoked_reason = $2 where id = $1 and revoked is null";
 
@@ -276,6 +295,41 @@ public final class ModalityAuthSessionStore implements SessionFamilyStore {
                                           : builder.setParameters(sinceMillis)).build();
         return asServer(() -> QueryService.executeQuery(query))
             .map(ModalityAuthSessionStore::toPage);
+    }
+
+    @Override
+    public Future<Long> alarmExpiryMillis() {
+        return asServer(() -> QueryService.executeQuery(new QueryArgumentBuilder()
+                .setDataSourceId(dataSourceId())
+                .setStatement(ALARM_EXPIRY_SQL)
+                // NOT shed under load, unlike the revocation poll — which is a page and this is one indexed
+                // row. Shedding it would be the cheap choice and the wrong one: an instance that keeps missing
+                // this read keeps serving ordinary access windows while its neighbours serve the alarm's, and
+                // two instances that disagree make a client with tabs on both renew on every message. That
+                // costs far more than the read, and it lasts as long as the disagreement does.
+                .build()))
+            // Null (no row ahead of now) and a missing result both read as "not raised"
+            .map(result -> result == null || result.getRowCount() == 0 ? 0L : longAt(result, 0));
+    }
+
+    @Override
+    public Future<Long> raiseAlarm(long expiryMillis, Object raisedByPersonId) {
+        Integer personId = toInteger(raisedByPersonId);
+        return asServer(() -> SubmitService.executeSubmit(new SubmitArgumentBuilder()
+                .setDataSourceId(dataSourceId())
+                .setStatement(RAISE_ALARM_SQL)
+                .setParameters(expiryMillis, personId)
+                .build()))
+            // Read back rather than answered from what was asked for: another super administrator may have
+            // raised it for longer a second ago, and the answer must be what is actually in force. It is
+            // also what this instance notes at once, so the alarm starts here without waiting for the poll.
+            .compose(ignored -> alarmExpiryMillis())
+            .onSuccess(expiry -> {
+                SecurityAlarm.noteExpiry(expiry == null ? 0 : expiry);
+                Console.log("🛡 Alarm mode raised until " + Instant.ofEpochMilli(expiry == null ? 0 : expiry)
+                            + " (person " + personId + ") — access windows shorten to "
+                            + SecurityAlarm.ACCESS_WINDOW_MILLIS / 1000 + "s until then");
+            });
     }
 
     private static RevocationPage toPage(QueryResult result) {

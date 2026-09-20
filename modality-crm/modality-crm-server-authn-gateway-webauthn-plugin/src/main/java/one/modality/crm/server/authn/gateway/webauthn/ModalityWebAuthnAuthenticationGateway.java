@@ -40,6 +40,9 @@ import dev.webfx.stack.session.state.StateAccessor;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 import dev.webfx.stack.session.token.AuthenticatedState;
 import dev.webfx.stack.session.token.SessionTokenService;
+import dev.webfx.stack.session.token.SecurityAlarm;
+import dev.webfx.stack.session.token.SessionFamilyStore;
+import dev.webfx.stack.session.token.SessionFamilyStoreRegistry;
 import one.modality.base.shared.entities.FrontendAccount;
 import one.modality.base.shared.entities.Person;
 import one.modality.crm.server.authn.gateway.shared.CredentialChangeProof;
@@ -59,6 +62,8 @@ import one.modality.crm.shared.services.authn.ClosePasswordSignInCredentials;
 import one.modality.crm.shared.services.authn.ReopenPasswordSignInCredentials;
 import one.modality.crm.shared.services.authn.ReportDeviceStolenCredentials;
 import one.modality.crm.shared.services.authn.RescueStolenAccountCredentials;
+import one.modality.crm.shared.services.authn.RaiseSecurityAlarmCredentials;
+import one.modality.crm.shared.services.authn.SecurityAlarmStatusCredentials;
 import one.modality.crm.server.authn.gateway.shared.AccountSignInRestrictionStore;
 import one.modality.crm.shared.services.authn.ListPendingPasskeysCredentials;
 import one.modality.crm.shared.services.authn.ModalityAuthenticationI18nKeys;
@@ -586,7 +591,13 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
                || updateCredentialsArgument instanceof ApprovePasskeyCredentials
                || updateCredentialsArgument instanceof RejectPasskeyCredentials
                || updateCredentialsArgument instanceof RevokeApprovedPasskeyCredentials
-               || updateCredentialsArgument instanceof ListAccountPasskeysCredentials;
+               || updateCredentialsArgument instanceof ListAccountPasskeysCredentials
+               // Alarm mode (V0102) is neither a credential nor an account decision, and it is here because
+               // the Security page's whole server side is: the same membership check, the same verified-session
+               // fence, the same dispatch. If it grows the other postures its design calls for, it earns a seam
+               // of its own; one switch does not.
+               || updateCredentialsArgument instanceof SecurityAlarmStatusCredentials
+               || updateCredentialsArgument instanceof RaiseSecurityAlarmCredentials;
     }
 
     @Override
@@ -620,6 +631,21 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
         Object userId = ThreadLocalStateHolder.getUserId();
         if (!(userId instanceof ModalityUserPrincipal principal) || principal.isSupportView())
             return managementFailure();
+        // ...and on a session THIS SERVER established, for every operation below without exception. Read here,
+        // on the caller's thread, before the first async step.
+        //
+        // Everything dispatched from here either changes how an account is reached, decides something about
+        // somebody else's, or reveals a posture that is meant to be silent — and until the identity-token flip
+        // is on (it is off in production) a caller with no token may claim any principal it likes, with only
+        // an existence check between them and it. Existence is not identity. The anonymous ceremonies are not
+        // affected: a passkey sign-in arrives at authenticate(), not here, and that is what mints the token
+        // this fence then asks for.
+        //
+        // A legacy token carries no family and is refused here too. It gets one at its next renewal, minutes
+        // away, and nothing is lost by waiting — the same trade "sign out my other devices" has made since it
+        // shipped.
+        if (!arrivedOnAVerifiedSession())
+            return managementFailure();
         if (updateCredentialsArgument instanceof StartPasskeyRegistrationCredentials cred)
             return startPasskeyRegistration(principal, cred);
         if (updateCredentialsArgument instanceof FinalisePasskeyRegistrationCredentials cred)
@@ -644,6 +670,13 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
         // never trusted from the client's grant push, and never delegable through operation codes.
         // The approver's own passkeys are neither listed, decidable nor revocable (store WHERE
         // clauses).
+        // Reading it is a super administrator's too, and for a reason of its own: the alarm is meant to be
+        // silent, so an attacker holding a stolen session must not be able to ask whether it has been noticed
+        // or when the posture lapses.
+        if (updateCredentialsArgument instanceof SecurityAlarmStatusCredentials)
+            return requireSuperAdmin(principal).compose(ignored -> securityAlarmStatusJson());
+        if (updateCredentialsArgument instanceof RaiseSecurityAlarmCredentials)
+            return raiseSecurityAlarm(principal);
         if (updateCredentialsArgument instanceof ListPendingPasskeysCredentials)
             return requireSuperAdmin(principal).compose(ignored -> listPendingPasskeysJson(principal));
         if (updateCredentialsArgument instanceof ApprovePasskeyCredentials cred)
@@ -1079,13 +1112,6 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
     }
 
     private Future<Boolean> closePasswordSignIn(ModalityUserPrincipal principal) {
-        // Same fence as the panic button, for the same reason: closing wipes the stored password, so on an
-        // identity a caller merely asserted it is a remote way to take somebody's password away from them.
-        // Reopening is refused to that caller too (it needs a passkey sign-in), so the owner is the only one
-        // who can undo it — which is the control working as intended, and exactly why it must not be reachable
-        // by assertion.
-        if (!arrivedOnAVerifiedSession())
-            return managementFailure();
         Object accountId = accountIdOf(principal);
         if (!passwordClosingAvailable())
             return notConfiguredFailure();
@@ -1134,12 +1160,6 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
      * they may not have it.
      */
     private Future<Integer> reportDeviceStolen(ModalityUserPrincipal principal) {
-        // Not on an asserted identity: this one takes the account away from its owner, and until the identity
-        // flip is on, a claim costs an attacker nothing (see arrivedOnAVerifiedSession). The revocation half
-        // refuses such a caller anyway — this makes the disabling half refuse it too, rather than disabling an
-        // account and reporting success while ending no sessions at all.
-        if (!arrivedOnAVerifiedSession())
-            return managementFailure();
         Object accountId = accountIdOf(principal);
         Object personId = Numbers.toLong(principal.getUserPersonId());
         return AccountSignInRestrictionStore.disableAccountAfterTheft(accountId, personId, null)
@@ -1181,6 +1201,48 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
                 if (Boolean.TRUE.equals(rescued))
                     Console.log(LOG_PREFIX + "🛡 Account " + rescuedAccountId + " re-enabled after a reported theft"
                                 + " by super administrator person " + principal.getUserPersonId());
+            });
+    }
+
+    /**
+     * When alarm mode lapses, as {@code {"expiresAtMillis": 0}} or the moment it ends.
+     *
+     * <p>Answered from this instance's own copy, which its poll refreshes every twenty seconds — no read of
+     * the store, because the question is "is my posture raised", and that copy IS the posture. A caller
+     * seeing an alarm twenty seconds after it was raised is seeing what this instance is actually doing.
+     */
+    private Future<String> securityAlarmStatusJson() {
+        AstObject response = AST.createObject();
+        response.set("expiresAtMillis", SecurityAlarm.expiryMillis(System.currentTimeMillis()));
+        return Future.succeededFuture(Json.formatObject(response));
+    }
+
+    /**
+     * Raises alarm mode for {@link SecurityAlarm#RAISE_DURATION_MILLIS}, or extends one already raised, and
+     * answers the expiry in force afterwards.
+     *
+     * <p>A super administrator's to raise, re-checked here on every call, and from a session this server
+     * established: an alarm costs every session in the system a round trip every couple of minutes, which is
+     * a poor thing to leave reachable by an identity a caller merely asserted.
+     *
+     * <p>No duration is taken from the client. The server decides how long an alarm lasts, so that nobody can
+     * raise one that does not end — the whole reason this is an expiry rather than a flag.
+     */
+    private Future<String> raiseSecurityAlarm(ModalityUserPrincipal principal) {
+        return requireSuperAdmin(principal)
+            .compose(ignored -> {
+                SessionFamilyStore store = SessionFamilyStoreRegistry.getStore();
+                if (store == null) // nothing records sessions here, so there is no posture to raise
+                    return Future.failedFuture("[%s] This deployment does not record sessions".formatted(ModalityAuthenticationI18nKeys.AuthnPasskeyManagementError));
+                return store.raiseAlarm(System.currentTimeMillis() + SecurityAlarm.RAISE_DURATION_MILLIS,
+                                        principal.getUserPersonId());
+            })
+            .map(expiry -> {
+                Console.log(LOG_PREFIX + "🛡 Alarm mode raised by super administrator person "
+                            + principal.getUserPersonId() + ", in force until " + expiry);
+                AstObject response = AST.createObject();
+                response.set("expiresAtMillis", expiry == null ? 0L : expiry);
+                return Json.formatObject(response);
             });
     }
 
@@ -1317,11 +1379,11 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
      * at all may claim any principal it likes, and the only check that runs is that the claimed person and
      * account exist. Existence is not identity.
      *
-     * <p>Required by the controls that can take an account away from its owner, because for those the difference
-     * matters: {@code endEverySessionOfCurrentUser} has always demanded it (a caller could otherwise end
-     * somebody else's sessions), and disabling an account or wiping its password are the same kind of act. A
-     * client without a token is refused rather than served, which is what "sign out my other devices" has done
-     * in production since it shipped.
+     * <p>Required by every operation {@link #updateCredentials} dispatches, where it is applied once rather
+     * than control by control: the ones that can take an account away from its owner (disabling it, wiping its
+     * password), the ones a super administrator runs about somebody else's, and the ones that reveal a posture
+     * meant to be silent. {@code endEverySessionOfCurrentUser} has always demanded it — a caller could
+     * otherwise end somebody else's sessions — and the rest of this endpoint now matches it.
      *
      * <p>MUST be read on the caller's thread, before the first async step, like everything else that reads
      * {@link ThreadLocalStateHolder}.

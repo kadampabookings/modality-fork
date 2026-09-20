@@ -6,7 +6,10 @@ import dev.webfx.platform.scheduler.Scheduled;
 import dev.webfx.platform.scheduler.Scheduler;
 import dev.webfx.stack.db.datasource.LocalDataSourceService;
 import dev.webfx.stack.session.state.server.RevokedFamilyLogoutPush;
+import java.time.Instant;
+
 import dev.webfx.stack.session.token.RevocationPoll;
+import dev.webfx.stack.session.token.SecurityAlarm;
 import dev.webfx.stack.session.token.RevokedFamilies;
 import dev.webfx.stack.session.token.SessionFamilyStoreRegistry;
 
@@ -63,12 +66,30 @@ public final class ModalityAuthSessionStoreInitializer implements ApplicationJob
     private static final long REVOCATION_SAFETY_WINDOW_MILLIS = 5 * 60 * 1000L;
     private static final int POLLS_BETWEEN_REVOCATION_SAFETY_READS = 15; // 15 × 20s = five minutes
 
+    /**
+     * How often each instance asks whether alarm mode is raised (control 4).
+     *
+     * <p>Its own timer rather than a passenger on the revocation poll, because that one switches to a
+     * one-second interval while catching up on a bulk revocation — which is exactly when an alarm is most
+     * likely to be raised, and is no reason to ask this question sixty times a minute.
+     *
+     * <p>FIVE seconds rather than the revocation poll's twenty, and the difference is not promptness for its
+     * own sake. While one instance holds an alarm and another has not yet read it, a client with tabs on both
+     * renews on every message: one instance hurries a long token, the other sees the short token that comes
+     * back as near-expiry and renews it long again. Nothing is broken by that — no session ends, and the
+     * losing generation lands inside the reuse grace — but it is a write per message, during an incident, and
+     * the only thing bounding it is this interval. One indexed row, five seconds apart, is the cheaper side of
+     * that trade by a wide margin.
+     */
+    private static final long ALARM_POLL_INTERVAL_MILLIS = 5_000L;
+
     private final ModalityAuthSessionStore store = new ModalityAuthSessionStore();
     // Written from a scheduler callback and read from another: volatile, because a job whose state is
     // handed between callback threads has no same-thread guarantee to rely on. A stale `stopped` would
     // leave a timer querying a closing datasource; the poll's own state lives in RevocationPoll.
     private volatile Scheduled purgeScheduled;
     private volatile Scheduled revocationPollScheduled;
+    private volatile Scheduled alarmPollScheduled;
     private volatile RevocationPoll revocationPoll;
     private volatile boolean stopped;
 
@@ -99,6 +120,9 @@ public final class ModalityAuthSessionStoreInitializer implements ApplicationJob
                 System.currentTimeMillis() - RevokedFamilies.RETENTION_MILLIS,
                 REVOCATION_SAFETY_WINDOW_MILLIS, POLLS_BETWEEN_REVOCATION_SAFETY_READS);
             scheduleRevocationPoll(1);
+            // At once, not in twenty seconds: an instance joining a running alarm — a deploy during an
+            // incident — must not serve half the clients with ordinary access windows meanwhile.
+            scheduleAlarmPoll(1);
         });
     }
 
@@ -112,6 +136,49 @@ public final class ModalityAuthSessionStoreInitializer implements ApplicationJob
         if (revocationPollScheduled != null) {
             revocationPollScheduled.cancel();
             revocationPollScheduled = null;
+        }
+        if (alarmPollScheduled != null) {
+            alarmPollScheduled.cancel();
+            alarmPollScheduled = null;
+        }
+    }
+
+    private void scheduleAlarmPoll(long delayMillis) {
+        if (!stopped)
+            alarmPollScheduled = Scheduler.scheduleDelay(Math.max(1, delayMillis), this::pollAlarm);
+    }
+
+    /**
+     * Reads whether alarm mode is in force and tells {@link SecurityAlarm}, which is what shortens this
+     * instance's access windows while it lasts.
+     *
+     * <p>A failed read leaves the last answer standing rather than clearing it: an alarm that somebody
+     * raised deliberately must not be dropped because one query was shed under load, and a stale alarm
+     * lapses by its own expiry anyway — the value held here is a moment, not a flag, so it cannot be left
+     * on by a poll that stops running.
+     */
+    private void pollAlarm() {
+        if (stopped)
+            return;
+        try {
+            store.alarmExpiryMillis()
+                .onSuccess(expiry -> {
+                    boolean wasRaised = SecurityAlarm.isRaised(System.currentTimeMillis());
+                    SecurityAlarm.noteExpiry(expiry == null ? 0 : expiry);
+                    boolean isRaised = SecurityAlarm.isRaised(System.currentTimeMillis());
+                    if (isRaised != wasRaised) // silence while nothing changes, a line at each edge
+                        Console.log(isRaised
+                            ? "🛡 Alarm mode is raised until " + Instant.ofEpochMilli(expiry)
+                              + " — access windows shorten to " + SecurityAlarm.ACCESS_WINDOW_MILLIS / 1000
+                              + "s, so every session re-checks itself that often"
+                            : "🛡 Alarm mode has lapsed — access windows are back to normal");
+                })
+                .onFailure(e -> Console.log("⚠️ Could not read whether alarm mode is raised, so this instance"
+                                            + " keeps the answer it had: " + e))
+                .onComplete(ar -> scheduleAlarmPoll(ALARM_POLL_INTERVAL_MILLIS));
+        } catch (RuntimeException e) {
+            Console.log("⚠️ An alarm mode poll could not be started: " + e);
+            scheduleAlarmPoll(ALARM_POLL_INTERVAL_MILLIS);
         }
     }
 
