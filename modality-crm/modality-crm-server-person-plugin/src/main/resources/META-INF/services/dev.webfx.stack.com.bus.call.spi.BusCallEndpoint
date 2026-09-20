@@ -2,3 +2,5 @@ one.modality.crm.server.person.MergeDuplicatePersonsEndpoint
 one.modality.crm.server.person.RevokeLinkEndpoint
 one.modality.crm.server.person.CreateInvitationEndpoint
 one.modality.crm.server.person.ApproveInvitationEndpoint
+one.modality.crm.server.person.UpdatePersonDetailsEndpoint
+one.modality.crm.server.person.AddMemberEndpoint
