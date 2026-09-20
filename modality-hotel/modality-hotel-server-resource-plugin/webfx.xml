@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project>
+
+    <!-- Deleting a room, with its configurations and the allocation rules naming either, as an endpoint rather than
+         as SQL the back office sends (front-office write-authorization plan, step 1). It keeps the
+         modality/service/resource address it will carry into a resource service later. -->
+
+    <exported-packages>
+        <source-packages/>
+    </exported-packages>
+
+    <dependencies>
+        <used-by-source-modules/>
+        <source-module>modality-crm-server-authn-gateway-shared</source-module>
+        <source-module>webfx-stack-com-bus-call</source-module>
+        <source-module>webfx-stack-db-query</source-module>
+        <source-module>webfx-stack-db-submit</source-module>
+        <source-module>webfx-stack-orm-datasourcemodel</source-module>
+        <source-module>webfx-stack-session-state</source-module>
+    </dependencies>
+
+    <providers>
+        <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.hotel.server.resource.DeleteRoomEndpoint</provider>
+    </providers>
+
+</project>

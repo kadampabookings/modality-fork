@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project>
+
+    <!-- Deleting a teaching session from the programme, with everything that references it, as an endpoint rather
+         than as SQL the back office sends. Server-side because the cascade is set-based and belongs in one
+         transaction, and because who may do it is the server's to decide (front-office write-authorization plan,
+         step 1). It keeps the modality/service/media address it will carry into a media service later. -->
+
+    <exported-packages>
+        <source-packages/>
+    </exported-packages>
+
+    <dependencies>
+        <used-by-source-modules/>
+        <source-module>modality-base-shared-knownitems</source-module>
+        <source-module>modality-crm-server-authn-gateway-shared</source-module>
+        <source-module>webfx-stack-db-query</source-module>
+        <source-module>webfx-stack-com-bus-call</source-module>
+        <source-module>webfx-stack-db-submit</source-module>
+        <source-module>webfx-stack-orm-datasourcemodel</source-module>
+        <source-module>webfx-stack-session-state</source-module>
+    </dependencies>
+
+    <providers>
+        <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.event.server.media.DeleteTeachingSessionEndpoint</provider>
+    </providers>
+
+</project>
