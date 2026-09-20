@@ -57,6 +57,9 @@ public final class AccountSignInRestrictionStore {
     /** The only method a restriction can name today — see the migration's note on why it is a column. */
     public static final String PASSWORD_METHOD = "password";
 
+    /** The whole account is closed: the owner reported the device they were signed in on as stolen (V0101). */
+    public static final String ACCOUNT_METHOD = "account";
+
     /**
      * Whether this account's password is closed.
      *
@@ -159,6 +162,63 @@ public final class AccountSignInRestrictionStore {
         "), audited as (" +
         "  insert into second_factor_reset (frontend_account_id, what, reset_by_person_id, note)" +
         "  select $1, 'PASSWORD', $3, $4 where exists (select 1 from lifted) returning id" +
+        ") select id from lifted";
+
+    /**
+     * The panic button: disables the account, rejects its passkeys, and records who did it — one statement, so
+     * that no part of it can land without the others.
+     *
+     * <p><b>Staff only</b>, enforced here as well as at the endpoint: {@code target} selects nothing for an
+     * account without the back-office flag, and every branch below hangs off it. Self-service disabling with
+     * super-administrator recovery is proportionate for a couple of hundred staff; offered to forty thousand
+     * members it is a support queue, and a mis-tap locks somebody out of their booking until Monday.
+     *
+     * <p><b>Why {@code disabled} is not enough on its own, and why the row exists.</b> The flag stops the thief
+     * signing back in — every sign-in path reads it, KBS2's included — but says nothing about who set it or why,
+     * and a super administrator's decision differs: the owner of a stolen laptop is expected back within the
+     * hour, an account an administrator disabled is not. The restriction row carries that, with the note.
+     *
+     * <p><b>The passkeys go too.</b> The device in the thief's hands may hold one, and a passkey outlives the
+     * disable: the moment a super administrator re-enabled the account it would sign them straight in, and
+     * nobody would know to look. Rejected rather than deleted — a rejection is a decision on record, refused
+     * whatever the approval switch says — and the owner enrols again on the devices they still have.
+     *
+     * <p>Sessions are not ended here. That is {@code SessionTokenService}, at the endpoint: the flag stops the
+     * return and the revocation stops the session in progress, and only both make the clock mean anything.
+     */
+    private static final String DISABLE_ACCOUNT_SQL =
+        "with target as (" +
+        "  select id from frontend_account where id = $1 and backoffice" +
+        "), restricted as (" +
+        "  insert into account_sign_in_restriction (frontend_account_id, method, created_by_person_id, note)" +
+        "  select t.id, $2, $3, $4 from target t on conflict do nothing returning id" +
+        "), disabled as (" +
+        "  update frontend_account set disabled = true where id in (select id from target) returning id" +
+        "), rejected as (" +
+        // Off `target` and not off `restricted`: a second press, with the row already there, must still reach a
+        // passkey enrolled in between
+        "  update webauthn_credential set status = 'REJECTED', decided_by_person_id = $3, decided_at = now()" +
+        "  where frontend_account_id in (select id from target) and status <> 'REJECTED' returning id" +
+        ") select id from disabled";
+
+    /**
+     * The way back: re-enables the account, lifts the restriction and records the rescue — again one statement.
+     *
+     * <p>Only lifts what the owner closed. The {@code lifted} arm matches an account-method restriction still in
+     * force, and the account is re-enabled only where that matched, so this cannot undo an administrator's own
+     * disabling of somebody — the case the method column exists to keep apart. The passkeys stay rejected: the
+     * one on the stolen device is still on the stolen device.
+     */
+    private static final String RESCUE_ACCOUNT_SQL =
+        "with lifted as (" +
+        "  update account_sign_in_restriction set lifted_at = now(), lifted_by_person_id = $3" +
+        "  where frontend_account_id = $1 and method = $2 and lifted_at is null returning id" +
+        "), enabled as (" +
+        "  update frontend_account set disabled = false" +
+        "  where id = $1 and exists (select 1 from lifted) returning id" +
+        "), audited as (" +
+        "  insert into second_factor_reset (frontend_account_id, what, reset_by_person_id, note)" +
+        "  select $1, 'ACCOUNT', $3, $4 where exists (select 1 from lifted) returning id" +
         ") select id from lifted";
 
     private AccountSignInRestrictionStore() {}
@@ -270,6 +330,46 @@ public final class AccountSignInRestrictionStore {
                 else if (result.getRowCount() == 0)
                     Console.log("⚠️ The refuse_password_while_closed trigger is NOT installed on frontend_account: a KBS2 session opened before a close, or KBS2 staff, can still set a password on an account whose password is closed. Run scripts/refuse-password-while-closed-trigger.sql (V0100 installs it too, but skips it when the table is busy)");
             });
+    }
+
+    /**
+     * Disables this account and rejects its passkeys, at its owner's word that the device they were signed in on
+     * has been stolen. Back-office accounts only; anything else changes nothing and answers false.
+     *
+     * <p>The caller ends the sessions afterwards — the account flag alone leaves a live session running, because
+     * renewal does not read the account.
+     *
+     * @return whether the account was disabled (false: not a back-office account, or no such account)
+     */
+    public static Future<Boolean> disableAccountAfterTheft(Object frontendAccountId, Object createdByPersonId, String note) {
+        return executeRawSubmit(DISABLE_ACCOUNT_SQL, normaliseId(frontendAccountId), ACCOUNT_METHOD,
+                                normaliseId(createdByPersonId), note)
+            .map(AccountSignInRestrictionStore::returnedARow)
+            .onSuccess(disabled -> {
+                if (Boolean.TRUE.equals(disabled)) // the account id, never the address (a log is outside erasure's reach)
+                    Console.log("🛡 Account disabled and its passkeys rejected after a reported theft: account " + frontendAccountId);
+            });
+    }
+
+    /**
+     * Re-enables an account its owner disabled after a theft, and records the rescue. Lifts nothing an
+     * administrator disabled by hand.
+     *
+     * @return whether a restriction was actually lifted — false when there was none in force
+     */
+    public static Future<Boolean> enableAccountByAdministrator(Object frontendAccountId, Object liftedByPersonId, String note) {
+        return executeRawSubmit(RESCUE_ACCOUNT_SQL, normaliseId(frontendAccountId), ACCOUNT_METHOD,
+                                normaliseId(liftedByPersonId), note)
+            .map(AccountSignInRestrictionStore::returnedARow);
+    }
+
+    /**
+     * Whether this account is the owner's own doing — disabled through the panic button and not yet rescued.
+     * Fail-CLOSED, and read by the super administrator's screen to know which button to offer.
+     */
+    public static Future<Boolean> readAccountClosed(Object frontendAccountId) {
+        return executeRawQuery(IS_RESTRICTED_SQL, normaliseId(frontendAccountId), ACCOUNT_METHOD)
+            .map(result -> result != null && result.getRowCount() > 0);
     }
 
     /**

@@ -100,3 +100,4 @@ V0097__username_sync_on_real_email_change.sql
 V0098__kbs2_reset_shut_while_password_closed.sql
 V0099__second_factor_reset_password.sql
 V0100__refuse_password_while_closed_trigger.sql
+V0101__account_restriction_for_stolen_device.sql

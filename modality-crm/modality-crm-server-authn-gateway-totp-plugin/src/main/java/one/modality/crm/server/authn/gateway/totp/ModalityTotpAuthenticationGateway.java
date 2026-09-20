@@ -734,11 +734,16 @@ public final class ModalityTotpAuthenticationGateway implements ServerAuthentica
             credentialStore.findByAccount(accountId),
             credentialStore.countUnused(accountId),
             // Whether its owner stopped their password working: then the rescue may have to reopen it (V0096)
-            AccountSignInRestrictionStore.readPasswordClosed(accountId)
+            AccountSignInRestrictionStore.readPasswordClosed(accountId),
+            // And whether they disabled the whole account after a theft (V0101) — a different rescue, and the
+            // reason the two are told apart at all: this owner is expected back within the hour, an account an
+            // administrator disabled is not
+            AccountSignInRestrictionStore.readAccountClosed(accountId)
         ).map(compositeFuture -> {
             TotpCredentialStore.TotpRow row = compositeFuture.resultAt(0);
             Integer backupCodesLeft = compositeFuture.resultAt(1);
             Boolean passwordClosed = compositeFuture.resultAt(2);
+            Boolean accountClosed = compositeFuture.resultAt(3);
             AstObject response = AST.createObject();
             response.set("found", Boolean.TRUE);
             response.setObject("account", accountJson(accountId, account, displayName(person)));
@@ -750,6 +755,7 @@ public final class ModalityTotpAuthenticationGateway implements ServerAuthentica
                 response.setObject("totp", totp);
             response.set("backupCodesLeft", backupCodesLeft == null ? 0 : backupCodesLeft);
             response.set("passwordClosed", Boolean.TRUE.equals(passwordClosed));
+            response.set("accountClosed", Boolean.TRUE.equals(accountClosed));
             return Json.formatObject(response);
         });
     }

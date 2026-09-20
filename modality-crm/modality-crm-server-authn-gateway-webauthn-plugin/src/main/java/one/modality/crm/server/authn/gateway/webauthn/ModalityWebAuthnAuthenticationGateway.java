@@ -36,8 +36,10 @@ import dev.webfx.stack.orm.domainmodel.DataSourceModel;
 import dev.webfx.stack.orm.domainmodel.HasDataSourceModel;
 import dev.webfx.stack.orm.entity.EntityStore;
 import dev.webfx.stack.push.server.PushServerService;
+import dev.webfx.stack.session.state.StateAccessor;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 import dev.webfx.stack.session.token.AuthenticatedState;
+import dev.webfx.stack.session.token.SessionTokenService;
 import one.modality.base.shared.entities.FrontendAccount;
 import one.modality.base.shared.entities.Person;
 import one.modality.crm.server.authn.gateway.shared.CredentialChangeProof;
@@ -55,6 +57,8 @@ import one.modality.crm.shared.services.authn.ListPasskeysCredentials;
 import one.modality.crm.shared.services.authn.PasswordSignInStatusCredentials;
 import one.modality.crm.shared.services.authn.ClosePasswordSignInCredentials;
 import one.modality.crm.shared.services.authn.ReopenPasswordSignInCredentials;
+import one.modality.crm.shared.services.authn.ReportDeviceStolenCredentials;
+import one.modality.crm.shared.services.authn.RescueStolenAccountCredentials;
 import one.modality.crm.server.authn.gateway.shared.AccountSignInRestrictionStore;
 import one.modality.crm.shared.services.authn.ListPendingPasskeysCredentials;
 import one.modality.crm.shared.services.authn.ModalityAuthenticationI18nKeys;
@@ -545,6 +549,7 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
                || updateCredentialsArgument instanceof RemovePasskeyCredentials
                || updateCredentialsArgument instanceof RenamePasskeyCredentials
                || isPasswordSignInOperation(updateCredentialsArgument)
+               || isStolenDeviceOperation(updateCredentialsArgument)
                || isSuperAdminOperation(updateCredentialsArgument);
     }
 
@@ -557,6 +562,15 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
         return updateCredentialsArgument instanceof PasswordSignInStatusCredentials
                || updateCredentialsArgument instanceof ClosePasswordSignInCredentials
                || updateCredentialsArgument instanceof ReopenPasswordSignInCredentials;
+    }
+
+    /**
+     * The panic button (V0101) and its rescue. Here beside the password control for the same reason, and for one
+     * of its own: the stolen device may hold a passkey, and this is the gateway that may reject one.
+     */
+    private static boolean isStolenDeviceOperation(Object updateCredentialsArgument) {
+        return updateCredentialsArgument instanceof ReportDeviceStolenCredentials
+               || updateCredentialsArgument instanceof RescueStolenAccountCredentials;
     }
 
     /**
@@ -589,8 +603,13 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
         // Reading the password's status, and reopening it, are also pure decisions, and reopening is the way OUT: an
         // unconfigured gateway must not trap an account whose passkeys it can no longer check. Closing is not exempt,
         // because it depends on passkeys working.
+        // The panic button and its rescue are decisions too, and both are needed most when something is wrong:
+        // an unconfigured gateway must neither stop somebody disabling a stolen device's account nor trap them
+        // outside it afterwards.
         boolean passwordDecision = updateCredentialsArgument instanceof PasswordSignInStatusCredentials
-                                   || updateCredentialsArgument instanceof ReopenPasswordSignInCredentials;
+                                   || updateCredentialsArgument instanceof ReopenPasswordSignInCredentials
+                                   || updateCredentialsArgument instanceof ReportDeviceStolenCredentials
+                                   || updateCredentialsArgument instanceof RescueStolenAccountCredentials;
         if (!config.isConfigured() && !isSuperAdminOperation(updateCredentialsArgument) && !passwordDecision)
             return notConfiguredFailure();
         // Registration and management require a real logged-in account. A support view is a member
@@ -617,6 +636,10 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
             return closePasswordSignIn(principal);
         if (updateCredentialsArgument instanceof ReopenPasswordSignInCredentials cred)
             return reopenPasswordSignIn(principal, cred);
+        if (updateCredentialsArgument instanceof ReportDeviceStolenCredentials)
+            return reportDeviceStolen(principal);
+        if (updateCredentialsArgument instanceof RescueStolenAccountCredentials cred)
+            return rescueStolenAccount(principal, cred);
         // Approval and revocation operations: re-checked as super administrator on EVERY call,
         // never trusted from the client's grant push, and never delegable through operation codes.
         // The approver's own passkeys are neither listed, decidable nor revocable (store WHERE
@@ -1056,6 +1079,13 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
     }
 
     private Future<Boolean> closePasswordSignIn(ModalityUserPrincipal principal) {
+        // Same fence as the panic button, for the same reason: closing wipes the stored password, so on an
+        // identity a caller merely asserted it is a remote way to take somebody's password away from them.
+        // Reopening is refused to that caller too (it needs a passkey sign-in), so the owner is the only one
+        // who can undo it — which is the control working as intended, and exactly why it must not be reachable
+        // by assertion.
+        if (!arrivedOnAVerifiedSession())
+            return managementFailure();
         Object accountId = accountIdOf(principal);
         if (!passwordClosingAvailable())
             return notConfiguredFailure();
@@ -1081,6 +1111,79 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
      * (CredentialChangeProof), which is what the owner has and the holder of a taken session does not. MUST be asked
      * on the caller's thread, which is where updateCredentials calls this.
      */
+    /**
+     * The panic button: the device this session was opened on has been stolen.
+     *
+     * <p>Two halves, and neither works alone. <b>Disabling</b> stops the thief signing back in — every sign-in
+     * path reads the flag, KBS2's included — but does not end the session they are holding, because renewal does
+     * not read the account. <b>Revoking</b> ends the sessions, including this one, but leaves them free to sign
+     * back in with a password that is member-grade. Both, and the clock finally means something: after one access
+     * window every token of that person has had to renew and been refused.
+     *
+     * <p>Order matters. Disabling first, so that a thief who is quick cannot open a fresh session in the gap
+     * between the revocation and the flag. The passkeys go with the disable, in the same statement, because the
+     * stolen device may hold one and a passkey would otherwise outlive all of this.
+     *
+     * <p>Refused for an account without back-office access, both here and in the statement itself. The reply is
+     * how many sessions ended, which the client shows before it lands on the sign-in page — its own session is
+     * one of them.
+     *
+     * <p>No proof beyond the session is asked for. That is deliberate and the opposite of reopening: this control
+     * takes access away, so the worst a misused session can do with it is lock its own owner out, which a super
+     * administrator undoes. Asking a person with a stolen laptop for a passkey would be asking at the one moment
+     * they may not have it.
+     */
+    private Future<Integer> reportDeviceStolen(ModalityUserPrincipal principal) {
+        // Not on an asserted identity: this one takes the account away from its owner, and until the identity
+        // flip is on, a claim costs an attacker nothing (see arrivedOnAVerifiedSession). The revocation half
+        // refuses such a caller anyway — this makes the disabling half refuse it too, rather than disabling an
+        // account and reporting success while ending no sessions at all.
+        if (!arrivedOnAVerifiedSession())
+            return managementFailure();
+        Object accountId = accountIdOf(principal);
+        Object personId = Numbers.toLong(principal.getUserPersonId());
+        return AccountSignInRestrictionStore.disableAccountAfterTheft(accountId, personId, null)
+            .compose(disabled -> {
+                if (!Boolean.TRUE.equals(disabled))
+                    // Not a back-office account, or no such account. Said as a management refusal rather than a
+                    // description of the account, which the caller does not need and a prober should not have.
+                    return managementFailure();
+                return SessionTokenService.endEverySessionOfCurrentUser()
+                    .map(List::size)
+                    // The account is already disabled at this point, which is the half that stops the thief
+                    // returning. A revocation that failed leaves their session running until it renews — worth
+                    // saying in the log, not worth failing a call whose main work is done.
+                    .recover(e -> {
+                        Console.log(LOG_PREFIX + "Account " + accountId + " was disabled after a reported theft, but ending its sessions failed: " + e.getMessage());
+                        return Future.succeededFuture(0);
+                    });
+            });
+    }
+
+    /**
+     * A super administrator letting somebody back in after a theft: re-enables the account and lifts the
+     * restriction, on the strength of an out-of-band check recorded in the note.
+     *
+     * <p>Never their own account, for the reason the password rescue refuses it: a session taken from a super
+     * administrator would otherwise undo the control through this door. Their passkeys stay rejected — the one on
+     * the stolen device is still on the stolen device — so the owner enrols again on what they still have.
+     */
+    private Future<Boolean> rescueStolenAccount(ModalityUserPrincipal principal, RescueStolenAccountCredentials credentials) {
+        Object rescuedAccountId = Numbers.toLong(credentials.accountId());
+        String note = credentials.note() == null ? "" : credentials.note().trim();
+        if (rescuedAccountId == null || note.isEmpty() || note.length() > 256)
+            return managementFailure();
+        if (Objects.equals(rescuedAccountId, accountIdOf(principal)))
+            return managementFailure();
+        return requireSuperAdmin(principal)
+            .compose(ignored -> AccountSignInRestrictionStore.enableAccountByAdministrator(rescuedAccountId, principal.getUserPersonId(), note))
+            .onSuccess(rescued -> {
+                if (Boolean.TRUE.equals(rescued))
+                    Console.log(LOG_PREFIX + "🛡 Account " + rescuedAccountId + " re-enabled after a reported theft"
+                                + " by super administrator person " + principal.getUserPersonId());
+            });
+    }
+
     private Future<Boolean> reopenPasswordSignIn(ModalityUserPrincipal principal, ReopenPasswordSignInCredentials credentials) {
         Object rescuedAccountId = Numbers.toLong(credentials.accountId());
         if (credentials.accountId() != null) {
@@ -1202,6 +1305,29 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
 
     private static <T> Future<T> adminNotPermittedFailure() {
         return Future.failedFuture("[%s] Only a super administrator can approve or reject passkeys".formatted(ModalityAuthenticationI18nKeys.AuthnPasskeyAdminNotPermittedError));
+    }
+
+    /**
+     * Whether this call arrived on a session THIS SERVER established, rather than on an identity the caller
+     * merely asserted.
+     *
+     * <p>The session family id is cleared from the client's state on every inbound message and re-set only from
+     * an identity token whose signature held (ServerSideStateSessionSyncer), so its presence is the one thing a
+     * caller cannot fake. Until the identity-token flip is on — it is off in production — a caller with no token
+     * at all may claim any principal it likes, and the only check that runs is that the claimed person and
+     * account exist. Existence is not identity.
+     *
+     * <p>Required by the controls that can take an account away from its owner, because for those the difference
+     * matters: {@code endEverySessionOfCurrentUser} has always demanded it (a caller could otherwise end
+     * somebody else's sessions), and disabling an account or wiping its password are the same kind of act. A
+     * client without a token is refused rather than served, which is what "sign out my other devices" has done
+     * in production since it shipped.
+     *
+     * <p>MUST be read on the caller's thread, before the first async step, like everything else that reads
+     * {@link ThreadLocalStateHolder}.
+     */
+    private static boolean arrivedOnAVerifiedSession() {
+        return StateAccessor.getSessionFamilyId(ThreadLocalStateHolder.getThreadLocalState()) != null;
     }
 
     private static <T> Future<T> managementFailure() {

@@ -17,6 +17,8 @@ one.modality.crm.shared.services.authn.serial.ListPendingPasskeysCredentialsSeri
 one.modality.crm.shared.services.authn.serial.PasswordSignInStatusCredentialsSerialCodec
 one.modality.crm.shared.services.authn.serial.ClosePasswordSignInCredentialsSerialCodec
 one.modality.crm.shared.services.authn.serial.ReopenPasswordSignInCredentialsSerialCodec
+one.modality.crm.shared.services.authn.serial.ReportDeviceStolenCredentialsSerialCodec
+one.modality.crm.shared.services.authn.serial.RescueStolenAccountCredentialsSerialCodec
 one.modality.crm.shared.services.authn.serial.ApprovePasskeyCredentialsSerialCodec
 one.modality.crm.shared.services.authn.serial.RejectPasskeyCredentialsSerialCodec
 one.modality.crm.shared.services.authn.serial.StartTotpEnrolmentCredentialsSerialCodec
