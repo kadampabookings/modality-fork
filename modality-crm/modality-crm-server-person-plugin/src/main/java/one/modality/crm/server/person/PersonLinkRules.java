@@ -74,6 +74,13 @@ final class PersonLinkRules {
     static final String INVITATION_NOT_YOURS_KEY = "InvitationNotYoursError";
     static final String INVITATION_ALREADY_USED_KEY = "InvitationAlreadyUsedError";
     static final String LINK_NOT_ESTABLISHED_KEY = "LinkNotEstablishedError";
+    /**
+     * Older than the seven days the email-link page allowed.
+     *
+     * <p>Carried over deliberately: it was a client-side test, so moving approval to the server without it
+     * would have quietly made every expired invitation live again — a link mailed years ago still good.
+     */
+    static final String INVITATION_EXPIRED_KEY = "InvitationExpiredError";
     static final String NOT_YOUR_LINK_KEY = "NotYourLinkError";
 
     /**
@@ -85,7 +92,8 @@ final class PersonLinkRules {
     private static final String INVITATION_SQL =
         "select i.inviter_id, i.invitee_id, i.inviter_payer, i.pending, i.accepted," +
         "       inviter.frontend_account_id, invitee.frontend_account_id, lower(invitee.email)," +
-        "       i.alias_first_name, i.alias_last_name, inviter.first_name, inviter.last_name" +
+        "       i.alias_first_name, i.alias_last_name, inviter.first_name, inviter.last_name," +
+        "       (i.creation_date < now() - interval '7 days') as expired" +
         " from invitation i" +
         " join person inviter on inviter.id = i.inviter_id" +
         " join person invitee on invitee.id = i.invitee_id" +
@@ -112,6 +120,19 @@ final class PersonLinkRules {
      * inside the statement, so two approvals racing cannot both insert, and a row created between a check
      * and a write cannot be missed.
      */
+    /**
+     * Re-linking a member row this service created earlier and that was later withdrawn.
+     *
+     * <p>{@link #LINK_EXISTING_MEMBER_SQL} finds the row by the invitee's address, and a row THIS service
+     * created carries no address — so after a withdrawal, re-approving matched nothing, inserted nothing
+     * (the row exists), and refused forever. Keyed on the link instead, which is what identifies those
+     * rows. The manager direction has the same statement for the same reason; they were written apart and
+     * only one of them had it.
+     */
+    private static final String RELINK_BY_LINK_SQL =
+        "update person set account_person_revoked_date = null" +
+        " where frontend_account_id = $2 and account_person_id = $1 and removed = false";
+
     private static final String CREATE_LINKED_MEMBER_SQL =
         "insert into person (first_name, last_name, frontend_account_id, account_person_id, owner)" +
         " select $4, $5, $2, $1, false" +
@@ -214,6 +235,8 @@ final class PersonLinkRules {
                     return refusal(INVITATION_NOT_YOURS_KEY);
                 if (!pending)
                     return refusal(INVITATION_ALREADY_USED_KEY);
+                if (isTrue(result.getValue(0, 12)))
+                    return refusal(INVITATION_EXPIRED_KEY);
                 return inviterPays
                     ? approveValidationRequest(invitationId, callerPersonId, inviterAccountId, inviteeEmail,
                         result.getValue(0, 8), result.getValue(0, 9), callerUserId)
@@ -240,6 +263,7 @@ final class PersonLinkRules {
             return refusal(LINK_NOT_ESTABLISHED_KEY);
         List<SubmitArgument> batch = new ArrayList<>();
         batch.add(statement(LINK_EXISTING_MEMBER_SQL, callerPersonId, inviterAccountId, inviteeEmail));
+        batch.add(statement(RELINK_BY_LINK_SQL, callerPersonId, inviterAccountId));
         batch.add(statement(CREATE_LINKED_MEMBER_SQL, callerPersonId, inviterAccountId, inviteeEmail,
             aliasFirstName, aliasLastName));
         return runAndConfirmLink(batch, invitationId, callerPersonId, inviterAccountId, callerUserId);
@@ -325,8 +349,8 @@ final class PersonLinkRules {
      * only ever spent from pending. Package-private for that reason alone.
      */
     static List<String> writeStatements() {
-        return List.of(LINK_EXISTING_MEMBER_SQL, CREATE_LINKED_MEMBER_SQL, CREATE_MANAGER_VIEW_SQL,
-            USE_INVITATION_SQL, REVOKE_LINK_SQL);
+        return List.of(LINK_EXISTING_MEMBER_SQL, RELINK_BY_LINK_SQL, CREATE_LINKED_MEMBER_SQL,
+            RELINK_MANAGER_VIEW_SQL, CREATE_MANAGER_VIEW_SQL, USE_INVITATION_SQL, REVOKE_LINK_SQL);
     }
 
     private static SubmitArgument statement(String sql, Object... parameters) {

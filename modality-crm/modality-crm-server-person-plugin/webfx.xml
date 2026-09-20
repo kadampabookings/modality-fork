@@ -21,10 +21,14 @@
         <source-module>webfx-stack-session-state</source-module>
     </dependencies>
 
-    <!-- ApproveInvitationEndpoint is written and deliberately NOT registered: approving trusts
-         invitation.inviter, and nothing yet stops a client inserting an invitation that names somebody
-         else as inviter. Registering it before invitation CREATION is gated would make this service the
-         escalation it exists to prevent. See PersonLinkCheck, which fails if it is switched on. -->
+    <!-- ApproveInvitationEndpoint and CreateInvitationEndpoint are written and deliberately NOT
+         registered. They are two halves of one thing and only close the hole together: approving trusts
+         invitation.inviter, and while a client can still INSERT an invitation it can name anybody there.
+         Creating server-side does not help on its own either — it would hand a caller a server-minted
+         token for a row they authored, which the email-link page still approves with no session at all.
+         Both register in the change that denies clients the invitation table and moves that page onto
+         the endpoint; PersonLinkCheck fails while either is switched on before then. Nothing runs that
+         check automatically — see scripts/checks/person-service/run.sh. -->
 
     <providers>
         <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.crm.server.person.MergeDuplicatePersonsEndpoint</provider>

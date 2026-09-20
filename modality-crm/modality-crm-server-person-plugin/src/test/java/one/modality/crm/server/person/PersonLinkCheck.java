@@ -56,6 +56,17 @@ public class PersonLinkCheck {
         check("linking never touches an owner", link.contains("owner = false"));
         check("linking never touches a removed row", link.contains("removed = false"));
 
+        // Both directions must be able to re-link after a withdrawal, or "ask again" works one way only.
+        // A row this service created carries no email, so the address-keyed statement cannot find it.
+        // Keyed on the LINK, not the address: a row this service created carries no email, so the
+        // address-keyed statement above cannot find it after a withdrawal. One such statement per
+        // direction, or "ask again" works one way round only and burns the invitation.
+        long relinks = writes.stream()
+            .filter(s -> s.startsWith("update person set account_person_revoked_date = null"))
+            .filter(s -> s.contains("account_person_id = $1"))
+            .count();
+        check("both directions can re-link a withdrawn row", relinks == 2);
+
         // --- inserts are idempotent rather than duplicating a person per click ---
         long guardedInserts = writes.stream().filter(s -> s.startsWith("insert into person")).filter(s -> s.contains("not exists")).count();
         check("both person inserts are guarded by not-exists", guardedInserts == 2);
@@ -82,6 +93,8 @@ public class PersonLinkCheck {
         check("the services file was read", !services.isEmpty() && !services.startsWith("(unreadable"));
         check("ApproveInvitationEndpoint is NOT registered while invitation creation is ungated",
             !services.contains("ApproveInvitationEndpoint"));
+        check("CreateInvitationEndpoint is NOT registered while clients can still insert invitations",
+            !services.contains("CreateInvitationEndpoint"));
         check("RevokeLinkEndpoint IS registered", services.contains("RevokeLinkEndpoint"));
 
         System.out.println(pass + " passed, " + fail + " failed");
