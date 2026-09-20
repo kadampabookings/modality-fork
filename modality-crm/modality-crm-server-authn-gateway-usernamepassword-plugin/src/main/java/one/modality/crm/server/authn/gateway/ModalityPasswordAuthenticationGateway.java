@@ -26,6 +26,7 @@ import one.modality.base.shared.entities.MagicLinkType;
 import one.modality.base.shared.entities.Person;
 import one.modality.crm.server.authn.gateway.magiclink.ModalityMagicLinkAuthenticationGateway;
 import one.modality.crm.server.authn.gateway.shared.AccountSignInRestrictionStore;
+import one.modality.crm.server.authn.gateway.shared.PasswordClosedNotice;
 import one.modality.crm.server.authn.gateway.shared.CredentialChangeProof;
 import one.modality.crm.server.authn.gateway.shared.EmailChangeNotice;
 import one.modality.crm.server.authn.gateway.shared.GuestPersonLinker;
@@ -397,23 +398,35 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
             .<FrontendAccount>executeQuery("select FrontendAccount where corporation=$1 and lower(username)=lower($2) limit 1", 1, credentials.getEmail())
             .compose(accounts -> {
                     boolean doesntExists = accounts.isEmpty();
-                    // Pick the right template for the branch, then render body + subject in the user's language.
-                    LocalizedMailTemplate template = doesntExists
-                        ? (verificationCodeOnly ? CREATE_ACCOUNT_WITH_VERIFICATION_CODE_MAIL : CREATE_ACCOUNT_MAIL)
-                        : CREATE_ACCOUNT_ALREADY_EXISTS_MAIL;
-                    return MagicLinkService.createAndSendMagicLink(
-                        loginRunId,
-                        credentials,
-                        null,
-                        doesntExists ? CREATE_ACCOUNT_ACTIVITY_PATH_FULL : ModalityMagicLinkAuthenticationGateway.MAGIC_LINK_ACTIVITY_PATH_FULL,
-                        MAIL_FROM_NAME,
-                        doesntExists ? CREATE_ACCOUNT_MAIL_FROM : CREATE_ACCOUNT_ALREADY_EXISTS_MAIL_FROM,
-                        template.renderSubject(lang),
-                        template.renderBody(lang),
-                        dataSourceModel
-                    );
+                    // The "already exists" mail carries a sign-in link, so an account whose password is closed gets the
+                    // passkey notice instead (V0096). Read fail-open: the link's redeem path reads it again, fail-closed.
+                    if (!doesntExists)
+                        return AccountSignInRestrictionStore.isPasswordClosedForEmail(credentials.getEmail())
+                            .compose(closed -> Boolean.TRUE.equals(closed)
+                                ? PasswordClosedNotice.send(credentials.getEmail(), lang)
+                                : sendAccountCreationMail(credentials, false, verificationCodeOnly, loginRunId, lang));
+                    return sendAccountCreationMail(credentials, true, verificationCodeOnly, loginRunId, lang);
                 }
             );
+    }
+
+    private Future<Void> sendAccountCreationMail(InitiateAccountCreationCredentials credentials, boolean doesntExists,
+                                                 boolean verificationCodeOnly, String loginRunId, String lang) {
+        // Pick the right template for the branch, then render body + subject in the user's language.
+        LocalizedMailTemplate template = doesntExists
+            ? (verificationCodeOnly ? CREATE_ACCOUNT_WITH_VERIFICATION_CODE_MAIL : CREATE_ACCOUNT_MAIL)
+            : CREATE_ACCOUNT_ALREADY_EXISTS_MAIL;
+        return MagicLinkService.createAndSendMagicLink(
+            loginRunId,
+            credentials,
+            null,
+            doesntExists ? CREATE_ACCOUNT_ACTIVITY_PATH_FULL : ModalityMagicLinkAuthenticationGateway.MAGIC_LINK_ACTIVITY_PATH_FULL,
+            MAIL_FROM_NAME,
+            doesntExists ? CREATE_ACCOUNT_MAIL_FROM : CREATE_ACCOUNT_ALREADY_EXISTS_MAIL_FROM,
+            template.renderSubject(lang),
+            template.renderBody(lang),
+            dataSourceModel
+        );
     }
 
     private Future<String> continueAccountCreation(ContinueAccountCreationCredentials credentials) {
@@ -520,8 +533,9 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
     }
 
     private Future<Void> finaliseEmailUpdate(FinaliseEmailUpdateCredentials credentials) {
-        // We check the validity of the token, and if valid, we load the user person
-        return MagicLinkService.loadMagicLinkFromTokenAndMarkAsUsed(credentials.magicLinkTokenOrVerificationCode(), dataSourceModel)
+        // We check the validity of the token, and if valid, we load the user person. Its own loader: the general one
+        // refuses a link into an account whose password is closed, and this one only changes an address (see there)
+        return MagicLinkService.loadEmailChangeLinkAndMarkAsUsed(credentials.magicLinkTokenOrVerificationCode(), dataSourceModel)
             .compose(magicLink -> loadRequesterOfEmailChange(magicLink)
                 .compose(userPerson -> {
                     // No account at the link's old address any more — a second pending change clicked after

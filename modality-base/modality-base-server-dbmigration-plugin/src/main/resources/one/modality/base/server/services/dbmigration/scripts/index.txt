@@ -97,3 +97,5 @@ V0094__person_occasional.sql
 V0095__mate_invite_token_delete_rules.sql
 V0096__account_sign_in_restriction.sql
 V0097__username_sync_on_real_email_change.sql
+V0098__kbs2_reset_shut_while_password_closed.sql
+V0099__second_factor_reset_password.sql

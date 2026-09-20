@@ -18,7 +18,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * What a session must show before it changes how the account is reached — its sign-in email, a new passkey:
- * the current password, or a password sign-in or an emailed recovery minutes old.
+ * the current password, or a password or passkey sign-in, or an emailed recovery, minutes old.
  *
  * <h3>Why a session is not enough</h3>
  *
@@ -40,9 +40,15 @@ import java.util.concurrent.ConcurrentHashMap;
  *       found correct, keyed by the tab's run id and the account, and only ever accepted for a caller signed
  *       in as that account. Five minutes because it serves that one moment: a laptop taken later carries an
  *       older sign-in.</li>
+ *   <li><b>A passkey, proved at sign-in in this tab within {@link #RECENT_PASSWORD_SIGN_IN}</b>, noted by the passkey
+ *       gateway ({@link #notePasskeyProved}) under the same rules. Accepted even when the password is closed: that
+ *       control distrusts a password, and a passkey assertion is possession and the person in one gesture. It is
+ *       how an account whose password is closed — and whose recovery is closed with it — adds a passkey on a new
+ *       device: sign in there with an existing one, then add.</li>
  *   <li><b>A recovery window</b> ({@link RecoveryWindow}): this tab redeemed an emailed link or code for this
  *       account within the last fifteen minutes — the person who has forgotten their password has proved the
- *       mailbox instead. Not spent here; see RecoveryWindow on why only a password set spends it.</li>
+ *       mailbox instead. Not spent here; see RecoveryWindow on why only a password set spends it. Not accepted
+ *       when the password is closed, even a window opened before the close: the close distrusts the mailbox.</li>
  * </ul>
  *
  * <p>A support view is refused outright: it is staff looking at a customer's account, and must never be
@@ -67,6 +73,9 @@ public final class CredentialChangeProof {
 
     private record PasswordProved(long accountId, Instant at) {}
 
+    /** Tabs that proved a passkey at sign-in, by run id — the same shape and lifetime as the password proofs. */
+    private static final Map<String, PasswordProved> RECENT_PASSKEY_PROOFS = new ConcurrentHashMap<>();
+
     private CredentialChangeProof() {}
 
     /**
@@ -75,16 +84,36 @@ public final class CredentialChangeProof {
      * that account exists in that tab).
      */
     public static void notePasswordProved(String runId, Object accountId) {
+        noteProof(RECENT_PASSWORD_PROOFS, runId, accountId);
+    }
+
+    /**
+     * Records that the tab {@code runId} has just signed in to {@code accountId} with a passkey — called by the passkey
+     * gateway once the assertion has passed every check and a session is being minted for it.
+     */
+    public static void notePasskeyProved(String runId, Object accountId) {
+        noteProof(RECENT_PASSKEY_PROOFS, runId, accountId);
+    }
+
+    private static void noteProof(Map<String, PasswordProved> proofs, String runId, Object accountId) {
         Long normalisedAccountId = accountId == null ? null : Numbers.toLong(accountId);
         if (runId == null || normalisedAccountId == null)
             return;
         Instant now = Instant.now();
-        RECENT_PASSWORD_PROOFS.values().removeIf(proof -> proof.at().plus(RECENT_PASSWORD_SIGN_IN).isBefore(now));
-        RECENT_PASSWORD_PROOFS.put(runId, new PasswordProved(normalisedAccountId, now));
+        proofs.values().removeIf(proof -> proof.at().plus(RECENT_PASSWORD_SIGN_IN).isBefore(now));
+        proofs.put(runId, new PasswordProved(normalisedAccountId, now));
     }
 
     private static boolean passwordProvedRecently(String runId, Object accountId) {
-        PasswordProved proof = runId == null ? null : RECENT_PASSWORD_PROOFS.get(runId);
+        return provedRecently(RECENT_PASSWORD_PROOFS, runId, accountId);
+    }
+
+    private static boolean passkeyProvedRecently(String runId, Object accountId) {
+        return provedRecently(RECENT_PASSKEY_PROOFS, runId, accountId);
+    }
+
+    private static boolean provedRecently(Map<String, PasswordProved> proofs, String runId, Object accountId) {
+        PasswordProved proof = runId == null ? null : proofs.get(runId);
         return proof != null
                && Numbers.identicalObjectsOrNumberValues(proof.accountId(), accountId)
                && Instant.now().isBefore(proof.at().plus(RECENT_PASSWORD_SIGN_IN));
@@ -92,10 +121,10 @@ public final class CredentialChangeProof {
 
     /**
      * Succeeds when the caller has proved the change; fails with {@code [AuthnOldPasswordNotMatchingError]}
-     * when it has not — a wrong password, or no password and neither a recent password sign-in nor an open
-     * recovery window, deliberately the same answer — or with {@code [AuthnPasswordSignInClosedError]} when the
-     * proof offered is the password of an account whose password is closed (the recovery window is then the
-     * only proof).
+     * when it has not — a wrong password, or no password and neither a recent password or passkey sign-in nor an
+     * open recovery window, deliberately the same answer — or with {@code [AuthnPasswordSignInClosedError]} when the
+     * proof offered is the password of an account whose password is closed. For such an account a recent passkey
+     * sign-in is the only proof: a password sign-in or a recovery window from before the close no longer counts.
      *
      * <p>MUST be called on the caller's thread: it reads the principal and run id before its first async step,
      * because {@link ThreadLocalStateHolder} is restored once the synchronous part of the call returns.
@@ -113,15 +142,19 @@ public final class CredentialChangeProof {
         if (accountId == null)
             return notProved();
         if (Strings.isEmpty(currentPassword)) {
+            // A passkey sign-in minutes old in this tab proves it outright, closed password or not
+            if (passkeyProvedRecently(runId, accountId))
+                return Future.succeededFuture();
             // Both started here, on the caller's thread: the recovery lookup reads the caller from it too
             Future<Void> byRecovery = RecoveryWindow.findForCaller(dataSourceModel)
                 .compose(open -> open != null ? Future.succeededFuture() : notProved());
-            if (!passwordProvedRecently(runId, accountId))
-                return byRecovery;
-            // A password proved at sign-in minutes ago still counts — unless it has since been closed, in which
-            // case the recovery window is the proof left, as it is for a typed password
+            boolean byPasswordSignIn = passwordProvedRecently(runId, accountId);
+            // A closed password takes both of these with it: a password proved at sign-in is the credential the
+            // owner distrusts, and a recovery window may have been opened just before the close, through the
+            // mailbox it distrusts too. Only the passkey is left. Read fail-closed.
             return AccountSignInRestrictionStore.readPasswordClosed(accountId)
-                .compose(closed -> Boolean.TRUE.equals(closed) ? byRecovery : Future.succeededFuture());
+                .compose(closed -> Boolean.TRUE.equals(closed) ? notProved()
+                    : byPasswordSignIn ? Future.succeededFuture() : byRecovery);
         }
         return Future.all(
             EntityStore.create(dataSourceModel)

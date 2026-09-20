@@ -22,9 +22,11 @@ import one.modality.base.shared.entities.MagicLink;
 import one.modality.base.shared.entities.MagicLinkType;
 import one.modality.base.shared.entities.Person;
 import one.modality.base.shared.util.ActivityHashUtil;
+import one.modality.crm.server.authn.gateway.shared.AccountSignInRestrictionStore;
 import one.modality.crm.server.authn.gateway.shared.GuestPersonLinker;
 import one.modality.crm.server.authn.gateway.shared.LocalizedMailTemplate;
 import one.modality.crm.server.authn.gateway.shared.MagicLinkService;
+import one.modality.crm.server.authn.gateway.shared.PasswordClosedNotice;
 import one.modality.crm.server.authn.gateway.shared.RecoveryWindow;
 import one.modality.crm.server.authn.gateway.shared.RoleOperationMembership;
 import one.modality.crm.server.authn.gateway.shared.SetPasswordAfterRecoveryCredentials;
@@ -149,24 +151,36 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
             .<FrontendAccount>executeQuery("select FrontendAccount where corporation=$1 and lower(username)=lower($2) limit 1", 1, request.getEmail())
             .compose(accounts -> {
                     boolean unknown = accounts.isEmpty();
-                    LocalizedMailTemplate template = unknown
-                        ? UNKNOWN_ACCOUNT_MAIL
-                        : request.isVerificationCodeOnly()
-                            ? RECOVERY_WITH_VERIFICATION_CODE_ONLY_MAIL
-                            : RECOVERY_WITH_VERIFICATION_CODE_OR_MAGIC_LINK_MAIL;
-                    return MagicLinkService.createAndSendMagicLink(
-                        loginRunId,
-                        request,
-                        null,
-                        MAGIC_LINK_ACTIVITY_PATH_FULL,
-                        MAIL_FROM_NAME,
-                        MAIL_FROM,
-                        template.renderSubject(lang),
-                        template.renderBody(lang),
-                        dataSourceModel
-                    );
+                    // An account whose owner stopped their password working gets no link and no code (V0096): the
+                    // passkey is its way in. Asked by address, resolving the account as the link's redeem would.
+                    // Read fail-OPEN here, because the redeem path reads it again fail-closed: a link sent on a blip
+                    // still opens nothing.
+                    Future<Boolean> passwordClosed = unknown ? Future.succeededFuture(false)
+                        : AccountSignInRestrictionStore.isPasswordClosedForEmail(request.getEmail());
+                    return passwordClosed.compose(closed -> Boolean.TRUE.equals(closed)
+                        ? PasswordClosedNotice.send(request.getEmail(), lang)
+                        : sendRecoveryOrUnknownAccountMail(request, unknown, loginRunId, lang));
                 }
             );
+    }
+
+    private Future<Void> sendRecoveryOrUnknownAccountMail(SendMagicLinkCredentials request, boolean unknown, String loginRunId, String lang) {
+        LocalizedMailTemplate template = unknown
+            ? UNKNOWN_ACCOUNT_MAIL
+            : request.isVerificationCodeOnly()
+                ? RECOVERY_WITH_VERIFICATION_CODE_ONLY_MAIL
+                : RECOVERY_WITH_VERIFICATION_CODE_OR_MAGIC_LINK_MAIL;
+        return MagicLinkService.createAndSendMagicLink(
+            loginRunId,
+            request,
+            null,
+            MAGIC_LINK_ACTIVITY_PATH_FULL,
+            MAIL_FROM_NAME,
+            MAIL_FROM,
+            template.renderSubject(lang),
+            template.renderBody(lang),
+            dataSourceModel
+        );
     }
 
     private Future<Void> renewAndSendMagicLink(RenewMagicLinkCredentials request) {
@@ -190,7 +204,11 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
                 // Renewals reuse the language persisted on the original MagicLink so the user stays in
                 // the language they started the flow with, even if their session was lost in between.
                 String lang = Strings.toSafeString(magicLink.getLang());
-                return MagicLinkService.createAndSendMagicLink(
+                // A renewal is a new link: none for an account whose password is closed (see createAndSendMagicLink)
+                return AccountSignInRestrictionStore.isPasswordClosedForEmail(magicLink.getEmail())
+                    .compose(closed -> Boolean.TRUE.equals(closed)
+                        ? PasswordClosedNotice.send(magicLink.getEmail(), lang)
+                        : MagicLinkService.createAndSendMagicLink(
                     magicLink.getLoginRunId(),
                     magicLink.getLang(),
                     clientOrigin,
@@ -204,7 +222,7 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
                     RECOVERY_WITH_VERIFICATION_CODE_OR_MAGIC_LINK_MAIL.renderSubject(lang),
                     RECOVERY_WITH_VERIFICATION_CODE_OR_MAGIC_LINK_MAIL.renderBody(lang),
                     dataSourceModel
-                );
+                ));
             });
     }
 
@@ -226,6 +244,8 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
             .compose(magicLink -> {
                 // 2) The magic link is valid, so we check if the request comes from
                 // a registered or unregistered user (with or without an account)
+                // (An account whose password is closed never reaches here: the link was refused above, where it is
+                // validated — see MagicLinkService.)
                 return MagicLinkService.loadUserPersonFromMagicLink(magicLink)
                     .compose(userPerson -> {
                         // 3) Preparing the userId = ModalityUserPrincipal for registered users, ModalityGuestPrincipal for unregistered users

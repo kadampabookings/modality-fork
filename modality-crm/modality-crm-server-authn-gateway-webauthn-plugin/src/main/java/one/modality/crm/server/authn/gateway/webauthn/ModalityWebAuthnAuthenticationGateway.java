@@ -52,6 +52,10 @@ import one.modality.crm.shared.services.authn.AuthenticateWithPasskeyCredentials
 import one.modality.crm.shared.services.authn.FinalisePasskeyRegistrationCredentials;
 import one.modality.crm.shared.services.authn.ListAccountPasskeysCredentials;
 import one.modality.crm.shared.services.authn.ListPasskeysCredentials;
+import one.modality.crm.shared.services.authn.PasswordSignInStatusCredentials;
+import one.modality.crm.shared.services.authn.ClosePasswordSignInCredentials;
+import one.modality.crm.shared.services.authn.ReopenPasswordSignInCredentials;
+import one.modality.crm.server.authn.gateway.shared.AccountSignInRestrictionStore;
 import one.modality.crm.shared.services.authn.ListPendingPasskeysCredentials;
 import one.modality.crm.shared.services.authn.ModalityAuthenticationI18nKeys;
 import one.modality.crm.shared.services.authn.ModalityUserPrincipal;
@@ -74,13 +78,17 @@ import java.util.Set;
  * credential management, all keyed to the {@code frontend_account} shared by the front office and
  * the back office.
  *
- * <p><b>Passkeys are a BACK-OFFICE feature (product decision, 2026-09-14).</b> The front office
- * keeps password, magic link and verification code, and shows no passkey UI at all. The rpId still
- * spans both origins and must stay that way — it is forever, and every passkey already registered
- * is bound to its current value — so the enforcement is the ORIGIN allowlist, not the rpId: with
- * {@code WEBAUTHN_FRONTOFFICE_ORIGINS} unset, a registration or an assertion signed by a
- * front-office origin fails webauthn4j's signed-origin check and is refused. That is a server-side
- * refusal, not a hidden button. The boot log states which of the two states the server is in.
+ * <p><b>Passkeys are a BACK-OFFICE feature (product decision, 2026-09-14), with one exception (2026-09-18):
+ * back-office staff may SIGN IN to the front office with one.</b> The exception exists because "Stop my password
+ * working" (V0096) closes a staff member's password and every emailed way in, so without it they would have no
+ * way into the front office at all. It is enforced here rather than in the UI: a passkey is only ever REGISTERED
+ * from a back-office origin (refused otherwise, in finalisePasskeyRegistration), and a sign-in from EITHER origin
+ * resolves only a back-office account (the {@code requireBackoffice} fence below), so a member without a
+ * back-office account signs in with no passkey anywhere. The front office offers passkeys only through the
+ * browser's autofill, which appears only on a device already holding one. The rpId spans both origins and must
+ * stay that way — it is forever, and every passkey already registered is bound to its current value. With
+ * {@code WEBAUTHN_FRONTOFFICE_ORIGINS} unset, a front-office assertion fails webauthn4j's signed-origin check and
+ * the exception is off. The boot log states which of the two states the server is in.
  *
  * <p>Verification is delegated to webauthn4j (never hand-rolled): challenge (single-use, from
  * {@link WebAuthnChallengeStore}), origin ∈ configured allowlist, rpId hash, user presence + user
@@ -150,6 +158,15 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
 
     private final DataSourceModel dataSourceModel;
     private final WebAuthnChallengeStore challengeStore = new WebAuthnChallengeStore();
+    // Front-office sign-in challenges are kept apart (2026-09-18): the front office arms a silent autofill request
+    // for everyone on its sign-in page, and at a busy booking opening those must not fill the store that back-office
+    // sign-ins and second-factor steps depend on. Chosen by the session's claimed app, at both ends of a ceremony;
+    // a claim that does not match the signed origin is refused on verification anyway.
+    private final WebAuthnChallengeStore frontofficeAssertionChallengeStore = new WebAuthnChallengeStore();
+
+    private WebAuthnChallengeStore assertionChallengeStore(boolean backoffice) {
+        return backoffice ? challengeStore : frontofficeAssertionChallengeStore;
+    }
     private final WebAuthnCredentialStore credentialStore = new WebAuthnCredentialStore();
     // Written once by the config-loaded callback, read by every ceremony — volatile is the contract.
     // STATIC because it has a second reader that holds no gateway: PasskeySecondFactorVerifier is a
@@ -202,9 +219,9 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
                 // front-office origin a ceremony signed by one fails webauthn4j's signed-origin
                 // check — registration included — which is exactly what enforces the decision.
                 if (config.getFrontofficeOriginCount() == 0)
-                    Console.log(LOG_PREFIX + "WEBAUTHN_FRONTOFFICE_ORIGINS is empty — front-office passkey sign-in AND enrolment are disabled (refused at the signed-origin check). This is the EXPECTED state: passkeys and the TOTP second factor are back-office only (product decision 2026-09-14)");
+                    Console.log(LOG_PREFIX + "WEBAUTHN_FRONTOFFICE_ORIGINS is empty — no passkey sign-in on the front office, not even for staff (refused at the signed-origin check). A staff member who stops their password working then has no way into the front office: in the AWS deploys it inherits FRONTOFFICE_ORIGIN, so an empty value here means it was overridden or that variable is unset");
                 else
-                    Console.log(LOG_PREFIX + "⚠️ WEBAUTHN_FRONTOFFICE_ORIGINS is set — this server still ACCEPTS front-office passkey sign-in and enrolment, which the back-office-only policy of 2026-09-14 says it should not. The front office shows no passkey UI, so nothing reaches it today, but only clearing this variable enforces the decision server-side. Do NOT narrow WEBAUTHN_RP_ID instead: rpId is forever and every registered passkey is bound to its current value");
+                    Console.log(LOG_PREFIX + "WEBAUTHN_FRONTOFFICE_ORIGINS is set — back-office staff may sign in to the front office with a passkey (2026-09-18). Registration stays back-office only, and a front-office sign-in resolves only back-office accounts. Do NOT narrow WEBAUTHN_RP_ID: rpId is forever and every registered passkey is bound to its current value");
             } else
                 // Loud, because the consequence is silent: the login button in the apps would just
                 // return errors. Unset WEBAUTHN_* means "this environment has no passkeys", on purpose.
@@ -236,7 +253,8 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
         if (runId == null)
             return genericFailure();
         WebAuthnConfig cfg = config;
-        WebAuthnChallengeStore.Pending pending = challengeStore.create(runId + ASSERTION_PURPOSE, null, null);
+        WebAuthnChallengeStore.Pending pending = assertionChallengeStore(ThreadLocalStateHolder.isBackoffice())
+            .create(runId + ASSERTION_PURPOSE, null, null);
         if (pending == null) // store full (anonymous start-flood) — new ceremonies refused, pending ones untouched
             return genericFailure();
         AstObject options = AST.createObject();
@@ -301,7 +319,7 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
                 return genericFailure();
             }
         }
-        WebAuthnChallengeStore.Pending pending = challengeStore.consume(runId + ASSERTION_PURPOSE);
+        WebAuthnChallengeStore.Pending pending = assertionChallengeStore(claimedBackoffice).consume(runId + ASSERTION_PURPOSE);
         if (pending == null)
             return genericFailure();
         byte[] credentialId, authenticatorData, clientDataJSON, signature, userHandle;
@@ -359,7 +377,10 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
                 }
                 long newSignCount = authenticationData.getAuthenticatorData() == null ? 0
                     : authenticationData.getAuthenticatorData().getSignCount();
-                return LoginPersonResolver.loadLiveLoginPersonForAccount(row.accountId(), originIsBackoffice, dataSourceModel)
+                // A back-office account from EITHER origin: passkeys are for staff, and the front office accepts one only
+                // so that a staff member whose password is closed can still reach it (2026-09-18). A member who somehow
+                // held a passkey signs in nowhere with it. The back-office origin's own checks follow unchanged.
+                return LoginPersonResolver.loadLiveLoginPersonForAccount(row.accountId(), true, dataSourceModel)
                     .compose(userPerson -> {
                         if (userPerson == null)
                             return genericFailure();
@@ -385,8 +406,10 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
                         // The status rule itself lives in the store, as ONE method, because
                         // PasskeySecondFactorVerifier has to answer "is this account enrolled?" by
                         // exactly the same rule: a verifier that said yes where this says no would
-                        // ask an owner for a factor this line then refuses.
-                        if (originIsBackoffice && !WebAuthnCredentialStore.opensBackofficeLogin(row.status(), cfg.isBackofficeApprovalRequired()))
+                        // ask an owner for a factor this line then refuses. Applied in the front office
+                        // too: only back-office accounts sign in there with a passkey, and a passkey the
+                        // back office has not approved must not open their account from the other door.
+                        if (!WebAuthnCredentialStore.opensBackofficeLogin(row.status(), cfg.isBackofficeApprovalRequired()))
                             return notApprovedFailure();
                         if (newSignCount != 0 && row.signCount() != 0 && newSignCount <= row.signCount())
                             // Warn-and-accept — see the class javadoc for why this is not a hard fail
@@ -396,6 +419,13 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
                         credentialStore.updateUsage(row.id(), newSignCount)
                             .onFailure(e -> Console.log(LOG_PREFIX + "Usage update failed for credential row " + row.id() + ": " + e.getMessage()));
                         ModalityUserPrincipal principal = new ModalityUserPrincipal(userPerson.getPrimaryKey(), row.accountId());
+                        // For the next five minutes this tab may add a passkey, change the sign-in email or reopen a
+                        // closed password without a password: the assertion is the stronger proof (CredentialChangeProof).
+                        // Only for a sign-in of its own (a step-up completes a password login, whose proof is noted
+                        // there). The passkey has passed the approval gate above, in either app, so an unapproved one
+                        // never reaches this proof.
+                        if (pendingSecondFactor == null)
+                            CredentialChangeProof.notePasskeyProved(runId, row.accountId());
                         if (pendingSecondFactor != null)
                             // This assertion is the second step of a password login: it completes
                             // that one rather than opening one of its own.
@@ -514,7 +544,19 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
                || updateCredentialsArgument instanceof ListPasskeysCredentials
                || updateCredentialsArgument instanceof RemovePasskeyCredentials
                || updateCredentialsArgument instanceof RenamePasskeyCredentials
+               || isPasswordSignInOperation(updateCredentialsArgument)
                || isSuperAdminOperation(updateCredentialsArgument);
+    }
+
+    /**
+     * "Stop my password working" (V0096): its status, closing and reopening. Handled here rather than in the password
+     * gateway because closing is only safe for an account holding a passkey that signs it in — the question this
+     * gateway answers — and the passkey removal it has to guard is here too.
+     */
+    private static boolean isPasswordSignInOperation(Object updateCredentialsArgument) {
+        return updateCredentialsArgument instanceof PasswordSignInStatusCredentials
+               || updateCredentialsArgument instanceof ClosePasswordSignInCredentials
+               || updateCredentialsArgument instanceof ReopenPasswordSignInCredentials;
     }
 
     /**
@@ -544,7 +586,12 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
         // holding a usable row on a gateway that cannot assert anything, so that account's
         // back-office login is refused and the only way back in is to withdraw those rows. Refusing
         // the withdrawal here as well would turn one missing variable into a lockout with no exit.
-        if (!config.isConfigured() && !isSuperAdminOperation(updateCredentialsArgument))
+        // Reading the password's status, and reopening it, are also pure decisions, and reopening is the way OUT: an
+        // unconfigured gateway must not trap an account whose passkeys it can no longer check. Closing is not exempt,
+        // because it depends on passkeys working.
+        boolean passwordDecision = updateCredentialsArgument instanceof PasswordSignInStatusCredentials
+                                   || updateCredentialsArgument instanceof ReopenPasswordSignInCredentials;
+        if (!config.isConfigured() && !isSuperAdminOperation(updateCredentialsArgument) && !passwordDecision)
             return notConfiguredFailure();
         // Registration and management require a real logged-in account. A support view is a member
         // of staff looking at a customer's account: letting one plant its OWN authenticator there —
@@ -564,6 +611,12 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
             return removePasskey(principal, cred);
         if (updateCredentialsArgument instanceof RenamePasskeyCredentials cred)
             return renamePasskey(principal, cred);
+        if (updateCredentialsArgument instanceof PasswordSignInStatusCredentials)
+            return passwordSignInStatusJson(principal);
+        if (updateCredentialsArgument instanceof ClosePasswordSignInCredentials)
+            return closePasswordSignIn(principal);
+        if (updateCredentialsArgument instanceof ReopenPasswordSignInCredentials cred)
+            return reopenPasswordSignIn(principal, cred);
         // Approval and revocation operations: re-checked as super administrator on EVERY call,
         // never trusted from the client's grant push, and never delegable through operation codes.
         // The approver's own passkeys are neither listed, decidable nor revocable (store WHERE
@@ -709,6 +762,14 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
             // keeps a classpath fault loud in the log and generic on the wire.
             Console.log(LOG_PREFIX + "Registration verification failed: "
                         + e.getClass().getSimpleName() + ": " + e.getMessage());
+            return registrationFailure();
+        }
+        // Created from the back office only, even when the front office accepts passkey sign-in: the origin is the one
+        // the browser signed, so a page on the front office cannot enrol one however it asks
+        Origin registrationOrigin = registrationData.getCollectedClientData() == null ? null
+            : registrationData.getCollectedClientData().getOrigin();
+        if (!cfg.isBackofficeOrigin(registrationOrigin)) {
+            Console.log(LOG_PREFIX + "Registration from a non-back-office origin refused: " + registrationOrigin);
             return registrationFailure();
         }
         AttestedCredentialData attested = registrationData.getAttestationObject() == null ? null
@@ -942,11 +1003,144 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
         Long passkeyId = Numbers.toLong(credentials.passkeyId());
         if (passkeyId == null)
             return managementFailure();
+        Object accountId = accountIdOf(principal);
         // Ownership is in the DELETE's WHERE clause; a valid id belonging to another account
         // matches zero rows and gets the same generic error as a nonexistent one — as does a
         // REJECTED row, which stays on record (the owner's UI offers no remove for it)
-        return credentialStore.deleteOwned(passkeyId, accountIdOf(principal))
+        return refuseRemovingLastWayIn(accountId, passkeyId)
+            .compose(ignored -> credentialStore.deleteOwned(passkeyId, accountId))
             .compose(deleted -> Boolean.TRUE.equals(deleted) ? Future.succeededFuture() : managementFailure());
+    }
+
+    /**
+     * With its password closed, an account's passkeys are its only way in, so the last one that signs it in may not
+     * be removed: that would lock its owner out as surely as disabling the account, with only a super administrator
+     * to undo it. Read fail-closed. Two removals in the same instant could each see the other passkey still standing;
+     * that takes the owner acting twice at once, and the store's single-row delete is kept rather than widened for it.
+     */
+    private Future<Void> refuseRemovingLastWayIn(Object accountId, long removedPasskeyId) {
+        return AccountSignInRestrictionStore.readPasswordClosed(accountId)
+            .compose(closed -> !Boolean.TRUE.equals(closed) ? Future.succeededFuture()
+                : countPasskeysThatSignIn(accountId, removedPasskeyId).compose(remaining -> remaining > 0
+                    ? Future.succeededFuture()
+                    : Future.failedFuture("[%s] The last passkey that signs this account in cannot be removed while its password is closed"
+                        .formatted(ModalityAuthenticationI18nKeys.AuthnLastPasskeyWhilePasswordClosedError))));
+    }
+
+    // ===== "Stop my password working" (V0096) ====================================================
+
+    /**
+     * Whether this server can honour a closed password: passkey sign-in has to work in BOTH apps, since closing shuts
+     * every other way into each. With no front-office origin, a staff member who closed their password would have no
+     * way into the front office at all.
+     */
+    private boolean passwordClosingAvailable() {
+        WebAuthnConfig cfg = config;
+        return cfg.isConfigured() && cfg.getBackofficeOriginCount() > 0 && cfg.getFrontofficeOriginCount() > 0;
+    }
+
+    /** {@code {"closed", "canClose", "available"}} (booleans) — see PasswordSignInStatusCredentials. */
+    private Future<String> passwordSignInStatusJson(ModalityUserPrincipal principal) {
+        Object accountId = accountIdOf(principal);
+        boolean available = passwordClosingAvailable();
+        return Future.all(
+            AccountSignInRestrictionStore.readPasswordClosed(accountId),
+            available ? countPasskeysThatSignIn(accountId, null) : Future.succeededFuture(0)
+        ).map(composite -> {
+            AstObject status = AST.createObject();
+            status.set("closed", Boolean.TRUE.equals(composite.resultAt(0)));
+            status.set("canClose", available && ((Integer) composite.resultAt(1)) > 0);
+            status.set("available", available);
+            return Json.formatObject(status);
+        });
+    }
+
+    private Future<Boolean> closePasswordSignIn(ModalityUserPrincipal principal) {
+        Object accountId = accountIdOf(principal);
+        if (!passwordClosingAvailable())
+            return notConfiguredFailure();
+        return countPasskeysThatSignIn(accountId, null)
+            .compose(passkeys -> {
+                if (passkeys == 0)
+                    return Future.failedFuture("[%s] No passkey signs this account in".formatted(ModalityAuthenticationI18nKeys.AuthnNoUsablePasskeyError));
+                return AccountSignInRestrictionStore.closePassword(accountId, principal.getUserPersonId(), null);
+            })
+            .onSuccess(closedNow -> {
+                if (Boolean.TRUE.equals(closedNow)) // the account id, never the address (log outside erasure's reach)
+                    Console.log(LOG_PREFIX + "🛡 Password sign-in closed by its owner for account " + accountId);
+            });
+    }
+
+    /**
+     * Reopens a closed password: the owner's own, or — naming an account — a super administrator's rescue of somebody
+     * who lost every passkey.
+     *
+     * <p>The owner needs a proof beyond the session, because reopening reopens recovery: a session taken from the
+     * owner, together with their mailbox, could otherwise undo the control and set a password of its own. With the
+     * password closed the only proof there is left is a passkey sign-in in this tab minutes ago
+     * (CredentialChangeProof), which is what the owner has and the holder of a taken session does not. MUST be asked
+     * on the caller's thread, which is where updateCredentials calls this.
+     */
+    private Future<Boolean> reopenPasswordSignIn(ModalityUserPrincipal principal, ReopenPasswordSignInCredentials credentials) {
+        Object rescuedAccountId = Numbers.toLong(credentials.accountId());
+        if (credentials.accountId() != null) {
+            // The note is the record of the out-of-band check, required as for every other rescue, and capped as the
+            // column is (second_factor_reset.note)
+            String note = credentials.note() == null ? "" : credentials.note().trim();
+            if (rescuedAccountId == null || note.isEmpty() || note.length() > 256)
+                return managementFailure();
+            // Never their own: a super administrator's closed password reopens through their own passkey sign-in like
+            // anybody's, or a session taken from them would undo the control through this door
+            if (Objects.equals(rescuedAccountId, accountIdOf(principal)))
+                return managementFailure();
+            return requireSuperAdmin(principal)
+                .compose(ignored -> AccountSignInRestrictionStore.openPasswordByAdministrator(rescuedAccountId, principal.getUserPersonId(), note))
+                .onSuccess(reopened -> {
+                    if (Boolean.TRUE.equals(reopened))
+                        Console.log(LOG_PREFIX + "🛡 Password sign-in reopened for account " + rescuedAccountId
+                                    + " by super administrator person " + principal.getUserPersonId());
+                });
+        }
+        Object accountId = accountIdOf(principal);
+        return CredentialChangeProof.require(null, dataSourceModel)
+            .compose(ignored -> AccountSignInRestrictionStore.openPassword(accountId, principal.getUserPersonId()))
+            .onSuccess(reopened -> {
+                if (Boolean.TRUE.equals(reopened))
+                    Console.log(LOG_PREFIX + "🛡 Password sign-in reopened by its owner for account " + accountId);
+            });
+    }
+
+    /**
+     * How many of this account's passkeys sign it in, leaving out {@code excludedPasskeyId} when given: for a
+     * back-office account, those that open the back office (approved, when approval is required); for any other,
+     * none — the same rules the sign-in itself applies.
+     */
+    private Future<Integer> countPasskeysThatSignIn(Object accountId, Long excludedPasskeyId) {
+        WebAuthnConfig cfg = config;
+        return Future.all(
+            EntityStore.create(dataSourceModel)
+                .<FrontendAccount>executeQuery("select backoffice from FrontendAccount where id=$1", accountId)
+                .map(accounts -> !accounts.isEmpty() && Boolean.TRUE.equals(accounts.get(0).isBackoffice())),
+            credentialStore.findByAccount(accountId)
+        ).map(composite -> {
+            boolean backofficeAccount = Boolean.TRUE.equals(composite.resultAt(0));
+            List<WebAuthnCredentialStore.CredentialSummary> passkeys = composite.resultAt(1);
+            int count = 0;
+            for (WebAuthnCredentialStore.CredentialSummary passkey : passkeys)
+                if ((excludedPasskeyId == null || passkey.id() != excludedPasskeyId)
+                    && signsIn(passkey.status(), backofficeAccount, cfg.isBackofficeApprovalRequired()))
+                    count++;
+            return count;
+        });
+    }
+
+    /**
+     * Whether a passkey with this status signs its account in: see {@link #countPasskeysThatSignIn}. Only a back-office
+     * account's passkey signs in anywhere (the account fence in authenticateWithPasskey), and in the back office only
+     * once trusted there.
+     */
+    static boolean signsIn(String status, boolean backofficeAccount, boolean approvalRequired) {
+        return backofficeAccount && WebAuthnCredentialStore.opensBackofficeLogin(status, approvalRequired);
     }
 
     private Future<?> renamePasskey(ModalityUserPrincipal principal, RenamePasskeyCredentials credentials) {

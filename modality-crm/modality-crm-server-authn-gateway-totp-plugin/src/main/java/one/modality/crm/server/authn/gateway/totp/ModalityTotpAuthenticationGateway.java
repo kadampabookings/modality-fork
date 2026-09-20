@@ -22,6 +22,7 @@ import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 import dev.webfx.stack.session.token.AuthenticatedState;
 import one.modality.base.shared.entities.FrontendAccount;
 import one.modality.base.shared.entities.Person;
+import one.modality.crm.server.authn.gateway.shared.AccountSignInRestrictionStore;
 import one.modality.crm.server.authn.gateway.shared.PendingSecondFactor;
 import one.modality.crm.server.authn.gateway.shared.PendingSecondFactorStore;
 import one.modality.crm.server.authn.gateway.shared.SecondFactorAttemptLimiter;
@@ -731,10 +732,13 @@ public final class ModalityTotpAuthenticationGateway implements ServerAuthentica
                     + ": account " + accountId);
         return Future.all(
             credentialStore.findByAccount(accountId),
-            credentialStore.countUnused(accountId)
+            credentialStore.countUnused(accountId),
+            // Whether its owner stopped their password working: then the rescue may have to reopen it (V0096)
+            AccountSignInRestrictionStore.readPasswordClosed(accountId)
         ).map(compositeFuture -> {
             TotpCredentialStore.TotpRow row = compositeFuture.resultAt(0);
             Integer backupCodesLeft = compositeFuture.resultAt(1);
+            Boolean passwordClosed = compositeFuture.resultAt(2);
             AstObject response = AST.createObject();
             response.set("found", Boolean.TRUE);
             response.setObject("account", accountJson(accountId, account, displayName(person)));
@@ -745,6 +749,7 @@ public final class ModalityTotpAuthenticationGateway implements ServerAuthentica
             if (totp != null)
                 response.setObject("totp", totp);
             response.set("backupCodesLeft", backupCodesLeft == null ? 0 : backupCodesLeft);
+            response.set("passwordClosed", Boolean.TRUE.equals(passwordClosed));
             return Json.formatObject(response);
         });
     }

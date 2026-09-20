@@ -18,8 +18,10 @@ import one.modality.base.server.mail.ModalityMailMessage;
 import one.modality.base.shared.context.ModalityContext;
 import one.modality.base.shared.entities.Cart;
 import one.modality.base.shared.entities.MagicLink;
+import one.modality.crm.server.authn.gateway.shared.AccountSignInRestrictionStore;
 import one.modality.crm.server.authn.gateway.shared.LocalizedMailTemplate;
 import one.modality.crm.server.authn.gateway.shared.MagicLinkService;
+import one.modality.crm.server.authn.gateway.shared.PasswordClosedNotice;
 import one.modality.crm.shared.services.authn.AuthenticateWithCartCredentials;
 import one.modality.crm.shared.services.authn.ModalityGuestPrincipal;
 import one.modality.crm.shared.services.authn.SendBookingAccessEmailCredentials;
@@ -80,6 +82,16 @@ public final class ModalityGuestAuthenticationGateway implements ServerAuthentic
         String lang       = cred.lang() != null ? cred.lang() : "en";
         DataSourceModel ds = dev.webfx.stack.orm.datasourcemodel.service.DataSourceModelService.getDefaultDataSourceModel();
 
+        // An address whose account has its password closed (V0096) gets the passkey notice, not cart links: those sign
+        // their holder in on the strength of the mailbox, which is what that control shuts. Read fail-open here; the
+        // cart redeem below reads it again, fail-closed.
+        return AccountSignInRestrictionStore.isPasswordClosedForEmail(email)
+            .compose(closed -> Boolean.TRUE.equals(closed)
+                ? PasswordClosedNotice.send(email, lang)
+                : mailBookingAccessLinks(email, origin, lang, ds));
+    }
+
+    private Future<Void> mailBookingAccessLinks(String email, String origin, String lang, DataSourceModel ds) {
         return EntityStore.create(ds)
             .<Cart>executeQuery(
                 "select id, uuid, magicLink.(id,creationDate,requestedPath) from Cart c where magicLink!=null and exists(" +
@@ -183,6 +195,7 @@ public final class ModalityGuestAuthenticationGateway implements ServerAuthentic
                 if (magicLink == null)
                     return Future.failedFuture("No magic link associated with cart: " + cartUuid);
                 // Validate via the shared service (handles BOOKING_ACCESS expiry rules)
+                // Refuses an address whose account has its password closed (V0096), as for every link it validates
                 return MagicLinkService.loadMagicLinkFromTokenOrVerificationCode(
                         magicLink.getToken(), true, dataSourceModel)
                     .compose(validMagicLink -> {

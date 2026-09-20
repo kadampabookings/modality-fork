@@ -4,16 +4,19 @@ package one.modality.crm.shared.services.authn;
 public interface ModalityAuthenticationI18nKeys {
 
     Object AuthnBackofficeMethodNotAllowedError = "AuthnBackofficeMethodNotAllowedError";
-    Object AuthnNoSuchUserAccountError = "AuthnNoSuchUserAccountError";
-    Object AuthnOldPasswordNotMatchingError = "AuthnOldPasswordNotMatchingError";
-    Object AuthnPasswordSignInClosedError = "AuthnPasswordSignInClosedError";
+    Object AuthnEmailSignInClosedError = "AuthnEmailSignInClosedError";
+    Object AuthnLastPasskeyWhilePasswordClosedError = "AuthnLastPasskeyWhilePasswordClosedError";
     Object AuthnNewPasswordTooShortError = "AuthnNewPasswordTooShortError";
+    Object AuthnNoSuchUserAccountError = "AuthnNoSuchUserAccountError";
+    Object AuthnNoUsablePasskeyError = "AuthnNoUsablePasskeyError";
+    Object AuthnOldPasswordNotMatchingError = "AuthnOldPasswordNotMatchingError";
     Object AuthnPasskeyAdminNotPermittedError = "AuthnPasskeyAdminNotPermittedError";
     Object AuthnPasskeyError = "AuthnPasskeyError";
     Object AuthnPasskeyManagementError = "AuthnPasskeyManagementError";
     Object AuthnPasskeyNotApprovedError = "AuthnPasskeyNotApprovedError";
     Object AuthnPasskeyNotConfiguredError = "AuthnPasskeyNotConfiguredError";
     Object AuthnPasskeyRegistrationError = "AuthnPasskeyRegistrationError";
+    Object AuthnPasswordSignInClosedError = "AuthnPasswordSignInClosedError";
     Object AuthnSecondFactorAttemptsExceededError = "AuthnSecondFactorAttemptsExceededError";
     Object AuthnSecondFactorCodeError = "AuthnSecondFactorCodeError";
     Object AuthnSecondFactorNotEnrolledError = "AuthnSecondFactorNotEnrolledError";

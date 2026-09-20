@@ -10,6 +10,9 @@ import dev.webfx.stack.db.submit.SubmitArgument;
 import dev.webfx.stack.db.submit.SubmitResult;
 import dev.webfx.stack.db.submit.SubmitService;
 import dev.webfx.stack.orm.datasourcemodel.service.DataSourceModelService;
+import one.modality.crm.shared.services.authn.ModalityAuthenticationI18nKeys;
+
+import java.security.SecureRandom;
 
 /**
  * Which ways into an account its owner has deliberately closed — {@code account_sign_in_restriction}, V0096.
@@ -26,13 +29,14 @@ import dev.webfx.stack.orm.datasourcemodel.service.DataSourceModelService;
  *
  * <p>Both routes are closed by one restriction, and that is the point rather than an extra: a password
  * that cannot be used to sign in but can be replaced from an email has not stopped working, it has moved
- * house. The password gateway reads it in two places: on sign-in ({@link #isPasswordClosed}, fail-open),
- * and before ANY password is set, from a session or after a recovery link ({@link #readPasswordClosed},
- * fail-closed). A change to this table or its query therefore reaches every password change as well as
- * every password sign-in. It has no writer yet: that lands with the Security page control.
+ * house. And "recovery" is every emailed way in, not only the reset: sign-in links and codes and booking
+ * access are refused where a link is validated (MagicLinkService), and KBS2's own reset is shut in the
+ * database (V0098). The password gateway reads it on sign-in ({@link #isPasswordClosed}, fail-open) and
+ * before ANY password is set ({@link #readPasswordClosed}, fail-closed). The writer is the owner's Security
+ * page control, through the passkey gateway, and a super administrator's rescue.
  *
- * <p>The consequence, for whoever writes that: with recovery closed the ways back are a passkey or a
- * super administrator, so nothing may create one of these for an account that has no usable passkey.
+ * <p>The consequence, for every writer: with recovery closed the ways back are a passkey or a super
+ * administrator, so nothing may create one of these for an account that has no usable passkey.
  * This class is deliberately not the place that checks it — it records and reports restrictions, and the
  * caller owns the precondition because the caller is what knows about passkeys. That disclaimer is
  * load-bearing rather than tidy: a forgotten precondition locks a real person out until an administrator
@@ -63,20 +67,90 @@ public final class AccountSignInRestrictionStore {
         "select 1 from account_sign_in_restriction" +
         " where frontend_account_id = $1 and method = $2 and lifted_at is null limit 1";
 
+    /** How a wiped password starts: readable in the row, and a dash no MD5 hex digest ever holds. */
+    static final String WIPED_PASSWORD_PREFIX = "CLOSED-";
+    private static final String WIPED_PASSWORD_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    private static final SecureRandom RANDOM = new SecureRandom();
+
     /**
-     * Closes it. Idempotent by the partial unique index rather than by checking first: two clicks a second
-     * apart would otherwise both see nothing and both insert, leaving a second row that a later lift would
-     * miss — and an account that looks restricted after being un-restricted is the failure mode that costs
-     * somebody their morning.
+     * What a closed account's stored password is replaced with. {@code frontend_account.password} is
+     * {@code char(32) not null}, so the password cannot simply be removed; this takes its place: exactly 32
+     * characters, starting with {@link #WIPED_PASSWORD_PREFIX}.
+     *
+     * <p>Two properties, both needed. It matches no password: a stored password is an MD5 hex digest
+     * ({@link StoredPasswords}), and no digest holds a dash, whatever the case. And it is RANDOM, drawn afresh on
+     * every close, because not every reader hashes before comparing: a KBS2 login that compares a client-supplied
+     * value with the stored column as it stands would accept a fixed, public wiped value typed in as-is. About 148
+     * bits of it are unknown to anyone.
+     */
+    static String newWipedPassword() {
+        StringBuilder wiped = new StringBuilder(WIPED_PASSWORD_PREFIX);
+        while (wiped.length() < 32)
+            wiped.append(WIPED_PASSWORD_ALPHABET.charAt(RANDOM.nextInt(WIPED_PASSWORD_ALPHABET.length())));
+        return wiped.toString();
+    }
+
+    /**
+     * The same question asked by the address an emailed link or code goes to. The account is resolved exactly as
+     * redeeming the link resolves it (MagicLinkService.loadUserPersonFromMagicLink: live persons first, the owner
+     * first, then the lowest id), so that with two accounts whose usernames differ only in case, the one asked
+     * about is the one the link would open.
+     */
+    private static final String IS_RESTRICTED_BY_USERNAME_SQL =
+        "select 1 from account_sign_in_restriction r" +
+        " where r.method = $2 and r.lifted_at is null and r.frontend_account_id = (" +
+        "   select p.frontend_account_id from person p join frontend_account fa on fa.id = p.frontend_account_id" +
+        "   where fa.corporation_id = 1 and lower(fa.username) = lower($1) and not fa.disabled" +
+        "   order by p.removed, p.owner desc, p.id limit 1)" +
+        " limit 1";
+
+    /**
+     * Closes it, and wipes the stored password in the same statement. Idempotent by the partial unique index
+     * rather than by checking first: two clicks a second apart would otherwise both see nothing and both insert,
+     * leaving a second row that a later lift would miss — and an account that looks restricted after being
+     * un-restricted is the failure mode that costs somebody their morning.
+     *
+     * <p>The wipe is what makes the control worth more than a flag. Stored passwords are MD5 with a salt derived
+     * from the email, so a copied {@code frontend_account} table is close to a list of passwords, and people reuse
+     * them. A closed account's is no longer in it. Any KBS2 reset token already mailed goes with it (KBS2's reset
+     * is otherwise shut by V0098), and so do the account's pending sign-in and email-change links. It runs whether or
+     * not this call inserted the row, so a second click still leaves the password wiped.
      */
     private static final String RESTRICT_SQL =
-        "insert into account_sign_in_restriction (frontend_account_id, method, created_by_person_id, note)" +
-        " values ($1, $2, $3, $4) on conflict do nothing returning id";
+        "with restricted as (" +
+        "  insert into account_sign_in_restriction (frontend_account_id, method, created_by_person_id, note)" +
+        "  values ($1, $2, $3, $4) on conflict do nothing returning id" +
+        "), wiped as (" +
+        "  update frontend_account set password = $5, pwdreset_token = null, pwdreset_expires = null" +
+        "  where id = $1 returning username" +
+        "), voided as (" +
+        // Pending sign-in and email-change links for the account die with the close: redeeming them is refused anyway,
+        // but an email change started before it (by whoever knew the password) must not be finishable after it
+        "  update magic_link set usage_date = now()" +
+        // (LOGIN rows are mostly stored with no type; support rows, whose old_email is the AGENT, are left alone)
+        "  where (link_type is null or link_type = 'LOGIN') and usage_date is null and exists (select 1 from wiped w" +
+        "    where lower(magic_link.email) = lower(w.username) or lower(magic_link.old_email) = lower(w.username))" +
+        "  returning id" +
+        ") select id from restricted";
 
     /** Lifts it, keeping the row: a security control that leaves no trace of having been used is worth less. */
     private static final String LIFT_SQL =
         "update account_sign_in_restriction set lifted_at = now(), lifted_by_person_id = $3" +
         " where frontend_account_id = $1 and method = $2 and lifted_at is null returning id";
+
+    /**
+     * A super administrator's rescue lift, recorded where every other rescue is: a {@code second_factor_reset} row
+     * ({@code what = 'PASSWORD'}, V0099) carrying the approver and the note of the out-of-band check they made. In one
+     * statement, and the audit row only when something was lifted.
+     */
+    private static final String RESCUE_LIFT_SQL =
+        "with lifted as (" +
+        "  update account_sign_in_restriction set lifted_at = now(), lifted_by_person_id = $3" +
+        "  where frontend_account_id = $1 and method = $2 and lifted_at is null returning id" +
+        "), audited as (" +
+        "  insert into second_factor_reset (frontend_account_id, what, reset_by_person_id, note)" +
+        "  select $1, 'PASSWORD', $3, $4 where exists (select 1 from lifted) returning id" +
+        ") select id from lifted";
 
     private AccountSignInRestrictionStore() {}
 
@@ -94,11 +168,24 @@ public final class AccountSignInRestrictionStore {
         // No account, no restriction to read: a "no" here, where readPasswordClosed() would refuse.
         if (frontendAccountId == null)
             return Future.succeededFuture(false);
-        return readPasswordClosed(frontendAccountId)
-            .otherwise(e -> {
-                Console.log("⚠️ Could not read sign-in restrictions — letting the attempt proceed: " + e);
-                return false;
-            });
+        return failOpen(readPasswordClosed(frontendAccountId));
+    }
+
+    /** A read that could not answer counts as "no" — only for the callers documented as fail-open. */
+    private static Future<Boolean> failOpen(Future<Boolean> read) {
+        return read.otherwise(e -> {
+            Console.log("⚠️ Could not read sign-in restrictions — letting the attempt proceed: " + e);
+            return false;
+        });
+    }
+
+    /**
+     * The refusal for an emailed link or code — sign-in, recovery or booking access — reaching an account whose
+     * password is closed. One definition, because the client recognises it by its key.
+     */
+    public static <T> Future<T> emailSignInClosedFailure() {
+        return Future.failedFuture("[%s] Sign-in links and codes are turned off for this account"
+            .formatted(ModalityAuthenticationI18nKeys.AuthnEmailSignInClosedError));
     }
 
     /**
@@ -120,6 +207,23 @@ public final class AccountSignInRestrictionStore {
     }
 
     /**
+     * Whether the account that signs in with this address has its password closed — for the paths that know an
+     * address rather than an account (a link or code to email, a cart link to redeem). No such account: false.
+     * Fails OPEN like {@link #isPasswordClosed}, so only for a path whose outcome is checked again fail-closed.
+     */
+    public static Future<Boolean> isPasswordClosedForEmail(String email) {
+        return failOpen(readPasswordClosedForEmail(email));
+    }
+
+    /** The same by address, fail-CLOSED: a failure to answer is a failure. No such account (or no address): false. */
+    public static Future<Boolean> readPasswordClosedForEmail(String email) {
+        if (email == null || email.isBlank())
+            return Future.succeededFuture(false);
+        return executeRawQuery(IS_RESTRICTED_BY_USERNAME_SQL, email.trim(), PASSWORD_METHOD)
+            .map(result -> result != null && result.getRowCount() > 0);
+    }
+
+    /**
      * Closes password sign-in and recovery for this account.
      *
      * @param createdByPersonId who asked — the owner, or a super administrator acting for them
@@ -127,18 +231,31 @@ public final class AccountSignInRestrictionStore {
      */
     public static Future<Boolean> closePassword(Object frontendAccountId, Object createdByPersonId, String note) {
         return executeRawSubmit(RESTRICT_SQL, normaliseId(frontendAccountId), PASSWORD_METHOD,
-                                normaliseId(createdByPersonId), note)
+                                normaliseId(createdByPersonId), note, newWipedPassword())
             .map(AccountSignInRestrictionStore::returnedARow);
     }
 
     /**
-     * Re-opens password sign-in (and recovery, once that half lands) for this account.
+     * Re-opens password sign-in and recovery for this account. Nothing comes back: the password was wiped when it
+     * was closed, so the owner sets a new one through recovery.
      *
      * @return whether a restriction was actually lifted — false when there was none in force
      */
     public static Future<Boolean> openPassword(Object frontendAccountId, Object liftedByPersonId) {
         return executeRawSubmit(LIFT_SQL, normaliseId(frontendAccountId), PASSWORD_METHOD,
                                 normaliseId(liftedByPersonId))
+            .map(AccountSignInRestrictionStore::returnedARow);
+    }
+
+    /**
+     * A super administrator's rescue of an owner who lost every passkey: reopens the account's password and records
+     * who did it, and the check they made, beside the other rescues.
+     *
+     * @return whether a restriction was actually lifted
+     */
+    public static Future<Boolean> openPasswordByAdministrator(Object frontendAccountId, Object administratorPersonId, String note) {
+        return executeRawSubmit(RESCUE_LIFT_SQL, normaliseId(frontendAccountId), PASSWORD_METHOD,
+                                normaliseId(administratorPersonId), note)
             .map(AccountSignInRestrictionStore::returnedARow);
     }
 

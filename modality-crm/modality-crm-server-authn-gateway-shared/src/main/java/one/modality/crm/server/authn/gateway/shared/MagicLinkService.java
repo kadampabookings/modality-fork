@@ -268,6 +268,22 @@ public final class MagicLinkService {
     }
 
     public static Future<MagicLink> loadMagicLinkFromTokenOrVerificationCode(String tokenOrVerificationCode, boolean checkValidity, DataSourceModel dataSourceModel) {
+        return loadValidatedMagicLink(tokenOrVerificationCode, checkValidity, dataSourceModel)
+            // 3) Not into an account whose owner stopped their password working (V0096): that control shuts
+            //    every way in that a mailbox opens, so the passkey is the only one left. Checked HERE, where every
+            //    sign-in, recovery and booking-access link or code is validated, so no redeem path can forget it
+            //    — including a link sent before the password was closed, and a booking link redeemed as a guest.
+            //    Fail-closed, and on the account the link acts on: an email-change link's is its OLD address, and
+            //    redeemed here it would sign its holder into that account. The one path that finalises an email
+            //    change reads the link through loadEmailChangeLinkAndMarkAsUsed instead.
+            .compose(magicLink -> AccountSignInRestrictionStore.readPasswordClosedForEmail(accountAddressOf(magicLink))
+                .compose(closed -> Boolean.TRUE.equals(closed)
+                    ? AccountSignInRestrictionStore.<MagicLink>emailSignInClosedFailure()
+                    : Future.succeededFuture(magicLink)));
+    }
+
+    /** Steps 1 and 2 of {@link #loadMagicLinkFromTokenOrVerificationCode}: the link exists, is of a login flavour, and is valid. */
+    private static Future<MagicLink> loadValidatedMagicLink(String tokenOrVerificationCode, boolean checkValidity, DataSourceModel dataSourceModel) {
         // 1) Checking the existence of the magic link in the database, and if so, loading it with required info.
         // Verification codes are 6-digit strings; magic-link tokens are UUIDs.
         // For verification codes we additionally scope by loginRunId — the tab that requested the code
@@ -363,6 +379,28 @@ public final class MagicLinkService {
                 }
                 return Future.succeededFuture(magicLink);
             });
+    }
+
+    /** The address of the account a link acts on: its old address for an email change, else its own. */
+    private static String accountAddressOf(MagicLink magicLink) {
+        return Objects.coalesce(magicLink.getOldEmail(), magicLink.getEmail());
+    }
+
+    /**
+     * Reads an email-change confirmation link and marks it used — for finalising the change and nothing else.
+     *
+     * <p>Unlike {@link #loadMagicLinkFromTokenAndMarkAsUsed}, it lets through a link for an account whose password is
+     * closed: the change was authorised when it began, against CredentialChangeProof (a passkey sign-in, for a closed
+     * account), and the link proves only the new mailbox. What it can do is only what finalising does — change the
+     * address — never sign anybody in. A change started before the password was closed does not reach here: closing
+     * voids the account's pending links (AccountSignInRestrictionStore). Anything but an email-change link is refused.
+     */
+    public static Future<MagicLink> loadEmailChangeLinkAndMarkAsUsed(String token, DataSourceModel dataSourceModel) {
+        String usageRunId = ThreadLocalStateHolder.getRunId();
+        return loadValidatedMagicLink(token, true, dataSourceModel)
+            .compose(magicLink -> magicLink.getOldEmail() == null
+                ? Future.<MagicLink>failedFuture("[%s] Magic link not found (token: %s)".formatted(ModalityAuthenticationI18nKeys.LoginLinkUnrecognisedError, token))
+                : markMagicLinkAsUsed(magicLink, usageRunId).map(ignored -> magicLink));
     }
 
     /**
