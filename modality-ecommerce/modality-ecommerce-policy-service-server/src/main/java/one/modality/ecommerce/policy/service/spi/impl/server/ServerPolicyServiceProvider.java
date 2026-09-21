@@ -270,6 +270,9 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                     // Which accommodation a sharing item pairs with. Bare FKs: the client only
                     // compares them by id, so there is nothing to expand.
                     ",pairedItem1,pairedItem2,pairedItem3,pairedItem4" +
+                    // Whether that sharing option's places come from a space the event does not count
+                    // (a family tent, a campervan), in which case no bed arithmetic applies to it.
+                    ",sharingNeedsNoBed" +
                     " from ItemPolicy ip, e where ip.scope.(" +
                     " (organization = e.organization or organization=e.venue_organization)" +
                     " and (site = null or site?.event = null or site?.event = e.finalEvent)" +

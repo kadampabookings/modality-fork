@@ -32,6 +32,7 @@ public interface ItemPolicy extends Entity,
     String pairedItem2 = "pairedItem2";
     String pairedItem3 = "pairedItem3";
     String pairedItem4 = "pairedItem4";
+    String sharingNeedsNoBed = "sharingNeedsNoBed";
 
     default void setScope(Object value) {
         setForeignField(scope, value);
@@ -160,6 +161,20 @@ public interface ItemPolicy extends Entity,
 
     default Boolean isSoldOutForced() {
         return getBooleanFieldValue(forceSoldOut);
+    }
+
+    default void setSharingNeedsNoBed(Boolean value) {
+        setFieldValue(sharingNeedsNoBed, value);
+    }
+
+    /**
+     * Whether this sharing option's sharer joins a space the event does not count -- a family tent,
+     * a campervan -- so its availability is not derived from the free beds in anyone's room (V0103).
+     * Only meaningful on an option whose item is share_mate. Null means no, once scope resolution
+     * has had its say: null is what lets a wider scope's answer through.
+     */
+    default Boolean isSharingNeedsNoBed() {
+        return getBooleanFieldValue(sharingNeedsNoBed);
     }
 
     default void setAutoBookItem(Object value) {

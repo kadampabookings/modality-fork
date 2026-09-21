@@ -55,6 +55,11 @@ public final class SharingPlaceAvailability {
     }
 
     private static Offer offerFor(PolicyAggregate policy, ItemPolicy sharingItemPolicy) {
+        // A sharing option whose sharer brings the space -- a family tent, a campervan -- takes no bed
+        // the event ever counted, so there is nothing to derive and nothing to refuse (V0103). Null is
+        // what callers already read as "cannot be known", and they must not refuse on it.
+        if (sharingItemPolicy != null && Boolean.TRUE.equals(sharingItemPolicy.isSharingNeedsNoBed()))
+            return new Offer(null, new ArrayList<>());
         // The free-bed figure is per room item and identical on every date of it, so one row per item is enough.
         Map<Object, ScheduledItem> roomRowByItemPk = new HashMap<>();
         // The waiting places are event-wide and the same on every accommodation row.

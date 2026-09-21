@@ -1150,6 +1150,7 @@
     "pairedItem3": "Item",
     "pairedItem4": "Item",
     "scope": "PolicyScope",
+    "sharingNeedsNoBed": "boolean",
     "titleLabel": "Label",
     "wholeEvent": "boolean",
     "youngAdultAllowed": "boolean"
