@@ -98,6 +98,16 @@ public class PersonDetailsCheck {
         check("null and empty are the same absence", PersonDetailsRules.sameText(null, ""));
         check("a different address is a change", !PersonDetailsRules.sameText("a@b.com", "c@d.com"));
 
+        // --- a foreign key must arrive as an id, not as the entity the change-set layer would unwrap ---
+        List<String> p4 = new ArrayList<>(List.of("country"));
+        List<Object> v4 = new ArrayList<>();
+        v4.add(java.util.Map.of("id", 5));
+        check("an entity sent where an id belongs is refused", "country".equals(PersonDetailsRules.firstNotAnId(p4, v4)));
+        v4.set(0, 5);
+        check("a plain id is accepted", PersonDetailsRules.firstNotAnId(p4, v4) == null);
+        v4.set(0, null);
+        check("clearing a foreign key is allowed", PersonDetailsRules.firstNotAnId(p4, v4) == null);
+
         System.out.println(pass + " passed, " + fail + " failed");
         if (fail > 0)
             System.exit(1);

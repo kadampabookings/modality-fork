@@ -44,7 +44,7 @@ public final class CreateInvitationEndpoint extends AsyncFunctionBusCallEndpoint
             Object aliasFirstName = Arrays.length(a) > 2 ? a[2] : null;
             Object aliasLastName = Arrays.length(a) > 3 ? a[3] : null;
             Object callerUserId = StateAccessor.getUserId(ThreadLocalStateHolder.getThreadLocalState());
-            return MemberSessionGuard.whenCallerIsMember((personId, accountId) ->
+            return MemberSessionGuard.whenCallerIsVerifiedMember((personId, accountId) ->
                 InvitationRules.createInvitation(inviteeId, inviterPays, aliasFirstName, aliasLastName,
                     personId, callerUserId));
         });

@@ -45,10 +45,34 @@ final class MemberSessionGuard {
      * @param work given the caller's person id and account id, in that order
      */
     static <T> Future<T> whenCallerIsMember(BiFunction<Object, Object, Future<T>> work) {
+        return whenCallerIsMember(false, work);
+    }
+
+    /**
+     * The same, refusing anything but a session this server established.
+     *
+     * <p>For the operations that hand one account sight of another person's bookings and recordings.
+     * There the fence earns its cost: production still accepts a principal a caller merely asserts, and
+     * a session family only exists where somebody actually signed in.
+     *
+     * <p><b>It is NOT used for editing details</b>, and that is a judgement rather than an oversight. A
+     * caller who can assert a principal can already write {@code person} directly — the table does not
+     * close until step 2b — so the fence buys nothing there that the open table does not give away,
+     * while costing every member with a tab open overnight a Save that fails with a refusal no screen
+     * can explain and no prompt to sign in again. <b>Worth revisiting the moment the table closes</b>,
+     * when the fence would start to be the only thing standing there.
+     */
+    static <T> Future<T> whenCallerIsVerifiedMember(BiFunction<Object, Object, Future<T>> work) {
+        return whenCallerIsMember(true, work);
+    }
+
+    private static <T> Future<T> whenCallerIsMember(boolean requireVerifiedSession,
+                                                    BiFunction<Object, Object, Future<T>> work) {
         Object state = ThreadLocalStateHolder.getThreadLocalState();
         Object userId = StateAccessor.getUserId(state);
         boolean verifiedSession = StateAccessor.getSessionFamilyId(state) != null;
-        if (!(userId instanceof ModalityUserPrincipal principal) || principal.isSupportView() || !verifiedSession)
+        if (!(userId instanceof ModalityUserPrincipal principal) || principal.isSupportView()
+            || (requireVerifiedSession && !verifiedSession))
             return refused();
         Object personId = principal.getUserPersonId();
         Object accountId = principal.getUserAccountId();

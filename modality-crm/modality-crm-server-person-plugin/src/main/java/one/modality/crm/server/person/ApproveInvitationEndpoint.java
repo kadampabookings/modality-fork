@@ -35,7 +35,7 @@ public final class ApproveInvitationEndpoint extends AsyncFunctionBusCallEndpoin
             // Read on THIS thread: the principal for the audit trail, and the guard's own reads, both
             // happen before any async step because the thread-local does not survive one.
             Object callerUserId = StateAccessor.getUserId(ThreadLocalStateHolder.getThreadLocalState());
-            return MemberSessionGuard.whenCallerIsMember((personId, accountId) ->
+            return MemberSessionGuard.whenCallerIsVerifiedMember((personId, accountId) ->
                 PersonLinkRules.approveInvitation(invitationId, personId, accountId, callerUserId));
         });
     }

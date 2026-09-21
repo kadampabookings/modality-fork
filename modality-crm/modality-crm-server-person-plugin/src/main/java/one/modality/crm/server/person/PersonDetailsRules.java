@@ -49,6 +49,16 @@ final class PersonDetailsRules {
     static final String VALUE_TOO_LONG_KEY = "PersonValueTooLongError";
     /** Changing the sign-in address of an account owner, which belongs to the flow that verifies it. */
     static final String OWNER_EMAIL_KEY = "PersonOwnerEmailError";
+    /**
+     * A foreign key sent as something other than an id.
+     *
+     * <p>The change-set layer takes {@code {id: 5}} and extracts the 5, so every screen writing a person
+     * is in the habit of sending entities. A bus call has no such layer — the same distinction the React
+     * guide draws between a mutation's fields and a query's parameters. Refused rather than unwrapped
+     * here, so a caller that kept the habit is told, instead of having its object quietly coerced into
+     * whatever Postgres makes of it.
+     */
+    static final String NOT_AN_ID_KEY = "PersonNotAnIdError";
 
     /**
      * Whose row this is, asked as one question.
@@ -112,6 +122,8 @@ final class PersonDetailsRules {
                 String tooLong = firstTooLong(names, values);
                 if (tooLong != null)
                     return refusal(VALUE_TOO_LONG_KEY);
+                if (firstNotAnId(names, values) != null)
+                    return refusal(NOT_AN_ID_KEY);
                 return runUpdate(personId, names, values, callerPersonId, callerAccountId, callerUserId);
             });
     }
@@ -152,8 +164,6 @@ final class PersonDetailsRules {
         }
         // The ownership test travels WITH the write. Checked only beforehand, a row moved to another
         // account in between would still be updated by this statement.
-        // The ownership test travels WITH the write. Checked only beforehand, a row moved to another
-        // account in between would still be updated by this statement.
         parameters.add(personId);
         int idParameter = parameters.size();
         parameters.add(callerPersonId);
@@ -188,6 +198,13 @@ final class PersonDetailsRules {
         String rejected = collect(namesAndValues, names, values);
         if (rejected != null)
             return refusal(FIELD_NOT_EDITABLE_KEY);
+        // The same two checks the update makes. Skipped here, a 50-character first name reached the
+        // column and came back as raw Postgres text no screen could translate — and no form in either
+        // feature caps length on the way in.
+        if (firstTooLong(names, values) != null)
+            return refusal(VALUE_TOO_LONG_KEY);
+        if (firstNotAnId(names, values) != null)
+            return refusal(NOT_AN_ID_KEY);
         StringBuilder columns = new StringBuilder(INSERT_SQL_PREFIX);
         StringBuilder placeholders = new StringBuilder(") values ($1, false");
         List<Object> parameters = new ArrayList<>();
@@ -268,6 +285,22 @@ final class PersonDetailsRules {
             Object value = values.get(i);
             if (field != null && field.maxLength() > 0 && value != null
                 && String.valueOf(value).length() > field.maxLength())
+                return names.get(i);
+        }
+        return null;
+    }
+
+    /**
+     * The first foreign key that did not arrive as a number, or null.
+     *
+     * <p>Null passes: clearing a country or an organization is an ordinary edit ("no centre").
+     */
+    static String firstNotAnId(List<String> names, List<Object> values) {
+        for (int i = 0; i < names.size(); i++) {
+            PersonFields.Field field = PersonFields.fieldFor(names.get(i));
+            Object value = values.get(i);
+            if (field != null && field.kind() == PersonFields.Kind.INTEGER
+                && value != null && !(value instanceof Number))
                 return names.get(i);
         }
         return null;

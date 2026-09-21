@@ -31,7 +31,7 @@ public final class RevokeLinkEndpoint extends AsyncFunctionBusCallEndpoint<Objec
         super(REVOKE_LINK_ADDRESS, argument -> {
             Object targetPersonId = firstArgument(argument);
             Object callerUserId = StateAccessor.getUserId(ThreadLocalStateHolder.getThreadLocalState());
-            return MemberSessionGuard.whenCallerIsMember((personId, accountId) ->
+            return MemberSessionGuard.whenCallerIsVerifiedMember((personId, accountId) ->
                 PersonLinkRules.revokeLink(targetPersonId, personId, accountId, callerUserId));
         });
     }
