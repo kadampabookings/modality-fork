@@ -4,3 +4,4 @@ one.modality.crm.server.person.CreateInvitationEndpoint
 one.modality.crm.server.person.ApproveInvitationEndpoint
 one.modality.crm.server.person.UpdatePersonDetailsEndpoint
 one.modality.crm.server.person.AddMemberEndpoint
+one.modality.crm.server.person.CreateAccountOwnerEndpoint

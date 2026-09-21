@@ -12,6 +12,7 @@
 
     <dependencies>
         <used-by-source-modules/>
+        <source-module>modality-base-shared-entities</source-module>
         <source-module>modality-crm-server-authn-gateway-shared</source-module>
         <source-module>modality-crm-shared-authn</source-module>
         <source-module>webfx-stack-com-bus-call</source-module>
@@ -29,6 +30,7 @@
         <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.crm.server.person.ApproveInvitationEndpoint</provider>
         <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.crm.server.person.UpdatePersonDetailsEndpoint</provider>
         <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.crm.server.person.AddMemberEndpoint</provider>
+        <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.crm.server.person.CreateAccountOwnerEndpoint</provider>
     </providers>
 
 </project>

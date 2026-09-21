@@ -521,6 +521,51 @@ public final class MagicLinkService {
      *
      * @param runId the calling session's runId (captured BEFORE any async step)
      */
+    /**
+     * The account-creation link THIS SESSION has already redeemed — for the step that runs after it.
+     *
+     * <p>Sibling of {@link #loadMagicLinkForAccountCreation}, and needed because that one cannot answer
+     * this question for a six-digit code. It goes through
+     * {@link #loadMagicLinkFromTokenOrVerificationCode}, whose code branch drops a row with a usageDate
+     * inside the lookup itself — before the "or one this session already claimed" leniency further up
+     * can apply. That leniency is therefore reachable for tokens and unreachable for codes, and
+     * {@code finaliseAccountCreation} consumes the credential in the same transaction as the account.
+     * So a second call naming the same code sees "not found", every time, by construction.
+     *
+     * <p><b>What this proves, and why a spent credential is the right thing to ask for here.</b>
+     * {@code usageRunId} means "this session REDEEMED the link" wherever it is read — see
+     * {@code stageMagicLinkSupersession} for why a merely superseded link never carries one. So a row
+     * matching both the credential and the caller's own run id says the caller is the session that read
+     * the email and turned it into an account. Guessing the credential buys nothing without the run id,
+     * which is the caller's own; there is no attempt budget here for the same reason, and charging one
+     * would have spent the member's five guesses on calls they did not make.
+     *
+     * <p>No expiry test either: the link's job is done. It is being read as a receipt for something that
+     * already happened, not redeemed for something that has not.
+     *
+     * @return the link, or a failure — deliberately the same failure whichever test missed
+     */
+    public static Future<MagicLink> loadMagicLinkRedeemedByThisSession(String tokenOrVerificationCode, String runId, DataSourceModel dataSourceModel) {
+        if (tokenOrVerificationCode == null || runId == null)
+            return notFound(tokenOrVerificationCode);
+        // One column, chosen the way the redeem path chooses it: an OR across both would match neither
+        // index. LOGIN in SQL for the reason the code branch gives — a BOOKING_ACCESS row minted later
+        // with the same six digits must not shadow it.
+        String column = looksLikeVerificationCode(tokenOrVerificationCode) ? "verificationCode" : "token";
+        return EntityStore.create(dataSourceModel).<MagicLink>executeQuery(
+                "select email,linkType,usageDate,usageRunId from MagicLink"
+                + " where " + column + "=$1 and linkType=$2 and usageRunId=$3 order by id desc limit 1",
+                tokenOrVerificationCode, MagicLinkType.LOGIN.name(), runId)
+            .map(Collections::first)
+            .compose(ml -> ml == null ? MagicLinkService.<MagicLink>notFound(tokenOrVerificationCode)
+                : Future.succeededFuture(ml));
+    }
+
+    private static <T> Future<T> notFound(String tokenOrVerificationCode) {
+        return Future.failedFuture("[%s] Magic link not found (token: %s)"
+            .formatted(ModalityAuthenticationI18nKeys.LoginLinkUnrecognisedError, tokenOrVerificationCode));
+    }
+
     public static Future<MagicLink> loadMagicLinkForAccountCreation(String tokenOrVerificationCode, String runId, DataSourceModel dataSourceModel) {
         return loadMagicLinkFromTokenOrVerificationCode(tokenOrVerificationCode, false, dataSourceModel)
             .compose(magicLink -> {

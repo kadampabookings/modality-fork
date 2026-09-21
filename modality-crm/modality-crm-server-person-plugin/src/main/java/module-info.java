@@ -3,6 +3,7 @@
 module modality.crm.server.person.plugin {
 
     // Direct dependencies modules
+    requires modality.base.shared.entities;
     requires modality.crm.server.authn.gateway.shared;
     requires modality.crm.shared.authn;
     requires webfx.platform.async;
@@ -18,6 +19,6 @@ module modality.crm.server.person.plugin {
     exports one.modality.crm.server.person;
 
     // Provided services
-    provides dev.webfx.stack.com.bus.call.spi.BusCallEndpoint with one.modality.crm.server.person.MergeDuplicatePersonsEndpoint, one.modality.crm.server.person.RevokeLinkEndpoint, one.modality.crm.server.person.CreateInvitationEndpoint, one.modality.crm.server.person.ApproveInvitationEndpoint, one.modality.crm.server.person.UpdatePersonDetailsEndpoint, one.modality.crm.server.person.AddMemberEndpoint;
+    provides dev.webfx.stack.com.bus.call.spi.BusCallEndpoint with one.modality.crm.server.person.MergeDuplicatePersonsEndpoint, one.modality.crm.server.person.RevokeLinkEndpoint, one.modality.crm.server.person.CreateInvitationEndpoint, one.modality.crm.server.person.ApproveInvitationEndpoint, one.modality.crm.server.person.UpdatePersonDetailsEndpoint, one.modality.crm.server.person.AddMemberEndpoint, one.modality.crm.server.person.CreateAccountOwnerEndpoint;
 
 }
