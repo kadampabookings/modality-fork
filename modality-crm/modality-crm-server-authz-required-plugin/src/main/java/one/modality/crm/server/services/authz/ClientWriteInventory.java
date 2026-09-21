@@ -150,10 +150,20 @@ final class ClientWriteInventory implements ProtectedEntityWriteRegistry.WriteIn
      * {@code writtenValues} is for. Folding the two together would have told the allowlist that no
      * client insert can be ownership-checked — false, and false in the direction that makes a rule
      * look impossible to write.
+     *
+     * <p>{@code target=UNBOUNDED} is separated from {@code target=UNREADABLE} for the same reason, and it
+     * was added late, after a rule had already been written on the strength of a grep. Both have a null
+     * target id, but {@code delete from ListItem where list=$1} is an ordinary set-based delete while
+     * {@code delete from ListItem} rewrites the table, and an inventory that reported them alike could
+     * not answer the one question {@code UnscopedWritePolicy} needed answering: does anything out there
+     * actually send the second? <b>An inventory is only worth the distinctions it records</b>, and the
+     * distinction a rule turns on has to be one of them.
      */
     private static String targetShapeOf(ProtectedEntityWriteRegistry.WriteRequest request) {
         if (request.verb() == ProtectedEntityWriteRegistry.WriteVerb.INSERT)
             return "target=new"; // ownership lives in the SET values, not in a WHERE
+        if (request.unbounded())
+            return "target=UNBOUNDED";
         return request.targetId() == null ? "target=UNREADABLE" : "target=id";
     }
 

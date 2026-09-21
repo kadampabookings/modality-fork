@@ -160,7 +160,8 @@ final class PersonDetailsRules {
             if (i > 0)
                 sql.append(", ");
             parameters.add(values.get(i));
-            sql.append(field.column()).append(" = $").append(parameters.size()).append(field.kind().cast);
+            sql.append(field.column()).append(" = ")
+               .append(PersonFields.valueExpression(names.get(i), parameters.size()));
         }
         // The ownership test travels WITH the write. Checked only beforehand, a row moved to another
         // account in between would still be updated by this statement.
@@ -213,7 +214,7 @@ final class PersonDetailsRules {
             PersonFields.Field field = PersonFields.fieldFor(names.get(i));
             parameters.add(values.get(i));
             columns.append(", ").append(field.column());
-            placeholders.append(", $").append(parameters.size()).append(field.kind().cast);
+            placeholders.append(", ").append(PersonFields.valueExpression(names.get(i), parameters.size()));
         }
         String sql = columns + placeholders.toString() + ") returning id";
         SubmitArgument insert = new SubmitArgumentBuilder()
@@ -248,7 +249,7 @@ final class PersonDetailsRules {
             if (n > 0)
                 sql.append(", ");
             n++;
-            sql.append(field.column()).append(" = $").append(n).append(field.kind().cast);
+            sql.append(field.column()).append(" = ").append(PersonFields.valueExpression(name, n));
         }
         sql.append(whereClause(n, copy));
         return sql.toString();

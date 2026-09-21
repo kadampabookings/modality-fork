@@ -77,8 +77,24 @@ public class PersonDetailsCheck {
         check("removing refuses an account owner", removing.contains("and owner = false"));
 
         // --- the booking flow's markers, without which the review step is refused outright ---
-        for (String marker : new String[] { "detailsConfirmedDate", "addressDeprecatedDate", "organizationDeprecatedDate" })
+        for (String marker : new String[] { "detailsConfirmedDate", "addressDeprecatedDate", "organizationDeprecatedDate" }) {
             check(marker + " is editable", PersonFields.isEditable(marker));
+            // The field is the client's to name; the VALUE is not. A client free to choose the date could
+            // write detailsConfirmedDate=2999-01-01 and never be asked to review again, or future-date a
+            // deprecation, which reads as "not deprecated yet" to anything that compares.
+            String stamped = PersonDetailsRules.updateStatementFor(names(marker));
+            check(marker + " is stamped by the server, not by the client",
+                stamped.contains("else current_date end") && !stamped.contains("= $1::date"));
+            check(marker + " can still be cleared",
+                stamped.contains("case when $1::date is null then null"));
+        }
+        // Asserted on the shared builder, not only through the update: addMember composes its own insert
+        // inline, and a member added with a confirmation date of its own choosing would start the year's
+        // holiday at creation. All three statements get the rule because all three ask this one question.
+        check("the insert asks the same builder the update does",
+            PersonFields.valueExpression("detailsConfirmedDate", 4).contains("current_date"));
+        check("an ordinary field is still the client's own value",
+            "$4".equals(PersonFields.valueExpression("firstName", 4)));
 
         // --- an unpaired field is refused, which is what the pair encoding is for ---
         List<String> p2 = new ArrayList<>();

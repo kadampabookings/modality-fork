@@ -92,6 +92,39 @@ final class PersonFields {
         return m;
     }
 
+    /**
+     * The markers whose value the SERVER decides — the client only says null or not-null.
+     *
+     * <p>{@code detailsConfirmedDate} buys a year without being asked to review again, and a client that
+     * could choose the date could write {@code 2999-01-01} and never be asked again. The deprecation
+     * markers are the mirror of it: a future date reads as "not deprecated yet" to any rule that
+     * compares, so setting one is as good as clearing it.
+     *
+     * <p>None of them is a value a member types — the booking flow sends today, or null to clear. So the
+     * field stays editable and only the VALUE stops being the client's: a non-null becomes
+     * {@code current_date}, a null stays null. That also settles the clock question the obvious fix
+     * raises, since "is this today?" asked in Java has to pick a timezone and would refuse a member
+     * whose own date is legitimately a day ahead of the server's.
+     *
+     * @see #valueExpression
+     */
+    private static final java.util.Set<String> SERVER_STAMPED =
+        java.util.Set.of("detailsConfirmedDate", "addressDeprecatedDate", "organizationDeprecatedDate");
+
+    /**
+     * How one field's value reaches its column, given its placeholder number.
+     *
+     * <p>Here rather than in the statement builders because there are three of them — the update, the
+     * insert, and the mirror a check reads — and a rule about values that lived in one of them would be
+     * a rule the other two did not have.
+     */
+    static String valueExpression(String name, int placeholder) {
+        String parameter = "$" + placeholder + fieldFor(name).kind().cast;
+        return SERVER_STAMPED.contains(name)
+            ? "case when " + parameter + " is null then null else current_date end"
+            : parameter;
+    }
+
     /** Only writable where the row is not an account owner — see the class note. */
     static final String EMAIL = "email";
 

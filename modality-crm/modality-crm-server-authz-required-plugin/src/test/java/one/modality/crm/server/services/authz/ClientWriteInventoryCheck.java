@@ -33,7 +33,9 @@ public class ClientWriteInventoryCheck {
         Map<String, Object> values = new java.util.LinkedHashMap<>();
         for (String field : fields)
             values.put(field, "Jane Doe <jane@example.com>"); // a value no shape may ever carry
-        return new ProtectedEntityWriteRegistry.WriteRequest(entity, verb, fields, values, targetId);
+        // These fixtures are about field lists and caller classes; false keeps them on the ordinary
+        // path rather than the unbounded one, which targetShapeOf reports separately.
+        return new ProtectedEntityWriteRegistry.WriteRequest(entity, verb, fields, values, targetId, false);
     }
 
     public static void main(String[] args) {

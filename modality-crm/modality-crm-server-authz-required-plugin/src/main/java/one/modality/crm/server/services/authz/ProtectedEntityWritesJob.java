@@ -197,12 +197,24 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         // - and the person a sign-in resolves to: a client may not move somebody's person into an account it controls,
         //   which would make its sign-in resolve to them - their bookings, and their grants if any. Staff only, and
         //   a grant holder by a super admin only. See PersonAccountMovePolicy.
+        // - and the statements that name no bound on the rows they touch: no where clause, or one with no
+        //   equality tying a column to a value. The server half of removing ChangeSet.execute().
+        //   Deliberately NOT "must name a row id" - the back office legitimately sends set-based
+        //   deletes, and a rule that refused them would be walked back on the first deploy.
+        //   See UnscopedWritePolicy.
         ClientSubmitGuard.registerWritePolicy(new ClientWritePolicies(
-            new OwnerLoginWritePolicy(), new GrantTableWritePolicy(), new PersonAccountMovePolicy()));
+            new OwnerLoginWritePolicy(), new GrantTableWritePolicy(), new PersonAccountMovePolicy(),
+            new UnscopedWritePolicy()));
         Console.log("🛡 Write authorization active on " + REQUIRED_OPERATIONS.size() + " entities and "
                     + REQUIRED_OPERATIONS_BY_FIELD.size() + " fields"
                     + (ENFORCING ? " — ENFORCING" : " — observing only, nothing is refused yet"));
         Console.log("🛡 Client write inventory recording — shapes only, no values, nothing refused");
+        // Said separately, and said even though the line above has just said "nothing is refused yet":
+        // that sentence is about the per-entity operation rule and the switch that gates it, and the row
+        // rules below it are NOT gated by that switch. An operator reading only the line above would
+        // triage a write that started failing on this deploy by looking anywhere but here.
+        Console.log("🛡 Client write row rules ENFORCING — owner login, grant tables, person account move,"
+                    + " unbounded writes");
     }
 
     /**
