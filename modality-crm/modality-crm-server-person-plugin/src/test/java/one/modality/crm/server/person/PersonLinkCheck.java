@@ -91,6 +91,31 @@ public class PersonLinkCheck {
         check("clients may not write invitation token or authorship",
             secrets.contains("\"token\", \"inviter_id\", \"invitee_id\""));
 
+        // --- and the link itself, which is what all of this protects ---
+        // Any client could set account_person_id on any row until 2b. That is the single worst thing a
+        // client could do to a person: it hands one account the row's bookings and TAKES its media.
+        // The gate is both halves together — the deny, and the endpoint that replaced the one client
+        // that legitimately wrote it. Either alone is a broken state: without the endpoint the claim
+        // stops working, and without the deny the endpoint's rules are bypassable by not calling it.
+        check("clients may not write the link",
+            secrets.contains("\"account_person_id\", \"account_person_revoked_date\""));
+        // The un-revoke case is asserted THROUGH THE INSPECTOR in ClientWriteGuardCheck; a second
+        // substring test here would be a substring of the one above and could never fail alone.
+
+        String claim = AccountOwnerCheck.readSource(
+            "modality-fork/modality-crm/modality-crm-server-person-plugin/src/main/java/"
+            + "one/modality/crm/server/person/MemberClaimRules.java");
+        // The proof is the caller's own sign-in address, read from frontend_account.username — which
+        // only the server writes. The browser used to choose which rows to claim.
+        check("the claim derives its rows from the caller's verified address",
+            claim.contains("select username from frontend_account where id = $1")
+            && claim.contains("lower(email) = lower($2)"));
+        check("and repeats every condition in the write, not only the read",
+            claim.contains("account_person_id is null and frontend_account_id is not null")
+            && claim.contains("owner = false and removed = false"));
+        check("never the caller's own account, which would claim nothing and mean nothing",
+            claim.contains("frontend_account_id <> $3"));
+
         String services = "";
         try (java.io.InputStream in = PersonLinkCheck.class.getClassLoader()
                 .getResourceAsStream("META-INF/services/dev.webfx.stack.com.bus.call.spi.BusCallEndpoint")) {
@@ -103,6 +128,9 @@ public class PersonLinkCheck {
         check("CreateInvitationEndpoint IS registered", services.contains("CreateInvitationEndpoint"));
         check("ApproveInvitationEndpoint IS registered", services.contains("ApproveInvitationEndpoint"));
         check("RevokeLinkEndpoint IS registered", services.contains("RevokeLinkEndpoint"));
+        // The other half of the deny above: without this endpoint the claim simply stops working, and
+        // without the deny its rules are bypassable by not calling it. Neither is safe alone.
+        check("ClaimMembersEndpoint IS registered", services.contains("ClaimMembersEndpoint"));
 
         System.out.println(pass + " passed, " + fail + " failed");
         if (fail > 0)

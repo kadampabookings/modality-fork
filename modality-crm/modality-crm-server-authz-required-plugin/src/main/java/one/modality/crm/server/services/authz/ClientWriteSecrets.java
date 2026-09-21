@@ -22,9 +22,19 @@ import dev.webfx.stack.db.submit.ClientWriteDenyList;
  * <p>{@code magic_link} is closed entirely: a client able to insert a row there could mint a sign-in link for any
  * account and follow it. No client writes it; the server creates, stamps and retires every row.
  *
- * <p><b>What this does not cover yet.</b> A person's email reaches {@code frontend_account.username} through a
- * database trigger when that person is the account's owner (V0062), and {@code person} rows are not yet guarded, so
- * that road to the username stays open until person writes are. Nor is {@code backoffice} here: the back office's
+ * <p><b>What this does not cover yet, and why {@code person} is only half closed.</b> The plan's step 2b is
+ * {@code denyTable("person")}, and it cannot be taken while the legacy JavaFX back office is deployed: its
+ * reception and registration modals INSERT people (with an address), and its customers view UPDATES an existing
+ * person's email. Denying the table, or the {@code email} column, breaks all of them. So the link columns are
+ * closed here — they are what the claim and the invitation depend on, and nothing live writes them — and
+ * {@code email} stays open.
+ *
+ * <p><b>Be exact about what that leaves, because it is easy to understate.</b> It does not take a raw or
+ * hand-crafted statement: {@code OwnerLoginWritePolicy} guards only an OWNER's email, and every row a claim
+ * targets is a non-owner — so an ORDINARY client write, the shape a change set produces, can point a stranger's
+ * member row at the caller's own address, after which {@code claimMembers} links it legitimately. Two steps
+ * where it used to be one, and much narrower, but open. Closing it needs those three legacy screens moved
+ * server-side (or that app retired), or the person-ownership rule the plan lists as item C. Nor is {@code backoffice} here: the back office's
  * super-admin toggle writes it, and its own rule in {@link ProtectedEntityWritesJob} is still observe-only.
  *
  * <p>Enforced on every client write regardless of the observe-only switch in {@link ProtectedEntityWritesJob}:
@@ -42,6 +52,20 @@ final class ClientWriteSecrets {
     static void declare() {
         // Sign-in links: a client that could write one could sign in as anybody
         ClientWriteDenyList.denyTable("magic_link");
+        // The LINK between a person and an account, which says "this row, in somebody else's account,
+        // IS this human". Setting it hands that account the row's bookings, and TAKES its recordings
+        // (the media screens stop listing a linked row in its own account). Any client could set it on
+        // any row until now, which is the single worst thing a client could still do to a person.
+        //
+        // The four legitimate writers are all server operations: approving an invitation, revoking a
+        // link, the customer merge, and the claim. The one client that still wrote it — the sign-up
+        // and /members claim — became `claimMembers`, which takes no arguments and derives the rows
+        // from the caller's own verified sign-in address.
+        //
+        // The revoked date goes with it. Writable alone, it is an un-revoke: a withdrawn link reads as
+        // live again the moment that column is cleared, without touching the link itself.
+        for (String column : new String[] { "account_person_id", "account_person_revoked_date" })
+            ClientWriteDenyList.denyColumn("person", column);
         // Signing in: the password, its salt, the name it is checked against, and the reset route
         for (String column : new String[] { "password", "salt", "username", "pwdreset_token", "pwdreset_expires" })
             ClientWriteDenyList.denyColumn("frontend_account", column);
