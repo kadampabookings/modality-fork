@@ -35,7 +35,7 @@ public class ClientWriteInventoryCheck {
             values.put(field, "Jane Doe <jane@example.com>"); // a value no shape may ever carry
         // These fixtures are about field lists and caller classes; false keeps them on the ordinary
         // path rather than the unbounded one, which targetShapeOf reports separately.
-        return new ProtectedEntityWriteRegistry.WriteRequest(entity, verb, fields, values, targetId, false);
+        return new ProtectedEntityWriteRegistry.WriteRequest(entity, verb, fields, values, targetId, false, null);
     }
 
     public static void main(String[] args) {
