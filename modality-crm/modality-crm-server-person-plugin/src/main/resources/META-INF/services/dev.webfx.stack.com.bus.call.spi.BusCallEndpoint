@@ -9,3 +9,5 @@ one.modality.crm.server.person.UpdateCustomerEndpoint
 one.modality.crm.server.person.UpdateUserEndpoint
 one.modality.crm.server.person.SetResidentEndpoint
 one.modality.crm.server.person.UpdateResidentEndpoint
+one.modality.crm.server.person.MergeIntoAccountEndpoint
+one.modality.crm.server.person.RemoveCustomersEndpoint
