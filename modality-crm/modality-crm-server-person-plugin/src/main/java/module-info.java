@@ -19,6 +19,6 @@ module modality.crm.server.person.plugin {
     exports one.modality.crm.server.person;
 
     // Provided services
-    provides dev.webfx.stack.com.bus.call.spi.BusCallEndpoint with one.modality.crm.server.person.MergeDuplicatePersonsEndpoint, one.modality.crm.server.person.RevokeLinkEndpoint, one.modality.crm.server.person.CreateInvitationEndpoint, one.modality.crm.server.person.ApproveInvitationEndpoint, one.modality.crm.server.person.UpdatePersonDetailsEndpoint, one.modality.crm.server.person.AddMemberEndpoint, one.modality.crm.server.person.CreateAccountOwnerEndpoint;
+    provides dev.webfx.stack.com.bus.call.spi.BusCallEndpoint with one.modality.crm.server.person.MergeDuplicatePersonsEndpoint, one.modality.crm.server.person.RevokeLinkEndpoint, one.modality.crm.server.person.CreateInvitationEndpoint, one.modality.crm.server.person.ApproveInvitationEndpoint, one.modality.crm.server.person.UpdatePersonDetailsEndpoint, one.modality.crm.server.person.AddMemberEndpoint, one.modality.crm.server.person.CreateAccountOwnerEndpoint, one.modality.crm.server.person.UpdateCustomerEndpoint, one.modality.crm.server.person.UpdateUserEndpoint, one.modality.crm.server.person.SetResidentEndpoint, one.modality.crm.server.person.UpdateResidentEndpoint;
 
 }

@@ -137,8 +137,12 @@ final class AccountOwnerRules {
      * argues against three files away: two overlapping calls — a double-tapped Submit, a bus retry, a
      * StrictMode double-invoke — both read "no owner" and both insert, and two {@code owner = true} rows
      * on one account is the state that already breaks sign-in resolution and the customer merge. A
-     * unique index would be the stronger answer and is <b>not available</b>: staging already holds 4
+     * unique index would be the stronger answer and is <b>not available yet</b>: staging holds 4
      * accounts with several owner rows (and 17 with none at all), so creating one would simply fail.
+     * Those rows are being cleaned up separately (2026-09-21) — one owner per account, and the
+     * person-less accounts deleted. <b>When that lands, add the partial unique index</b>
+     * ({@code on person (frontend_account_id) where owner and not removed}) and this condition becomes
+     * belt and braces rather than the only thing holding the invariant.
      *
      * <p>{@code removed} is deliberately not tested — a removed owner still blocks. The row is evidence
      * this operation has already run for this account, whatever state it was later put in.

@@ -108,8 +108,10 @@ final class PersonFields {
      *
      * @see #valueExpression
      */
-    private static final java.util.Set<String> SERVER_STAMPED =
-        java.util.Set.of("detailsConfirmedDate", "addressDeprecatedDate", "organizationDeprecatedDate");
+    private static final java.util.Set<String> SERVER_STAMPED = java.util.Set.of(
+        "detailsConfirmedDate", "addressDeprecatedDate", "organizationDeprecatedDate",
+        // Staff-only, and the same reasoning: the back office says clear-it or mark-it, never when.
+        "genderChangedDate");
 
     /**
      * How one field's value reaches its column, given its placeholder number.
@@ -128,12 +130,70 @@ final class PersonFields {
     /** Only writable where the row is not an account owner — see the class note. */
     static final String EMAIL = "email";
 
+    /**
+     * What a member of STAFF may set on top of that, and nobody else.
+     *
+     * <p>Kept as a separate map rather than folded in, so the difference between "a member editing their
+     * own record" and "the back office editing anybody's" is a thing you can read rather than infer. Each
+     * of these is here because a back-office screen writes it today:
+     *
+     * <ul>
+     *   <li>{@code nationality} and {@code passport} — the customer detail drawer. Not on any member
+     *       screen, and not data a member is asked for.</li>
+     *   <li>{@code resident} and the {@code resident*}/{@code sponsored} fields — the residents
+     *       screens, which is what they are for.</li>
+     *   <li>{@code genderChangedDate} — the marker staff read when allocating dormitories. A member must
+     *       not be able to clear it, which is why it is excluded above; staff dismissing it IS the
+     *       supported flow (the V0035 trigger stamps it, and a null write sticks).</li>
+     * </ul>
+     *
+     * <p>Everything a member may set, staff may set too, so the staff list is a superset. The reverse is
+     * never true: a name only in this map is refused on the member endpoints exactly as before.
+     */
+    private static final Map<String, Field> STAFF_ONLY = staffOnly();
+
+    private static Map<String, Field> staffOnly() {
+        Map<String, Field> m = new LinkedHashMap<>();
+        m.put("nationality", new Field("nationality", Kind.TEXT, 64));
+        m.put("passport", new Field("passport", Kind.TEXT, 64));
+        m.put("resident", new Field("resident", Kind.BOOLEAN));
+        // The residents screens' own fields: what a resident is booked in for, whether their stay is
+        // sponsored, and the room and rent. All of them are a centre's business about its own residents.
+        m.put("residentBooksBreakfast", new Field("resident_books_breakfast", Kind.BOOLEAN));
+        m.put("residentBooksLunch", new Field("resident_books_lunch", Kind.BOOLEAN));
+        m.put("residentBooksDinner", new Field("resident_books_dinner", Kind.BOOLEAN));
+        m.put("sponsored", new Field("sponsored", Kind.BOOLEAN));
+        m.put("residentRoom", new Field("resident_room_id", Kind.INTEGER));
+        m.put("residentRoomMonthlyRent", new Field("resident_room_monthly_rent", Kind.INTEGER));
+        // Stamped like the other markers: staff say "clear it" (null) or "mark it" (any value, written
+        // as current_date). See SERVER_STAMPED — the value is not the caller's here either.
+        m.put("genderChangedDate", new Field("gender_changed_date", Kind.DATE));
+        return m;
+    }
+
     /** Every name a client may send, {@link #EMAIL} included. */
     static boolean isEditable(String name) {
         return EDITABLE.containsKey(name) || EMAIL.equals(name);
     }
 
+    /**
+     * Whether this name resolves to a column staff may write SOMEWHERE — the member list plus
+     * {@link #STAFF_ONLY}.
+     *
+     * <p><b>Not an authorization answer, and no longer used as one.</b> Each back-office route carries
+     * its own list ({@code StaffPersonRules.CUSTOMER_FIELDS}, {@code USER_FIELDS},
+     * {@code RESIDENT_FIELDS}), because a shared superset let {@code /customers} write the residency
+     * columns that {@code /residents} is scoped for. This remains as the question a check asks: is
+     * this field known to staff at all, and still refused to members?
+     */
+    static boolean isStaffEditable(String name) {
+        return isEditable(name) || STAFF_ONLY.containsKey(name);
+    }
+
     static Field fieldFor(String name) {
-        return EMAIL.equals(name) ? new Field("email", Kind.TEXT, 127) : EDITABLE.get(name);
+        if (EMAIL.equals(name))
+            return new Field("email", Kind.TEXT, 127);
+        Field field = EDITABLE.get(name);
+        return field != null ? field : STAFF_ONLY.get(name);
     }
 }

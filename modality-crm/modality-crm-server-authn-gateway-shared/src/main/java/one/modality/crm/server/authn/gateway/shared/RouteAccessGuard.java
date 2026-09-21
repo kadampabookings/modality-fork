@@ -76,4 +76,33 @@ public final class RouteAccessGuard {
                 : SuperAdminMembership.isSuperAdminPerson(personId, entityStore))
             .compose(allowed -> Boolean.TRUE.equals(allowed) ? work.get() : refused());
     }
+
+    /**
+     * The same, for a target that has no organization to be scoped to — see
+     * {@link RouteGrantMembership#mayReachRouteAnywhere} for when that is true and why it is not a
+     * loophole.
+     *
+     * <p>In short: a {@code person} has no owning organization, the back office's own guard scopes to
+     * the sidebar's selection rather than to the row, and the screen then reads and writes every person
+     * there is. Asking "anywhere" is the same question the client asks; asking narrower would refuse
+     * legitimate work and stop nothing.
+     *
+     * <p>Everything else is unchanged, and it is the everything else that carries the weight here: a
+     * support view is refused, a guest and an anonymous caller are refused, and the session must be one
+     * this server established. Before these endpoints, ANY of them could write any person row directly.
+     */
+    public static <T> Future<T> whenCallerMayReachAnywhere(String route, Supplier<Future<T>> work) {
+        Object state = ThreadLocalStateHolder.getThreadLocalState();
+        Object userId = StateAccessor.getUserId(state);
+        boolean verifiedSession = StateAccessor.getSessionFamilyId(state) != null;
+        if (!(userId instanceof ModalityUserPrincipal principal) || principal.isSupportView() || !verifiedSession)
+            return refused();
+        Object personId = principal.getUserPersonId();
+        EntityStore entityStore = EntityStore.create(DataSourceModelService.getDefaultDataSourceModel());
+        return RouteGrantMembership.mayReachRouteAnywhere(personId, route, entityStore)
+            .compose(mayReach -> Boolean.TRUE.equals(mayReach)
+                ? Future.succeededFuture(true)
+                : SuperAdminMembership.isSuperAdminPerson(personId, entityStore))
+            .compose(allowed -> Boolean.TRUE.equals(allowed) ? work.get() : refused());
+    }
 }
