@@ -19,6 +19,11 @@ import dev.webfx.stack.db.submit.ClientWriteDenyList;
  * client can author is not evidence. Denying {@code token} — which is NOT NULL — is what stops a client
  * creating one at all.
  *
+ * <p>A mail's DELIVERY RECORD is closed for a third reason: it is the mailer's own state, and a client
+ * able to write it can make the mailer act again on a mail that was already dealt with. What a client may
+ * do to the mail itself — compose one, and nothing to anybody else's — is a row rule rather than a column
+ * list, and lives in {@code MailWritePolicy}.
+ *
  * <p>{@code magic_link} is closed entirely: a client able to insert a row there could mint a sign-in link for any
  * account and follow it. No client writes it; the server creates, stamps and retires every row.
  *
@@ -93,7 +98,25 @@ final class ClientWriteSecrets {
         // refused — but only the back-office GWT app is built and deployed, so nothing live reaches it.
         for (String column : new String[] { "token", "inviter_id", "invitee_id" })
             ClientWriteDenyList.denyColumn("invitation", column);
-        Console.log("🛡 Client writes may not touch sign-in links or invitation authorship, nor set the"
-                    + " account's sign-in, status or privilege columns (1 table, 17 columns)");
+        // A mail's delivery record, and the sign-in link a mail can be pointed at.
+        //
+        // `transmitted` is what stops a mail being sent twice, so a client able to clear it can make the
+        // mailer deliver an already-sent mail again. `transmission_date` and `error` are the same record
+        // of what happened. `magic_link_id` is worse than a record: the auto_recipient trigger reads the
+        // LINK's own address to address the mail, so setting it aims a mail the caller wrote at the owner
+        // of a sign-in link, from a verified Kadampa address.
+        //
+        // Checked against both apps before being listed: every client reference to the three delivery
+        // columns is a READ (the delivery badge, the booking mail column, the volunteering status field
+        // lists), and no client sets a mail's magic link at all. The only writers are MailTransmitter and
+        // WebPushMailTransmitter, both server-side, which never reach this guard.
+        //
+        // What a client may still do to a mail is bounded by MailWritePolicy, not by this list: compose
+        // its own, and nothing to anybody else's.
+        for (String column : new String[] { "transmitted", "transmission_date", "error", "magic_link_id" })
+            ClientWriteDenyList.denyColumn("mail", column);
+        Console.log("🛡 Client writes may not touch sign-in links or invitation authorship, a mail's"
+                    + " delivery record, nor the account's sign-in, status or privilege columns"
+                    + " (magic_link entirely, plus 23 columns across 4 tables)");
     }
 }

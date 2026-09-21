@@ -204,9 +204,12 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         //   See UnscopedWritePolicy.
         // - and an email on somebody else's account's person: it is what claimMembers accepts as "this
         //   is me", and an ordinary client write could supply it in bulk. See PersonEmailWritePolicy.
+        // - and mail that is not the caller's own: a pending mail is a live sign-in link or somebody's
+        //   booking, and until now any client could add its own address to one, or rewrite it. Clients
+        //   still compose mail, which is the relay itself and is not closed here. See MailWritePolicy.
         ClientSubmitGuard.registerWritePolicy(new ClientWritePolicies(
             new OwnerLoginWritePolicy(), new GrantTableWritePolicy(), new PersonAccountMovePolicy(),
-            new UnscopedWritePolicy(), new PersonEmailWritePolicy()));
+            new UnscopedWritePolicy(), new PersonEmailWritePolicy(), new MailWritePolicy()));
         Console.log("🛡 Write authorization active on " + REQUIRED_OPERATIONS.size() + " entities and "
                     + REQUIRED_OPERATIONS_BY_FIELD.size() + " fields"
                     + (ENFORCING ? " — ENFORCING" : " — observing only, nothing is refused yet"));
@@ -216,7 +219,7 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         // rules below it are NOT gated by that switch. An operator reading only the line above would
         // triage a write that started failing on this deploy by looking anywhere but here.
         Console.log("🛡 Client write row rules ENFORCING — owner login, grant tables, person account move,"
-                    + " unbounded writes, person email");
+                    + " unbounded writes, person email, mail");
     }
 
     /**
