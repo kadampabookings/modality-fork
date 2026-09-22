@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project>
+
+    <!-- Creating an event by duplicating an existing one, as an endpoint rather than as SQL the back office
+         sends: the client cannot run copy_event_scheduled_items() itself (ClientSubmitGuard refuses raw
+         statements of client origin), and the new event row and its programme have to land in ONE
+         transaction or a failed copy leaves an empty event behind. It keeps the modality/service/event
+         address it will carry into a wider event lifecycle service later. -->
+
+    <exported-packages>
+        <source-packages/>
+    </exported-packages>
+
+    <dependencies>
+        <used-by-source-modules/>
+        <source-module>modality-crm-server-authn-gateway-shared</source-module>
+        <source-module>webfx-stack-com-bus-call</source-module>
+        <source-module>webfx-stack-db-query</source-module>
+        <source-module>webfx-stack-db-submit</source-module>
+        <source-module>webfx-stack-orm-datasourcemodel</source-module>
+        <source-module>webfx-stack-session-state</source-module>
+    </dependencies>
+
+    <providers>
+        <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.event.server.lifecycle.DuplicateEventEndpoint</provider>
+    </providers>
+
+</project>

@@ -103,5 +103,6 @@ V0100__refuse_password_while_closed_trigger.sql
 V0101__account_restriction_for_stolen_device.sql
 V0102__security_alarm.sql
 V0103__item_policy_sharing_needs_no_bed.sql
+V0104__duplicate_event.sql
 V0105__operation_catalogue_cleanup.sql
 V0106__backoffice_missing_operations.sql
