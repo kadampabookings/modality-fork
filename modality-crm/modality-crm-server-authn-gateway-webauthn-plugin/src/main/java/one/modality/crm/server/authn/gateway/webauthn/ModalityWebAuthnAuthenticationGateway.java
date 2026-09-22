@@ -857,11 +857,28 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
 
     /**
      * The management list, also returned by a successful registration so the client refreshes in
-     * one call. Shaped {@code {"approvalRequired": bool, "passkeys": [...]}}: the flag is true
+     * one call. Shaped {@code {"approvalRequired": bool, "passkeys": [...], "signal": {...}}}: the flag is true
      * only when the approval switch is on AND the account can enter the back office — the one
      * case in which a status means anything to the owner — so the client shows status badges and
      * the "awaiting approval" hint when it is true and nothing of the sort otherwise (members
      * never, staff only while the gate is on).
+     *
+     * <p><b>{@code signal} is for the password manager, not for the UI.</b> Removing a passkey here
+     * deletes our row and nothing else: the authenticator keeps its copy, so a member who re-enrols a
+     * few times accumulates dead entries in their keychain and is offered three identical choices at
+     * the next sign-in. The WebAuthn Signal API fixes that — given the rp id, the user handle and the
+     * COMPLETE set of credential ids we still accept, the provider removes everything else it holds
+     * for us. So this block carries exactly those three things.
+     *
+     * <p>Deliberately in the OWNER's envelope and not in the shared row shape: the row parser is also
+     * used by the super administrator's listing, and a credential id there would be somebody else's.
+     * Here they are the caller's own, on a call whose account comes from the session and cannot be
+     * named — which is the whole reason this is safe to send. Credential ids are identifiers, not
+     * secrets; the client is already handed them at registration, in {@code excludeCredentials}.
+     *
+     * <p>Omitted entirely when the account has no passkey left, because there is then no user handle
+     * to address the signal with — ours live on the credential rows. Removing your LAST passkey
+     * therefore leaves its keychain entry behind until the next registration signals again.
      */
     private Future<String> listPasskeysJson(Object accountId) {
         WebAuthnConfig cfg = config;
@@ -880,8 +897,38 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
             AstObject response = AST.createObject();
             response.set("approvalRequired", approvalRequired);
             response.setArray("passkeys", passkeysJson(credentials));
+            AstObject signal = signalJson(cfg, credentials);
+            if (signal != null)
+                response.setObject("signal", signal);
             return Json.formatObject(response);
         });
+    }
+
+    /**
+     * What the client needs to tell the password manager which credentials are still real.
+     *
+     * <p>The user handle is one per account by construction (registration reuses the one the
+     * account's other passkeys carry), so any row's will do; a row with none is skipped rather than
+     * allowed to produce a signal addressed to nobody. Null when there is nothing to say — no
+     * credentials, or none carrying a handle — and the caller then omits the block.
+     */
+    private static AstObject signalJson(WebAuthnConfig cfg, List<WebAuthnCredentialStore.CredentialSummary> credentials) {
+        String userHandle = credentials.stream()
+            .map(WebAuthnCredentialStore.CredentialSummary::userHandle)
+            .filter(Objects::nonNull)
+            .findFirst()
+            .orElse(null);
+        if (userHandle == null)
+            return null;
+        AstArray credentialIds = AST.createArray();
+        for (WebAuthnCredentialStore.CredentialSummary summary : credentials)
+            if (summary.credentialId() != null)
+                credentialIds.push(summary.credentialId());
+        AstObject signal = AST.createObject();
+        signal.set("rpId", cfg.getRpId());
+        signal.set("userHandle", userHandle);
+        signal.setArray("credentialIds", credentialIds);
+        return signal;
     }
 
     /**
