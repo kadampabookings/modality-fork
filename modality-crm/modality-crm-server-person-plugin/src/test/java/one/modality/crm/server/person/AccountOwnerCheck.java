@@ -106,7 +106,7 @@ public class AccountOwnerCheck {
         // --- the freshness markers are still the server's value, as everywhere else ---
         String stamped = AccountOwnerRules.insertStatementFor(List.of("detailsConfirmedDate"));
         check("a marker is stamped by the server here too",
-            stamped.contains("else current_date end"));
+            stamped.contains("then current_date") && !stamped.contains("::date"));
 
         // --- the credential's LIFECYCLE, which this check did not look at the first time ---
         // It asserted the shape of the generated SQL and nothing about what the endpoint asks the magic

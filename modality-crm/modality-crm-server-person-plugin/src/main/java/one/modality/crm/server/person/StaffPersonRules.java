@@ -110,7 +110,7 @@ final class StaffPersonRules {
         String badValue = firstBadValue(names, values);
         if (badValue != null)
             return refusal(badValue);
-        List<Object> parameters = new ArrayList<>(values);
+        List<Object> parameters = PersonFields.boundValues(names, values);
         parameters.add(personId);
         if (userOfOrgId != null)
             parameters.add(userOfOrgId);
@@ -185,7 +185,7 @@ final class StaffPersonRules {
         String badValue = firstBadValue(names, values);
         if (badValue != null)
             return refusal(badValue);
-        List<Object> parameters = new ArrayList<>(values);
+        List<Object> parameters = PersonFields.boundValues(names, values);
         parameters.add(personId);
         parameters.add(organizationId);
         return runResidentWrite(residentStatementFor(names), parameters.toArray(), callerUserId);
@@ -326,6 +326,8 @@ final class StaffPersonRules {
             return PersonDetailsRules.VALUE_TOO_LONG_KEY;
         if (PersonDetailsRules.firstNotAnId(names, values) != null)
             return PersonDetailsRules.NOT_AN_ID_KEY;
+        if (PersonDetailsRules.firstNotADate(names, values) != null)
+            return PersonDetailsRules.NOT_A_DATE_KEY;
         for (int i = 0; i < names.size(); i++) {
             PersonFields.Field field = PersonFields.fieldFor(names.get(i));
             if (field != null && field.kind() == PersonFields.Kind.BOOLEAN

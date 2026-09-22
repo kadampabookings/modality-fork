@@ -219,6 +219,8 @@ final class AccountOwnerRules {
             return PersonDetailsRules.VALUE_TOO_LONG_KEY;
         if (PersonDetailsRules.firstNotAnId(names, values) != null)
             return PersonDetailsRules.NOT_AN_ID_KEY;
+        if (PersonDetailsRules.firstNotADate(names, values) != null)
+            return PersonDetailsRules.NOT_A_DATE_KEY;
         return null;
     }
 
@@ -245,8 +247,9 @@ final class AccountOwnerRules {
         List<Object> parameters = new ArrayList<>();
         parameters.add(accountId);
         parameters.add(email);
-        for (String name : names)
-            parameters.add(values.get(names.indexOf(name)));
+        // Positionally, like every other builder: indexOf would bind the FIRST occurrence's value to a
+        // repeated name, which is correct only for as long as collect() keeps deduplicating them.
+        parameters.addAll(PersonFields.boundValues(names, values));
         SubmitArgument insert = new SubmitArgumentBuilder()
             .setDataSourceId(DataSourceModelService.getDefaultDataSourceId())
             .setStatement(insertStatementFor(names))

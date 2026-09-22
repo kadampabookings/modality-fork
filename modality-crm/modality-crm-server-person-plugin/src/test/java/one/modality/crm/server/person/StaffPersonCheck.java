@@ -81,7 +81,7 @@ public class StaffPersonCheck {
         // --- the value of a marker is the server's here too ---
         String stamped = StaffPersonRules.updateStatementFor(names("genderChangedDate"));
         check("dismissing a gender-change marker clears it, and cannot post-date it",
-            stamped.contains("case when $1::date is null then null") && stamped.contains("else current_date end"));
+            stamped.contains("case when $1 then current_date else null end"));
 
         // --- residency: the one target that HAS an organization ---
         check("adding a resident SETS the centre the grant was checked for",

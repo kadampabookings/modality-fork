@@ -121,10 +121,75 @@ final class PersonFields {
      * a rule the other two did not have.
      */
     static String valueExpression(String name, int placeholder) {
-        String parameter = "$" + placeholder + fieldFor(name).kind().cast;
-        return SERVER_STAMPED.contains(name)
-            ? "case when " + parameter + " is null then null else current_date end"
-            : parameter;
+        // A stamped field binds a BOOLEAN, not a date, and {@link #boundValue} supplies it. The
+        // expression never reads the value - it only asks whether one was sent - so carrying a date
+        // here bought nothing and cost a production failure: the `::date` cast makes the driver demand
+        // a java.time.LocalDate, and the booking flow's "confirm my details" sent the wire's string
+        // form, which is refused at ENCODING, before the statement runs. A parameter whose value is
+        // ignored should not have a type that can be wrong.
+        if (SERVER_STAMPED.contains(name))
+            return "case when $" + placeholder + " then current_date else null end";
+        return "$" + placeholder + fieldFor(name).kind().cast;
+    }
+
+    /**
+     * The value to bind for one field, given what the caller sent.
+     *
+     * <p>Beside {@link #valueExpression} deliberately: the expression and the value it binds are one
+     * decision, and the three statement builders that call one must call the other.
+     *
+     * <ul>
+     *   <li><b>Stamped fields</b> become a boolean - "was a value sent?" - which is the only thing the
+     *       expression asks. Nothing about the caller's value survives, which is the point.</li>
+     *   <li><b>Dates</b> accept the wire's string form as well as a {@code LocalDate}. Clients send
+     *       either: a Temporal date travels as `$LD:` and arrives typed, while a value that went
+     *       through `toString()` somewhere arrives as text. The column takes a date either way, so
+     *       refusing one of them is an accident of encoding rather than a rule about the data.</li>
+     * </ul>
+     *
+     * <p>A string this cannot parse is refused by NAME here, rather than surfacing as the driver's
+     * "can not be coerced to the expected class" with no clue which field it meant.
+     */
+    static Object boundValue(String name, Object raw) {
+        Object value = blankAsNull(raw);
+        if (SERVER_STAMPED.contains(name))
+            return value != null;
+        Field field = fieldFor(name);
+        if (field != null && field.kind() == Kind.DATE && value instanceof CharSequence text) {
+            try {
+                return java.time.LocalDate.parse(text.toString().trim());
+            } catch (java.time.format.DateTimeParseException e) {
+                // Unreachable once firstNotADate has run, which every write path calls before binding.
+                // Kept, and narrow, because "unreachable" is a claim about callers: a fourth path that
+                // forgot the rule should fail here rather than hand the driver something it cannot encode.
+                throw new IllegalArgumentException(name + " is not a date", e);
+            }
+        }
+        return value;
+    }
+
+    /**
+     * Blank text is an absent value, everywhere.
+     *
+     * <p>Shared by both branches deliberately. Read only by the date branch, a marker sent as {@code ""}
+     * — which is what a cleared {@code <input type="date">} yields — would have been "a value was sent"
+     * and re-stamped the very marker the member had just answered, while the same {@code ""} on an
+     * ordinary date cleared the column. Two readings of empty in one method is a bug waiting for a form.
+     */
+    private static Object blankAsNull(Object raw) {
+        return raw instanceof CharSequence text && text.toString().trim().isEmpty() ? null : raw;
+    }
+
+    /** {@link #boundValue} across a whole positional name/value pair, for the builders that bind in bulk. */
+    static java.util.List<Object> boundValues(java.util.List<String> names, java.util.List<Object> values) {
+        if (names.size() != values.size())
+            // The two lists are filled in lockstep by collect(); a caller that breaks that would
+            // otherwise return a short parameter list and misalign every placeholder after it.
+            throw new IllegalArgumentException("names and values must be the same length");
+        java.util.List<Object> bound = new java.util.ArrayList<>(values.size());
+        for (int i = 0; i < values.size(); i++)
+            bound.add(boundValue(names.get(i), values.get(i)));
+        return bound;
     }
 
     /** Only writable where the row is not an account owner — see the class note. */

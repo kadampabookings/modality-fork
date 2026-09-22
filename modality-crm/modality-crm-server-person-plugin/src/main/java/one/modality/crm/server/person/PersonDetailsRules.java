@@ -59,6 +59,7 @@ final class PersonDetailsRules {
      * whatever Postgres makes of it.
      */
     static final String NOT_AN_ID_KEY = "PersonNotAnIdError";
+    static final String NOT_A_DATE_KEY = "PersonNotADateError";
 
     /**
      * Whose row this is, asked as one question.
@@ -124,6 +125,8 @@ final class PersonDetailsRules {
                     return refusal(VALUE_TOO_LONG_KEY);
                 if (firstNotAnId(names, values) != null)
                     return refusal(NOT_AN_ID_KEY);
+                if (firstNotADate(names, values) != null)
+                    return refusal(NOT_A_DATE_KEY);
                 return runUpdate(personId, names, values, callerPersonId, callerAccountId, callerUserId);
             });
     }
@@ -159,7 +162,7 @@ final class PersonDetailsRules {
             PersonFields.Field field = PersonFields.fieldFor(names.get(i));
             if (i > 0)
                 sql.append(", ");
-            parameters.add(values.get(i));
+            parameters.add(PersonFields.boundValue(names.get(i), values.get(i)));
             sql.append(field.column()).append(" = ")
                .append(PersonFields.valueExpression(names.get(i), parameters.size()));
         }
@@ -204,6 +207,8 @@ final class PersonDetailsRules {
         // feature caps length on the way in.
         if (firstTooLong(names, values) != null)
             return refusal(VALUE_TOO_LONG_KEY);
+        if (firstNotADate(names, values) != null)
+            return refusal(NOT_A_DATE_KEY);
         if (firstNotAnId(names, values) != null)
             return refusal(NOT_AN_ID_KEY);
         StringBuilder columns = new StringBuilder(INSERT_SQL_PREFIX);
@@ -212,7 +217,7 @@ final class PersonDetailsRules {
         parameters.add(callerAccountId);
         for (int i = 0; i < names.size(); i++) {
             PersonFields.Field field = PersonFields.fieldFor(names.get(i));
-            parameters.add(values.get(i));
+            parameters.add(PersonFields.boundValue(names.get(i), values.get(i)));
             columns.append(", ").append(field.column());
             placeholders.append(", ").append(PersonFields.valueExpression(names.get(i), parameters.size()));
         }
@@ -296,6 +301,44 @@ final class PersonDetailsRules {
      *
      * <p>Null passes: clearing a country or an organization is an ordinary edit ("no centre").
      */
+    /**
+     * The first date field whose value is not one, or null.
+     *
+     * <p>Beside {@link #firstNotAnId} because it is the same kind of rule, and here rather than at the
+     * bind so that it is judged where every other client-value rule is judged — before the database is
+     * asked anything, and answered with a named refusal the client can translate. A date reaching the
+     * driver unparseable gives "can not be coerced to the expected class", which names no field.
+     *
+     * <p>Accepts what the wire actually carries: a {@code LocalDate} (a Temporal date travels as
+     * `$LD:`) or its ISO text (a value that went through {@code toString()} somewhere). A number is a
+     * date to nobody, and the year is bounded because {@code LocalDate} parses years Postgres cannot
+     * store — and an out-of-range one would surface as raw Postgres text in a browser.
+     */
+    static String firstNotADate(List<String> names, List<Object> values) {
+        for (int i = 0; i < names.size(); i++) {
+            PersonFields.Field field = PersonFields.fieldFor(names.get(i));
+            Object value = values.get(i);
+            if (field == null || field.kind() != PersonFields.Kind.DATE || value == null)
+                continue;
+            java.time.LocalDate day = null;
+            if (value instanceof java.time.LocalDate already)
+                day = already;
+            else if (value instanceof CharSequence text) {
+                String iso = text.toString().trim();
+                if (iso.isEmpty())
+                    continue; // blank clears the column; see PersonFields.boundValue
+                try {
+                    day = java.time.LocalDate.parse(iso);
+                } catch (java.time.format.DateTimeParseException e) {
+                    return names.get(i);
+                }
+            }
+            if (day == null || day.getYear() < 1 || day.getYear() > 9999)
+                return names.get(i);
+        }
+        return null;
+    }
+
     static String firstNotAnId(List<String> names, List<Object> values) {
         for (int i = 0; i < names.size(); i++) {
             PersonFields.Field field = PersonFields.fieldFor(names.get(i));
