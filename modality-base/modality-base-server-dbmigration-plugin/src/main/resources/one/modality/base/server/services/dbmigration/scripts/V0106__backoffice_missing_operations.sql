@@ -50,6 +50,12 @@
 -- the row. Until then the capability catalogue reports the code as "not grantable", which is both
 -- true and a standing reminder.
 --
+-- When the row is finally added, the code also needs to become a tile's operationCode rather than
+-- one of its additionalOperationCodes -- the role editor builds a tickable card per canonical
+-- code and treats the additional ones as alternatives it may clear but never add, so as an
+-- alternative it would be revocable and ungrantable. The statistics pages were in exactly that
+-- shape and were split for this reason.
+--
 -- ViewAsCustomer and ViewAsBackOfficeUser are deliberately NOT seeded to anyone. They let the
 -- holder see the booking system as another person, which is a genuine privilege escalation and
 -- exactly the kind of thing that should be granted deliberately and individually. Today only
