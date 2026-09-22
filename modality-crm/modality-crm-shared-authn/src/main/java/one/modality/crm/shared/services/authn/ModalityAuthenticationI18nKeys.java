@@ -20,6 +20,12 @@ public interface ModalityAuthenticationI18nKeys {
      * that "the change could not be completed" has no reason to guess that.
      */
     Object AuthnSessionNotVerifiedError = "AuthnSessionNotVerifiedError";
+    /**
+     * Sign-in by emailed link or code is suspended because an alarm is raised — control 4 of
+     * docs/security/session-revocation-spec.md. Worded for the user as a temporary unavailability and
+     * never as a posture: the alarm is silent by design, so the message must read like any other outage.
+     */
+    Object AuthnMagicLinkSuspendedError = "AuthnMagicLinkSuspendedError";
     Object AuthnPasskeyNotApprovedError = "AuthnPasskeyNotApprovedError";
     Object AuthnPasskeyNotConfiguredError = "AuthnPasskeyNotConfiguredError";
     Object AuthnPasskeyRegistrationError = "AuthnPasskeyRegistrationError";

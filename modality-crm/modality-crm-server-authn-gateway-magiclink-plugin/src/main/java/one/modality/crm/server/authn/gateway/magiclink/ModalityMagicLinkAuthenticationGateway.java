@@ -16,6 +16,7 @@ import dev.webfx.stack.orm.entity.EntityStore;
 import dev.webfx.stack.push.server.PushServerService;
 import dev.webfx.stack.session.state.StateAccessor;
 import dev.webfx.stack.session.token.AuthenticatedState;
+import dev.webfx.stack.session.token.SecurityAlarm;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 import one.modality.base.shared.entities.FrontendAccount;
 import one.modality.base.shared.entities.MagicLink;
@@ -118,8 +119,37 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
             ;
     }
 
+    /**
+     * Whether this argument is a sign-in by emailed secret — the credential an alarm suspends.
+     *
+     * <p>The four magic-link paths, and deliberately NOT the support or back-office views. Those are also
+     * redeemed from a link, but they are STAFF-initiated and already gated on staff privileges: they are
+     * not "an attacker with mailbox access", and cutting them off would remove the tool somebody needs
+     * during exactly the incident that raised the alarm.
+     *
+     * <p>Issuing is refused as well as redeeming, because a link that arrives and cannot be used is worse
+     * than none; and redeeming is refused as well as issuing, because the links already sitting in inboxes
+     * when the alarm went up are the ones it is aimed at.
+     */
+    private static boolean isSignInByEmailedSecret(Object userCredentials) {
+        return userCredentials instanceof SendMagicLinkCredentials
+               || userCredentials instanceof RenewMagicLinkCredentials
+               || userCredentials instanceof AuthenticateWithMagicLinkCredentials
+               || userCredentials instanceof AuthenticateWithVerificationCodeCredentials;
+    }
+
     @Override
     public Future<?> authenticate(Object userCredentials) {
+        // Control 4: the weakest credential in the system, and the one an attacker with mailbox access
+        // reaches for, stops working while an alarm is raised. Checked here rather than in each branch so
+        // a path added later is suspended by default instead of by remembering.
+        if (SecurityAlarm.isRaised(System.currentTimeMillis()) && isSignInByEmailedSecret(userCredentials)) {
+            // Counted, not itemised: who was refused is not interesting and naming them would write
+            // attacker-chosen addresses into the log, exactly as the untokened-claim counter avoids.
+            Console.log("🛡 Sign-in by emailed link or code refused: an alarm is raised");
+            return Future.failedFuture("[%s] Sign-in by link is temporarily unavailable"
+                .formatted(ModalityAuthenticationI18nKeys.AuthnMagicLinkSuspendedError));
+        }
         if (userCredentials instanceof SendMagicLinkCredentials sendMagicLinkCredentials)
             return createAndSendMagicLink(sendMagicLinkCredentials);
         if (userCredentials instanceof RenewMagicLinkCredentials renewMagicLinkCredentials)
