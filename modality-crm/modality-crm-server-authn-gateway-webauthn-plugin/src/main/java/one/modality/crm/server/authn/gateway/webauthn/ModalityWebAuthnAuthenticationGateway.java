@@ -645,7 +645,7 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
         // away, and nothing is lost by waiting — the same trade "sign out my other devices" has made since it
         // shipped.
         if (!arrivedOnAVerifiedSession())
-            return managementFailure();
+            return sessionNotVerifiedFailure();
         if (updateCredentialsArgument instanceof StartPasskeyRegistrationCredentials cred)
             return startPasskeyRegistration(principal, cred);
         if (updateCredentialsArgument instanceof FinalisePasskeyRegistrationCredentials cred)
@@ -1437,6 +1437,23 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
      */
     private static boolean arrivedOnAVerifiedSession() {
         return StateAccessor.getSessionFamilyId(ThreadLocalStateHolder.getThreadLocalState()) != null;
+    }
+
+    /**
+     * Refused for the one reason the caller can fix themselves, and told so.
+     *
+     * <p>Everything on this address needs a session this server verified, and a session can be signed in
+     * WITHOUT being verified: pre-flip, a token past its signed expiry is tolerated rather than treated as
+     * a logout, so the app works, the user looks signed in, and every control here refuses. It cannot heal
+     * on its own either — verification fails before the renewal path is reached — so the only cure is to
+     * sign in again.
+     *
+     * <p>Which is exactly why this is not {@link #managementFailure()}. Sharing that key is what made the
+     * state invisible on production on 2026-09-22: three controls reporting a generic failure, none of them
+     * hinting at the one action that fixes all three.
+     */
+    private static <T> Future<T> sessionNotVerifiedFailure() {
+        return Future.failedFuture("[%s] This session needs signing in again".formatted(ModalityAuthenticationI18nKeys.AuthnSessionNotVerifiedError));
     }
 
     private static <T> Future<T> managementFailure() {
