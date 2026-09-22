@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
-<body style="min-height: 350px; overflow: hidden; margin: 0; height: 100vh; display: flex; justify-content: center; align-items: center;">
+<!-- min-height rather than height, so the body fills the frame - which is what centres the button below -
+     but is free to grow past it when AcceptUI's popup needs more room than the frame currently has. -->
+<body style="min-height: 100vh; overflow: hidden; margin: 0; display: flex; justify-content: center; align-items: center;">
 
 <button id="displayFormButton" style="padding: 10px; font-size: 16px; border-width: 1px; border-radius: 5px; cursor: pointer;"
         type="button"
@@ -153,6 +155,103 @@
     function modality_pay() {
         if (modality_javaPaymentForm)
             modality_javaPaymentForm.pay();
+    }
+
+</script>
+
+<script type="text/javascript">
+
+    // Reporting our height to the parent frame
+    //
+    // The parent sizes this iframe from the height reported here (it listens for
+    // "modality-iframe-resize"). Without a report the iframe keeps whatever
+    // height the parent guessed, and AcceptUI's popup - which stacks into a
+    // single column when it is not given the width for two, roughly doubling its
+    // height - is cut off at the iframe's bottom edge, taking the pay button
+    // with it. Nothing can scroll to it: the popup is positioned out of flow, so
+    // it extends no scrollable area.
+    //
+    // That same out-of-flow positioning is why documentElement.scrollHeight is
+    // not enough on its own, as it is for the PayPal form: the popup contributes
+    // nothing to it. So we measure the out-of-flow elements as well.
+
+    const MODALITY_MIN_HEIGHT = 350;
+    const MODALITY_MAX_HEIGHT = 1600;   // matches the parent's own clamp
+    const MODALITY_POPUP_MARGIN = 24;   // breathing room above and below the popup
+
+    function modality_neededHeight() {
+        const viewportHeight = document.documentElement.clientHeight;
+        let needed = document.documentElement.scrollHeight;
+        // From the root, not from <body>: AcceptUI attaches its popup where it
+        // likes, and a scan rooted in <body> would silently measure nothing at
+        // all if it ever attached elsewhere.
+        document.querySelectorAll("*").forEach(element => {
+            const position = getComputedStyle(element).position;
+            if (position !== "fixed" && position !== "absolute")
+                return;
+            // scrollHeight as well as the box: a wrapper sized to the viewport
+            // that clips taller content would otherwise measure as fitting.
+            const height = Math.max(
+                Math.ceil(element.getBoundingClientRect().height),
+                element.scrollHeight);
+            // Skip anything that comes out viewport-sized (AcceptUI's dimming
+            // backdrop): its height is whatever we already are, so asking for it
+            // plus a margin would grow the iframe on every report. The clamp
+            // below is what actually bounds that, since this test only catches
+            // the backdrop when it matches the viewport near-exactly.
+            if (height <= 0 || Math.abs(height - viewportHeight) < 2)
+                return;
+            needed = Math.max(needed, height + 2 * MODALITY_POPUP_MARGIN);
+        });
+        return Math.min(MODALITY_MAX_HEIGHT, Math.max(MODALITY_MIN_HEIGHT, needed));
+    }
+
+    let modality_reportedHeight = 0;
+    let modality_reportScheduled = false;
+
+    function modality_reportHeight() {
+        modality_reportScheduled = false;
+        const height = modality_neededHeight();
+        // Grow freely; shrink only all the way back to the minimum, which is
+        // where we land when the popup has been closed. Resizing the iframe
+        // makes AcceptUI recentre its popup, which fires the observers again, so
+        // a rule that allowed any shrink could settle into an oscillation
+        // between two sizes - but a shrink to the minimum cannot, because the
+        // popup measures larger than the minimum whenever it is open.
+        const grew = height > modality_reportedHeight;
+        const backToMinimum = height <= MODALITY_MIN_HEIGHT && modality_reportedHeight > MODALITY_MIN_HEIGHT;
+        if (!grew && !backToMinimum)
+            return;
+        modality_reportedHeight = height;
+        window.parent.postMessage({ type: "modality-iframe-resize", height: height }, "*");
+    }
+
+    function modality_scheduleHeightReport() {
+        if (modality_reportScheduled)
+            return;
+        modality_reportScheduled = true;
+        // Coalesce: the mutation observer fires on every class or style the
+        // gateway's own field validation touches while the payer types.
+        requestAnimationFrame(modality_reportHeight);
+    }
+
+    // Only when framed. Loaded as a top-level document (the JavaFX client loads
+    // this same file in a web view) there is no parent to tell, and
+    // window.parent would be ourselves.
+    if (window.parent !== window) {
+        // The popup appears long after load - AcceptUI.js injects it - and
+        // changes size afterwards, so watch for both. Attributes are filtered to
+        // the two that can move layout, to keep typing in the card field from
+        // scheduling a measurement per keystroke.
+        if (typeof ResizeObserver !== "undefined")
+            new ResizeObserver(modality_scheduleHeightReport).observe(document.documentElement);
+        if (typeof MutationObserver !== "undefined")
+            new MutationObserver(modality_scheduleHeightReport).observe(document.documentElement, {
+                childList: true,
+                subtree: true,
+                attributes: true,
+                attributeFilter: ["class", "style"]
+            });
     }
 
 </script>
