@@ -106,3 +106,4 @@ V0103__item_policy_sharing_needs_no_bed.sql
 V0104__duplicate_event.sql
 V0105__operation_catalogue_cleanup.sql
 V0106__backoffice_missing_operations.sql
+V0107__recurring_events_grant_route.sql
