@@ -7,6 +7,7 @@ import dev.webfx.platform.console.Console;
 import dev.webfx.stack.authz.server.AuthorizationServerService;
 import dev.webfx.stack.authz.server.spi.AuthorizationServerServiceProvider;
 import dev.webfx.stack.authz.server.spi.impl.AuthorizationServerServiceProviderBase;
+import dev.webfx.stack.db.query.ClientReadInspectionRegistry;
 import dev.webfx.stack.db.submit.ClientSubmitGuard;
 import dev.webfx.stack.db.submit.ProtectedEntityWriteRegistry;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
@@ -180,6 +181,10 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         // The read half of the same item, narrowly: not read authorisation, which is later, but the columns whose
         // disclosure is a way in. Registered here for the same reason as the inventory above.
         ClientReadSecrets.declare();
+        // And step 0 of the READ plan, the twin of the write inventory: learn what the clients read before
+        // writing the rule that constrains the rest. Reads are the larger half of item 6 by exposure and the
+        // half with no rule at all yet, so the inventory is what the rule will be written from.
+        ClientReadInspectionRegistry.registerReadInspector(new ClientReadInventory());
         // And the write half of that: the account columns no client may set, enforced now rather than observed —
         // see ClientWriteSecrets for why the observe-only switch below does not apply to them.
         ClientWriteSecrets.declare();
@@ -214,6 +219,7 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
                     + REQUIRED_OPERATIONS_BY_FIELD.size() + " fields"
                     + (ENFORCING ? " — ENFORCING" : " — observing only, nothing is refused yet"));
         Console.log("🛡 Client write inventory recording — shapes only, no values, nothing refused");
+        Console.log("🛡 Client read inventory recording — shapes only, no values, nothing refused");
         // Said separately, and said even though the line above has just said "nothing is refused yet":
         // that sentence is about the per-entity operation rule and the switch that gates it, and the row
         // rules below it are NOT gated by that switch. An operator reading only the line above would
