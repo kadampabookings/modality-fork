@@ -13,3 +13,4 @@ one.modality.crm.server.person.MergeIntoAccountEndpoint
 one.modality.crm.server.person.RemoveCustomersEndpoint
 one.modality.crm.server.person.ClaimMembersEndpoint
 one.modality.crm.server.person.RequestRefundEndpoint
+one.modality.crm.server.person.ContactCentreEndpoint
