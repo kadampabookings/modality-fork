@@ -46,13 +46,20 @@ final class ClientReadSecrets {
         ClientReadDenyList.denyColumn("smtp_account", "password");
         ClientReadDenyList.denyColumn("push_subscription", "auth_key");
         ClientReadDenyList.denyColumn("push_subscription", "p256dh_key");
+        // Capability tokens: a client may look a row up BY one and may not read one. Each is a link somebody was
+        // emailed, and the way a capability like this is defeated is not by guessing a token but by asking for
+        // all of them - `select token from Invitation` returned every live one to anybody who could reach the
+        // bus. Equality against a bound parameter is what presenting a link does, and it is all that is left.
+        ClientReadDenyList.denyColumnExceptEqualityMatch("invitation", "token");
+        ClientReadDenyList.denyColumnExceptEqualityMatch("volunteering_date_proposal", "action_token");
+        ClientReadDenyList.denyColumnExceptEqualityMatch("volunteering_application", "arrival_confirmation_token");
         // NOT yet denied, because a legitimate screen reads each of them and would simply break. Each needs the
         // server to stop handing the value out rather than the client to stop asking:
         //   organization.bunny_api_key — the back-office Organizations page loads the real key into the browser
         //       only to decide whether to show it masked; the server should say "a key is set" instead.
-        //   volunteering_date_proposal.action_token, volunteering_application.arrival_confirmation_token,
-        //       invitation.token — capability tokens the front office looks rows up BY. Safe only once the token
-        //       itself cannot be read, which means an endpoint that takes the token and returns the one row.
-        Console.log("🛡 Client queries may not touch the sign-in, credential and key columns (2 tables, 6 columns)");
+        //   (the three capability tokens that used to be listed here are now declared above: they did not need
+        //       an endpoint after all, only a rule saying they may be tested and not read.)
+        Console.log("🛡 Client queries may not touch the sign-in, credential and key columns (2 tables, 6 columns),"
+                    + " and may test but not read 3 capability tokens");
     }
 }
