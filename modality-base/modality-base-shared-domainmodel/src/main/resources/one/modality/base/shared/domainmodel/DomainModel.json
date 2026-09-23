@@ -519,6 +519,7 @@
     "paper": "boolean",
     "passReady": "boolean",
     "passToMake": "boolean",
+    "payer": "Person",
     "person": "Person",
     "person_abcNames": "string",
     "person_admin1Code": "string",
@@ -1287,6 +1288,7 @@
     "noShuttleTime": "boolean",
     "ord": "integer",
     "order": "boolean",
+    "payer": "boolean",
     "scopeOverride": "boolean",
     "sendPassword": "boolean",
     "terms": "boolean"
@@ -1297,6 +1299,7 @@
     "createdBy": "Person",
     "description": "string",
     "documentList": "boolean",
+    "educationProgram": "boolean",
     "event": "Event",
     "labelList": "boolean",
     "name": "string",
@@ -1310,6 +1313,7 @@
     "document": "Document",
     "label": "Label",
     "list": "List",
+    "payer": "Person",
     "person": "Person"
   },
   "MagicLink": {

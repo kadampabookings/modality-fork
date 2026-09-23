@@ -19,6 +19,7 @@ public interface Document extends
     String ref = "ref";
     String personLang = "person_lang";
     String cart = "cart";
+    String payer = "payer";
     String priceNet = "price_net";
     String priceDeposit = "price_deposit";
     String priceMinDeposit = "price_minDeposit";
@@ -74,6 +75,22 @@ public interface Document extends
 
     default Cart getCart() {
         return getForeignEntity(cart);
+    }
+
+    // Payer (V0109): the person billed for this booking when it is not the attendee - e.g. a
+    // centre's Administrative Director paying for its Resident Teacher. Setting it moves the
+    // booking into that payer's cart for the event (trigger_document_cart_follows_payer), and
+    // letters whose type has LetterType.payer are addressed to them. Null = the attendee pays.
+    default void setPayer(Object value) {
+        setForeignField(payer, value);
+    }
+
+    default EntityId getPayerId() {
+        return getForeignEntityId(payer);
+    }
+
+    default Person getPayer() {
+        return getForeignEntity(payer);
     }
 
     default void setPriceNet(Integer value) {
