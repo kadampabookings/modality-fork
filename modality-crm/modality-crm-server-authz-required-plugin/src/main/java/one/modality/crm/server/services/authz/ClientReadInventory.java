@@ -159,15 +159,42 @@ final class ClientReadInventory implements ClientReadInspectionRegistry.ReadInsp
      * nobody was going to read individually anyway.
      */
     static String shapeOf(ClientReadInspectionRegistry.ReadShape shape, String callerClass) {
+        // The verdict and the caller come FIRST, ahead of the three lists, because the key is truncated at
+        // MAX_SHAPE_LENGTH and the lists are what make it long. Put last, they were the first thing a long
+        // shape lost - and a shape with no `scope=` matches none of the report's filters, so it vanishes from
+        // every section rather than appearing in the wrong one.
         String key = (shape.entityName() == null ? "?" : shape.entityName())
                + " " + shape.statementKind()
-               + " bound=" + capped(shape.boundFields(), MAX_FIELDS_NAMED)
-               + " fn=" + capped(shape.guardFunctions(), MAX_FIELDS_NAMED)
-               + " tables=" + capped(shape.touchedTables(), MAX_TABLES_NAMED)
-               + (shape.hasWhere() ? "" : " no-where")
+               + " " + scopeOf(shape)
                + " by " + callerClass
-               + " " + scopeOf(shape);
+               + (shape.hasWhere() ? "" : " no-where")
+               + " " + boundOf(shape)
+               + " fn=" + capped(shape.guardFunctions(), MAX_FIELDS_NAMED)
+               + " tables=" + capped(shape.touchedTables(), MAX_TABLES_NAMED);
         return key.length() <= MAX_SHAPE_LENGTH ? key : key.substring(0, MAX_SHAPE_LENGTH) + "…";
+    }
+
+    /**
+     * What the statement ties its rows to.
+     *
+     * <p>Three renderings, because two of them are easy to confuse and the confusion is expensive:
+     *
+     * <ul>
+     *   <li>{@code bound=[a,b]} — tied down, and by the same fields whichever branch a row came through.</li>
+     *   <li>{@code bound=any-of[a,b]} — tied down, but by different fields in different branches. This is the
+     *       orders union: {@code person.frontendAccount} in one branch and
+     *       {@code person.accountPerson.frontendAccount} in the other, scoped to one account all the same. It
+     *       read as {@code bound=[]} until 2026-09-23 and so was filed as returning the whole table — the first
+     *       thing production traffic said, and a rule written from it would have refused the orders page.</li>
+     *   <li>{@code bound=[]} — nothing ties the rows down at all.</li>
+     * </ul>
+     */
+    private static String boundOf(ClientReadInspectionRegistry.ReadShape shape) {
+        if (shape.boundFields().length > 0)
+            return "bound=" + capped(shape.boundFields(), MAX_FIELDS_NAMED);
+        if (shape.bounded() && shape.alternativeFields().length > 0)
+            return "bound=any-of" + capped(shape.alternativeFields(), MAX_FIELDS_NAMED);
+        return "bound=[]";
     }
 
     /**
@@ -200,9 +227,16 @@ final class ClientReadInventory implements ClientReadInspectionRegistry.ReadInsp
      *   <li>{@code scope=ownership-fn} — the predicate is already there, as a guard the statement GUARANTEES.
      *       Step 2 binds its argument, and that is the whole of the change.</li>
      *   <li>{@code scope=UNSCOPED} — the statement guarantees nothing about which rows it returns: no WHERE, or
-     *       one that ties no column to a value and uses no guard, or a union with one such branch. This read
-     *       returns the table. It is the read twin of the write inventory's {@code target=UNBOUNDED}, and it is
-     *       the line to look for first.</li>
+     *       one that ties no column to a value and uses no guard, or an OR or union with one such alternative.
+     *       This read returns the table. It is the read twin of the write inventory's {@code target=UNBOUNDED},
+     *       and it is the line to look for first.
+     *       <p>One shape lands here that is not in fact unconstrained: {@code x in (select …)}. A subquery can
+     *       select anything, so nothing here can verify what it bounds. Kept conservative on purpose, and worth
+     *       knowing when reading a report.</li>
+     *   <li>{@code scope=fn?} — restricted only by a function this side does not recognise. Not a verdict: a
+     *       request for one. Either it is an ownership predicate missing from {@code OWNERSHIP_FUNCTIONS}, or
+     *       it is a search condition that scans the table, and the shape's {@code fn=} list says which to go
+     *       and look at.</li>
      *   <li>{@code scope=fields} — something is tied down, and what it is appears in the shape's own
      *       {@code bound=} list. <b>Bound is not scoped.</b> {@code where id=$1} binds and reaches anybody's row;
      *       {@code where cart.uuid=$1} binds and is a capability; {@code where person=$1} binds to an id the
@@ -220,7 +254,15 @@ final class ClientReadInventory implements ClientReadInspectionRegistry.ReadInsp
         for (String function : shape.guardFunctions())
             if (OWNERSHIP_FUNCTIONS.contains(function.toLowerCase()))
                 return "scope=ownership-fn";
-        return shape.boundFields().length == 0 ? "scope=UNSCOPED" : "scope=fields";
+        // `bounded`, not an empty field list. Two branches can each tie their rows down and share no field, and
+        // reading the empty intersection as "unconstrained" is what called the orders page unscoped.
+        if (shape.bounded())
+            return "scope=fields";
+        // A guard this side does not recognise. Neither bucket above is honest about it: calling it scoped
+        // would file `searchMatchesPerson(p)` - a table scan when the search term is empty - as constrained,
+        // and calling it UNSCOPED would bury a real ownership predicate nobody has added to the list yet.
+        // Named so a person looks, which is the only thing that can settle it.
+        return shape.guardFunctions().length == 0 ? "scope=UNSCOPED" : "scope=fn?";
     }
 
     /**
