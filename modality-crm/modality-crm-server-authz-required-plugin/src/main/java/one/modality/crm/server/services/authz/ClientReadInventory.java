@@ -38,6 +38,15 @@ import java.util.function.Consumer;
  * one-token change in step 2 ({@code $2} becomes {@code callerAccount()}); a statement with no predicate needs an
  * endpoint. Counting which is which is what says how big step 2 really is.
  *
+ * <h3>What the construct list is for</h3>
+ *
+ * <p>{@code uses=[…]} names the expression kinds a statement contains. It answers the question a restricted
+ * client dialect has to be designed against — which of the grammar's ~59 term classes clients actually send —
+ * and it answers it by OBSERVATION. Reading the front-end source cannot: it misses everything composed at
+ * runtime, and it cannot see the Java clients at all, which build statements programmatically rather than as
+ * text. A construct nobody anticipated is recorded here rather than refused, which is the one place in this
+ * work where an unknown is data instead of a refusal.
+ *
  * <h3>What is deliberately not logged</h3>
  *
  * <p>Names, never values. No parameter value, no literal, no target id, no principal identity. A read's literals
@@ -80,11 +89,25 @@ final class ClientReadInventory implements ClientReadInspectionRegistry.ReadInsp
     /** How many bound fields or guard functions a shape names before the rest are counted instead. */
     private static final int MAX_FIELDS_NAMED = 12;
 
+    /**
+     * How many expression kinds a shape names.
+     *
+     * <p>Higher than the others because this list is the point of the exercise: it is what a restricted client
+     * dialect would be defined from, and a truncated one would hide exactly the construct nobody expected. The
+     * whole grammar is under 60 classes and a single statement uses a handful, so 24 truncates nothing real.
+     */
+    private static final int MAX_CONSTRUCTS_NAMED = 24;
+
     /** How long one name may be — a dot path can be walked round a foreign-key cycle indefinitely. */
     private static final int MAX_ENTRY_LENGTH = 60;
 
-    /** And the whole key, so that no single log line or map entry can be made unbounded by composing one. */
-    private static final int MAX_SHAPE_LENGTH = 400;
+    /**
+     * And the whole key, so that no single log line or map entry can be made unbounded by composing one.
+     *
+     * <p>Raised from 400 when the construct list joined: the parts are each capped, but four capped lists plus a
+     * verdict no longer fit in 400, and a shape truncated mid-list silently merges with its neighbours.
+     */
+    private static final int MAX_SHAPE_LENGTH = 800;
 
     /**
      * One entry per distinct shape.
@@ -170,7 +193,11 @@ final class ClientReadInventory implements ClientReadInspectionRegistry.ReadInsp
                + (shape.hasWhere() ? "" : " no-where")
                + " " + boundOf(shape)
                + " fn=" + capped(shape.guardFunctions(), MAX_FIELDS_NAMED)
-               + " tables=" + capped(shape.touchedTables(), MAX_TABLES_NAMED);
+               + " tables=" + capped(shape.touchedTables(), MAX_TABLES_NAMED)
+               // LAST, and the cap raised to fit it. Inserted ahead of `tables=` it pushed the table list past
+               // MAX_SHAPE_LENGTH, so two reads touching different tables collapsed into one key — the same
+               // truncation trap the verdict was moved to the front to escape, one field further down.
+               + " uses=" + capped(shape.constructs(), MAX_CONSTRUCTS_NAMED);
         return key.length() <= MAX_SHAPE_LENGTH ? key : key.substring(0, MAX_SHAPE_LENGTH) + "…";
     }
 
