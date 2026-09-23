@@ -22,7 +22,16 @@ import java.util.function.BiFunction;
  * answered yes. A guest carries a different principal type and is refused by the same test. And it
  * requires a session this server established rather than an identity a caller asserted — the same
  * reasoning as the back-office guard, for the same reason: linking hands somebody another person's
- * bookings and media, and production still accepts a bare claim until the identity flip.
+ * bookings and media.
+ *
+ * <p><b>There is only one door, since 2026-09-23.</b> This class used to offer two, and the unfenced
+ * one was a deliberate judgement with a stated expiry: while {@code person} stayed client-writable and
+ * production still honoured a bare claim, fencing an endpoint bought nothing the open table did not
+ * give away, and cost a member with a tab open overnight a Save that failed with nothing to explain
+ * it. The identity-binding flip landed in production on 2026-09-23, which retires both halves of that
+ * judgement at once: a caller can no longer assert a principal, so an unverified session is now simply
+ * a logged-out one, and the fence costs nothing it did not already cost. The plain door was removed
+ * rather than deprecated — a door nobody may use is better not built.
  *
  * @author Claude Code
  */
@@ -42,37 +51,17 @@ final class MemberSessionGuard {
      * point of passing them in rather than letting the operation read them: an operation cannot
      * accidentally act for somebody the caller named.
      *
+     * <p>A session family exists only where somebody actually signed in and this server verified the
+     * token they came back with, so this is the test that separates "signed in" from "claims to be".
+     *
      * @param work given the caller's person id and account id, in that order
      */
-    static <T> Future<T> whenCallerIsMember(BiFunction<Object, Object, Future<T>> work) {
-        return whenCallerIsMember(false, work);
-    }
-
-    /**
-     * The same, refusing anything but a session this server established.
-     *
-     * <p>For the operations that hand one account sight of another person's bookings and recordings.
-     * There the fence earns its cost: production still accepts a principal a caller merely asserts, and
-     * a session family only exists where somebody actually signed in.
-     *
-     * <p><b>It is NOT used for editing details</b>, and that is a judgement rather than an oversight. A
-     * caller who can assert a principal can already write {@code person} directly — the table does not
-     * close until step 2b — so the fence buys nothing there that the open table does not give away,
-     * while costing every member with a tab open overnight a Save that fails with a refusal no screen
-     * can explain and no prompt to sign in again. <b>Worth revisiting the moment the table closes</b>,
-     * when the fence would start to be the only thing standing there.
-     */
     static <T> Future<T> whenCallerIsVerifiedMember(BiFunction<Object, Object, Future<T>> work) {
-        return whenCallerIsMember(true, work);
-    }
-
-    private static <T> Future<T> whenCallerIsMember(boolean requireVerifiedSession,
-                                                    BiFunction<Object, Object, Future<T>> work) {
         Object state = ThreadLocalStateHolder.getThreadLocalState();
         Object userId = StateAccessor.getUserId(state);
         boolean verifiedSession = StateAccessor.getSessionFamilyId(state) != null;
         if (!(userId instanceof ModalityUserPrincipal principal) || principal.isSupportView()
-            || (requireVerifiedSession && !verifiedSession))
+            || !verifiedSession)
             return refused();
         Object personId = principal.getUserPersonId();
         Object accountId = principal.getUserAccountId();

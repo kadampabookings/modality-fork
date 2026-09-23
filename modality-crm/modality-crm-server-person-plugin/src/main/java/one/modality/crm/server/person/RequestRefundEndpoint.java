@@ -19,11 +19,12 @@ import one.modality.crm.shared.services.authn.ModalityGuestPrincipal;
  * Which test applies is read from the PRINCIPAL, never from the argument — a caller cannot ask to be
  * treated as the other kind. {@link RefundRequestRules} applies whichever inside the read itself.
  *
- * <p>Not the fenced door. This composes a fixed sentence to the centre's own mailbox about a booking
- * the caller can already open, so a caller who asserted a principal gains nothing here they could not
- * get by opening the page — and the fence would cost a member with a tab open overnight a button that
- * fails with nothing to explain it. Worth revisiting with the others when the fence becomes the only
- * thing standing there.
+ * <p><b>Fenced since 2026-09-23</b>, with the rest of the member endpoints. It used to take the plain
+ * door on the argument that a fixed sentence to the centre's own mailbox gains an asserted caller
+ * nothing, and that the fence would cost a member with a tab open overnight a button failing for no
+ * visible reason. The identity-binding flip retires both halves: a principal can no longer be
+ * asserted, and an unverified session is now a logged-out one, so the fence costs nothing it did not
+ * already cost.
  *
  * @author Claude Code
  */
@@ -42,7 +43,7 @@ public final class RequestRefundEndpoint extends AsyncFunctionBusCallEndpoint<Ob
                 ? array[0] : argument);
             if (callerUserId instanceof ModalityGuestPrincipal guest)
                 return RefundRequestRules.request(documentId, guest.getEmail(), true, callerUserId);
-            return MemberSessionGuard.whenCallerIsMember((callerPersonId, callerAccountId) ->
+            return MemberSessionGuard.whenCallerIsVerifiedMember((callerPersonId, callerAccountId) ->
                 RefundRequestRules.request(documentId, callerAccountId, false, callerUserId));
         });
     }

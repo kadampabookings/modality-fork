@@ -32,7 +32,7 @@ public final class UpdatePersonDetailsEndpoint extends AsyncFunctionBusCallEndpo
             Object[] namesAndValues = new Object[a.length - 1];
             System.arraycopy(a, 1, namesAndValues, 0, namesAndValues.length);
             Object callerUserId = StateAccessor.getUserId(ThreadLocalStateHolder.getThreadLocalState());
-            return MemberSessionGuard.whenCallerIsMember((callerPersonId, callerAccountId) ->
+            return MemberSessionGuard.whenCallerIsVerifiedMember((callerPersonId, callerAccountId) ->
                 PersonDetailsRules.updateDetails(personId, namesAndValues,
                     callerPersonId, callerAccountId, callerUserId));
         });

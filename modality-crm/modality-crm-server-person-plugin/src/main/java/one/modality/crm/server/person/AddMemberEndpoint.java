@@ -27,7 +27,7 @@ public final class AddMemberEndpoint extends AsyncFunctionBusCallEndpoint<Object
             if (namesAndValues == null || Arrays.length(namesAndValues) < 2)
                 return MemberSessionGuard.refused();
             Object callerUserId = StateAccessor.getUserId(ThreadLocalStateHolder.getThreadLocalState());
-            return MemberSessionGuard.whenCallerIsMember((callerPersonId, callerAccountId) ->
+            return MemberSessionGuard.whenCallerIsVerifiedMember((callerPersonId, callerAccountId) ->
                 PersonDetailsRules.addMember(namesAndValues, callerAccountId, callerUserId));
         });
     }

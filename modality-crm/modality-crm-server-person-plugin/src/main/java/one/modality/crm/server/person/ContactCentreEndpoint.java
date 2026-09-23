@@ -21,21 +21,14 @@ import one.modality.crm.shared.services.authn.ModalityGuestPrincipal;
  * cannot ask to be treated as the other kind. {@link ContactRequestRules} applies whichever inside the
  * read itself.
  *
- * <h3>Not the fenced door — but NOT for the refund's reason</h3>
+ * <h3>Fenced, and it needed it more than its sibling</h3>
  *
- * <p>This uses {@code whenCallerIsMember}, which does not require a verified session, the same as
- * {@link RequestRefundEndpoint}. The reasoning there does not transfer, and it is worth being exact
- * about why rather than inheriting it: the refund composes a FIXED sentence, so a caller who asserted
- * a principal gains nothing but a note the centre would have received anyway. This one carries the
- * caller's own words. An asserted identity can therefore put arbitrary text into the centre's mailbox
- * under a real member's display name, with that member's address as the reply-to — which is a
- * social-engineering surface the refund does not have.
- *
- * <p>It is still a strict improvement on what it replaces, which is the only reason it ships this way:
- * before this endpoint, ANY caller — with no principal at all — could insert a mail row naming any
- * document, and choose the display name and the reply address as well. What is left is narrower on
- * every axis. But this endpoint should take {@code whenCallerIsVerifiedMember} once the identity
- * binding flip lands, and it belongs at the FRONT of that queue rather than with the others.
+ * <p>Takes {@code whenCallerIsVerifiedMember} since 2026-09-23. It briefly shipped on the plain door,
+ * inheriting {@link RequestRefundEndpoint}'s reasoning — which never actually transferred: the refund
+ * composes a FIXED sentence, so an asserted caller gained nothing by it, whereas this one carries the
+ * caller's own words and could have put arbitrary text into the centre's mailbox under a real member's
+ * display name, with that member's address as the reply-to. That gap is closed at the door now rather
+ * than argued about.
  *
  * <p>Two things are also not closed here, both unchanged from the dialog: nothing limits how many
  * messages one caller may send, and nothing deduplicates them.
@@ -63,7 +56,7 @@ public final class ContactCentreEndpoint extends AsyncFunctionBusCallEndpoint<Ob
             if (callerUserId instanceof ModalityGuestPrincipal guest)
                 return ContactRequestRules.send(documentId, subject, message,
                     guest.getEmail(), true, callerUserId);
-            return MemberSessionGuard.whenCallerIsMember((callerPersonId, callerAccountId) ->
+            return MemberSessionGuard.whenCallerIsVerifiedMember((callerPersonId, callerAccountId) ->
                 ContactRequestRules.send(documentId, subject, message,
                     callerAccountId, false, callerUserId));
         });
