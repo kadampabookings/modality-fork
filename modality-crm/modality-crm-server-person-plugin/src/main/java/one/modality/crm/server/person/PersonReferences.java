@@ -11,10 +11,10 @@ import java.util.Set;
  * screen used to send one {@code update <entity> set <field>} per entry of a list it carried, which meant
  * the set of tables a client could rewrite was whatever that client said it was.
  *
- * <p><b>A foreign key is not a backstop, and on this table that is not theoretical.</b> Of the 36 keys
+ * <p><b>A foreign key is not a backstop, and on this table that is not theoretical.</b> Of the 38 keys
  * pointing at {@code person}, two are {@code ON DELETE SET NULL} — {@code document.person_id} and
  * {@code recipient.person_id} — so a person this list forgot would not make the delete fail. It would
- * quietly erase whose booking it was. Two more are {@code ON DELETE CASCADE}. The remaining thirty-two
+ * quietly erase whose booking it was. Two more are {@code ON DELETE CASCADE}. The remaining thirty-four
  * refuse, which is why a forgotten one shows up as a failed merge rather than as damage; but the two that
  * do not refuse are the reason {@link #UNKNOWN_REFERENCE_KEY} exists and the merge asks the catalogue
  * every time rather than trusting this list to have stayed complete.
@@ -40,6 +40,9 @@ final class PersonReferences {
         m.put("document", "person_id");
         m.put("document.carer1", "person_carer1_id");
         m.put("document.carer2", "person_carer2_id");
+        // V0109: who pays for the booking. Before history, so the history row the payer_cart trigger
+        // writes while this repoint consolidates the payer's carts is itself repointed below.
+        m.put("document.payer", "payer_id");
         m.put("history", "user_person_id");
         m.put("error", "user_person_id");
         m.put("recipient", "person_id"); // ON DELETE SET NULL — forgetting this one erases it silently
@@ -57,6 +60,7 @@ final class PersonReferences {
         m.put("activity_state", "owner_id");
         m.put("list", "created_by_id");
         m.put("list_item", "person_id");
+        m.put("list_item.payer", "payer_id"); // V0109: a programme registrant's standing payer
         m.put("pass_template", "created_by");
         // Roles a person plays.
         m.put("driver", "person_id");

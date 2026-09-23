@@ -85,6 +85,14 @@ import dev.webfx.stack.db.submit.ProtectedEntityWriteRegistry;
  * because a reader of this section would otherwise conclude that intercepting somebody's booking mail is
  * closed, and it is not.
  *
+ * <p>V0109 adds a third column to that road: {@code document.payer_id}. A letter whose type carries
+ * {@code letter_type.payer} (the "Payment request") is addressed to the payer, and setting the payer also
+ * moves the booking into that payer's cart, whose /pay-cart/ link the letter carries. So a client that
+ * writes {@code payer_id} and {@code trigger_send_letter_id} on a booking it does not own can aim that
+ * booking's payment request, with a working payment link, at any existing person. The Education
+ * programmes page is its only legitimate writer; the same item C ownership rule, making {@code payer}
+ * staff-only, is what closes it.
+ *
  * <p>The relay itself. A client composing its own mail still picks the subject, the body and the
  * address, which is what the eighteen sites are for. Only {@code denyTable("mail")} and
  * {@code denyTable("recipient")} close that, and they cannot be taken while those sites write the tables

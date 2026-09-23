@@ -12,6 +12,7 @@ public interface LetterType extends
 
     String confirmation = "confirmation";
     String cancellation = "cancellation";
+    String payer = "payer";
 
     default void setConfirmation(Boolean value) {
         setFieldValue(confirmation, value);
@@ -27,5 +28,16 @@ public interface LetterType extends
 
     default Boolean isCancellation() {
         return getBooleanFieldValue(cancellation);
+    }
+
+    // Payer (V0109): letters of this type go to the booking's payer (Document.payer) rather than
+    // the attendee, falling back to the attendee when the booking has no payer. The "Payment
+    // request" type carries it.
+    default void setPayer(Boolean value) {
+        setFieldValue(payer, value);
+    }
+
+    default Boolean isPayer() {
+        return getBooleanFieldValue(payer);
     }
 }

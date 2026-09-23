@@ -108,3 +108,4 @@ V0105__operation_catalogue_cleanup.sql
 V0106__backoffice_missing_operations.sql
 V0107__recurring_events_grant_route.sql
 V0108__branches_operation.sql
+V0109__education_programs_and_booking_payer.sql
