@@ -23,26 +23,6 @@
 -- NOT NULL: DQL `!removed` compiles to `not (removed)`, which would silently drop rows where the flag
 -- is NULL. The constant default is stored as metadata, so no table is rewritten.
 
--- A BOOKING NEVER LOSES ITS EVENT. document_event_id_fkey was ON DELETE SET NULL — the "clear a nullable
--- pointer" rule V0095 cites — so deleting an event silently detached its bookings: each one, with its
--- payments and mails, left pointing at no event. That is never what deleting an event should do. The key
--- becomes NO ACTION like the other keys into event: deleting an event that still has bookings is refused
--- (23503), and the back office keeps the event, flagged `removed`, instead.
--- It holds for every path that deletes events, not only the new delete button: the legacy Java recurring-
--- event screen and KBS2 now get the refusal too (the Java screen's message already names registrations).
--- And it closes the window the back office's own check leaves open: a first booking made between that
--- check and the delete is now refused by the delete rather than detached by it.
--- Rebuilt rather than altered — Postgres cannot change a key's ON DELETE rule in place. Re-validating it
--- against the existing rows is quick: about 0.5 s for the ~291k documents on staging (2026-09-24).
--- It runs FIRST, before the columns below: it locks document and event together, and taking event
--- alone first (an ADD COLUMN) would leave a window in which a live booking holding document and
--- then reading event could deadlock with this script. Apply in a quiet window all the same.
-
-ALTER TABLE public.document DROP CONSTRAINT IF EXISTS document_event_id_fkey;
-
-ALTER TABLE public.document
-    ADD CONSTRAINT document_event_id_fkey FOREIGN KEY (event_id) REFERENCES public.event(id);
-
 ALTER TABLE public.event
     ADD COLUMN IF NOT EXISTS removed boolean DEFAULT false NOT NULL;
 
