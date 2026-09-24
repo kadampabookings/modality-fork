@@ -210,7 +210,7 @@ final class PersonLinkRules {
      * @param callerAccountId the caller's own account, likewise
      */
     static Future<Boolean> approveInvitation(Object rawInvitationId, Object callerPersonId, Object callerAccountId,
-                                             Object callerUserId) {
+                                             Object subject, Object body, Object callerUserId) {
         Object invitationId = Numbers.toLong(rawInvitationId);
         if (invitationId == null)
             return MemberSessionGuard.refused();
@@ -237,11 +237,19 @@ final class PersonLinkRules {
                     return refusal(INVITATION_ALREADY_USED_KEY);
                 if (isTrue(result.getValue(0, 12)))
                     return refusal(INVITATION_EXPIRED_KEY);
-                return inviterPays
+                Future<Boolean> approved = inviterPays
                     ? approveValidationRequest(invitationId, callerPersonId, inviterAccountId, inviteeEmail,
                         result.getValue(0, 8), result.getValue(0, 9), callerUserId)
                     : approveManagerInvitation(invitationId, inviterId, callerAccountId,
                         result.getValue(0, 10), result.getValue(0, 11), callerUserId);
+                // "Your request was approved" goes to the INVITER, and the operation already knows who
+                // that is — it read the row to decide the caller was allowed to approve it. Nothing
+                // about the recipient comes from the caller. Only on success: a link that was not
+                // established should not be announced as one. No token: this mail carries no
+                // capability, only a link to the member's own account page.
+                return approved.compose(ok -> !Boolean.TRUE.equals(ok) ? Future.succeededFuture(ok)
+                    : MemberMail.sendToPerson(inviterId, subject, body, null, callerUserId)
+                        .map(ignored -> ok));
             });
     }
 

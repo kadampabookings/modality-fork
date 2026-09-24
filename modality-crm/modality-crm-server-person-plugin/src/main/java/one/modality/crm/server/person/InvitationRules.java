@@ -89,8 +89,9 @@ final class InvitationRules {
      *                    false for "please manage my bookings" (the invitee approves seeing the caller)
      * @param callerPersonId the caller's own person, from the principal — the inviter, always
      */
-    static Future<String> createInvitation(Object rawInviteeId, boolean inviterPays,
+    static Future<Object> createInvitation(Object rawInviteeId, boolean inviterPays,
                                             Object aliasFirstName, Object aliasLastName,
+                                            Object subject, Object body,
                                             Object callerPersonId, Object callerUserId) {
         Object inviteeId = Numbers.toLong(rawInviteeId);
         if (inviteeId == null)
@@ -119,7 +120,12 @@ final class InvitationRules {
                 // caller, and a mail that failed used to leave the inviter permanently unable to ask
                 // again. The screens keep their own "already pending" message; this is about retries.
                 return createAndReadBackToken(inviteeId, inviterPays, aliasFirstName, aliasLastName,
-                    callerPersonId, callerUserId);
+                        callerPersonId, callerUserId)
+                    // The token no longer leaves this server. It was returned so the browser could
+                    // build the approve/decline links; the mail is composed here now, so the only
+                    // thing that ever holds the capability is the invitee's own inbox.
+                    .compose(token -> MemberMail.sendToPerson(inviteeId, subject, body, token, callerUserId)
+                        .map(ignored -> (Object) Boolean.TRUE));
             });
     }
 

@@ -7,7 +7,9 @@ module modality.crm.server.person.plugin {
     requires modality.crm.server.authn.gateway.shared;
     requires modality.crm.shared.authn;
     requires webfx.platform.async;
+    requires webfx.platform.conf;
     requires webfx.platform.console;
+    requires webfx.platform.substitution;
     requires webfx.platform.util;
     requires webfx.stack.com.bus.call;
     requires webfx.stack.db.query;

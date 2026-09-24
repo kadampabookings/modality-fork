@@ -32,11 +32,17 @@ public final class ApproveInvitationEndpoint extends AsyncFunctionBusCallEndpoin
     public ApproveInvitationEndpoint() {
         super(APPROVE_INVITATION_ADDRESS, argument -> {
             Object invitationId = firstArgument(argument);
+            // The translated subject and body of the "approved" email. The server picks its recipient
+            // (the inviter), its account and its links; see MemberMail.
+            Object[] all = argument instanceof Object[] array ? array : null;
+            Object subject = all != null && Arrays.length(all) > 1 ? all[1] : null;
+            Object body = all != null && Arrays.length(all) > 2 ? all[2] : null;
             // Read on THIS thread: the principal for the audit trail, and the guard's own reads, both
             // happen before any async step because the thread-local does not survive one.
             Object callerUserId = StateAccessor.getUserId(ThreadLocalStateHolder.getThreadLocalState());
             return MemberSessionGuard.whenCallerIsVerifiedMember((personId, accountId) ->
-                PersonLinkRules.approveInvitation(invitationId, personId, accountId, callerUserId));
+                PersonLinkRules.approveInvitation(invitationId, personId, accountId, subject, body,
+                    callerUserId));
         });
     }
 

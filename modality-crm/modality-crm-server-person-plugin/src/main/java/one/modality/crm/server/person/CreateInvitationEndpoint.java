@@ -24,7 +24,7 @@ import dev.webfx.stack.session.state.ThreadLocalStateHolder;
  *
  * @author Claude Code
  */
-public final class CreateInvitationEndpoint extends AsyncFunctionBusCallEndpoint<Object, String> {
+public final class CreateInvitationEndpoint extends AsyncFunctionBusCallEndpoint<Object, Object> {
 
     /** The bus address — mirrored in the React client's BUS_ADDRESSES.CREATE_INVITATION. */
     public static final String CREATE_INVITATION_ADDRESS = "modality/service/person/createInvitation";
@@ -43,10 +43,16 @@ public final class CreateInvitationEndpoint extends AsyncFunctionBusCallEndpoint
                 return MemberSessionGuard.refused();
             Object aliasFirstName = Arrays.length(a) > 2 ? a[2] : null;
             Object aliasLastName = Arrays.length(a) > 3 ? a[3] : null;
+            // The translated subject and body of the email this asks for. The server owns who receives
+            // it, which account it leaves from and every url in it; the browser owns only the prose,
+            // because these templates exist in every supported language and the server has no i18n for
+            // them yet. See MemberMail.
+            Object subject = Arrays.length(a) > 4 ? a[4] : null;
+            Object body = Arrays.length(a) > 5 ? a[5] : null;
             Object callerUserId = StateAccessor.getUserId(ThreadLocalStateHolder.getThreadLocalState());
             return MemberSessionGuard.whenCallerIsVerifiedMember((personId, accountId) ->
                 InvitationRules.createInvitation(inviteeId, inviterPays, aliasFirstName, aliasLastName,
-                    personId, callerUserId));
+                    subject, body, personId, callerUserId));
         });
     }
 }
