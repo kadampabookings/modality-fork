@@ -74,7 +74,7 @@ final class MemberMail {
     }
 
     /** Where this plugin's keys live; matches its declare@modality.crm.server.person.properties. */
-    private static final String CONFIG_PATH = "modality.crm.server.person";
+    static final String CONFIG_PATH = "modality.crm.server.person";
 
     /** Placeholders the browser leaves in the body for this class to fill with whole urls. */
     static final String APPROVE_LINK = "{{APPROVE_LINK}}";
@@ -97,6 +97,29 @@ final class MemberMail {
     private static final String RECIPIENT_INSERT_SQL =
         "insert into recipient (mail_id, person_id, name, email, \"to\", cc, bcc, ok)" +
         " values ($1, $2, $3, $4, true, false, false, false)";
+
+    /**
+     * Says at boot whether these emails can go out at all.
+     *
+     * <p>Without this the only signal is {@link #sendToPerson}'s warning, which appears the first time
+     * somebody invites a member and not before — so a deploy with an unresolved origin looks perfectly
+     * healthy until an inviter waits for a reply to a mail that was never sent. That is the failure
+     * this whole class is most likely to have, because it is the one with no symptom.
+     *
+     * <p>Modelled on the identity-token keys, which announce themselves the same way. Called once the
+     * configuration has actually LOADED — reading it at class-init or at job start would find only the
+     * bundled sources, where the value is still {@code ${{ FRONTOFFICE_ORIGIN }}}, and would report a
+     * correctly configured deploy as broken.
+     */
+    static void announceConfiguration() {
+        String baseUrl = configuredBaseUrl();
+        if (baseUrl == null)
+            Console.log("⚠️ Member emails are DISABLED: " + CONFIG_PATH + ".frontofficeBaseUrl is unset"
+                        + " or unresolved. Invitations will still be created — and nobody will be told."
+                        + " The AWS deploys pass FRONTOFFICE_ORIGIN here.");
+        else
+            Console.log("🔗 Member emails will link to " + baseUrl);
+    }
 
     /**
      * Sends one member email to the person an operation just acted on.

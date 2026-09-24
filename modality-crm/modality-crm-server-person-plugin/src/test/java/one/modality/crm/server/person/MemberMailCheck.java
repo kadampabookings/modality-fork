@@ -121,6 +121,22 @@ public class MemberMailCheck {
         check("and only when the link was actually established",
             link.contains("!Boolean.TRUE.equals(ok) ? Future.succeededFuture(ok)"));
 
+        // --- and a deploy says at boot whether any of this can happen ---
+        //
+        // The skip in sendToPerson is the right behaviour but a terrible signal: it appears the first
+        // time somebody invites a member, so an unresolved origin reads as a healthy deploy until an
+        // inviter waits for a mail that was never sent. The boot line is what makes that visible on
+        // the day of the deploy instead.
+        check("the configuration is announced at boot",
+            source.contains("static void announceConfiguration()"));
+        check("and says plainly that emails are disabled when it cannot build a link",
+            source.contains("Member emails are DISABLED"));
+        String job = AccountOwnerCheck.readSource(BASE + "MemberMailJob.java");
+        check("a boot job exists to announce it", !job.isEmpty()
+            && job.contains("implements ApplicationJob"));
+        check("it waits for the config to LOAD rather than reading it at start",
+            job.contains("ConfigLoader.onConfigLoaded(MemberMail.CONFIG_PATH"));
+
         System.out.println(pass + " passed, " + fail + " failed");
         if (fail > 0)
             System.exit(1);

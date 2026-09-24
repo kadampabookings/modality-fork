@@ -15,6 +15,7 @@
         <source-module>modality-base-shared-entities</source-module>
         <source-module>modality-crm-server-authn-gateway-shared</source-module>
         <source-module>modality-crm-shared-authn</source-module>
+        <source-module>webfx-platform-boot</source-module>
         <source-module>webfx-platform-conf</source-module>
         <source-module>webfx-platform-substitution</source-module>
         <source-module>webfx-stack-com-bus-call</source-module>
@@ -26,6 +27,7 @@
 
 
     <providers>
+        <provider interface="dev.webfx.platform.boot.spi.ApplicationJob">one.modality.crm.server.person.MemberMailJob</provider>
         <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.crm.server.person.MergeDuplicatePersonsEndpoint</provider>
         <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.crm.server.person.RevokeLinkEndpoint</provider>
         <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.crm.server.person.CreateInvitationEndpoint</provider>
