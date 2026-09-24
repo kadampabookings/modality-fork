@@ -116,12 +116,14 @@
   "Building": {
     "id": 91,
     "name": "string",
+    "removed": "boolean",
     "site": "Site"
   },
   "BuildingZone": {
     "id": 139,
     "building": "Building",
-    "name": "string"
+    "name": "string",
+    "removed": "boolean"
   },
   "Cart": {
     "id": 68,
@@ -835,6 +837,7 @@
     "privacyNoticeLabel": "Label",
     "recurringWithAudio": "boolean",
     "recurringWithVideo": "boolean",
+    "removed": "boolean",
     "repeatAudio": "boolean",
     "repeatVideo": "boolean",
     "repeatable": "boolean",
@@ -1758,6 +1761,7 @@
     "label": "Label",
     "name": "string",
     "ord": "integer",
+    "removed": "boolean",
     "webColor": "string"
   },
   "PushSubscription": {
