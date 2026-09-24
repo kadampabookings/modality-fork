@@ -28,8 +28,13 @@ import dev.webfx.stack.db.query.ClientReadDenyList;
  *
  * <p>Each was checked against what the React apps actually query before being listed: none reads any of them, and
  * the one legacy back-office screen that sent raw SQL is no longer used. A column a legitimate screen does read
- * cannot simply be denied — the screen breaks — and the ones found in that state are NOT here yet: see the note at
- * the end of {@link #declare()}.
+ * cannot simply be denied — the screen breaks — so a column can also be waiting here for a reason other than the
+ * screen: see the note at the end of {@link #declare()}.
+ *
+ * <p><b>This list binds KBS3 clients only.</b> It is enforced in this server's query guard, and KBS2 runs its own
+ * server and its own bus, so a KBS2 screen reading one of these columns is not refused by anything here — KBS2's
+ * DB Explorer reads several of them today. Read as an estate-wide guarantee this list is simply wrong, and that
+ * is the kind of reference that is trusted precisely where it misleads.
  *
  * @author Claude Code
  */
@@ -70,10 +75,25 @@ final class ClientReadSecrets {
         //
         // Before redeclaring, confirm no stale shape is still arriving:
         //   filter @message like /Refused a client query/ or @message like /reached a capability column/
-        // NOT yet denied, because a legitimate screen reads each of them and would simply break. Each needs the
-        // server to stop handing the value out rather than the client to stop asking:
-        //   organization.bunny_api_key — the back-office Organizations page loads the real key into the browser
-        //       only to decide whether to show it masked; the server should say "a key is set" instead.
+        // NOT yet denied — no longer because a current screen needs it, only because old ones still ask:
+        //   organization.bunny_api_key — READY TO DENY FROM 2026-10-01, waiting only on stale bundles.
+        //       The back-office Organizations page loaded the real key for every organisation (three live keys
+        //       in prod, 2026-09-24) purely to choose between a masked placeholder and an empty one. V0111 adds
+        //       `bunny_api_key_set`, a generated column that answers that question without the key, and the page
+        //       now reads it. The reason to hold the deny is the reason invitation.token had to be paused: the
+        //       back office is a PWA with registerType 'autoUpdate', so a cached shell keeps asking for the old
+        //       field until it updates, and a deny would break the page for whoever holds that bundle.
+        //       An equality rule would NOT have worked here: nothing looks an organisation up BY its API key,
+        //       and a testable secret is a per-character oracle. Once denied, add a line to the Console.log below.
+        //       When denying, bump kbs3-react/API_VERSION in the same change: that is the lever built for exactly
+        //       this, and it turns "wait for bundles to age out" into a banner telling stale clients to update.
+        //       NOT bumped now — nothing is broken yet (an old bundle asking for bunnyApiKey still works, the
+        //       column is still served), and API_VERSION is one root file read by BOTH apps, so bumping it early
+        //       would nag every front-office user for a back-office change. It becomes true at the deny, not here.
+        //       NOTE the deny will close the KBS3 path only. KBS2's DbExplorerActivity still lists bunnyApiKey in
+        //       its Organization node-fields, and KBS2 runs its own server and bus, so this list cannot refuse it
+        //       (same for the gateway_parameter and magic_link columns denied above). V0111 added bunnyApiKeySet
+        //       to the KBS2 model as well, so that screen is a one-word change away from not reading the key.
         //   (the three capability tokens that used to be listed here are now declared above: they did not need
         //       an endpoint after all, only a rule saying they may be tested and not read.)
         Console.log("🛡 Client queries may not touch the sign-in, credential and key columns (2 tables, 6 columns),"

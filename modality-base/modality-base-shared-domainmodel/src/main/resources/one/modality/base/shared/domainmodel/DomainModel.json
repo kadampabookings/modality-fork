@@ -1587,6 +1587,7 @@
     "audioBunnyPullZoneId": "string",
     "audioBunnyStorageZoneId": "string",
     "bunnyApiKey": "string",
+    "bunnyApiKeySet": "boolean",
     "cityName": "string",
     "closed": "boolean",
     "country": "Country",

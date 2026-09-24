@@ -110,3 +110,4 @@ V0107__recurring_events_grant_route.sql
 V0108__branches_operation.sql
 V0109__education_programs_and_booking_payer.sql
 V0110__money_transfer_date_change_recomputes_balances.sql
+V0111__organization_bunny_api_key_set.sql
