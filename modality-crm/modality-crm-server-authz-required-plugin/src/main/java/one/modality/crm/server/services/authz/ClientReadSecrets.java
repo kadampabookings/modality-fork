@@ -50,9 +50,26 @@ final class ClientReadSecrets {
         // emailed, and the way a capability like this is defeated is not by guessing a token but by asking for
         // all of them - `select token from Invitation` returned every live one to anybody who could reach the
         // bus. Equality against a bound parameter is what presenting a link does, and it is all that is left.
-        ClientReadDenyList.denyColumnExceptEqualityMatch("invitation", "token");
         ClientReadDenyList.denyColumnExceptEqualityMatch("volunteering_date_proposal", "action_token");
         ClientReadDenyList.denyColumnExceptEqualityMatch("volunteering_application", "arrival_confirmation_token");
+        // PAUSED 2026-09-24, REDECLARE FROM 2026-10-01:
+        //   ClientReadDenyList.denyColumnExceptEqualityMatch("invitation", "token");
+        //
+        // It refused real invitees. The client stopped selecting this column and that change is live, but a
+        // cached front-office bundle still sends the old statement, and an emailed invitation link is a FIRST
+        // page load — where the service worker serves the cached shell before it updates. Four refusals in the
+        // ten hours after the deploy, each one somebody told their invitation was invalid.
+        //
+        // The sequencing was wrong, not the rule: a server rule that refuses what a cached client still sends
+        // has to wait for the bundles to age out, not merely for the client change to ship. The two tokens
+        // above stay declared because nothing has been observed sending their old shape, and they are the
+        // pair that still AUTHORISE an action — reading one lets somebody confirm or cancel a volunteer's
+        // arrival, where an invitation token no longer accepts anything (ApproveInvitationEndpoint requires
+        // the caller to BE the invitee). So the week of exposure reopened here is disclosure of pending
+        // invitations, not account takeover.
+        //
+        // Before redeclaring, confirm no stale shape is still arriving:
+        //   filter @message like /Refused a client query/ or @message like /reached a capability column/
         // NOT yet denied, because a legitimate screen reads each of them and would simply break. Each needs the
         // server to stop handing the value out rather than the client to stop asking:
         //   organization.bunny_api_key — the back-office Organizations page loads the real key into the browser
@@ -60,6 +77,6 @@ final class ClientReadSecrets {
         //   (the three capability tokens that used to be listed here are now declared above: they did not need
         //       an endpoint after all, only a rule saying they may be tested and not read.)
         Console.log("🛡 Client queries may not touch the sign-in, credential and key columns (2 tables, 6 columns),"
-                    + " and may test but not read 3 capability tokens");
+                    + " and may test but not read 2 capability tokens (invitation.token paused to 2026-10-01)");
     }
 }
