@@ -90,10 +90,11 @@ final class ClientReadSecrets {
         //       NOT bumped now — nothing is broken yet (an old bundle asking for bunnyApiKey still works, the
         //       column is still served), and API_VERSION is one root file read by BOTH apps, so bumping it early
         //       would nag every front-office user for a back-office change. It becomes true at the deny, not here.
-        //       NOTE the deny will close the KBS3 path only. KBS2's DbExplorerActivity still lists bunnyApiKey in
-        //       its Organization node-fields, and KBS2 runs its own server and bus, so this list cannot refuse it
-        //       (same for the gateway_parameter and magic_link columns denied above). V0111 added bunnyApiKeySet
-        //       to the KBS2 model as well, so that screen is a one-word change away from not reading the key.
+        //       NOTE the deny closes the KBS3 path only, because KBS2 runs its own server and bus and this list
+        //       cannot refuse anything there. KBS2's DbExplorerActivity used to list bunnyApiKey in its
+        //       Organization node-fields; that has been removed, so the KBS2 side closes with its next backend
+        //       deploy — independently of this deny, which never bound it. The caveat still stands for the
+        //       gateway_parameter and magic_link columns denied above: that screen reads those today.
         //   (the three capability tokens that used to be listed here are now declared above: they did not need
         //       an endpoint after all, only a rule saying they may be tested and not read.)
         Console.log("🛡 Client queries may not touch the sign-in, credential and key columns (2 tables, 6 columns),"

@@ -22,12 +22,11 @@
 -- have aged out -- a server rule that refuses what a stale client still sends breaks the page for
 -- whoever is holding that bundle. That sequencing was learned the hard way on invitation.token.
 --
--- KBS2 STILL READS THE KEY, and the deny will not reach it: DbExplorerActivity's Organization
--- node-fields list names `bunnyApiKey`, and KBS2 runs its own server and bus, so KBS3's
--- ClientReadDenyList cannot refuse it. The `super` role gates that screen, which is what keeps it
--- from being urgent, but "no client reads this column" is a statement about KBS3 only until that
--- one field name is changed. This migration adds `bunnyApiKeySet` to the KBS2 model too, so the
--- fix there is a one-word edit whenever a KBS2 backend deploy next goes out.
+-- KBS2 read the key too, from DbExplorerActivity's Organization node-fields, and the KBS3 deny
+-- would not have reached it -- KBS2 runs its own server and bus. That field has now been dropped
+-- from the list (the key is entered in the KBS3 back office, so KBS2 has no reason to show it),
+-- which closes the path once a KBS2 backend deploy carries it. That deploy is NOT a precondition
+-- for the deny here: the two servers are independent, and this list never bound KBS2 either way.
 --
 -- Note for staging: the GDPR refresh nulls bunny_api_key (10-anon-helpers.sql classifies it
 -- 'anonymised'), so this column reads false for every organisation there. That is correct, not a
