@@ -57,8 +57,9 @@ final class ClientReadSecrets {
         // bus. Equality against a bound parameter is what presenting a link does, and it is all that is left.
         ClientReadDenyList.denyColumnExceptEqualityMatch("volunteering_date_proposal", "action_token");
         ClientReadDenyList.denyColumnExceptEqualityMatch("volunteering_application", "arrival_confirmation_token");
-        // PAUSED 2026-09-24, REDECLARE FROM 2026-10-01:
+        // PAUSED 2026-09-24 — and WATCHED instead, so that restoring it can be a measurement:
         //   ClientReadDenyList.denyColumnExceptEqualityMatch("invitation", "token");
+        ClientReadDenyList.observeColumnExceptEqualityMatch("invitation", "token");
         //
         // It refused real invitees. The client stopped selecting this column and that change is live, but a
         // cached front-office bundle still sends the old statement, and an emailed invitation link is a FIRST
@@ -73,8 +74,23 @@ final class ClientReadSecrets {
         // the caller to BE the invitee). So the week of exposure reopened here is disclosure of pending
         // invitations, not account takeover.
         //
-        // Before redeclaring, confirm no stale shape is still arriving:
-        //   filter @message like /Refused a client query/ or @message like /reached a capability column/
+        // REVIEW FROM 2026-10-08, and restore on evidence rather than on the date. The refusal used to be the
+        // only detector, so pausing removed it; the watch above restores the signal without refusing anybody.
+        //   filter @message like /CAPABILITY-READ/
+        // Every occurrence is logged and carries its running total, so the latest line answers "how many". Zero
+        // over a week means the old bundles are gone. The rate to beat is the one the refusals showed while the
+        // rule was live — 8 in the 15 hours it ran, about twelve a day — so a quiet afternoon proves nothing.
+        //
+        // Two ways a zero can lie, both worth one query each before acting on it:
+        //   - the inventory was not running. Confirm it emitted OTHER read shapes over the same window
+        //     (filter @message like /client read shape/); zero of those means the instrument, not the traffic.
+        //   - CAPABILITY-UNREADABLE lines. Those are "the walk met a construct it cannot read", not a read —
+        //     but they are also statements nobody has confirmed are safe, so read them before concluding.
+        // The deny may simply be declared when the time comes: it SUPERSEDES the watch, so the observe line
+        // above does not have to be removed in the same change, and leaving it is not a trap.
+        //
+        // Faster than waiting: bump kbs3-react/API_VERSION, which banners stale clients into updating instead of
+        // waiting for them to drift. That is the lever, and it is why this is a review date and not a deadline.
         // NOT yet denied — no longer because a current screen needs it, only because old ones still ask:
         //   organization.bunny_api_key — READY TO DENY FROM 2026-10-01, waiting only on stale bundles.
         //       The back-office Organizations page loaded the real key for every organisation (three live keys
@@ -98,6 +114,7 @@ final class ClientReadSecrets {
         //   (the three capability tokens that used to be listed here are now declared above: they did not need
         //       an endpoint after all, only a rule saying they may be tested and not read.)
         Console.log("🛡 Client queries may not touch the sign-in, credential and key columns (2 tables, 6 columns),"
-                    + " and may test but not read 2 capability tokens (invitation.token paused to 2026-10-01)");
+                    + " and may test but not read 2 capability tokens"
+                    + " (invitation.token paused, WATCHED — see CAPABILITY-READ in the read inventory)");
     }
 }

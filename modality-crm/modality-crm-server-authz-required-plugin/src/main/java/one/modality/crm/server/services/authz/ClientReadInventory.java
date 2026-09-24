@@ -170,6 +170,52 @@ final class ClientReadInventory implements ClientReadInspectionRegistry.ReadInsp
     }
 
     /**
+     * A client READ a watched capability column — the thing the enforced rule would have refused.
+     *
+     * <p>Recorded as its own shape so it stands out in the report rather than blending into the traffic, and
+     * prefixed so one Insights filter finds every occurrence. This is the number that decides when the enforced
+     * rule can come back: while it is above zero there are still clients sending the old statement, and turning
+     * the rule on would refuse them — which is how invitation.token came to tell real invitees their invitation
+     * was invalid for fifteen hours.
+     *
+     * <p>Zero is not instantly conclusive either. The rate to beat is the one the refusals showed while the rule
+     * was on, about twelve a day, so a few quiet hours mean little and a quiet week means a great deal.
+     */
+    @Override
+    public void onObservedCapabilityColumnRead(String maskedStatement, String[] columns, boolean unanalysable) {
+        // NOT through record(). That logs a shape at occurrence 1, 10, 100, 1000 — right for an inventory,
+        // catastrophic here. At the rate the refusals actually showed, about twelve a day from one stale
+        // statement, it would log twice on the first day and then go quiet until roughly the eighth, while
+        // clients went on reading the token. Six silent days read as "zero for a week", which is the exact
+        // sentence that would restore the enforced rule and repeat the outage. A throttle that manufactures
+        // the all-clear it is being consulted for is worse than no instrument at all.
+        //
+        // So: every occurrence, with the running total IN the line, so one log entry answers "how many so
+        // far" without anyone having to count them. Capped only against a client minting them deliberately,
+        // and the cap keeps the powers of ten so the count stays legible past it.
+        long n = capabilityReads.incrementAndGet();
+        if (n > MAX_CAPABILITY_LINES && !ClientWriteInventory.isPowerOfTen(n))
+            return;
+        logger.accept("🛡 " + (unanalysable ? "CAPABILITY-UNREADABLE " : "CAPABILITY-READ ")
+                      + String.join(",", columns == null ? new String[0] : columns)
+                      + " (#" + n + ") by " + callerClass() + ": " + maskedStatement);
+    }
+
+    /** Occurrences, not shapes: the watch is counting how OFTEN, not how many ways. */
+    private final AtomicLong capabilityReads = new AtomicLong();
+
+    /**
+     * Past this many lines the watch falls back to powers of ten. High enough that a real stale-client rate
+     * (tens a day) is logged in full for months, low enough that a client minting reads cannot flood the log.
+     */
+    private static final long MAX_CAPABILITY_LINES = 5_000;
+
+    /** Occurrences seen so far — for a check, and for anyone asking the count without reading the log. */
+    long capabilityReadCount() {
+        return capabilityReads.get();
+    }
+
+    /**
      * The key an allowlist entry would be written against.
      *
      * <p>Everything in it is sorted, so the same read composed in a different order is one shape and not two.
