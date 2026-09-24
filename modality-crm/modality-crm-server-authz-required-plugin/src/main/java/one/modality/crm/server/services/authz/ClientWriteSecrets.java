@@ -27,20 +27,29 @@ import dev.webfx.stack.db.submit.ClientWriteDenyList;
  * <p>{@code magic_link} is closed entirely: a client able to insert a row there could mint a sign-in link for any
  * account and follow it. No client writes it; the server creates, stamps and retires every row.
  *
- * <p><b>What this does not cover yet, and why {@code person} is only half closed.</b> The plan's step 2b is
- * {@code denyTable("person")}, and it cannot be taken while the legacy JavaFX back office is deployed: its
- * reception and registration modals INSERT people (with an address), and its customers view UPDATES an existing
- * person's email. Denying the table, or the {@code email} column, breaks all of them. So the link columns are
- * closed here — they are what the claim and the invitation depend on, and nothing live writes them — and
- * {@code email} stays open.
+ * <p><b>{@code person} is CLOSED to clients as of 2026-09-24 — step 2b of the plan.</b> No client writes a
+ * person row now: not a field, not an insert, not an update. The React apps reached this point first, by
+ * moving every person write to an endpoint that takes the caller's identity from the session rather than
+ * from the payload — UpdatePersonDetails, AddMember, UpdateCustomer, CreateAccountOwner, SetResident,
+ * UpdateResident, RemoveCustomers, MergeDuplicatePersons, MergeIntoAccount, UpdateUser. What kept the table
+ * open after that was the legacy JavaFX back office: its reception and registration modals INSERT people
+ * with an address, and its customers view UPDATES an existing person's email. Those three screens are now
+ * refused, which the one remaining user of that client accepted on 2026-09-24 — it is being retired, and
+ * they do not use it to write people.
  *
- * <p><b>Be exact about what that leaves, because it is easy to understate.</b> It does not take a raw or
+ * <p><b>What closing it actually shuts, because the hole was subtle.</b> It did not take a raw or
  * hand-crafted statement: {@code OwnerLoginWritePolicy} guards only an OWNER's email, and every row a claim
- * targets is a non-owner — so an ORDINARY client write, the shape a change set produces, can point a stranger's
- * member row at the caller's own address, after which {@code claimMembers} links it legitimately. Two steps
- * where it used to be one, and much narrower, but open. Closing it needs those three legacy screens moved
- * server-side (or that app retired), or the person-ownership rule the plan lists as item C. Nor is {@code backoffice} here: the back office's
- * super-admin toggle writes it, and its own rule in {@link ProtectedEntityWritesJob} is still observe-only.
+ * targets is a non-owner — so an ORDINARY client write, the shape a change set produces, could point a
+ * stranger's member row at the caller's own address, after which {@code claimMembers} would link it
+ * legitimately. Two steps rather than one, and easy to miss precisely because each step looked lawful. The
+ * table being shut is what ends it; the person-ownership rule the plan lists as item C is no longer the only
+ * way there.
+ *
+ * <p>The two link columns stay listed below even though the table now covers them. That is deliberate
+ * belt-and-braces: they are what the claim and the invitation depend on, and if somebody ever reopens the
+ * table for one legitimate field they should not silently reopen those. {@code backoffice} is NOT here and
+ * never was on this table — the super-admin toggle writes it on {@code frontend_account}, governed by its own
+ * rule in {@link ProtectedEntityWritesJob}, still observe-only.
  *
  * <p>Enforced on every client write regardless of the observe-only switch in {@link ProtectedEntityWritesJob}:
  * that switch protects legitimate screens from a rule nobody has watched yet, and none exists here. Checked
@@ -57,6 +66,10 @@ final class ClientWriteSecrets {
     static void declare() {
         // Sign-in links: a client that could write one could sign in as anybody
         ClientWriteDenyList.denyTable("magic_link");
+        // People. Every legitimate person write is an endpoint now, on both apps; see the class note.
+        // This is step 2b of the front-office write-authorization plan, and it is what finally closes
+        // the two-step claim: point a stranger's member row at your own address, then claim it.
+        ClientWriteDenyList.denyTable("person");
         // The LINK between a person and an account, which says "this row, in somebody else's account,
         // IS this human". Setting it hands that account the row's bookings, and TAKES its recordings
         // (the media screens stop listing a linked row in its own account). Any client could set it on
@@ -115,8 +128,8 @@ final class ClientWriteSecrets {
         // its own, and nothing to anybody else's.
         for (String column : new String[] { "transmitted", "transmission_date", "error", "magic_link_id" })
             ClientWriteDenyList.denyColumn("mail", column);
-        Console.log("🛡 Client writes may not touch sign-in links or invitation authorship, a mail's"
-                    + " delivery record, nor the account's sign-in, status or privilege columns"
-                    + " (magic_link entirely, plus 23 columns across 4 tables)");
+        Console.log("🛡 Client writes may not touch people, sign-in links or invitation authorship, a"
+                    + " mail's delivery record, nor the account's sign-in, status or privilege columns"
+                    + " (magic_link and person entirely, plus 23 columns across 4 tables)");
     }
 }

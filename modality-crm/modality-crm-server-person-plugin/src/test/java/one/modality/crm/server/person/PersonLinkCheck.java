@@ -86,6 +86,16 @@ public class PersonLinkCheck {
         // and from the repository root.
         String secrets = readClientWriteSecrets();
         check("the invitation deny rules were found", secrets.contains("denyColumn(\"invitation\""));
+
+        // The claim is only as safe as the table it reads. claimMembers takes no arguments and derives
+        // its rows from the caller's own verified sign-in address — but that was never the whole story:
+        // an ordinary client write could point a STRANGER's member row at the caller's address first,
+        // and the claim would then link it entirely lawfully. Two steps, each one looking legitimate.
+        // Shutting the table is what ends that, so the endpoint and this deny rule are safe together
+        // and not separately. If somebody reopens person to clients, claimMembers has to be revisited
+        // in the same breath — which is what this assertion is here to force.
+        check("person is CLOSED to clients, which is what makes the claim safe",
+            secrets.contains("denyTable(\"person\")"));
         // The exact list, not each name on its own: "token" also occurs in pwdreset_token, so a
         // per-column contains() could not fail for the one column that matters most.
         check("clients may not write invitation token or authorship",

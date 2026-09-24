@@ -112,8 +112,16 @@ final class ClientWriteInventory implements ProtectedEntityWriteRegistry.WriteIn
      * exactly where this class is meant to help: the inventory is the evidence for the allowlist, and
      * a shape assumed to be a client's — then allowed for, so as not to break it — widens a client
      * rule to fit a write no client makes. Check a shape against the code that composes it before
-     * allowing for it. {@code ClientSubmitGuard} is unaffected: it sits on the two bus endpoints, so
-     * these server writes never reach it.
+     * allowing for it.
+     *
+     * <p><b>The two paths, named, because the difference decides what a deny rule will actually do.</b>
+     * This inventory is invoked from {@code DqlSubmitInterceptorInitializer} — the INTERCEPTOR, which
+     * runs on every submit, server ones included. {@code ClientWriteDenyList} is consulted from
+     * {@code ClientSubmitGuard}, which only {@code ExecuteSubmitMethodEndpoint} and
+     * {@code ExecuteSubmitBatchMethodEndpoint} call. The inventory is therefore a strict SUPERSET of
+     * what a deny rule can refuse. A shape appearing here is a prompt to find out which path produced
+     * it — never on its own a reason to believe {@code denyTable} would block it, nor that it would
+     * not.
      *
      * <p>Read here rather than passed in because this is the one moment it can be: the framework asks
      * before the first async hop, while the caller's state is still on the thread.
