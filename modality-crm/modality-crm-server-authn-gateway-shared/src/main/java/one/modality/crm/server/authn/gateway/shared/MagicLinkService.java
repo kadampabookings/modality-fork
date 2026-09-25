@@ -300,8 +300,8 @@ public final class MagicLinkService {
             // the request tab (prevents cross-user collisions while two users happen to share a
             // 6-digit value in the same window, and is what makes the guessing cap meaningful).
             //
-            // BOOKING_ACCESS rows carry a code too, but it is never shown to anyone (no mail or
-            // screen renders it; guests reach their booking by the token in the link), and it lives
+            // BOOKING_ACCESS rows minted before 2026-09-25 carry a code too (newer ones have none),
+            // but it is never shown to anyone (no mail or screen renders it), and it lives
             // a year with no originating tab to scope it to. Redeeming one by value would be a
             // guessable, un-cappable path to a guest's booking and contact details, so the code
             // branch treats it as a miss — the same "not found" as a wrong guess.
@@ -404,20 +404,21 @@ public final class MagicLinkService {
     }
 
     /**
-     * Creates a BOOKING_ACCESS magic link for a guest booking confirmation email.
+     * Creates the BOOKING_ACCESS link behind a booking cart's guest access (see GuestBookingAccess).
      * Unlike LOGIN links this link is long-lived (1 year) and multi-use — the guest can
      * click it from any device or browser without getting "already used" errors.
      *
      * @param email          the guest's email address
      * @param requestedPath  the path to redirect to after authentication (e.g. "/order/42")
-     * @param clientOrigin   the frontend origin URL (e.g. "https://kbs.kadampa.net")
+     * @param origin         the front office's origin as this server is configured with it — never a
+     *                       caller's — or null when none is configured (the link is then stored as a path)
      * @param activityPath   the magic-link route pattern (e.g. "/magic-link/:token")
      * @param lang           the guest's preferred language code
      * @param dataSourceModel the data source to write to
      * @return the persisted MagicLink entity with its primary key and link URL set
      */
-    public static Future<MagicLink> createBookingAccessLink(String email, String requestedPath, String clientOrigin, String activityPath, String lang, DataSourceModel dataSourceModel) {
-        return createBookingAccessLink(generateToken(), email, requestedPath, clientOrigin, activityPath, lang, dataSourceModel);
+    public static Future<MagicLink> createBookingAccessLink(String email, String requestedPath, String origin, String activityPath, String lang, DataSourceModel dataSourceModel) {
+        return createBookingAccessLink(generateToken(), email, requestedPath, origin, activityPath, lang, dataSourceModel);
     }
 
     /**
@@ -429,23 +430,24 @@ public final class MagicLinkService {
      * (Its former justification, a document.magic_link_token round-trip needed by the
      * [bookingUrl] bracket pattern, no longer exists: that resolves via the cart.)
      * <p>
-     * Always assigns a 6-digit verification code alongside the token, so the same link
-     * can be redeemed either via URL (token) or via code entry (verification code) on
-     * the post-install PWA login screen.
+     * Mints NO verification code. One used to be assigned alongside the token for a PWA
+     * code-entry screen, but the code path redeems LOGIN rows only, so it could never be
+     * used — while living a year, unscoped to any tab, as a six-digit secret in the table.
      */
-    private static Future<MagicLink> createBookingAccessLink(String token, String email, String requestedPath, String clientOrigin, String activityPath, String lang, DataSourceModel dataSourceModel) {
-        String normalizedOrigin = clientOrigin;
+    private static Future<MagicLink> createBookingAccessLink(String token, String email, String requestedPath, String origin, String activityPath, String lang, DataSourceModel dataSourceModel) {
+        String normalizedOrigin = origin;
         if (normalizedOrigin != null && !normalizedOrigin.startsWith("http")) {
             normalizedOrigin = (normalizedOrigin.contains(":80") ? "http" : "https") + normalizedOrigin.substring(normalizedOrigin.indexOf("://"));
         }
-        String link = normalizedOrigin + activityPath.replace(":token", token);
+        // With no origin configured the column holds the path alone, the shape a support pass's link has. Nothing
+        // mails this column for a booking-access row — letters link to the cart — so it is a record, not a URL.
+        String link = (normalizedOrigin == null ? "" : normalizedOrigin) + activityPath.replace(":token", token);
         UpdateStore updateStore = UpdateStore.create(dataSourceModel);
         MagicLink magicLink = updateStore.insertEntity(MagicLink.class);
         // loginRunId is required NOT NULL in the DB; for server-generated links there is no
         // originating client session, so we use a sentinel value.
         magicLink.setLoginRunId("server-generated");
         magicLink.setToken(token);
-        magicLink.setVerificationCode(generateVerificationCode());
         magicLink.setEmail(email);
         magicLink.setLang(lang != null ? lang : "en");
         magicLink.setLink(link);
@@ -593,6 +595,14 @@ public final class MagicLinkService {
     }
 
     public static Future<Person> loadUserPersonFromMagicLink(MagicLink magicLink) {
+        // A booking-access link never resolves to an account, even when one exists for its address. It stands for
+        // "whoever holds this booking's cart link": nothing proves its holder controls the address — it is never
+        // mailed as a sign-in, and a back-office booking carries whatever address staff typed. So redeemed anywhere
+        // it opens a guest session at most, the grant the cart page gives. Until 2026-09-25 a booking-access token
+        // presented at /magic-link signed its bearer into the account of that address, which made every such row
+        // in the table a year-long sign-in credential for whoever could read it.
+        if (magicLink.isBookingAccess())
+            return Future.succeededFuture(null);
         String email = Objects.coalesce(magicLink.getOldEmail(), magicLink.getEmail());
         return magicLink.getStore()
             // Only the frontendAccount id is ever needed. This used to select the password hash as well, for the

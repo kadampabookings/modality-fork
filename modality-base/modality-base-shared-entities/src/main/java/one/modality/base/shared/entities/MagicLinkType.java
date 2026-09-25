@@ -5,8 +5,9 @@ package one.modality.base.shared.entities;
  *
  * <ul>
  *   <li>{@link #LOGIN} — standard password-recovery / sign-in link: short-lived (10 min), single-use.</li>
- *   <li>{@link #BOOKING_ACCESS} — embedded in guest booking confirmation emails: long-lived (1 year),
- *       multi-use so the guest can open it from any device at any time.</li>
+ *   <li>{@link #BOOKING_ACCESS} — the guest access behind a booking cart's /cart/:uuid page, which the
+ *       confirmation letters link to: long-lived (1 year), multi-use so the guest can open it from any
+ *       device at any time, and never a sign-in — redeemed anywhere, it opens a guest session at most.</li>
  *   <li>{@link #SUPPORT_VIEW} — issued to a support member to open a customer's front office read-only:
  *       very short-lived (2 min to redeem), single-use, never emailed.</li>
  *   <li>{@link #BACKOFFICE_VIEW} — issued to a super admin to open the back office as another

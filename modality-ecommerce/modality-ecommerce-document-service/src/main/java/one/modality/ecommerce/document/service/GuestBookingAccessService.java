@@ -4,23 +4,25 @@ import dev.webfx.platform.async.Future;
 import dev.webfx.stack.orm.domainmodel.DataSourceModel;
 
 /**
- * Server-side extension point: stores a BOOKING_ACCESS magic link record in the
- * database after a guest booking is successfully submitted.
+ * Server-side extension point: keeps a booking cart's BOOKING_ACCESS link — what lets somebody
+ * without an account open their booking from the letter's /cart/:cartUuid button — in line with
+ * the bookings in it, after a booking in that cart is submitted.
  *
- * The implementation mints the link's bearer token itself, from a cryptographically
- * secure source. It used to be passed in from ServerDocumentServiceProvider, which
- * generated it with the GWT-compatible Uuid helper — Math.random(), i.e. a 48-bit LCG
- * on the JVM, whose whole output stream follows from a couple of observed values. The
- * parameter is gone rather than fixed in place so no future caller can reintroduce a
- * weak one. (The document.magic_link_token round-trip that once justified passing it
- * is long gone: [bookingUrl] derives the cart URL from person.frontend_account_id.)
+ * The implementation decides everything from the database: whether the cart gets a link at all
+ * (every booking in it for one address, none belonging to an account, none billed to a payer),
+ * the address it is for, the host it points at (this server's configured front office), and the
+ * bearer token, minted from a cryptographically secure source. The caller supplies none of them.
+ * The token parameter went first — ServerDocumentServiceProvider generated it with the
+ * GWT-compatible Uuid helper, Math.random(), i.e. a 48-bit LCG on the JVM — and the address and
+ * origin followed, so no future caller can hand the link a weak token, somebody else's address or
+ * its own host.
  *
  * The confirmation email itself is handled entirely by the existing database-driven
  * letter system (trigger_document_generate_mails_on_booking + interpret_brackets).
  *
  * The interface lives in modality-ecommerce-document-service so that
  * ServerDocumentServiceProvider can call it without a circular dependency on
- * modality-crm. The implementation is in the CRM magic-link plugin and discovered
+ * modality-crm. The implementation is in the CRM guest gateway plugin and discovered
  * via ServiceLoader.
  *
  * @author Bruno Salmon
@@ -28,24 +30,12 @@ import dev.webfx.stack.orm.domainmodel.DataSourceModel;
 public interface GuestBookingAccessService {
 
     /**
-     * Persist the magic_link record for a guest booking and link it to the booking cart.
-     * The cart link enables /cart/:cartUuid authentication and invalidation when the
-     * guest later creates an account.
+     * Gives the cart the guest link its bookings call for — keeping a live one it already has — or
+     * withdraws the link it should no longer carry.
      *
-     * @param documentPk     primary key of the newly created Document (used as requestedPath)
-     * @param cartPk         primary key of the booking cart to link to the magic link
-     * @param personEmail    guest email address
-     * @param personLang     guest preferred language (2-char code, e.g. "en")
-     * @param clientOrigin   frontend origin used to compose magic_link.link, e.g. "https://kbs.kadampa.net"
-     * @param dataSourceModel data source to write to
-     * @return future that completes when the magic_link record is stored and cart linked
+     * @param cartPk          primary key of the booking cart a booking was just submitted into
+     * @param dataSourceModel data source to read and write
+     * @return future that completes once the cart's link is in line with its bookings
      */
-    Future<Void> registerBookingAccessMagicLink(
-        Object documentPk,
-        Object cartPk,
-        String personEmail,
-        String personLang,
-        String clientOrigin,
-        DataSourceModel dataSourceModel
-    );
+    Future<Void> syncCartAccessLink(Object cartPk, DataSourceModel dataSourceModel);
 }
