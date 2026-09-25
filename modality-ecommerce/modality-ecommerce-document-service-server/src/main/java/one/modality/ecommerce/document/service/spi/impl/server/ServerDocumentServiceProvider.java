@@ -374,8 +374,11 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
         // no longer holds the original caller's session — it would return null, incorrectly making every
         // queued registered-user booking look like a guest booking and generating a spurious magic link.
         Object userId = request.userId();
-        boolean isGuestBooking = getUserAccountId(userId) == null;
-        String clientOrigin = request.argument().clientOrigin();
+        // Whose booking may need a guest link: a guest's own, and any that staff enter in the back office — for
+        // somebody who may well have no account. Which of them get one is decided from the database
+        // (GuestBookingAccessService), never from this request. The backoffice flag, which the client can sway,
+        // only decides whether to look: claiming it on a front-office account's own booking just costs a lookup.
+        boolean mayNeedGuestLink = getUserAccountId(userId) == null || request.backoffice();
 
         // Note: At this point, the document may be null, but in that case we at least have documentLine not null
         return HistoryRecorder.prepareDocumentHistoriesBeforeSubmit(request.argument().historyComment(), request.document(), request.documentLine(), userId)
@@ -385,20 +388,12 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
                 return submitChangesAndPrepareResult(request.updateStore(), document, request.backoffice())
                     .compose(result -> { // Completing the history recording (changes column with resolved primary keys)
                         if (result.status() == DocumentChangesStatus.APPROVED) {
-                            // For guest bookings: record the magic link and link it to the cart. The
-                            // link's bearer token is minted by MagicLinkService from a secure source —
-                            // this caller neither supplies nor sees it.
-                            // The bracket pattern [bookingUrl] no longer needs the token on the document —
-                            // it now derives the cart URL from person.frontend_account_id check.
-                            if (isGuestBooking && clientOrigin != null) {
-                                registerBookingAccessMagicLink(
-                                    result.documentPrimaryKey(),
-                                    result.cartPrimaryKey(),
-                                    document.getEmail(),
-                                    document.getPersonLang(),
-                                    clientOrigin
-                                );
-                            }
+                            // Somebody without an account opens their booking from the letter's /cart/ button,
+                            // through the cart's guest link. Whether the cart gets (or keeps) one, for which
+                            // address, on which host, with which token: all decided and minted server-side —
+                            // this caller supplies none of it and never sees the token.
+                            if (mayNeedGuestLink)
+                                syncCartAccessLink(result.cartPrimaryKey());
                             return HistoryRecorder.completeDocumentHistoriesAfterSubmit(histories, request.argument().documentEvents())
                                 .compose(ignoredVoid -> consumeMateInviteTokenIfPresent(request, result));
                         }
@@ -590,18 +585,18 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
     }
 
     /**
-     * Persists the magic_link record for a guest booking. Fire-and-forget — failures are
+     * Brings the cart's guest link in line with its bookings. Fire-and-forget — failures are
      * logged but do not affect the booking result already returned to the client.
-     * The confirmation email was already queued by the DB trigger during the document INSERT.
+     * The confirmation email was already queued by the DB trigger during the document INSERT,
+     * and links to the cart, not to this link — so a first click racing this still works
+     * (the cart page mints the link itself when the cart has none).
      */
-    private static void registerBookingAccessMagicLink(Object documentPk, Object cartPk, String personEmail, String personLang, String clientOrigin) {
-        if (personEmail == null || clientOrigin == null) return;
+    private static void syncCartAccessLink(Object cartPk) {
+        if (cartPk == null) return;
         ServiceLoader<GuestBookingAccessService> loader = ServiceLoader.load(GuestBookingAccessService.class);
         for (GuestBookingAccessService service : loader) {
-            service.registerBookingAccessMagicLink(
-                documentPk, cartPk, personEmail, personLang, clientOrigin,
-                DataSourceModelService.getDefaultDataSourceModel()
-            ).onFailure(err -> Console.log("GuestBookingAccessService failed for document " + documentPk + ": " + err));
+            service.syncCartAccessLink(cartPk, DataSourceModelService.getDefaultDataSourceModel())
+                .onFailure(err -> Console.log("GuestBookingAccessService failed for cart " + cartPk + ": " + err));
             break; // use first registered implementation
         }
     }

@@ -11,6 +11,11 @@ package one.modality.crm.shared.services.authn;
  * over (iOS Safari isolated storage), so they enter their email to receive a
  * fresh link to their booking cart.
  *
+ * {@code clientOrigin} is IGNORED by the server, which links to its own configured
+ * front office. It stays in the record only so clients already deployed keep
+ * decoding; this request needs no sign-in, so an origin taken from it would let
+ * anyone point a genuine KBS mail's button at their own host.
+ *
  * @author Bruno Salmon
  */
 public record SendBookingAccessEmailCredentials(
