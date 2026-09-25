@@ -93,10 +93,19 @@ final class ClientReadInventory implements ClientReadInspectionRegistry.ReadInsp
      * How many expression kinds a shape names.
      *
      * <p>Higher than the others because this list is the point of the exercise: it is what a restricted client
-     * dialect would be defined from, and a truncated one would hide exactly the construct nobody expected. The
-     * whole grammar is under 60 classes and a single statement uses a handful, so 24 truncates nothing real.
+     * dialect would be defined from, and a truncated one would hide exactly the construct nobody expected.
+     *
+     * <p><b>Above the whole grammar, on purpose, so it can never truncate.</b> It was 24, on the reasoning that
+     * a statement uses a handful — and production then produced one using exactly 24, which is the value at
+     * which the next construct would have been replaced by {@code ,+1}: a report that something was dropped
+     * without saying what, in the one field where WHAT is the entire question.
+     *
+     * <p>The other caps bound something a caller can compose without limit: dot paths walk foreign-key cycles,
+     * conditions can be added at will. This one does not. The construct list is drawn from a fixed set of term
+     * classes — under 60 of them — so a cap below that bounds something the grammar already bounds, and buys
+     * nothing for the cost of blinding the census.
      */
-    private static final int MAX_CONSTRUCTS_NAMED = 24;
+    private static final int MAX_CONSTRUCTS_NAMED = 64;
 
     /** How long one name may be — a dot path can be walked round a foreign-key cycle indefinitely. */
     private static final int MAX_ENTRY_LENGTH = 60;
@@ -105,9 +114,16 @@ final class ClientReadInventory implements ClientReadInspectionRegistry.ReadInsp
      * And the whole key, so that no single log line or map entry can be made unbounded by composing one.
      *
      * <p>Raised from 400 when the construct list joined: the parts are each capped, but four capped lists plus a
-     * verdict no longer fit in 400, and a shape truncated mid-list silently merges with its neighbours.
+     * verdict no longer fit in 400, and a shape truncated mid-list silently merges with its neighbours. Raised
+     * again from 800 when the construct cap went to the size of the grammar — the list it has to leave room for
+     * grew with it.
+     *
+     * <p>The construct list is now exempt: it is appended AFTER this limit is applied to everything else, so a
+     * long shape loses tables and bound fields rather than the one field the observation exists to collect.
+     * That is the opposite of the earlier choice to put {@code uses=} last, which was right when truncation was
+     * about log readability and wrong once the list became the point.
      */
-    private static final int MAX_SHAPE_LENGTH = 800;
+    private static final int MAX_SHAPE_LENGTH = 1400;
 
     /**
      * One entry per distinct shape.
@@ -239,12 +255,13 @@ final class ClientReadInventory implements ClientReadInspectionRegistry.ReadInsp
                + (shape.hasWhere() ? "" : " no-where")
                + " " + boundOf(shape)
                + " fn=" + capped(shape.guardFunctions(), MAX_FIELDS_NAMED)
-               + " tables=" + capped(shape.touchedTables(), MAX_TABLES_NAMED)
-               // LAST, and the cap raised to fit it. Inserted ahead of `tables=` it pushed the table list past
-               // MAX_SHAPE_LENGTH, so two reads touching different tables collapsed into one key — the same
-               // truncation trap the verdict was moved to the front to escape, one field further down.
-               + " uses=" + capped(shape.constructs(), MAX_CONSTRUCTS_NAMED);
-        return key.length() <= MAX_SHAPE_LENGTH ? key : key.substring(0, MAX_SHAPE_LENGTH) + "…";
+               + " tables=" + capped(shape.touchedTables(), MAX_TABLES_NAMED);
+        // LAST in the key, and EXEMPT from the length limit: the limit is applied to everything above, then
+        // this is appended whole. A long shape therefore loses tables or bound fields — lists whose point is
+        // readability — rather than the construct list, which is the one thing the observation exists to
+        // collect and the one field where a silent omission cannot be noticed.
+        String uses = " uses=" + capped(shape.constructs(), MAX_CONSTRUCTS_NAMED);
+        return (key.length() <= MAX_SHAPE_LENGTH ? key : key.substring(0, MAX_SHAPE_LENGTH) + "…") + uses;
     }
 
     /**
