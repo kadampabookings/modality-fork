@@ -116,7 +116,12 @@ public final class SquareRestApiJob implements ApplicationJob {
                     .onSuccess(v -> ctx.response().setStatusCode(HttpResponseStatus.OK_200).end())
                     .onFailure(ex -> {
                         if (ex.getMessage().contains("No referenceId was found")) {
-                            Console.error(logPrefix + "Assuming this payment is from another POS (Café or Shop) 🤷️", ex);
+                            // NOT an error, and the code beside it already says so: this branch answers 200 and
+                            // moves on, while the real failure below answers 500. Logged at ERROR it was 363 lines
+                            // a day and, with the SockJS close noise, 92% of the whole error channel — which is why
+                            // 180 genuine authorization failures sat unread behind it. No stack trace either: an
+                            // expected outcome has nothing to diagnose.
+                            Console.log(logPrefix + "Payment is from another POS (Café or Shop), no referenceId 🤷️");
                             ctx.response().setStatusCode(HttpResponseStatus.OK_200).end();
                         } else {
                             Console.error(logPrefix + "An error occurred while processing the Square webhook", ex);
