@@ -54,6 +54,16 @@ final class DomainModelSnapshotLoader {
             new InlineFunction("searchMatchesPerson", "p", new Type[]{new DomainClassType("Person")}, "p?.abcNames like :abcSearchLike or p?.email like :searchEmailLike", "Person", domainModel.getParserDomainModelReader()).register();
             new InlineFunction("accountCanAccessPersonMedias", "a,p", new Type[]{new ObjectType(Object.class), new DomainClassType("Person")}, "p?.frontendAccount=a and p?.accountPerson=null or p?.accountPerson?.frontendAccount=a", "Person", domainModel.getParserDomainModelReader()).register();
             new InlineFunction("accountCanAccessPersonOrders", "a,p", new Type[]{new ObjectType(Object.class), new DomainClassType("Person")}, "p?.frontendAccount=a or p?.accountPerson?.frontendAccount=a", "Person", domainModel.getParserDomainModelReader()).register();
+            // How many items a saved list holds. Declared NOT evaluable (the last argument): the body is a
+            // correlated count that only the database can answer, so it must compile INTO the SQL even in a
+            // select list, where the default is to emit the argument's persistent terms and let a client with
+            // the DQL runtime work it out. The React clients have no such runtime.
+            //
+            // It exists so the five back-office screens that need this count stop writing the subquery
+            // themselves. Their statement then contains a call and no SelectExpression, which is what a
+            // restricted client dialect wants, and its text stops varying with anything. See step 2b of
+            // docs/security/read-authorization-plan.md.
+            new InlineFunction("listItemCount", "l", new Type[]{new DomainClassType("List")}, "(select count(1) from ListItem where list=l.id)", "List", domainModel.getParserDomainModelReader(), false).register();
             return domainModel;
         } catch (Exception e) {
             e.printStackTrace();
