@@ -149,8 +149,15 @@ final class InvitationRules {
                 .setParameters(callerPersonId, inviteeId, inviterPays)
                 .build())))
             .compose(after -> {
-                String pendingToken = after == null || after.getRowCount() == 0 ? null
-                    : after.getValue(0, 0) == null ? null : String.valueOf(after.getValue(0, 0));
+                // Through an Object local, and it MUST stay that way. QueryResult.getValue is
+                // `<T> T`, so String.valueOf(result.getValue(...)) lets javac infer T from the most
+                // specific applicable overload — String.valueOf(char[]) — and emit a checkcast to
+                // [C. The column is a String, so every call threw
+                // "class java.lang.String cannot be cast to class [C" at runtime while compiling
+                // and passing every source-text check. This endpoint was unusable from the day it
+                // was built (2026-09-21) until the first person tried it (2026-09-26).
+                Object rawToken = after == null || after.getRowCount() == 0 ? null : after.getValue(0, 0);
+                String pendingToken = rawToken == null ? null : String.valueOf(rawToken);
                 return pendingToken == null ? refusal(NOT_CREATED_KEY) : Future.succeededFuture(pendingToken);
             });
     }

@@ -170,8 +170,13 @@ final class PersonMergeCascade {
             return Set.of("(the catalogue could not be read)");
         Set<String> accountedFor = PersonReferences.accountedFor();
         for (int row = 0; row < catalogue.getRowCount(); row++) {
-            String table = PersonReferences.unquote(String.valueOf(catalogue.getValue(row, 0)));
-            String column = String.valueOf(catalogue.getValue(row, 1));
+            // Object locals, deliberately: QueryResult.getValue is `<T> T`, and passing it straight
+            // to String.valueOf infers T as char[] (the most specific overload) and emits a
+            // checkcast. See InvitationRules, where the same two lines threw on every call.
+            Object rawTable = catalogue.getValue(row, 0);
+            Object rawColumn = catalogue.getValue(row, 1);
+            String table = PersonReferences.unquote(String.valueOf(rawTable));
+            String column = String.valueOf(rawColumn);
             String name = table + "." + column;
             if (!accountedFor.contains(name))
                 unknown.add(name);

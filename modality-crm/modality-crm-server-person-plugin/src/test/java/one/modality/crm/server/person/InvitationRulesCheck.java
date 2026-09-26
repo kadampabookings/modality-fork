@@ -1,5 +1,10 @@
 package one.modality.crm.server.person;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+
 import java.util.HashSet;
 import java.util.Set;
 
@@ -15,6 +20,26 @@ import java.util.Set;
  * and the token comes from a generator with real entropy rather than from the argument.
  */
 public class InvitationRulesCheck {
+
+    /** The package's main sources, found by walking up like AccountOwnerCheck.readSource does. */
+    private static Path mainPackageDir() {
+        String relative = "modality-fork/modality-crm/modality-crm-server-person-plugin/src/main/java/"
+                          + "one/modality/crm/server/person";
+        Path here = Path.of(System.getProperty("user.dir")).toAbsolutePath();
+        for (Path at = here; at != null; at = at.getParent()) {
+            Path candidate = at.resolve(relative);
+            if (Files.isDirectory(candidate))
+                return candidate;
+        }
+        throw new IllegalStateException("package sources not found from " + here);
+    }
+
+    private static String readInvitationRules() {
+        return AccountOwnerCheck.readSource(
+            "modality-fork/modality-crm/modality-crm-server-person-plugin/src/main/java/"
+            + "one/modality/crm/server/person/InvitationRules.java");
+    }
+
 
     static int pass = 0, fail = 0;
 
@@ -49,6 +74,41 @@ public class InvitationRulesCheck {
         check("a token is URL-safe", token.chars().allMatch(c ->
             Character.isLetterOrDigit(c) || c == '-' || c == '_'));
         check("a token carries no padding", !token.contains("="));
+
+        // --- the inference trap that made this endpoint unusable for five days ---
+        //
+        // QueryResult.getValue is `<T> T`. Passing it straight to String.valueOf lets javac infer T
+        // from the most specific applicable overload — String.valueOf(char[]) — and emit a checkcast
+        // to [C. The column is a String, so EVERY call threw
+        // "class java.lang.String cannot be cast to class [C", while compiling cleanly and passing
+        // every source-text check in this package. createInvitation was broken from the day it was
+        // built until somebody first pressed the button.
+        //
+        // Scanned across the package, and with comment lines stripped: the fix's own explanation
+        // names the construct it forbids, and an assertion that reads whole files would fail on that
+        // prose rather than on code.
+        List<String> trap = new ArrayList<>();
+        try (var files = Files.list(mainPackageDir())) {
+            for (Path f : files.toList()) {
+                if (!f.getFileName().toString().endsWith(".java"))
+                    continue;
+                int line = 0;
+                for (String text : Files.readAllLines(f)) {
+                    line++;
+                    String code = text.trim();
+                    if (code.startsWith("//") || code.startsWith("*") || code.startsWith("/*"))
+                        continue;
+                    if (code.matches(".*String\\.valueOf\\([A-Za-z_][A-Za-z0-9_]*\\.getValue\\(.*"))
+                        trap.add(f.getFileName() + ":" + line);
+                }
+            }
+        } catch (Exception e) {
+            check("the package could be scanned: " + e, false);
+        }
+        check("no String.valueOf() takes a generic getValue() directly " + trap, trap.isEmpty());
+        check("the invitation read-back goes through an Object local",
+            readInvitationRules().contains("Object rawToken =")
+            && readInvitationRules().contains("String.valueOf(rawToken)"));
 
         System.out.println(pass + " passed, " + fail + " failed");
         if (fail > 0)
