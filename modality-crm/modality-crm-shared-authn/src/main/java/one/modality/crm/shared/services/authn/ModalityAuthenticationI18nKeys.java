@@ -6,6 +6,7 @@ public interface ModalityAuthenticationI18nKeys {
     Object AuthnBackofficeMethodNotAllowedError = "AuthnBackofficeMethodNotAllowedError";
     Object AuthnEmailSignInClosedError = "AuthnEmailSignInClosedError";
     Object AuthnLastPasskeyWhilePasswordClosedError = "AuthnLastPasskeyWhilePasswordClosedError";
+    Object AuthnMagicLinkSuspendedError = "AuthnMagicLinkSuspendedError";
     Object AuthnNewPasswordTooShortError = "AuthnNewPasswordTooShortError";
     Object AuthnNoSuchUserAccountError = "AuthnNoSuchUserAccountError";
     Object AuthnNoUsablePasskeyError = "AuthnNoUsablePasskeyError";
@@ -13,19 +14,6 @@ public interface ModalityAuthenticationI18nKeys {
     Object AuthnPasskeyAdminNotPermittedError = "AuthnPasskeyAdminNotPermittedError";
     Object AuthnPasskeyError = "AuthnPasskeyError";
     Object AuthnPasskeyManagementError = "AuthnPasskeyManagementError";
-    /**
-     * The caller is signed in but this server never verified the session — no identity token, or one past
-     * its signed expiry, which pre-flip is tolerated rather than treated as a logout. Distinct from
-     * {@link #AuthnPasskeyManagementError} on purpose: the cure is to sign in again, and a caller told only
-     * that "the change could not be completed" has no reason to guess that.
-     */
-    Object AuthnSessionNotVerifiedError = "AuthnSessionNotVerifiedError";
-    /**
-     * Sign-in by emailed link or code is suspended because an alarm is raised — control 4 of
-     * docs/security/session-revocation-spec.md. Worded for the user as a temporary unavailability and
-     * never as a posture: the alarm is silent by design, so the message must read like any other outage.
-     */
-    Object AuthnMagicLinkSuspendedError = "AuthnMagicLinkSuspendedError";
     Object AuthnPasskeyNotApprovedError = "AuthnPasskeyNotApprovedError";
     Object AuthnPasskeyNotConfiguredError = "AuthnPasskeyNotConfiguredError";
     Object AuthnPasskeyRegistrationError = "AuthnPasskeyRegistrationError";
@@ -34,6 +22,7 @@ public interface ModalityAuthenticationI18nKeys {
     Object AuthnSecondFactorCodeError = "AuthnSecondFactorCodeError";
     Object AuthnSecondFactorNotEnrolledError = "AuthnSecondFactorNotEnrolledError";
     Object AuthnSecondFactorUnavailableError = "AuthnSecondFactorUnavailableError";
+    Object AuthnSessionNotVerifiedError = "AuthnSessionNotVerifiedError";
     Object AuthnTotpEnrolmentError = "AuthnTotpEnrolmentError";
     Object AuthnUnrecognizedUserIdError = "AuthnUnrecognizedUserIdError";
     Object AuthnUserOrPasswordEmptyError = "AuthnUserOrPasswordEmptyError";
