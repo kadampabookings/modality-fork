@@ -99,6 +99,46 @@ public class PersonMergeCheck {
         check("a quoted catalogue name compares equal", "session_user.user_id".equals(
             PersonReferences.unquote("\"session_user\"") + ".user_id"));
 
+        // --- the account guard, narrowed 2026-09-28 ---
+        //
+        // It used to refuse any duplicate with an account at all. Every person the /customers screen
+        // can show HAS an account — its list correlates on frontendAccount, so an account-less row
+        // never appears — so the screen's own purpose, two duplicate member rows in one account, was
+        // refused in every case. Production recorded no successful merge at all.
+        String merge = AccountOwnerCheck.readSource(
+            "modality-fork/modality-crm/modality-crm-server-person-plugin/src/main/java/"
+            + "one/modality/crm/server/person/PersonMergeCascade.java");
+        check("the merge source was found", !merge.isEmpty());
+        check("the duplicate is refused only when it IS the row a sign-in resolves to",
+            merge.contains("sameId(state.getValue(0, 7), duplicateId)"));
+        check("and separately when the two belong to different accounts",
+            merge.contains("DIFFERENT_ACCOUNT_KEY"));
+
+        // THE COUPLING THAT MATTERS. The guard asks "which row would a sign-in pick?" by repeating
+        // the login's own ordering. If the login ever changes how it resolves a person, this guard
+        // silently starts protecting the wrong row — so the two are asserted to still agree, and a
+        // change to either fails here rather than in production.
+        String login = AccountOwnerCheck.readSource(
+            "modality-fork/modality-crm/modality-crm-server-authn-gateway-usernamepassword-plugin/"
+            + "src/main/java/one/modality/crm/server/authn/gateway/"
+            + "ModalityPasswordAuthenticationGateway.java");
+        check("the login source was found", !login.isEmpty());
+        check("the login resolves its person by owner then id",
+            login.contains("order by owner desc, id limit 1"));
+        check("and the merge guard asks the SAME question of the duplicate's account",
+            merge.contains("order by p2.owner desc, p2.id limit 1"));
+
+        // --- and the screen can say both refusals ---
+        String service = AccountOwnerCheck.readSource(
+            "kbs3-react/backoffice/src/features/customers/services/person-merge-service.ts");
+        check("the client maps the sign-in refusal", service.contains("PersonMergeHasAccountError"));
+        check("and the different-account refusal",
+            service.contains("PersonMergeDifferentAccountError"));
+        String en = AccountOwnerCheck.readSource(
+            "kbs3-react/backoffice/src/features/customers/i18n/en.json");
+        check("both have English text, so neither shows a raw key",
+            en.contains("\"hasAccount\"") && en.contains("\"differentAccount\""));
+
         System.out.println(pass + " passed, " + fail + " failed");
         if (fail > 0)
             System.exit(1);

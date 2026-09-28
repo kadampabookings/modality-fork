@@ -48,6 +48,7 @@ final class PersonMergeCascade {
     static final String NO_SUCH_PERSON_KEY = "PersonMergeNoSuchPersonError";
     static final String HOLDS_GRANTS_KEY = "PersonMergeHoldsGrantsError";
     static final String HAS_ACCOUNT_KEY = "PersonMergeHasAccountError";
+    static final String DIFFERENT_ACCOUNT_KEY = "PersonMergeDifferentAccountError";
 
     /**
      * What the two people are, asked as one question: whether they exist, what owns them, and what would
@@ -67,7 +68,16 @@ final class PersonMergeCascade {
         "  (select count(*) from authorization_super_admin where super_admin_id = $2)" +
         "  + (select count(*) from authorization_organization_admin where admin_id = $2)" +
         "  + (select count(*) from authorization_organization_user_access where user_id = $2)" +
-        "  + (select count(*) from authorization_management where manager_id = $2 or user_id = $2)";
+        "  + (select count(*) from authorization_management where manager_id = $2 or user_id = $2)," +
+        "  (select frontend_account_id from person where id = $1)," +
+        // WHICH row a sign-in resolves to, asked exactly as the login asks it:
+        // ModalityPasswordAuthenticationGateway orders `owner desc, id` and takes the first. Not
+        // "owner = true" — an account with no owner row signs in as its lowest id, and an account
+        // with SEVERAL owner rows (which exist) signs in as the lowest of those. Approximating this
+        // would either refuse merges that are safe or permit the one that locks an account out.
+        "  (select id from person p2 where p2.frontend_account_id =" +
+        "     (select frontend_account_id from person where id = $2)" +
+        "   and not p2.removed order by p2.owner desc, p2.id limit 1)";
 
     /**
      * Every column the database says points at a person.
@@ -134,10 +144,25 @@ final class PersonMergeCascade {
                         // a merge's decision.
                         if (countAt(state, 5) > 0)
                             return refusal(HOLDS_GRANTS_KEY);
-                        // An account's person is not a duplicate to be deleted — the account would be left
-                        // with nobody able to sign in. Merging the ACCOUNTS is a different screen.
-                        if (state.getValue(0, 4) != null)
-                            return refusal(HAS_ACCOUNT_KEY);
+                        // An account's SIGN-IN person is not a duplicate to be deleted — the account
+                        // would be left with nobody able to sign in, or signing in as somebody else.
+                        //
+                        // This used to refuse any duplicate with an account at all, which is every
+                        // person the /customers screen can show (its list correlates on
+                        // frontendAccount, so an account-less row never appears). The screen's own
+                        // purpose — two duplicate member rows in one account — was therefore refused
+                        // in every case, and production recorded not one successful merge.
+                        Object duplicateAccountId = state.getValue(0, 4);
+                        if (duplicateAccountId != null) {
+                            if (sameId(state.getValue(0, 7), duplicateId))
+                                return refusal(HAS_ACCOUNT_KEY);
+                            // Different accounts IS the case the old message described. Repointing a
+                            // person across an account boundary is the accounts screen's job, and
+                            // doing it here would move somebody's bookings and media with no
+                            // approval from the account losing them.
+                            if (!sameId(state.getValue(0, 6), duplicateAccountId))
+                                return refusal(DIFFERENT_ACCOUNT_KEY);
+                        }
                         return checkReferencesThenMerge(keptId, duplicateId, callerUserId);
                     }));
             });
@@ -271,6 +296,12 @@ final class PersonMergeCascade {
 
     private static Future<Boolean> refusal(String key) {
         return Future.failedFuture("[%s] This merge was not carried out".formatted(key));
+    }
+
+    /** Two ids from the database are equal, whatever numeric types they arrived as. */
+    private static boolean sameId(Object a, Object b) {
+        Long left = Numbers.toLong(a), right = Numbers.toLong(b);
+        return left != null && left.equals(right);
     }
 
     private static long countAt(QueryResult result, int columnIndex) {
