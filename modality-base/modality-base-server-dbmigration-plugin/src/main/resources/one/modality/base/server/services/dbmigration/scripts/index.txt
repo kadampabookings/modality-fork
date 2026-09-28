@@ -113,3 +113,4 @@ V0110__money_transfer_date_change_recomputes_balances.sql
 V0111__organization_bunny_api_key_set.sql
 V0112__new_removed_flags.sql
 V0113__cart_uuid_must_be_unguessable.sql
+V0114__capture_breakfast_included_on_insert.sql
