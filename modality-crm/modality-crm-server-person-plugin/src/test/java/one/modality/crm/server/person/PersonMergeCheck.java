@@ -50,6 +50,10 @@ public class PersonMergeCheck {
         check("the account link follows the survivor", writesTable(statements, "person"));
         // recipient.person_id is ON DELETE SET NULL: forgetting it erases silently rather than refusing.
         check("mail recipients follow the survivor", writesTable(statements, "recipient"));
+        // No foreign key at all, so neither the catalogue check nor the delete would object: the row
+        // would just be left naming a person who no longer exists, and the merge would report success.
+        check("the share-mate's link to the room owner follows the survivor",
+            statements.stream().anyMatch(s -> s.contains("document_line") && s.contains("share_mate_owner_person_id")));
 
         // --- every table the list names is written ---
         boolean allNamed = true;
@@ -68,7 +72,8 @@ public class PersonMergeCheck {
         // --- the survivor's own references are cleared, not pointed at itself ---
         // The lock comes before everything, or the window it closes is still open: a booking committed
         // between a repoint and the delete is SET NULL rather than refused.
-        check("the duplicate's row is locked first", statements.get(0).equals("select id from person where id = $2 for update"));
+        check("the duplicate's row is locked first",
+            statements.get(0).equals("select id from person where id = $2 and id <> $1 for update"));
         check("the survivor's link to the duplicate is cleared before any repoint",
             indexOfFirst(statements, t -> t.contains("set account_person_id = null where id = $1"))
                 < indexOfFirst(statements, t -> t.startsWith("update \"person\" set")));
@@ -84,6 +89,16 @@ public class PersonMergeCheck {
 
         // --- nothing is issued twice ---
         check("no statement is issued twice", Set.copyOf(statements).size() == statements.size());
+
+        // --- every statement names both ids, because the binding is uniform ---
+        //
+        // runMerge binds the same two values to every statement, so one that mentions only $2 leaves
+        // $1 with nothing to infer a type from and Postgres refuses to prepare it: 42P18, at Parse
+        // time, before a row is touched. The lock and the final delete both read that way naturally,
+        // and both did — the merge could not complete at all, and nothing here could see it, because
+        // the statements are perfectly well-formed as text. This is the assertion that would have.
+        check("every statement names both ids, as the uniform binding requires",
+            statements.stream().allMatch(s -> s.contains("$1") && s.contains("$2")));
 
         // --- the privileged tables are refused, never repointed ---
         boolean noGrantWrites = PersonReferences.REFUSING.keySet().stream()
@@ -109,10 +124,25 @@ public class PersonMergeCheck {
             "modality-fork/modality-crm/modality-crm-server-person-plugin/src/main/java/"
             + "one/modality/crm/server/person/PersonMergeCascade.java");
         check("the merge source was found", !merge.isEmpty());
-        check("the duplicate is refused only when it IS the row a sign-in resolves to",
-            merge.contains("sameId(state.getValue(0, 7), duplicateId)"));
+
+        // Asked of the decision itself rather than of the source text around it: these are the cases
+        // that decide whose bookings move. (duplicateAccount, keptAccount, theAccount'sSignInPerson,
+        // duplicateId) -> refusal or null.
+        check("two rows in the same account merge",
+            PersonMergeCascade.accountRefusal(7L, 7L, 99L, 42L) == null);
+        check("the duplicate is refused when it IS the row a sign-in resolves to",
+            PersonMergeCascade.HAS_ACCOUNT_KEY.equals(PersonMergeCascade.accountRefusal(7L, 7L, 42L, 42L)));
         check("and separately when the two belong to different accounts",
-            merge.contains("DIFFERENT_ACCOUNT_KEY"));
+            PersonMergeCascade.DIFFERENT_ACCOUNT_KEY.equals(PersonMergeCascade.accountRefusal(8L, 7L, 99L, 42L)));
+
+        // THE HOLE THIS CLOSED. An account-less duplicate skipped the account comparison altogether,
+        // so the survivor could belong to ANY account: a caller holding RouteToCustomers in the same
+        // organization could name their own person as the survivor and absorb that person's bookings,
+        // and the dietary and health notes on their document lines, into their own account.
+        check("an account-less duplicate is refused, whatever account the survivor is in",
+            PersonMergeCascade.DIFFERENT_ACCOUNT_KEY.equals(PersonMergeCascade.accountRefusal(null, 7L, null, 42L)));
+        check("and two account-less people are not merged either",
+            PersonMergeCascade.DIFFERENT_ACCOUNT_KEY.equals(PersonMergeCascade.accountRefusal(null, null, null, 42L)));
 
         // THE COUPLING THAT MATTERS. The guard asks "which row would a sign-in pick?" by repeating
         // the login's own ordering. If the login ever changes how it resolves a person, this guard

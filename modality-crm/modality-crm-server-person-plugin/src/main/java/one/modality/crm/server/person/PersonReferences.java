@@ -118,14 +118,23 @@ final class PersonReferences {
     );
 
     /**
-     * The audit trail of person changes, which has no foreign key at all.
+     * Person references the database does not constrain, and which the catalogue check therefore cannot see.
      *
-     * <p>Repointed for the same reason {@code history.user_person_id} is — the record follows the surviving
-     * identity — but invisible to the catalogue check below, so it is named here or it is named nowhere.
+     * <p>{@code REFERENCES_SQL} asks {@code pg_constraint} for foreign keys. A column naming a person
+     * WITHOUT one is invisible to it, and invisible to the delete too: nothing refuses, and the row is
+     * simply left pointing at somebody who no longer exists. Named here or named nowhere.
+     *
+     * <p>The two trails are repointed for the same reason {@code history.user_person_id} is — the record
+     * follows the surviving identity. {@code document_line.share_mate_owner_person_id} is not a trail at
+     * all: it is the live link from a share-mate's line to the person whose room they are in, declared as
+     * a Person in the domain model and written on every mate booking, but carrying no foreign key. Rows
+     * whose owner person is already gone exist today (23 on staging when this was written), so this is a
+     * gap that other deletion paths are realising, not only a merge's to open.
      */
-    static final Map<String, String[]> UNCONSTRAINED_AUDIT = Map.of(
+    static final Map<String, String[]> UNCONSTRAINED = Map.of(
         "person_account_move", new String[] { "person_id", "changed_by_person_id" },
-        "person_link_change", new String[] { "person_id", "old_account_person_id", "new_account_person_id", "changed_by_person_id" }
+        "person_link_change", new String[] { "person_id", "old_account_person_id", "new_account_person_id", "changed_by_person_id" },
+        "document_line", new String[] { "share_mate_owner_person_id" }
     );
 
     /** Told to the caller when the catalogue holds a reference this file does not. */

@@ -144,28 +144,50 @@ final class PersonMergeCascade {
                         // a merge's decision.
                         if (countAt(state, 5) > 0)
                             return refusal(HOLDS_GRANTS_KEY);
-                        // An account's SIGN-IN person is not a duplicate to be deleted — the account
-                        // would be left with nobody able to sign in, or signing in as somebody else.
-                        //
-                        // This used to refuse any duplicate with an account at all, which is every
-                        // person the /customers screen can show (its list correlates on
-                        // frontendAccount, so an account-less row never appears). The screen's own
-                        // purpose — two duplicate member rows in one account — was therefore refused
-                        // in every case, and production recorded not one successful merge.
-                        Object duplicateAccountId = state.getValue(0, 4);
-                        if (duplicateAccountId != null) {
-                            if (sameId(state.getValue(0, 7), duplicateId))
-                                return refusal(HAS_ACCOUNT_KEY);
-                            // Different accounts IS the case the old message described. Repointing a
-                            // person across an account boundary is the accounts screen's job, and
-                            // doing it here would move somebody's bookings and media with no
-                            // approval from the account losing them.
-                            if (!sameId(state.getValue(0, 6), duplicateAccountId))
-                                return refusal(DIFFERENT_ACCOUNT_KEY);
-                        }
+                        // Which accounts these two belong to, and whether the duplicate is the row a
+                        // sign-in resolves to. This used to refuse any duplicate with an account at
+                        // all — which is every person the /customers screen can show — so the
+                        // screen's own purpose was refused in every case, and production recorded
+                        // not one successful merge. See accountRefusal for what it asks instead.
+                        String accountRefusal = accountRefusal(
+                            state.getValue(0, 4), state.getValue(0, 6), state.getValue(0, 7), duplicateId);
+                        if (accountRefusal != null)
+                            return refusal(accountRefusal);
                         return checkReferencesThenMerge(keptId, duplicateId, callerUserId);
                     }));
             });
+    }
+
+    /**
+     * Whether the two people's accounts permit this merge, given what {@link #STATE_SQL} read.
+     *
+     * <p>Package-private and free of any lookup, so a check can ask it the awkward cases directly rather
+     * than matching the source text of the caller.
+     *
+     * <p>An account's SIGN-IN person is not a duplicate to be deleted: the account would be left with
+     * nobody able to sign in, or signing in as somebody else.
+     *
+     * <p>Otherwise the two must belong to the SAME account. Repointing a person across an account boundary
+     * is the accounts screen's job, and doing it here would move somebody's bookings and media with no
+     * approval from the account losing them.
+     *
+     * <p><b>Asked unconditionally, including when the duplicate has no account at all.</b> That branch used
+     * to be skipped, which left the survivor free to be anybody: a caller holding {@code RouteToCustomers}
+     * in the same organization could name their OWN person as the survivor and absorb an account-less
+     * person's bookings — with the dietary and health notes on their document lines — into their own
+     * account, readable afterwards from the front office. {@link #sameId} is false when either side is
+     * null, so two account-less people are refused as well; absorbing a guest's bookings is a deliberate
+     * act, not a duplicate tidy-up. The {@code /customers} screen can offer neither case — its list
+     * correlates on {@code frontendAccount}, so an account-less row never appears in it — which is the
+     * point: the endpoint is the boundary, not the screen.
+     */
+    static String accountRefusal(Object duplicateAccountId, Object keptAccountId, Object signInPersonId,
+                                 Object duplicateId) {
+        if (sameId(signInPersonId, duplicateId))
+            return HAS_ACCOUNT_KEY;
+        if (!sameId(keptAccountId, duplicateAccountId))
+            return DIFFERENT_ACCOUNT_KEY;
+        return null;
     }
 
     /** Refuses when the database names a person from somewhere this build has never heard of. */
@@ -242,7 +264,13 @@ final class PersonMergeCascade {
         // SET NULL — so it would not refuse, it would erase whose booking that was. Inserting a row that
         // references a person takes FOR KEY SHARE on it, which this conflicts with, so a booking arriving
         // mid-merge waits for the transaction and then finds the person gone and refuses honestly.
-        statements.add("select id from person where id = $2 for update");
+        //
+        // "and id <> $1" is not a condition this needs — the survivor and the duplicate were refused as
+        // equal long before here. It is there because EVERY statement in this batch is bound with both
+        // ids (runMerge), and Postgres refuses to prepare one that names only $2: $1 is then a parameter
+        // with nothing to infer a type from, and the whole batch dies at Parse time with 42P18. Saying
+        // the survivor is not the row being locked types it, and is true.
+        statements.add("select id from person where id = $2 and id <> $1 for update");
         // 1. The survivor's own references to the duplicate. These cannot be repointed onto the survivor —
         // that would make a person their own account-person or their own carer — and if they are left
         // alone the final delete fails on them, so they are cleared.
@@ -269,12 +297,13 @@ final class PersonMergeCascade {
             statements.add(repoint(table, spec[0])));
         PersonReferences.REPOINTED.forEach((key, column) ->
             statements.add(repoint(PersonReferences.table(key), column)));
-        PersonReferences.UNCONSTRAINED_AUDIT.forEach((table, columns) -> {
+        PersonReferences.UNCONSTRAINED.forEach((table, columns) -> {
             for (String column : columns)
                 statements.add(repoint(table, column));
         });
-        // 4. Nothing names the duplicate any more.
-        statements.add("delete from person where id = $2");
+        // 4. Nothing names the duplicate any more. ("and id <> $1" for the same reason as the lock:
+        // a statement naming only $2 leaves $1 untyped and Postgres refuses the whole batch.)
+        statements.add("delete from person where id = $2 and id <> $1");
         return statements;
     }
 
