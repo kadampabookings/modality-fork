@@ -38,7 +38,7 @@ import dev.webfx.stack.db.submit.ClientWriteDenyList;
  * they do not use it to write people.
  *
  * <p><b>What closing it actually shuts, because the hole was subtle.</b> It did not take a raw or
- * hand-crafted statement: {@code OwnerLoginWritePolicy} guards only an OWNER's email, and every row a claim
+ * hand-crafted statement: the owner rule that used to stand here guarded only an OWNER's email, and every row a claim
  * targets is a non-owner — so an ORDINARY client write, the shape a change set produces, could point a
  * stranger's member row at the caller's own address, after which {@code claimMembers} would link it
  * legitimately. Two steps rather than one, and easy to miss precisely because each step looked lawful. The

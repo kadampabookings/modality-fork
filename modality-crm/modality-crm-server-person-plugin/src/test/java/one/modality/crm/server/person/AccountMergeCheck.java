@@ -107,7 +107,7 @@ public class AccountMergeCheck {
         // --- and the rule that is re-asked here because the policy cannot see these writes ---
         check("moving somebody who holds authorizations needs a super admin",
             rules().contains("if (callerIsSuperAdmin)") && rules().contains("GRANT_HOLDER_KEY"));
-        check("and all three grant tables are asked, as PersonAccountMovePolicy asks them",
+        check("and all three grant tables are asked, as the retired client-write rule asked them",
             rules().contains("authorization_super_admin")
             && rules().contains("authorization_organization_admin")
             && rules().contains("authorization_organization_user_access"));

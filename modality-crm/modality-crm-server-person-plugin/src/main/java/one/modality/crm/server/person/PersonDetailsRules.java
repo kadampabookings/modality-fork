@@ -107,7 +107,7 @@ final class PersonDetailsRules {
                 // flow that verifies the new address — but a form that merely re-sends the address it
                 // displayed is not changing anything, and refusing that would make the whole dialog fail
                 // for somebody editing their phone. The same distinction V0097 draws in the trigger and
-                // OwnerLoginWritePolicy draws for client writes: a real change, not a mention.
+                // the owner rule used to draw for client writes: a real change, not a mention.
                 int emailAt = names.indexOf(PersonFields.EMAIL);
                 if (isOwnerRow && emailAt >= 0) {
                     Object current = target.getValue(0, 1);

@@ -347,8 +347,8 @@ final class StaffPersonRules {
      *   <li>{@code removed = false} is NOT one of them. Staff soft-delete duplicates and un-delete
      *       people, so a removed row is still theirs to edit — where a member's screen must never
      *       resurrect one.</li>
-     *   <li>{@code owner = false} when {@code email} or {@code removed} is written, the same rule
-     *       {@code OwnerLoginWritePolicy} applies to every client: an account owner's email is their
+     *   <li>{@code owner = false} when {@code email} or {@code removed} is written, the rule that used
+     *       to stand over every client write of a person: an account owner's email is their
      *       sign-in address, and changing it belongs to the flow that verifies the new one. The screens
      *       already decline to send it for an owner; this is what makes that true rather than polite.</li>
      * </ul>

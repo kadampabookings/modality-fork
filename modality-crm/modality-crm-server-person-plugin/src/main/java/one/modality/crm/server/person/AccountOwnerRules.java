@@ -27,8 +27,8 @@ import java.util.List;
  *
  * <p>What that bought an attacker was not hypothetical, though it was narrower than it looks: the
  * username trigger fires {@code AFTER UPDATE OF email} and not on insert, so planting an owner row in a
- * victim's account did not by itself move their login, and a later attempt to update it is refused by
- * {@code OwnerLoginWritePolicy}. What it did buy is a person in somebody else's account, flagged as the
+ * victim's account did not by itself move their login, and a later attempt to update it is refused:
+ * clients cannot write {@code person} at all. What it did buy is a person in somebody else's account, flagged as the
  * row that speaks for it — which is the shape the plan's account-creation note calls load-bearing,
  * because the {@code accountPerson} rules elsewhere are written on the assumption that an insert lands
  * in the caller's own account.

@@ -195,26 +195,27 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         // legacy scheduled-item generator (ScheduledItemGenerationView), which sends generated SQL, no longer runs.
         ClientSubmitGuard.registerRawStatementPolicy(ProtectedEntityWritesJob::isAllowedLegacyRawStatement);
         // And the row rules that cannot wait for the switch below, asked together because the guard holds one:
-        // - an owner's email is their login (V0062 trigger), so a client may not change it, nor make somebody an
-        //   owner. See OwnerLoginWritePolicy.
         // - the grant tables themselves: while the rule on them above only observes, any client could insert a
         //   super-admin row naming its own person. See GrantTableWritePolicy.
-        // - and the person a sign-in resolves to: a client may not move somebody's person into an account it controls,
-        //   which would make its sign-in resolve to them - their bookings, and their grants if any. Staff only, and
-        //   a grant holder by a super admin only. See PersonAccountMovePolicy.
         // - and the statements that name no bound on the rows they touch: no where clause, or one with no
         //   equality tying a column to a value. The server half of removing ChangeSet.execute().
         //   Deliberately NOT "must name a row id" - the back office legitimately sends set-based
         //   deletes, and a rule that refused them would be walked back on the first deploy.
         //   See UnscopedWritePolicy.
-        // - and an email on somebody else's account's person: it is what claimMembers accepts as "this
-        //   is me", and an ordinary client write could supply it in bulk. See PersonEmailWritePolicy.
         // - and mail that is not the caller's own: a pending mail is a live sign-in link or somebody's
         //   booking, and until now any client could add its own address to one, or rewrite it. Clients
         //   still compose mail, which is the relay itself and is not closed here. See MailWritePolicy.
+        //
+        // THREE RULES USED TO STAND HERE AND NO LONGER DO: an owner's email is their login, an email on
+        // somebody else's account's person, and moving a person into another account. All three asked
+        // their question of "Person", and ClientWriteSecrets now denies that table outright — the deny
+        // list is consulted before any row rule, so none of them could ever be reached again. They were
+        // deleted on 2026-09-28 rather than left as dead code that reads like live defence.
+        // ClientWriteGuardCheck asserts the deny rule and their absence TOGETHER: restoring the table
+        // without restoring the rules is what would reopen the holes they covered. What they knew that
+        // the deny rule does not say is written down in docs/security/frontoffice-write-authorization-plan.md.
         ClientSubmitGuard.registerWritePolicy(new ClientWritePolicies(
-            new OwnerLoginWritePolicy(), new GrantTableWritePolicy(), new PersonAccountMovePolicy(),
-            new UnscopedWritePolicy(), new PersonEmailWritePolicy(), new MailWritePolicy()));
+            new GrantTableWritePolicy(), new UnscopedWritePolicy(), new MailWritePolicy()));
         Console.log("🛡 Write authorization active on " + REQUIRED_OPERATIONS.size() + " entities and "
                     + REQUIRED_OPERATIONS_BY_FIELD.size() + " fields"
                     + (ENFORCING ? " — ENFORCING" : " — observing only, nothing is refused yet"));
@@ -224,8 +225,8 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         // that sentence is about the per-entity operation rule and the switch that gates it, and the row
         // rules below it are NOT gated by that switch. An operator reading only the line above would
         // triage a write that started failing on this deploy by looking anywhere but here.
-        Console.log("🛡 Client write row rules ENFORCING — owner login, grant tables, person account move,"
-                    + " unbounded writes, person email, mail");
+        Console.log("🛡 Client write row rules ENFORCING — grant tables, unbounded writes, mail"
+                    + " (person is closed outright by the deny list, not by a row rule)");
     }
 
     /**

@@ -32,7 +32,7 @@ import java.util.Set;
  *       for those ids. Emptiness is a fact about the database after the move, and it is now checked
  *       there, in the same transaction and inside the DELETE's own WHERE — a client that asked for a
  *       populated account is refused by the statement rather than believed.</li>
- *   <li><b>Whether a moved person may be moved.</b> {@code PersonAccountMovePolicy} refuses moving
+ *   <li><b>Whether a moved person may be moved.</b> A client-write policy used to refuse moving
  *       somebody who holds authorizations unless a super administrator asks, because a person moved
  *       into an account becomes somebody that account can sign in as — with their grants. These
  *       endpoints run "as server" and so are NOT seen by that policy; the rule is re-asked here, over

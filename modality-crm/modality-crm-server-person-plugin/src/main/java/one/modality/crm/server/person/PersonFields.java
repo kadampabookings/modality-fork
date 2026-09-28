@@ -27,8 +27,8 @@ import java.util.Map;
  * <p>{@code email} IS here, and is the one that needs saying twice: it reaches
  * {@code frontend_account.username} through a trigger when the person is an account owner, so setting it
  * on the wrong row is a sign-in change. The statement that writes it says {@code owner = false}, which is
- * the same rule {@code OwnerLoginWritePolicy} applies to client writes — an owner's address changes only
- * through the flow that verifies it.
+ * the rule that used to stand over client writes, before they lost the table entirely — an owner's
+ * address changes only through the flow that verifies it.
  *
  * @author Claude Code
  */

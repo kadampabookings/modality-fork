@@ -70,7 +70,7 @@ public class StaffPersonCheck {
 
         // --- and the structural fields are refused for staff too ---
         // These are account structure, not details: linking, unlinking and account takeover. The merge
-        // dialogs still write them through a change set, where PersonAccountMovePolicy judges them.
+        // dialogs write them through mergeIntoAccount now; the change-set path they used is denied.
         for (String structural : new String[] { "frontendAccount", "accountPerson", "owner", "accountPersonRevokedDate" })
             for (java.util.Set<String> list : List.of(StaffPersonRules.CUSTOMER_FIELDS,
                                                      StaffPersonRules.USER_FIELDS,

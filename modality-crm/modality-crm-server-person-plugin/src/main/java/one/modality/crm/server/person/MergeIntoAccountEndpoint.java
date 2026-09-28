@@ -23,10 +23,12 @@ import java.util.List;
  * read separately</b> and passed down, because it decides a second question the guard does not ask —
  * whether somebody who holds authorizations may be moved at all.
  *
- * <p>That second rule belongs to {@code PersonAccountMovePolicy}, which judges the same move on the
- * change-set path and cannot see this one: these endpoints run "as server" and drop the client-origin
- * stamp on purpose. A rule that exists on one path and not the other is not a rule, so it is re-asked
- * here — over the whole moving set at once, rather than row by row as the policy sees it.
+ * <p>That second rule used to belong to a client-write policy, which judged the same move on the
+ * change-set path and could not see this one: these endpoints run "as server" and drop the
+ * client-origin stamp on purpose. A rule that exists on one path and not the other is not a rule, so
+ * it was re-asked here — over the whole moving set at once, rather than row by row as the policy saw
+ * it. <b>That policy is gone</b>: clients can no longer write {@code person} at all, which leaves
+ * this the only place the rule still lives.
  *
  * @author Claude Code
  */

@@ -39,18 +39,19 @@ import java.util.List;
  * a live row, not an account OWNER (another holder with the same address is a duplicate signup, which
  * is a merge, not a claim), not already linked to anybody, on an account, and not on the caller's own.
  *
- * <h3>What this does NOT yet close, stated plainly</h3>
+ * <h3>What the proof rests on, and how it was forgeable until 2026-09-28</h3>
  *
- * <p>The proof is {@code person.email} on the target, and <b>that column is still client-writable by
- * an ORDINARY client write</b> — not a raw or hand-crafted one, the same shape a change set produces.
- * {@code OwnerLoginWritePolicy} guards only an OWNER's email, and every row this claims is a
- * non-owner. So a signed-in member can send {@code update Person set email=$1 where id=$2} against a
- * stranger's member row, point it at their own address, and then claim it legitimately through here.
+ * <p>The proof is {@code person.email} on the target, and that column was <b>writable by an ORDINARY
+ * client write</b> — not a raw or hand-crafted one, the same shape a change set produces. The owner
+ * rule that stood there guarded only an OWNER's email, and every row this claims is a non-owner. So a
+ * signed-in member could send {@code update Person set email=$1 where id=$2} against a stranger's
+ * member row, point it at their own address, and then claim it legitimately through here — set-based,
+ * over any number of strangers in one batch.
  *
- * <p>That is two steps where it used to be one, and much narrower — but <b>it is not closed, and must
- * not be described as though it were</b>. Closing it needs {@code person.email} denied to clients,
- * which today breaks the live legacy back office (its customers view edits an existing customer's
- * address), or the person-ownership rule the plan lists as item C.
+ * <p><b>Closed by {@code denyTable("person")}</b>: no client writes that column, or any other on the
+ * row, by any statement shape. The proof is now unforgeable from a client rather than merely narrow.
+ * It still rests on the SERVER paths that write an email being right about whose row they are on,
+ * which is {@code PersonDetailsRules}' and {@code StaffPersonRules}' business rather than this file's.
  *
  * @author Claude Code
  */
