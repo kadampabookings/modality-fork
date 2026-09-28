@@ -286,15 +286,18 @@ public final class WorkingBooking {
 
     /**
      * Computes the effective "breakfast included" flag to capture (read-only) on a freshly booked line.
-     * Sharing options carry it on the item (set explicitly to true or false); a charged accommodation
-     * (room owner) leaves the item null and derives it from whether any of its rates include breakfast.
-     * Returns false for non-accommodation items (it doesn't apply). The price algorithm later reads
-     * documentLine.breakfastIncluded to forgive prepaid breakfasts.
+     * A sharing option (item.share_mate) has no rate, so it carries the flag on the item (true = sharing
+     * room, false = sharing tent). A charged accommodation (room owner) derives it from whether any of its
+     * rates include breakfast; its own item flag is ignored, as it has no meaning there and is set anyway
+     * (event 1898's ensuite rooms carry false while their rates include breakfast). Returns false for
+     * non-accommodation items (it doesn't apply). The price algorithm later reads
+     * documentLine.breakfastIncluded to forgive prepaid breakfasts. Mirrored by the React WorkingBooking
+     * and by the database's capture_breakfast_included trigger (V0114), which fills the lines the KBS2
+     * back office adds.
      */
     private Boolean computeBreakfastIncluded(Site site, Item item) {
-        Boolean itemFlag = item.isBreakfastIncluded();
-        if (itemFlag != null)
-            return itemFlag; // sharing option (true = sharing room, false = sharing tent)
+        if (Boolean.TRUE.equals(item.isShare_mate()))
+            return Boolean.TRUE.equals(item.isBreakfastIncluded());
         if (item.getKnownItemFamily() == KnownItemFamily.ACCOMMODATION && policyAggregate != null)
             return policyAggregate.filterRatesStreamOfSiteAndItem(site, item)
                 .anyMatch(r -> Boolean.TRUE.equals(r.isBreakfastIncluded())); // room owner: ask the rate
