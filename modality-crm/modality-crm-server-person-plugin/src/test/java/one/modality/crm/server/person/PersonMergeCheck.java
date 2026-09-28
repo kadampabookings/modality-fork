@@ -158,6 +158,24 @@ public class PersonMergeCheck {
         check("and the merge guard asks the SAME question of the duplicate's account",
             merge.contains("order by p2.owner desc, p2.id limit 1"));
 
+        // The passkey path does NOT go through the gateway above: it resolves through the shared
+        // LoginPersonResolver, which asks the same question and filters `removed` the same way. Pinned
+        // here too, so the guard cannot be left agreeing with one sign-in path and not the other.
+        //
+        // The magic-link resolution deliberately differs — it sorts `removed` last instead of filtering
+        // it, to keep an account whose every person row is soft-deleted reachable — and is deliberately
+        // NOT pinned. Checked on 2026-09-28 against all 49,450 accounts: the two orderings never pick a
+        // different row, because a boolean sorts false-first; they differ only for the 12 accounts with
+        // no live person at all, where this guard has no row to protect anyway.
+        String resolver = AccountOwnerCheck.readSource(
+            "modality-fork/modality-crm/modality-crm-server-authn-gateway-shared/"
+            + "src/main/java/one/modality/crm/server/authn/gateway/shared/LoginPersonResolver.java");
+        check("the shared login resolver source was found", !resolver.isEmpty());
+        check("the passkey path resolves its person by owner then id, like the password gateway",
+            resolver.contains("order by owner desc, id limit 1"));
+        check("and filters removed, as the merge guard does",
+            resolver.contains("!removed"));
+
         // --- and the screen can say both refusals ---
         String service = AccountOwnerCheck.readSource(
             "kbs3-react/backoffice/src/features/customers/services/person-merge-service.ts");
