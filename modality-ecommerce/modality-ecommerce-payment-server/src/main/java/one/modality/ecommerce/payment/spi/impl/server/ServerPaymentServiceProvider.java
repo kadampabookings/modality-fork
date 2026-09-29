@@ -82,59 +82,25 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
         // Step 1: Load event state, live flag, and the event primary key from the document.
         // The event state determines live vs test mode (KBS3 way); event.live is the KBS2 fallback;
         // document.forceLivePayment is a per-booking override for testing live payments before opening.
+        // document.inPerson is the booking channel, which decides the money account (see step 2).
         return EntityStore.create()
             .<Document>executeQuery(
-                "select forceLivePayment, event.(state, live, organization) from Document where id=$1",
+                "select forceLivePayment, inPerson, event.(state, live, organization) from Document where id=$1",
                 argument.documentPrimaryKey())
             .compose(documents -> {
                 if (documents.isEmpty())
                     return Future.failedFuture("Document not found: " + argument.documentPrimaryKey());
                 Document document = documents.get(0);
                 Event event = document.getEvent();
-                boolean live = isLivePayment(document);
-                Object organizationPk = Numbers.toShortestNumber(Entities.getPrimaryKey(event.getOrganizationId()));
-                Object eventPk        = Numbers.toShortestNumber(event.getPrimaryKey());
-                // Step 2: Find the destination MoneyAccount for an online payment from this event's
-                // organization. This mirrors the autoset_money_transfer_to_account trigger logic:
-                // - type.internal=true and type.customer=false → destination account (not a customer account)
-                // - gatewayCompany!=null                       → only gateway-linked accounts
-                // - !closed                                    → account must be active
-                // - order by event=$eventPk desc               → prefer event-specific accounts over org-level ones
-                return EntityStore.create()
-                    .<MoneyAccount>executeQuery(
-                        "select gatewayCompany.name,googlePayEnabled,applePayEnabled from MoneyAccount" +
-                        " where organization=$1 and !closed and gatewayCompany!=null" +
-                        " and type.internal and !type.customer" +
-                        " order by event=$2 desc, id",
-                        organizationPk, eventPk)
-                    .map(accounts -> {
-                        if (accounts.isEmpty())
-                            return new GetPaymentMethodsResult("Unknown", live, new GatewayPaymentMethodInfo[0]);
-                        MoneyAccount moneyAccount = accounts.get(0);
-                        String gatewayName = moneyAccount.getGatewayCompany().getName();
-                        PaymentGateway gateway = findMatchingPaymentGatewayProvider(gatewayName);
-                        if (gateway == null)
-                            return new GetPaymentMethodsResult(gatewayName, live, new GatewayPaymentMethodInfo[0]);
-                        List<GatewayPaymentMethodInfo> supportedPaymentMethods = Collections.filter(
-                            gateway.getSupportedPaymentMethods(),
-                            methodInfo ->
-                                methodInfo.method() == PaymentMethod.GOOGLE_PAY ? moneyAccount.isGooglePayEnabled() :
-                                methodInfo.method() == PaymentMethod.APPLE_PAY ? moneyAccount.isApplePayEnabled() :
-                                true
-                        );
-                        return new GetPaymentMethodsResult(
-                            gateway.getName(),
-                            live,
-                            supportedPaymentMethods.toArray(GatewayPaymentMethodInfo[]::new)
-                        );
-                    });
+                return loadPaymentMethods(event.getOrganizationId(), event.getPrimaryKey(),
+                    !Boolean.FALSE.equals(document.isInPerson()), isLivePayment(document));
             });
     }
 
     private Future<GetPaymentMethodsResult> getPaymentMethodsForEvent(Object eventPk) {
         return EntityStore.create()
             .<Event>executeQuery(
-                "select state, live, organization from Event where id=$1",
+                "select state, live, organization, kbs3, inPersonAllowed from Event where id=$1",
                 eventPk)
             .compose(events -> {
                 if (events.isEmpty())
@@ -143,36 +109,52 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
                 EventState state = event.getState();
                 boolean live = state != null && state.compareTo(EventState.OPEN) >= 0
                                || state == null && event.isLive();
-                Object organizationPk = Numbers.toShortestNumber(Entities.getPrimaryKey(event.getOrganizationId()));
-                Object normalizedEventPk = Numbers.toShortestNumber(eventPk);
-                return EntityStore.create()
-                    .<MoneyAccount>executeQuery(
-                        "select gatewayCompany.name,googlePayEnabled,applePayEnabled from MoneyAccount" +
-                        " where organization=$1 and !closed and gatewayCompany!=null" +
-                        " and type.internal and !type.customer" +
-                        " order by event=$2 desc, id",
-                        organizationPk, normalizedEventPk)
-                    .map(accounts -> {
-                        if (accounts.isEmpty())
-                            return new GetPaymentMethodsResult("Unknown", live, new GatewayPaymentMethodInfo[0]);
-                        MoneyAccount moneyAccount = accounts.get(0);
-                        String gatewayName = moneyAccount.getGatewayCompany().getName();
-                        PaymentGateway gateway = findMatchingPaymentGatewayProvider(gatewayName);
-                        if (gateway == null)
-                            return new GetPaymentMethodsResult(gatewayName, live, new GatewayPaymentMethodInfo[0]);
-                        List<GatewayPaymentMethodInfo> supportedPaymentMethods = Collections.filter(
-                            gateway.getSupportedPaymentMethods(),
-                            methodInfo ->
-                                methodInfo.method() == PaymentMethod.GOOGLE_PAY ? moneyAccount.isGooglePayEnabled() :
-                                methodInfo.method() == PaymentMethod.APPLE_PAY ? moneyAccount.isApplePayEnabled() :
-                                true
-                        );
-                        return new GetPaymentMethodsResult(
-                            gateway.getName(),
-                            live,
-                            supportedPaymentMethods.toArray(GatewayPaymentMethodInfo[]::new)
-                        );
-                    });
+                // No booking yet, so no document.inPerson: predict the one it will get. Bookings created
+                // without a document (public talks) are sent in-person, and the database's document insert
+                // trigger turns that to online only for a KBS2 event that does not allow in-person.
+                boolean inPerson = !(Boolean.FALSE.equals(event.isKbs3()) && Boolean.FALSE.equals(event.isInPersonAllowed()));
+                return loadPaymentMethods(event.getOrganizationId(), eventPk, inPerson, live);
+            });
+    }
+
+    // Step 2: Find the destination MoneyAccount for an online payment from this event's organization.
+    // This mirrors the autoset_money_transfer_to_account trigger logic, which is what actually picks it:
+    // - type.internal=true and type.customer=false → destination account (not a customer account)
+    // - gatewayCompany!=null                       → only gateway-linked accounts
+    // - !closed                                    → account must be active
+    // - order by preferredForOnline                → online bookings prefer accounts preferred for online,
+    //                                                in-person bookings prefer the others (V0116)
+    // - order by event=$eventPk desc               → prefer event-specific accounts over org-level ones
+    private Future<GetPaymentMethodsResult> loadPaymentMethods(EntityId organizationId, Object eventPk, boolean inPerson, boolean live) {
+        Object organizationPk = Numbers.toShortestNumber(Entities.getPrimaryKey(organizationId));
+        Object normalizedEventPk = Numbers.toShortestNumber(eventPk);
+        return EntityStore.create()
+            .<MoneyAccount>executeQuery(
+                "select gatewayCompany.name,googlePayEnabled,applePayEnabled from MoneyAccount" +
+                " where organization=$1 and !closed and gatewayCompany!=null" +
+                " and type.internal and !type.customer" +
+                " order by " + MoneyAccount.preferredForOnline + (inPerson ? "" : " desc") + ", event=$2 desc, id",
+                organizationPk, normalizedEventPk)
+            .map(accounts -> {
+                if (accounts.isEmpty())
+                    return new GetPaymentMethodsResult("Unknown", live, new GatewayPaymentMethodInfo[0]);
+                MoneyAccount moneyAccount = accounts.get(0);
+                String gatewayName = moneyAccount.getGatewayCompany().getName();
+                PaymentGateway gateway = findMatchingPaymentGatewayProvider(gatewayName);
+                if (gateway == null)
+                    return new GetPaymentMethodsResult(gatewayName, live, new GatewayPaymentMethodInfo[0]);
+                List<GatewayPaymentMethodInfo> supportedPaymentMethods = Collections.filter(
+                    gateway.getSupportedPaymentMethods(),
+                    methodInfo ->
+                        methodInfo.method() == PaymentMethod.GOOGLE_PAY ? moneyAccount.isGooglePayEnabled() :
+                        methodInfo.method() == PaymentMethod.APPLE_PAY ? moneyAccount.isApplePayEnabled() :
+                        true
+                );
+                return new GetPaymentMethodsResult(
+                    gateway.getName(),
+                    live,
+                    supportedPaymentMethods.toArray(GatewayPaymentMethodInfo[]::new)
+                );
             });
     }
 

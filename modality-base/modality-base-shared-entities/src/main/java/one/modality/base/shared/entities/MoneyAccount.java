@@ -18,6 +18,7 @@ public interface MoneyAccount extends
     String gatewayCompany = "gatewayCompany";
     String googlePayEnabled = "googlePayEnabled";
     String applePayEnabled = "applePayEnabled";
+    String preferredForOnline = "preferredForOnline";
 
     default void setCurrency(Object value) {
         setForeignField(currency, value);
@@ -77,6 +78,14 @@ public interface MoneyAccount extends
 
     default Boolean isApplePayEnabled() {
         return getBooleanFieldValue(applePayEnabled);
+    }
+
+    default void setPreferredForOnline(Boolean value) {
+        setFieldValue(preferredForOnline, value);
+    }
+
+    default Boolean isPreferredForOnline() {
+        return getBooleanFieldValue(preferredForOnline);
     }
 
 }

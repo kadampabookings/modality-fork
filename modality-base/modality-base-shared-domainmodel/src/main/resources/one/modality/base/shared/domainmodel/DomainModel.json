@@ -1433,6 +1433,7 @@
     "label": "Label",
     "name": "string",
     "organization": "Organization",
+    "preferredForOnline": "boolean",
     "thirdParty": "string",
     "type": "MoneyAccountType"
   },
