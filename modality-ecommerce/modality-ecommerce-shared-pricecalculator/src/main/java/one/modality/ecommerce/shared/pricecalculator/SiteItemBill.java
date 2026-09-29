@@ -254,7 +254,8 @@ public final class SiteItemBill {
             if (wi != null)
                 withItemDateCache.computeIfAbsent(wi, k -> collectAttendanceDates(k, documentBill));
         }
-        return new RateContext(rates, rateLimits, creationDateTime.toLocalDate(), Booleans.isTrue(siteItem.getItem().isTemporal()),
+        // The rate's dates are all days in the event time zone, so today must be too (not the JVM's or the browser's)
+        return new RateContext(rates, rateLimits, creationDateTime.toLocalDate(), LocalDateTime.ofInstant(Instant.now(), eventZoneId).toLocalDate(), Booleans.isTrue(siteItem.getItem().isTemporal()),
             withItemDateCache, collectAccommodationNights(documentBill));
     }
 
@@ -347,7 +348,7 @@ public final class SiteItemBill {
             // updating the block price
             int deltaPrice = cheapest.price();
             if (minDeposit) {
-                int minDepositPercent = rateMinDepositPercent(cheapest.rate(), LocalDate.now());
+                int minDepositPercent = rateMinDepositPercent(cheapest.rate(), context.today);
                 deltaPrice = deltaPrice * minDepositPercent / 100;
             }
             if (price == Integer.MIN_VALUE)
@@ -386,9 +387,9 @@ public final class SiteItemBill {
         // Ignoring rates for long stay discounts (if requested)
         if (documentBill.ignoreLongStayDiscount && !perDay) // assuming that a rate not per day is a long stay discount TODO: check this more carefully
             return 0;
-        // Ignoring expired rates (such as early birds discounts)
+        // Ignoring expired rates (such as early birds discounts): the offDate is the first day without the rate
         LocalDate offDate = rate.getOffDate();
-        if (offDate != null && context.creationDate.isAfter(offDate))
+        if (offDate != null && !context.creationDate.isBefore(offDate))
             return 0;
         // Ignoring rates that are not in the range of dates
         LocalDate date = bas.get(dayIndex).getDate();
@@ -752,15 +753,18 @@ public final class SiteItemBill {
         final Map<Rate, RateDayLimits> rateLimits;
         /** Document creation date in the event time zone (now for a booking not created yet). */
         final LocalDate creationDate;
+        /** Today in the event time zone - the day the min deposit tiers (cutoffDate...) are read at. */
+        final LocalDate today;
         final boolean thisItemTemporal;
         final Map<Item, Set<LocalDate>> withItemDateCache;
         /** Accommodation night dates, for withAccommodation. */
         final Set<LocalDate> accoNights;
 
-        RateContext(List<Rate> rates, Map<Rate, RateDayLimits> rateLimits, LocalDate creationDate, boolean thisItemTemporal, Map<Item, Set<LocalDate>> withItemDateCache, Set<LocalDate> accoNights) {
+        RateContext(List<Rate> rates, Map<Rate, RateDayLimits> rateLimits, LocalDate creationDate, LocalDate today, boolean thisItemTemporal, Map<Item, Set<LocalDate>> withItemDateCache, Set<LocalDate> accoNights) {
             this.rates = rates;
             this.rateLimits = rateLimits;
             this.creationDate = creationDate;
+            this.today = today;
             this.thisItemTemporal = thisItemTemporal;
             this.withItemDateCache = withItemDateCache;
             this.accoNights = accoNights;

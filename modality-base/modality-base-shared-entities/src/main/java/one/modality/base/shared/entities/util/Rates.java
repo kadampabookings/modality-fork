@@ -30,9 +30,14 @@ public final class Rates {
         return rate.getFacilityFeePrice() != null || rate.getFacilityFeeDiscount() != null;
     }
 
+    /**
+     * Whether the rate is on sale at the given date: from its onDate included to its offDate excluded. The
+     * offDate is the first day without the rate (an early bird ending on the 20th has offDate = the 21st), as
+     * compute_document_prices applies it. The date must already be in the event's time zone.
+     */
     public static boolean isApplicableAtDate(Rate rate, LocalDateTime atDate) {
         return (rate.getOnDate() == null || Times.isBeforeOrEquals(rate.getOnDate(), atDate.toLocalDate()))
-               && (rate.getOffDate() == null || Times.isAfterOrEquals(rate.getOffDate(), atDate.toLocalDate()));
+               && (rate.getOffDate() == null || Times.isAfter(rate.getOffDate(), atDate.toLocalDate()));
     }
 
     public static boolean isApplicableOverPeriod(Rate rate, Period period) {
