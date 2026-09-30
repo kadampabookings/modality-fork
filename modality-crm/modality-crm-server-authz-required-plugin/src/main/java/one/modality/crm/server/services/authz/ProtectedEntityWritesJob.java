@@ -185,6 +185,11 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         // writing the rule that constrains the rest. Reads are the larger half of item 6 by exposure and the
         // half with no rule at all yet, so the inventory is what the rule will be written from.
         ClientReadInspectionRegistry.registerReadInspector(new ClientReadInventory());
+        // And the half of the read plan that the framework cannot supply: who the caller is. The compiler
+        // turns CALLER_PERSON into a bound parameter and has no notion of a person, so this answers it from
+        // the principal — on the endpoint thread, which is the only place the principal is still there.
+        // Registered here for the same reason as the two above.
+        ModalityCallerParameterResolver.register();
         // And the write half of that: the account columns no client may set, enforced now rather than observed —
         // see ClientWriteSecrets for why the observe-only switch below does not apply to them.
         ClientWriteSecrets.declare();
