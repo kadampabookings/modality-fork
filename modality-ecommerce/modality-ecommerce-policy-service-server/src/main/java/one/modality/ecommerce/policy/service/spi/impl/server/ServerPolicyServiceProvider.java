@@ -122,20 +122,21 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
         // A claim is a line that WANTS a bed and has none yet, so a line flagged on its own is only counted
         // while it holds no bed -- quantity 0, which is what a virtual sharing option carries until it is
         // linked (V0117). A sharing ITEM needs no such test: it has no capacity, so it never held one.
-        // Without that, the legacy rows that carry the flag on a room they actually occupy would be
-        // counted as claims on top of the bed they already have. They are not hypothetical: event 1957's
-        // bookings 93 and 105 are single rooms with the flag ticked by mistake -- the registration team
-        // then set a custom price, which is what stopped the database charging them 0 -- and counting them
-        // would have taken two beds off every sharing card at a live event. With the quantity test, all
-        // seven live events read exactly as they do today.
+        // Without that, the legacy rows that carry the flag on a room they actually occupy would be counted
+        // as claims on top of the bed they already have. They are not hypothetical: event 1957's bookings
+        // 93 and 105 are single rooms with the flag ticked by mistake -- the registration team then set a
+        // custom price, which is what stopped the database charging them 0 -- and counting them would have
+        // taken two beds off every sharing card at a live event.
         //
-        // The accommodation filter arrives WITH the line flag, and is not optional either. The note above
-        // about needing no item-family filter was true while this read l.item.share_mate, because every
-        // sharing ITEM is an accommodation item; it stops being true the moment a line's own flag is
-        // admitted. On staging 35 live share-mate lines are meals, teaching, diet, tax and transport.
+        // "A room with beds" is spelled `capacity>1` and NOT `item.family.code='acco'`, for a reason worth
+        // keeping: the family form joins item_family, and the planner then drives the whole CTE from it --
+        // 410 accommodation items, an index scan of document_line for each, 143k rows and 57k buffer reads.
+        // Measured on staging at event 1898: 31,477 ms, against 72 ms for this form and 15 ms for the
+        // item-flag-only query it replaces. capacity>1 also says what is actually meant, since it is exactly
+        // the set V0117 governs: a bed in a room that has more than one.
         ", ps as materialized (select count(1) as claims" +
-        " from DocumentLine l where (l.item.share_mate or (l.share_mate and l.quantity=0))" +
-        " and l.item.family.code='acco' and l.share_mate_ownerDocumentLine=null and !l.cancelled" +
+        " from DocumentLine l where (l.item.share_mate or (l.share_mate and l.quantity=0 and l.item.capacity>1))" +
+        " and l.share_mate_ownerDocumentLine=null and !l.cancelled" +
         " and l.document.(!cancelled and event=$1))" +
         " select name,label,comment,site.(name,terminal,selfArranged,label),arrivalSite.(name,terminal,selfArranged,label),item.(name,label,perResourceLabel,code,temporal,family.(code,name,label,ord),capacity,share_mate,breakfastIncluded,ord),date,startTime,endTime,timeline?.(site,item,startTime,endTime),cancelled,resource,buddha.hyt" +
         // Availability: for each applicable configuration (from the rc CTE above, matched on the
