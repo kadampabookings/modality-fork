@@ -5,6 +5,10 @@ import dev.webfx.stack.db.query.ClientReadInspectionRegistry;
 import dev.webfx.stack.session.state.RestrictedPrincipalRegistry;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -167,9 +171,63 @@ final class ClientReadInventory implements ClientReadInspectionRegistry.ReadInsp
         return ThreadLocalStateHolder.isClientOrigin();
     }
 
+    /**
+     * The term classes a client statement is expected to be built from — CDQL, the restricted dialect the
+     * read-authorization plan's step 2b defines, stated as the set actually observed rather than as a design.
+     *
+     * <p>Taken from production traffic over two full working days, 2026-09-28 and 2026-09-29, after a deploy
+     * reset the shape map so every distinct shape re-logged once. Three of these appear only when the BACK
+     * OFFICE is in use — {@code Minus}, {@code Multiply} and {@code Like} — which is why a weekend sample was
+     * not enough to write this from, and why a quiet week should not be read as a narrower dialect.
+     *
+     * <p><b>This does not refuse anything.</b> A term outside it is logged and allowed, because the cost of
+     * the two mistakes is not symmetric: a construct nobody anticipated is a line in a log, while refusing a
+     * legitimate screen is an outage — and this list is an observation of five days' traffic, not a proof
+     * about a grammar. It earns the right to refuse by going a long time without surprising anyone.
+     */
+    private static final Set<String> CDQL_CONSTRUCTS = new HashSet<>(Arrays.asList(
+        "Alias", "And", "As", "Call", "Constant", "DomainField", "Dot", "Equals", "Exists", "ExpressionArray",
+        "GreaterThan", "GreaterThanOrEquals", "IdExpression", "In", "LessThan", "LessThanOrEquals", "Like",
+        "Minus", "Multiply", "Not", "NotEquals", "Or", "Ordered", "ParameterReference", "Plus", "Select",
+        "SelectExpression", "TernaryExpression", "Union"));
+
+    /** Occurrences of a term class outside {@link #CDQL_CONSTRUCTS}. Occurrences, not shapes. */
+    private final AtomicLong unexpectedConstructs = new AtomicLong();
+
     @Override
     public void onRead(ClientReadInspectionRegistry.ReadShape shape) {
+        reportConstructsOutsideCdql(shape);
         record(shapeOf(shape, callerClass()));
+    }
+
+    /**
+     * Names any term class the dialect did not anticipate.
+     *
+     * <p>NOT through {@link #record}, for the reason {@link #onObservedCapabilityColumnRead} spells out: that
+     * logs at occurrence 1, 10, 100, and a construct arriving a few times a day would be visible twice and
+     * then silent for a week. Here the silence would be read as "the dialect is settled", which is the exact
+     * sentence that would turn refusal on. Every occurrence, with the running total in the line.
+     *
+     * <p>The shaper records a class it does not recognise rather than refusing it — see its own note on why
+     * unknown is data here — so this is the reporting end of that decision, not a second opinion.
+     */
+    private void reportConstructsOutsideCdql(ClientReadInspectionRegistry.ReadShape shape) {
+        List<String> unexpected = null;
+        for (String construct : shape.constructs())
+            if (!CDQL_CONSTRUCTS.contains(construct)) {
+                if (unexpected == null)
+                    unexpected = new ArrayList<>(2);
+                unexpected.add(construct);
+            }
+        if (unexpected == null)
+            return;
+        long n = unexpectedConstructs.incrementAndGet();
+        if (n > MAX_CAPABILITY_LINES && !ClientWriteInventory.isPowerOfTen(n))
+            return;
+        logger.accept("🛡 CDQL-UNEXPECTED (#" + n + "): " + String.join(",", unexpected)
+                    + " in " + (shape.entityName() == null ? "?" : shape.entityName()) + " " + shape.statementKind()
+                    + " by " + callerClass()
+                    + " — outside the dialect this inventory was written against. Allowed, not refused.");
     }
 
     /**
