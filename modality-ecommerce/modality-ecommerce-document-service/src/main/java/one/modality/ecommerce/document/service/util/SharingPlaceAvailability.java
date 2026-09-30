@@ -6,6 +6,7 @@ import dev.webfx.stack.orm.entity.EntityId;
 import dev.webfx.stack.orm.entity.EntityStore;
 import one.modality.base.shared.entities.Item;
 import one.modality.base.shared.entities.ItemFamily;
+import one.modality.base.shared.entities.Rate;
 import one.modality.base.shared.entities.ItemPolicy;
 import one.modality.base.shared.entities.ScheduledItem;
 import one.modality.ecommerce.policy.service.LoadPolicyArgument;
@@ -109,9 +110,10 @@ public final class SharingPlaceAvailability {
      * own lines count even when it offers no room at all, or an option with nothing to offer would never be
      * refused.
      *
-     * <p>Also refused: a sharing item this event's policy does not offer at all — the booking form only ever
-     * offers the policy's own, so only a crafted request sends another. Never refused: an option whose
-     * availability cannot be known.
+     * <p>Also refused: an item this event does not offer as a sharing place at all — neither a configured
+     * sharing option of its policy, nor a room eligible for a virtual one ({@link #virtualOfferFor}). The
+     * booking form only ever offers those, so only a crafted request sends another. Never refused: an option
+     * whose availability cannot be known.
      *
      * <p>With {@code countBeds} false only that offered check runs — for a line an invite link stands in for,
      * whose bed was checked on its own, but whose item must still be one the event offers.
@@ -119,32 +121,170 @@ public final class SharingPlaceAvailability {
     public static Future<Object> firstOverbooked(Object eventPk, Map<Object, Integer> requestedLinesByItemPk, boolean countBeds) {
         return PolicyService.loadPolicy(new LoadPolicyArgument(eventPk)).map(policy -> {
             policy.rebuildEntities(EntityStore.create());
-            Map<Object, ItemPolicy> offeredByItemPk = new LinkedHashMap<>();
+            Map<Object, Offer> offerByItemPk = new LinkedHashMap<>();
             for (Object itemPk : requestedLinesByItemPk.keySet()) {
                 ItemPolicy offered = null;
                 for (ItemPolicy sharingItemPolicy : policy.getSharingAccommodationItemPolicies())
                     if (Entities.samePrimaryKey(sharingItemPolicy.getItem(), itemPk))
                         offered = sharingItemPolicy;
-                if (offered == null)
+                // A configured sharing option, or -- where the organisation configured none for that room --
+                // the room's own VIRTUAL one. Null from either means this event does not offer the item as a
+                // sharing place at all, which is the check that stands whether or not beds are counted.
+                Offer offer = offered != null ? offerFor(policy, offered) : virtualOfferFor(policy, itemPk);
+                if (offer == null)
                     return itemPk;
-                offeredByItemPk.put(itemPk, offered);
+                offerByItemPk.put(itemPk, offer);
             }
             if (!countBeds)
                 return null;
-            for (Map.Entry<Object, ItemPolicy> entry : offeredByItemPk.entrySet()) {
-                Offer offer = offerFor(policy, entry.getValue());
+            for (Map.Entry<Object, Offer> entry : offerByItemPk.entrySet()) {
+                Offer offer = entry.getValue();
                 if (offer.freeBeds() == null)
                     continue;
                 int drawing = 0;
                 for (Map.Entry<Object, Integer> requested : requestedLinesByItemPk.entrySet())
+                    // Two options draw on the same beds when the ROOMS they draw from overlap. Asked of the
+                    // rooms rather than of the pairings (which is how this read until virtual options existed),
+                    // because a virtual option has no pairing to ask -- it IS one room. The two agree wherever
+                    // a pairing exists, since an option's rooms are exactly the ones its pairing covers, less
+                    // those every offer excludes anyway. They differ in one case, deliberately: an option that
+                    // needs no bed (V0103) has no rooms, so it no longer counts against another option's beds.
+                    // It never had beds of its own checked either -- counting its draw on someone else's was
+                    // the flag contradicting itself, and refused sharers who should have been let in.
                     if (Objects.equals(requested.getKey(), entry.getKey())
-                        || overlaps(pairedIdsOf(offeredByItemPk.get(requested.getKey())), offer.roomItemPks()))
+                        || intersects(offerByItemPk.get(requested.getKey()).roomItemPks(), offer.roomItemPks()))
                         drawing += requested.getValue();
                 if (drawing > offer.freeBeds())
                     return entry.getKey();
             }
             return null;
         });
+    }
+
+    /**
+     * What a VIRTUAL sharing option offers, or null when this item is not one (room-mate plan Part B).
+     *
+     * <p>A virtual option is the absence of configuration: where no sharing Item was set up for a room, the
+     * mate's line names the ROOM's item and says what it is on the line ({@code document_line.share_mate}).
+     * So there is no {@link ItemPolicy} to read an offer from — the offer is that one room's own free beds,
+     * less the event's unlinked sharing places, exactly as a configured option paired with that one room
+     * would have offered.
+     *
+     * <p>Eligibility mirrors {@code getAccommodationOptions}' synthesis in {@code policy-helpers.ts}, and must
+     * keep mirroring it, or the server refuses what the card offered:
+     * <ul>
+     *   <li>an accommodation item of this event, not a sharing item itself;</li>
+     *   <li>more than one bed — one bed cannot be shared, and an item with no capacity is not a whole-room
+     *       type (the same test {@code V0117} governs a mate's quantity by, so the three agree);</li>
+     *   <li>not sold for sole occupancy ({@code minOccupancy} 1), whose booker hosts nobody;</li>
+     *   <li><b>no configured sharing option pairs with it, for anyone.</b> Where the organisation said how
+     *       that room is shared, that statement governs — including its own availability, which may be
+     *       stricter. Counted over every sharing option the EVENT offers, never the ones one booker can see:
+     *       the visible list is age-filtered, so testing it would conjure a virtual option for an adult where
+     *       only a children's one was deliberately offered.</li>
+     * </ul>
+     *
+     * <p>The same tests the card applies, deliberately — see {@link #isVirtualSharingRoom}, which holds the
+     * rule and says why this side must be the strict one. The day-visitor item needs no test of its own: it
+     * is attendance without a bed, so it carries no capacity and is already excluded.
+     */
+    private static Offer virtualOfferFor(PolicyAggregate policy, Object roomItemPk) {
+        ScheduledItem roomRow = null;
+        Integer pendingSharers = null;
+        for (ScheduledItem si : policy.getScheduledItems()) {
+            Item item = si.getItem();
+            ItemFamily family = item == null ? null : item.getFamily();
+            if (family == null || !ACCOMMODATION_FAMILY_CODE.equals(family.getCode()))
+                continue;
+            if (si.getPendingSharers() != null)
+                pendingSharers = pendingSharers == null ? si.getPendingSharers() : Math.max(pendingSharers, si.getPendingSharers());
+            if (roomRow == null && !Boolean.TRUE.equals(item.isShare_mate()) && Entities.samePrimaryKey(item, roomItemPk))
+                roomRow = si;
+        }
+        if (roomRow == null)
+            return null; // not an accommodation item of this event, or a sharing item (handled by its policy)
+        Item room = roomRow.getItem();
+        // Registration's own switch, which the card obeys too. It matters more here than for a configured
+        // option: V0118 stops these lines reaching the defer-allocate trigger, so the sold_out_item check
+        // that ran inside allocation (V0030/V0082) no longer stands behind this one. Without it, ticking a
+        // room type sold out would stop its public sales while still accepting shares of it.
+        if (policy.isItemForcedSoldOut(room, roomRow.getSite()))
+            return null;
+        ItemPolicy roomPolicy = policy.getItemPolicy(room);
+        boolean configuredPairingCovers = false;
+        for (ItemPolicy sharingItemPolicy : policy.getSharingAccommodationItemPolicies())
+            if (pairsWith(pairedIdsOf(sharingItemPolicy), roomItemPk))
+                configuredPairingCovers = true;
+        if (!isVirtualSharingRoom(room.getCapacity(),
+            roomPolicy == null ? null : roomPolicy.getMinOccupancy(), configuredPairingCovers,
+            isPerPersonRoom(policy, roomRow), isApplicableInPerson(roomPolicy)))
+            return null;
+        List<Object> roomItemPks = new ArrayList<>();
+        roomItemPks.add(roomItemPk);
+        if (pendingSharers == null)
+            return new Offer(null, roomItemPks); // an older server: no figures, so nobody is refused
+        Integer free = roomRow.getFreeSharedBeds();
+        if (free == null)
+            return new Offer(null, roomItemPks);
+        return new Offer(Math.max(0, free - pendingSharers), roomItemPks);
+    }
+
+    /**
+     * The rule deciding whether a room carries a virtual sharing option, as facts rather than entities, so
+     * it can be checked on its own — see {@code SharingPlaceAvailabilityCheck}.
+     *
+     * <p>Its twin is the synthesis in {@code getAccommodationOptions} ({@code policy-helpers.ts}) and the
+     * two must apply the SAME tests. An earlier draft let the server be the looser side, reasoning that a
+     * strict card only risks refusing a bed it offered. That is the wrong way round for this rule: it
+     * decides which items may be priced at ZERO, so a claim the server accepts and the card never offers
+     * is a free booking waiting for a crafted submit. On staging, 37 live room bookings across 22 events
+     * carry 38 free shared beds on per-person items at £10.60–£70.00 per person per night — beds the form
+     * shows to nobody. The server is therefore at least as strict as the card, in both directions.
+     *
+     * @param capacity the room's own capacity: more than one bed, since one bed cannot be shared, and an
+     *                 item with no capacity at all is not a whole-room type. The same test {@code V0117}
+     *                 governs a mate's quantity by, so the rule, the trigger and the card agree on which
+     *                 rooms have a bed to share.
+     * @param minOccupancy the room's {@code ItemPolicy.minOccupancy}: 1 means its booker paid to have it to
+     *                     themselves and hosts nobody.
+     * @param configuredPairingCovers whether any sharing option THIS EVENT offers pairs with the room —
+     *                     counted over the event's own options, never the age-filtered ones a booker sees,
+     *                     or an event offering only a children's sharing option would conjure an adult one
+     *                     that was deliberately never configured. An option with no pairing covers every
+     *                     room, so a single unpaired one suppresses them all.
+     */
+    static boolean isVirtualSharingRoom(Integer capacity, Integer minOccupancy, boolean configuredPairingCovers,
+                                        boolean perPersonRoom, boolean applicableInPerson) {
+        return capacity != null && capacity > 1
+            && !Objects.equals(minOccupancy, 1)
+            && !configuredPairingCovers
+            && !perPersonRoom
+            && applicableInPerson;
+    }
+
+    /**
+     * Whether the room is sold per person rather than as a whole room, by its first applicable daily rate —
+     * the same rate and the same default the card reads ({@code getAccommodationOptions}: no daily rate at
+     * all means per person, so such an item is not a whole room to spare a bed of either).
+     *
+     * <p>A per-person room has no bed to give away: everyone in it has paid for their own place. Letting a
+     * sharing claim name one is how a bed sold at a per-person rate becomes free.
+     */
+    private static boolean isPerPersonRoom(PolicyAggregate policy, ScheduledItem roomRow) {
+        for (Rate rate : policy.getDailyRates())
+            if (Entities.samePrimaryKey(rate.getItem(), roomRow.getItem())
+                && Entities.samePrimaryKey(rate.getSite(), roomRow.getSite()))
+                return !Boolean.FALSE.equals(rate.isPerPerson()); // unset reads as per person, as on the card
+        return true; // no daily rate for this site and item: not a whole-room type
+    }
+
+    /**
+     * Whether the room's policy offers it to people attending in person at all. Accommodation is in-person
+     * by definition, so an item whose policy opts out is never shown as a room — and must not be reachable
+     * as a bed in one. Unset means offered, as {@code isItemPolicyApplicableToMode} reads it.
+     */
+    private static boolean isApplicableInPerson(ItemPolicy roomPolicy) {
+        return roomPolicy == null || !Boolean.FALSE.equals(roomPolicy.isApplicableToInPerson());
     }
 
     private static EntityId[] pairedIdsOf(ItemPolicy itemPolicy) {
@@ -155,11 +295,19 @@ public final class SharingPlaceAvailability {
             itemPolicy.getPairedItem3Id(), itemPolicy.getPairedItem4Id() };
     }
 
-    /** Whether a pairing covers any of {@code roomItemPks}. */
-    private static boolean overlaps(EntityId[] pairedIds, List<Object> roomItemPks) {
-        for (Object roomPk : roomItemPks)
-            if (pairsWith(pairedIds, roomPk))
-                return true;
+    /**
+     * Whether two offers draw from any room in common.
+     *
+     * <p>By {@link Entities#samePrimaryKey}, never by {@code equals}: a configured offer's rooms are the
+     * primary keys of loaded entities while a virtual offer's is the key the submit sent, so the same room
+     * arrives here as two number types, and a room that compared unequal to itself would let two sharers
+     * onto one bed.
+     */
+    private static boolean intersects(List<Object> someRoomItemPks, List<Object> otherRoomItemPks) {
+        for (Object roomPk : someRoomItemPks)
+            for (Object otherRoomPk : otherRoomItemPks)
+                if (Entities.samePrimaryKey(roomPk, otherRoomPk))
+                    return true;
         return false;
     }
 
