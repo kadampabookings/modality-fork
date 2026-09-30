@@ -114,8 +114,28 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
         // only err towards offering too little once pairings are configured, never a bed twice.
         // No item-family filter here either, for the same reason as above: every sharing item is an accommodation
         // item, so it would narrow nothing, yet it lets the plan start from the items rather than this event's documents.
+        // A sharing place is recognised by the LINE's own flag or by its item's, the way IS_SHARE_MATE_LINE
+        // already recognises one: a virtual sharing option (room-mate plan Part B) names the ROOM's item and
+        // says what it is on the line, so asking the item alone would miss it and its claimed bed would be
+        // offered to somebody else as well.
+        //
+        // A claim is a line that WANTS a bed and has none yet, so a line flagged on its own is only counted
+        // while it holds no bed -- quantity 0, which is what a virtual sharing option carries until it is
+        // linked (V0117). A sharing ITEM needs no such test: it has no capacity, so it never held one.
+        // Without that, the legacy rows that carry the flag on a room they actually occupy would be
+        // counted as claims on top of the bed they already have. They are not hypothetical: event 1957's
+        // bookings 93 and 105 are single rooms with the flag ticked by mistake -- the registration team
+        // then set a custom price, which is what stopped the database charging them 0 -- and counting them
+        // would have taken two beds off every sharing card at a live event. With the quantity test, all
+        // seven live events read exactly as they do today.
+        //
+        // The accommodation filter arrives WITH the line flag, and is not optional either. The note above
+        // about needing no item-family filter was true while this read l.item.share_mate, because every
+        // sharing ITEM is an accommodation item; it stops being true the moment a line's own flag is
+        // admitted. On staging 35 live share-mate lines are meals, teaching, diet, tax and transport.
         ", ps as materialized (select count(1) as claims" +
-        " from DocumentLine l where l.item.share_mate and l.share_mate_ownerDocumentLine=null and !l.cancelled" +
+        " from DocumentLine l where (l.item.share_mate or (l.share_mate and l.quantity=0))" +
+        " and l.item.family.code='acco' and l.share_mate_ownerDocumentLine=null and !l.cancelled" +
         " and l.document.(!cancelled and event=$1))" +
         " select name,label,comment,site.(name,terminal,selfArranged,label),arrivalSite.(name,terminal,selfArranged,label),item.(name,label,perResourceLabel,code,temporal,family.(code,name,label,ord),capacity,share_mate,breakfastIncluded,ord),date,startTime,endTime,timeline?.(site,item,startTime,endTime),cancelled,resource,buddha.hyt" +
         // Availability: for each applicable configuration (from the rc CTE above, matched on the

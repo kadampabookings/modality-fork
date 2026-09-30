@@ -39,8 +39,10 @@ import one.modality.ecommerce.history.server.HistoryRecorder;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -719,11 +721,17 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
         // Documents created by this very submit name their event; any other document is looked up.
         Map<Object, Object> createdDocumentEvents = new HashMap<>();
         List<AddDocumentLineEvent> addedLines = new ArrayList<>();
+        // The lines this submit declares to be sharing places in their own right. A VIRTUAL sharing option
+        // (room-mate plan Part B) names the ROOM's item and says what it is on the line, so its item tells
+        // us nothing; the EditShareMateInfo event travelling with it does.
+        Set<String> shareMateLinePks = new HashSet<>();
         for (AbstractDocumentEvent documentEvent : request.argument().documentEvents()) {
             if (documentEvent instanceof AddDocumentEvent addDocument)
                 createdDocumentEvents.put(addDocument.getDocumentPrimaryKey(), addDocument.getEventPrimaryKey());
             else if (documentEvent instanceof AddDocumentLineEvent add && add.getItemPrimaryKey() != null)
                 addedLines.add(add);
+            else if (documentEvent instanceof EditShareMateInfoDocumentLineEvent mate)
+                shareMateLinePks.add(String.valueOf(mate.getDocumentLinePrimaryKey()));
         }
         if (addedLines.isEmpty())
             return Future.succeededFuture(null);
@@ -733,8 +741,22 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
                 itemPks.add(add.getItemPrimaryKey());
         return sharingItemsAmong(itemPks, 0, new ArrayList<>()).compose(sharingItemPks -> {
             List<AddDocumentLineEvent> sharingLines = new ArrayList<>();
+            // A sharing place by its item OR by its own flag, as IS_SHARE_MATE_LINE reads one. Without the
+            // second, a virtual sharing option would be classified as an ordinary room booking and refused
+            // by the ROOM's sold-out check -- exactly when its booker has no room and needs the bed.
+            //
+            // A no-op until virtual sharing options exist, and NOT sufficient for them on its own:
+            // firstOverbooked refuses any item the policy does not offer as a sharing option, and keys its
+            // bed arithmetic on sharing item pks, so a line naming a ROOM item is refused today and would
+            // draw on no offer even if it were not. Both belong with the front-office half (room-mate plan
+            // Part B step 2), which is also where a test for this rule belongs, since there is nothing to
+            // assert about it until a virtual option can be booked.
             for (AddDocumentLineEvent add : addedLines)
-                if (sharingItemPks.contains(add.getItemPrimaryKey()))
+                // Keys compared as strings, as groupByEvent does just below and for the same reason: the two
+                // events carry the same line key by different routes, and a number type must not decide
+                // whether a sharing place is bed-checked.
+                if (sharingItemPks.contains(add.getItemPrimaryKey())
+                    || shareMateLinePks.contains(String.valueOf(add.getDocumentLinePrimaryKey())))
                     sharingLines.add(add);
             if (sharingLines.isEmpty())
                 return Future.succeededFuture(null);

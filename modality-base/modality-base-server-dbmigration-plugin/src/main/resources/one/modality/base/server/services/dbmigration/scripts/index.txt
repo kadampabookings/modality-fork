@@ -116,3 +116,4 @@ V0113__cart_uuid_must_be_unguessable.sql
 V0114__capture_breakfast_included_on_insert.sql
 V0115__rate_dates_in_event_time_zone.sql
 V0116__money_account_booking_channel.sql
+V0117__share_mate_quantity.sql
