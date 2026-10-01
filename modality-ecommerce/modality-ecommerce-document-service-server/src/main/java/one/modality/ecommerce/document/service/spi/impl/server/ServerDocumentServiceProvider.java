@@ -1054,12 +1054,15 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
                     // extra person in their own room, which is visible to them and to registration and is
                     // their own doing. link() still refuses a cancelled room and a line that is not a
                     // sharing place.
-                    return MateInviteTokenStore.link(mateLineId, ownerLineId, false).map(linked -> {
-                        if (!linked)
+                    return MateInviteTokenStore.link(mateLineId, ownerLineId, false).compose(linked -> {
+                        if (!linked) {
                             Console.log("[MateLink] link refused (room cancelled, or not a share-mate line); booking left unlinked");
-                        return SubmitDocumentChangesResult.withMateInvite(result, linked
-                            ? SubmitDocumentChangesResult.MATE_INVITE_LINKED
-                            : SubmitDocumentChangesResult.MATE_INVITE_NOT_LINKED);
+                            return Future.succeededFuture(SubmitDocumentChangesResult.withMateInvite(result, SubmitDocumentChangesResult.MATE_INVITE_NOT_LINKED));
+                        }
+                        // Fills the owner's name only where the booker left it blank — it never overwrites
+                        // what they wrote. Both link paths label the line the same way for that reason.
+                        return MateInviteTokenStore.stampOwnerName(mateLineId, ownerLineId)
+                            .map(ignored -> SubmitDocumentChangesResult.withMateInvite(result, SubmitDocumentChangesResult.MATE_INVITE_LINKED));
                     });
                 }));
         }).otherwise(e -> {

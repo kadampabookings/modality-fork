@@ -396,13 +396,19 @@ final class MateInviteTokenStore {
     }
 
     /**
-     * Records the room booker's name on the mate's line once the link is made, so the booking says
-     * who it shares with even where the mate typed nothing or typed it wrong.
+     * Fills in the room booker's name on the mate's line once the link is made, where the mate left it
+     * blank, so the booking still says who it shares with.
      *
-     * <p>The name is taken from the owner's OWN booking, never from the client — the link is the
-     * fact, and this only labels it. A blank owner name leaves whatever the mate typed in place
-     * rather than replacing a real name with an empty string, and any failure here is swallowed:
-     * the link stands on its own without the label.
+     * <p><b>It never overwrites what somebody wrote</b> (Bruno, 2026-10-01). It used to: any non-empty
+     * owner name replaced whatever the mate had typed, on the grounds that the mate might have typed it
+     * wrong. That reasoning does not survive the link existing — once the mate IS linked, who they share
+     * with is a fact of the link, and the typed name stops being the system's way of finding the owner
+     * and becomes a record of what that person said. Replacing it destroys that record and gains
+     * nothing; keeping it lets registration see a mismatch instead of having it quietly tidied away.
+     *
+     * <p>The name is taken from the owner's OWN booking, never from the client — the link is the fact,
+     * and this only labels it. A blank owner name leaves the line blank rather than writing an empty
+     * string, and any failure here is swallowed: the link stands on its own without the label.
      */
     static Future<Void> stampOwnerName(Object mateDocumentLineId, Object ownerDocumentLineId) {
         return SubmitService.executeSubmit(new SubmitArgumentBuilder()
@@ -412,7 +418,9 @@ final class MateInviteTokenStore {
                     "    select coalesce(d.person_first_name, '') || ' ' || coalesce(d.person_last_name, '') " +
                     "      from document_line o join document d on d.id = o.document_id where o.id = $2)), ''), " +
                     "  share_mate_owner_name) " +
-                    "where id = $1 and share_mate = true")
+                    // Only into a blank: the name the mate typed is theirs, and the link already says who
+                    // the room belongs to.
+                    "where id = $1 and share_mate = true and coalesce(trim(share_mate_owner_name), '') = ''")
                 .setParameters(mateDocumentLineId, ownerDocumentLineId)
                 .build())
             .map(r -> (Void) null)
