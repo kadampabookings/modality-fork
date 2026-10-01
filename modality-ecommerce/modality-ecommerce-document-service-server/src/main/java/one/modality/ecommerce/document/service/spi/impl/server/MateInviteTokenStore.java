@@ -352,11 +352,18 @@ final class MateInviteTokenStore {
      *
      * @param countBeds whether a full room refuses the link. True for an invited mate: a token is emailed
      *                  and can be forwarded, so an unbounded claim there is a stranger's doing. False for
-     *                  a booker adding someone to their OWN room (room-mate plan Part C) — the worst it
-     *                  allows is a third person in their own twin, visible to them and to registration,
-     *                  and the capacity data this would refuse on is the same data that produced a false
-     *                  sold-out on prod (camping pitches carry capacity 1 — see V0103). The room still has
-     *                  to be live either way; that guard is separate for this reason.
+     *                  a booker adding someone to their OWN room (room-mate plan Part C), who is allowed
+     *                  to put a third person in their own twin — visible to them, visible to registration,
+     *                  and their own doing — and whose capacity would otherwise be refused on the same
+     *                  data that produced a false sold-out on prod (camping pitches carry capacity 1, see
+     *                  V0103).
+     *                  <p>This is NOT where that path is bounded, and it must not be read as unbounded
+     *                  because of it: {@code refuseEventSharingLines} asks this room's own capacity before
+     *                  it exempts the submit from the event pool, so a request that reaches here with
+     *                  countBeds false was told moments earlier that the room had a bed. What is dropped
+     *                  is the re-test inside the write, which is what lets a booker exceed the room on
+     *                  purpose. The room still has to be live either way; that guard is separate for this
+     *                  reason.
      */
     static Future<Boolean> link(Object mateDocumentLineId, Object ownerDocumentLineId, boolean countBeds) {
         return SubmitService.executeSubmit(new SubmitArgumentBuilder()

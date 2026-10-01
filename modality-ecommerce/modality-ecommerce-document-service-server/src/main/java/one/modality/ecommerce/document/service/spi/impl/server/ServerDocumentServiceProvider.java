@@ -879,14 +879,83 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
             : MateInviteTokenStore.resolve(token, eventPk).compose(ownerLineId -> ownerLineId == null
                 ? Future.succeededFuture(false)
                 : MateInviteTokenStore.hasFreeBed(ownerLineId));
-        return invitedToFreeBed
-            // The link stands in for the bed count only; the item must still be one this event offers.
-            .compose(invited -> SharingPlaceAvailability.firstOverbooked(eventPk, requestedLinesByItemPk, !invited))
+        // A BOOKER putting someone in their own room is exempt from the event-wide POOL too (room-mate
+        // plan Part C). That pool is the free beds in the event's booked rooms LESS every unlinked
+        // sharing place anywhere in it, so a queue of other people's unplaced sharers can exhaust it —
+        // and a booker who has just paid for a whole twin is then told there is no bed in it. The figure
+        // is wrong about that one room, which is what this drops.
+        //
+        // It does NOT drop the room's OWN count, although the plan said to drop both. The reasoning there
+        // — that the worst a booker can do is put a third person in their own twin — is true of the
+        // booking FORM and not of the submit: with no per-room ceiling anywhere, a crafted request can
+        // hang any number of £0 lines off one room, and nothing downstream counts them, because a LINKED
+        // mate never reaches the allocation trigger (defer_allocate skips it) and so meets neither its
+        // capacity check nor its sold-out check. The pool used to be that ceiling by accident, being
+        // self-limiting as it is consumed. Asking the room itself restores a ceiling and makes it the
+        // thing the booker actually controls; it is also the check the invited-mate path keeps.
+        //
+        // Gated on OWNERSHIP, and it has to be, because this runs BEFORE the write — the ownership check
+        // in linkBookerMateIfPresent is too late to decide whether the submit may be accepted at all.
+        // Without it, naming any line id would buy a sharing place the event cannot supply; the link would
+        // then be refused afterwards, leaving exactly the unlinked £0 sharing line this gate exists to
+        // prevent. The singleLine guard applies for the same reason it applies to a token.
+        Object bookerRoomLineId = request.argument().ownerDocumentLine();
+        Future<Boolean> booksOwnRoom = !singleLine || bookerRoomLineId == null ? Future.succeededFuture(false)
+            : ownsRoomAtEvent(bookerRoomLineId, eventPk, getUserAccountId(request.userId()))
+                .compose(ownsRoom -> ownsRoom ? MateInviteTokenStore.hasFreeBed(bookerRoomLineId)
+                                              : Future.succeededFuture(false));
+        return Future.all(invitedToFreeBed, booksOwnRoom)
+            .map(exemptions -> Boolean.TRUE.equals(exemptions.resultAt(0)) || Boolean.TRUE.equals(exemptions.resultAt(1)))
+            // Either exemption stands in for the bed COUNT only; the item must still be one this event
+            // offers as a sharing place, which is what firstOverbooked keeps checking.
+            .compose(exempt -> SharingPlaceAvailability.firstOverbooked(eventPk, requestedLinesByItemPk, !exempt))
             .map(refusedItemPk -> {
                 if (refusedItemPk == null)
                     return null;
                 Console.log("[SharingAvailability] refused a sharing place with no free bed: event=" + eventPk + " item=" + refusedItemPk);
                 return SubmitDocumentChangesResult.createSoldOutResult(firstLineByItemPk.get(refusedItemPk).getSitePrimaryKey(), refusedItemPk);
+            });
+    }
+
+    /**
+     * Whether {@code ownerDocumentLineId} is a live room of {@code eventPk} that {@code accountId} may act
+     * on — the pre-write half of the booker's room-share authorisation (room-mate plan Part C).
+     *
+     * <p>Asks the same question as {@link MateLinkRules}' ownership test, and must keep asking it: this
+     * decides whether the submit is exempt from the event's sharing pool, and that decision is made before
+     * anything is written, where the post-write check cannot help. Answering yes for a room that is not
+     * the caller's would hand them a sharing place the event cannot supply, and the link would then be
+     * refused afterwards — leaving an unlinked line priced at zero.
+     *
+     * <p>Two queries rather than one, deliberately. {@code accountCanAccessPersonOrders} is passed a bare
+     * {@code person} at every other call site in the repository, and this would have been the first to
+     * hand it a traversed one ({@code document.person}). That may well compile, but its failure mode is
+     * silent — the query errors, this answers false, and the exemption simply never applies, which is the
+     * bug it exists to fix wearing the costume of working correctly. So the line is resolved to its
+     * booking first, and the ownership question is then asked in the shape everything else uses.
+     *
+     * <p>Any failure answers false: the pool check then stays on, which refuses too much rather than too
+     * little.
+     */
+    private static Future<Boolean> ownsRoomAtEvent(Object ownerDocumentLineId, Object eventPk, Object accountId) {
+        if (ownerDocumentLineId == null || eventPk == null || accountId == null)
+            return Future.succeededFuture(false);
+        return EntityStore.create().<DocumentLine>executeQuery(
+                "select document from DocumentLine where id=$1 and share_owner and !cancelled"
+                + " and item.family.code='acco' and document.event=$2",
+                ownerDocumentLineId, eventPk)
+            .compose(lines -> {
+                if (lines.isEmpty())
+                    return Future.succeededFuture(false); // not a live room of this event
+                Object documentPk = Entities.getPrimaryKey(lines.get(0).getForeignEntityId("document"));
+                return EntityStore.create().executeQuery(
+                        "select id from Document where id=$1 and !cancelled and accountCanAccessPersonOrders($2, person)",
+                        documentPk, accountId)
+                    .map(documents -> !documents.isEmpty());
+            })
+            .otherwise(e -> {
+                Console.log("[MateLink] could not confirm the booker owns the room; keeping the bed count on: " + e);
+                return false;
             });
     }
 
