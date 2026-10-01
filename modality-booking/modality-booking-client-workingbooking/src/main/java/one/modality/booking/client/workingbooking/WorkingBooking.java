@@ -642,7 +642,7 @@ public final class WorkingBooking {
         }
         // We submit the booking changes
         return DocumentService.submitDocumentChanges(
-            new SubmitDocumentChangesArgument(historyComment, documentChanges.toArray(new AbstractDocumentEvent[0]), queueCapable, null /* clientOrigin - React-only */, null /* inviteToken - React-only */)
+            new SubmitDocumentChangesArgument(historyComment, documentChanges.toArray(new AbstractDocumentEvent[0]), queueCapable, null /* clientOrigin - React-only */, null /* inviteToken - React-only */, null /* ownerDocumentLine - React-only */)
         ).compose(result -> {
             if (result.status() != DocumentChangesStatus.APPROVED || !reloadOnApproved) // SOLD_OUT or ENQUEUED
                 return Future.succeededFuture(result);

@@ -27,6 +27,7 @@ public final class SubmitDocumentChangesResultSerialCodec extends SerialCodecBas
     private static final String PRIORITY_KEY = "priority";
     private static final String ERROR_KEY = "error";
     private static final String MATE_INVITE_KEY = "mateInvite";
+    private static final String OWNER_DOCUMENT_LINE_KEY = "ownerDocumentLine";
 
     public SubmitDocumentChangesResultSerialCodec() {
         super(SubmitDocumentChangesResult.class, CODEC_ID);
@@ -51,6 +52,7 @@ public final class SubmitDocumentChangesResultSerialCodec extends SerialCodecBas
         encodeObject(serial, ERROR_KEY,                     arg.errorMessage());
         if (arg.mateInvite() != null)
             encodeString(serial, MATE_INVITE_KEY,           arg.mateInvite());
+        encodeObject(serial, OWNER_DOCUMENT_LINE_KEY,       arg.ownerDocumentLine());
     }
 
     @Override
@@ -69,7 +71,8 @@ public final class SubmitDocumentChangesResultSerialCodec extends SerialCodecBas
             decodeInteger(serial, QUEUE_TOTAL_KEY, 0),
             decodeBoolean(serial, PRIORITY_KEY, false),
             decodeString(serial, ERROR_KEY),
-            decodeString(serial, MATE_INVITE_KEY)
+            decodeString(serial, MATE_INVITE_KEY),
+            decodeObject(serial, OWNER_DOCUMENT_LINE_KEY)
             );
     }
 
