@@ -58,7 +58,17 @@ final class MailTransmitter {
                 Console.log("⛔️ " + LOG_PREFIX + "Could not build mail " + mail.getPrimaryKey() + ": " + buildError);
                 return completeMail(mail, recipients, buildError);
             }
-            Console.log(LOG_PREFIX + "Sending '" + message.getSubject() + "' to " + message.getTo());
+            // The mail's id and how many it is going to, never the addresses. `MailAddress.toString()`
+            // is its RFC822 form, so this line used to print them - and the three senders that fail to
+            // address a mail at all were the ones it never reached, so fixing that would have started
+            // writing exactly the addresses this system is careful about into CloudWatch: a previous
+            // sign-in address (EmailChangeNotice masks that very datum in the body and keeps it out of
+            // its own error log), an account that has just closed password sign-in, a booker asking to
+            // recover their bookings. A log is outside the database, so neither the anonymiser nor an
+            // erasure request reaches it. The mail id correlates with the `mail` and `recipient` rows
+            // for anyone who needs the address and is entitled to it.
+            Console.log(LOG_PREFIX + "Sending mail " + mail.getPrimaryKey()
+                        + " ('" + message.getSubject() + "') to " + message.getTo().size() + " recipient(s)");
             Promise<Void> promise = Promise.promise();
             MailTransport.transmit(message)
                     .onSuccess(result -> {
@@ -87,6 +97,14 @@ final class MailTransmitter {
     }
 
     private TransportMessage buildMessage(Mail mail, List<Recipient> recipients) {
+        // Recipients FIRST, although the account is needed first: with none, nothing about this mail
+        // has been loaded at all. The entity arrives from the drain query, which selects only `date`,
+        // and every other field - subject, content, the account and its SMTP account - is loaded as a
+        // side effect of the recipient query above. So a mail nobody is addressed on failed on its
+        // ACCOUNT, naming a row that was sitting in the database all along, and sent five days of
+        // debugging after the wrong thing. Checked here, the error names what is actually wrong.
+        if (recipients.isEmpty())
+            throw new IllegalStateException("Mail " + mail.getPrimaryKey() + " has no recipients");
         MailAccount account = mail.getAccount();
         if (account == null)
             throw new IllegalStateException("Mail " + mail.getPrimaryKey() + " has no mail account");
@@ -139,8 +157,9 @@ final class MailTransmitter {
         }
 
         TransportMessage message = builder.build();
+        // Recipient rows exist (checked above) but none of them is flagged to/cc/bcc.
         if (!message.hasRecipients())
-            throw new IllegalStateException("Mail " + mail.getPrimaryKey() + " has no recipients");
+            throw new IllegalStateException("Mail " + mail.getPrimaryKey() + " has recipients but none addressed to/cc/bcc");
         return message;
     }
 

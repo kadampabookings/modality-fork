@@ -116,7 +116,15 @@ public final class ModalityGuestAuthenticationGateway implements ServerAuthentic
                 new ModalityContext(1, null, null, null),
                 MAIL_FROM_NAME
             )
-        );
+        ).recover(e -> {
+            // "Always resolves successfully to avoid email-enumeration" (above) has to hold here too:
+            // an error returned for one address while every other gets a bland success tells the caller
+            // that address has guest bookings with a live cart link, which is the fact this whole path
+            // is built to conceal. The exception's type only - a provider's message can quote the
+            // recipient, and that is somebody's address. Same shape as EmailChangeNotice's recover.
+            GuestBookingAccess.logRecoveryMailFailure(e);
+            return Future.succeededFuture();
+        });
     }
 
     /**
