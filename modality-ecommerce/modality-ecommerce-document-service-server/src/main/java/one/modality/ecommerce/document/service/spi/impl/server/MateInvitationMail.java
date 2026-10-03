@@ -30,8 +30,8 @@ import one.modality.base.server.mail.LocalizedMailTemplate;
  * <p><b>What the caller does not choose.</b> The link is built on OUR configured origin, never on
  * anything that arrived with the request — the body carries a bearer token for a bed, so an
  * attacker-chosen origin would be handed that capability by the invitee's own mail client. The sending
- * account is fixed. The prose is a bundled template (English today; the loader falls back to it
- * for every other language until the six translations land). What the booker supplies is the address
+ * account is fixed. The prose is a bundled template in the seven languages the front office ships,
+ * with English as the fallback for anything else. What the booker supplies is the address
  * and, through their own booking, the names — and the names are escaped, because a booking form's free
  * text must not become markup in a message we send under our own name.
  *
