@@ -19,7 +19,7 @@ import one.modality.base.shared.entities.Cart;
 import one.modality.base.shared.entities.MagicLink;
 import one.modality.crm.server.authn.gateway.shared.AccountSignInRestrictionStore;
 import one.modality.crm.server.authn.gateway.shared.GuestBookingAccess;
-import one.modality.crm.server.authn.gateway.shared.LocalizedMailTemplate;
+import one.modality.base.server.mail.LocalizedMailTemplate;
 import one.modality.crm.server.authn.gateway.shared.MagicLinkService;
 import one.modality.crm.server.authn.gateway.shared.PasswordClosedNotice;
 import one.modality.crm.shared.services.authn.AuthenticateWithCartCredentials;

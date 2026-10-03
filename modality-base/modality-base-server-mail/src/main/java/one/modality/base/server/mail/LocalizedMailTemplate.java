@@ -1,4 +1,4 @@
-package one.modality.crm.server.authn.gateway.shared;
+package one.modality.base.server.mail;
 
 import dev.webfx.platform.resource.Resource;
 import dev.webfx.platform.util.Strings;
@@ -24,6 +24,12 @@ import java.util.Properties;
  *
  * <p>Missing language files (HTML or properties) silently fall back to English so
  * partial translations are safe to ship.</p>
+ *
+ * <p>Beside the mail provider rather than in the authentication gateway it was written for: the three
+ * notices there are no longer the only senders that need per-language prose, and the alternative was an
+ * ecommerce module depending on CRM authentication to read an HTML file. The resources themselves do not
+ * move with it — {@code loaderClass} resolves them against the CALLER's package, so each sender keeps its
+ * own templates next to itself.</p>
  *
  * <p>Dictionary files are loaded as UTF-8 via {@link Properties#load(java.io.Reader)} —
  * the legacy {@code InputStream} overload would assume ISO-8859-1 and garble

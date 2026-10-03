@@ -30,7 +30,7 @@ import one.modality.crm.server.authn.gateway.shared.PasswordClosedNotice;
 import one.modality.crm.server.authn.gateway.shared.CredentialChangeProof;
 import one.modality.crm.server.authn.gateway.shared.EmailChangeNotice;
 import one.modality.crm.server.authn.gateway.shared.GuestPersonLinker;
-import one.modality.crm.server.authn.gateway.shared.LocalizedMailTemplate;
+import one.modality.base.server.mail.LocalizedMailTemplate;
 import one.modality.crm.server.authn.gateway.shared.MagicLinkService;
 import one.modality.crm.server.authn.gateway.shared.SetPasswordAfterRecoveryCredentials;
 import one.modality.crm.server.authn.gateway.shared.StoredPasswords;

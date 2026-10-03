@@ -13,7 +13,6 @@ module modality.crm.server.authn.gateway.shared {
     requires webfx.platform.async;
     requires webfx.platform.conf;
     requires webfx.platform.console;
-    requires webfx.platform.resource;
     requires webfx.platform.scheduler;
     requires webfx.platform.service;
     requires webfx.platform.substitution;
