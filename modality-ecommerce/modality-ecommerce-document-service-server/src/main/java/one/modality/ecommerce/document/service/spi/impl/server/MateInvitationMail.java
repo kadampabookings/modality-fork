@@ -49,14 +49,6 @@ final class MateInvitationMail {
 
     private static final String LOG_PREFIX = "[MateInvite] ";
     private static final String CONFIG_PATH = "modality.ecommerce.document.service";
-    private static final String MAIL_FROM = "kbs@kadampa.net";
-    private static final String MAIL_FROM_NAME = "Kadampa Booking System";
-    /** The same account the other KBS3 senders use until mail accounts are resolved per organisation. */
-    private static final int MAIL_ACCOUNT_ID = 27;
-    /** mail.subject is varchar(255); recipient.name is varchar(91); recipient.email is varchar(127). */
-    private static final int MAX_SUBJECT = 255, MAX_NAME = 91, MAX_EMAIL = 127;
-    /** Longer than any name this greeting needs, and short enough not to be a paragraph. */
-    private static final int MAX_PRINTED_NAME = 40;
 
     /**
      * Loaded on first use rather than at class-load.
@@ -74,14 +66,6 @@ final class MateInvitationMail {
                 MateInvitationMail.class);
         return mail;
     }
-
-    private static final String MAIL_SQL =
-        "insert into mail (account_id, out, subject, content, from_name, from_email)" +
-        " values ($1, true, $2, $3, $4, $5) returning id";
-
-    private static final String RECIPIENT_SQL =
-        "insert into recipient (mail_id, name, email, \"to\", cc, bcc, ok)" +
-        " values ($1, $2, $3, true, false, false, false)";
 
     /**
      * Records on the token that it was emailed, for which slot, and in which message — the row the cart
@@ -146,35 +130,23 @@ final class MateInvitationMail {
                              String mateName, String bookerName, String eventName, String lang) {
         String body = mail().renderBody(lang)
             .replace("[inviteLink]", inviteLink)
-            .replace("[mateName]", nameOrNeutral(mateName, mail().getMessage(lang, "neutralMateName")))
-            .replace("[bookerName]", nameOrNeutral(bookerName, mail().getMessage(lang, "neutralBookerName")))
+            .replace("[mateName]", MateMails.nameOrNeutral(mateName, mail().getMessage(lang, "neutralMateName")))
+            .replace("[bookerName]", MateMails.nameOrNeutral(bookerName, mail().getMessage(lang, "neutralBookerName")))
             // The event's name is ours, not a booker's free text, so it is escaped and printed as it is.
-            .replace("[eventName]", escapeHtml(eventName));
+            .replace("[eventName]", MateMails.escapeHtml(eventName));
 
-        SubmitArgument mail = new SubmitArgumentBuilder()
-            .setDataSourceId(DataSourceModelService.getDefaultDataSourceId())
-            // " returning id" with setReturnGeneratedKeys is what the two references below resolve
-            // against; without the pair, neither the recipient nor the record lands.
-            .setStatement(MAIL_SQL)
-            .setParameters(MAIL_ACCOUNT_ID, cut(mail().renderSubject(lang), MAX_SUBJECT), body,
-                MAIL_FROM_NAME, MAIL_FROM)
-            .setReturnGeneratedKeys(true)
-            .build();
-        SubmitArgument recipient = new SubmitArgumentBuilder()
-            .setDataSourceId(DataSourceModelService.getDefaultDataSourceId())
-            .setStatement(RECIPIENT_SQL)
-            // No person_id: the invitee is a stranger to this system and may never become one. The
-            // address is theirs and theirs alone, and it is written here exactly once.
-            .setParameters(new GeneratedKeyReference(0), cut(mateName, MAX_NAME), cut(email, MAX_EMAIL))
-            .build();
+        SubmitArgument[] message = MateMails.mailAndRecipient(
+            // No person: the invitee is a stranger to this system and may never become one.
+            mail().renderSubject(lang), body, mateName, email, null);
         SubmitArgument record = new SubmitArgumentBuilder()
             .setDataSourceId(DataSourceModelService.getDefaultDataSourceId())
             .setStatement(RECORD_SQL)
+            // The generated key is the mail's, from the first statement of the pair above.
             .setParameters(mateSlot, new GeneratedKeyReference(0), tokenHash)
             .build();
 
         return SubmitService.executeSubmitBatch(
-                new Batch<>(new SubmitArgument[] { mail, recipient, record }))
+                new Batch<>(new SubmitArgument[] { message[0], message[1], record }))
             .map(ignored -> null);
     }
 
@@ -202,39 +174,4 @@ final class MateInvitationMail {
         return origin + "/book-event/" + eventId + "/share/" + rawToken;
     }
 
-    /**
-     * A name as this message may print it, or a neutral word when what the booking holds is not one.
-     *
-     * Escaping stops markup; it does not stop PROSE. The name is free text on the booker's own line, and
-     * this message goes out under our name to an address its subject never chose — so ninety characters
-     * of it are an invitation to write "https://kbs-refund.example/claim" and have a mail client render
-     * it as a link beside our branding. Anything carrying a scheme, an at-sign or something
-     * domain-shaped is therefore not printed at all, and a long one is cut: a booking whose roommate is
-     * genuinely called that is better greeted impersonally than used as a billboard.
-     */
-    static String nameOrNeutral(String value, String neutral) {
-        String name = value == null ? "" : value.trim();
-        if (name.isEmpty() || name.length() > MAX_PRINTED_NAME)
-            return name.isEmpty() ? neutral : neutral;
-        String lower = name.toLowerCase();
-        if (lower.contains("://") || lower.contains("www.") || lower.indexOf('@') >= 0
-            || lower.matches(".*\\.[a-z]{2,}.*"))
-            return neutral;
-        return escapeHtml(name);
-    }
-
-    /**
-     * Names reach this message from a booking form, so they are somebody's free text. Escaped rather
-     * than trusted: this mail goes out under our own name, to an address its subject never chose.
-     */
-    private static String escapeHtml(String value) {
-        if (value == null)
-            return "";
-        return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-                    .replace("\"", "&quot;").replace("'", "&#39;");
-    }
-
-    private static String cut(String value, int max) {
-        return value == null || value.length() <= max ? value : value.substring(0, max);
-    }
 }

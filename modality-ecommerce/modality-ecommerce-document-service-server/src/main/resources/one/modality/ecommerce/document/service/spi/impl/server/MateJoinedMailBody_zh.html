@@ -1,0 +1,96 @@
+<html lang="zh" dir="ltr"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>有人已入住您房间的床位</title>
+    <style>
+        /* Global Styles */
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            background-color: #f9fafb;
+        }
+
+        .email-container {
+            max-width: 600px;
+            margin: 20px auto;
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            text-align: center;
+        }
+
+        .header {
+            background-color: #ffffff;
+            padding: 20px 0;
+            font-size: 32px;
+            color: #009fe3;
+            font-weight: bold;
+        }
+
+        .content {
+            padding: 20px 40px;
+            font-size: 16px;
+            color: #505050;
+        }
+
+        .content h2 {
+            font-size: 18px;
+            margin-bottom: 10px;
+            font-weight: normal;
+            color: #606060;
+        }
+
+        .highlight {
+            font-weight: bold;
+            color: #303030;
+        }
+
+        .button {
+            display: inline-block;
+            margin: 10px 0 20px;
+            padding: 12px 28px;
+            background-color: #009fe3;
+            color: #ffffff !important;
+            font-weight: bold;
+            text-decoration: none;
+            border-radius: 8px;
+        }
+
+        .divider {
+            width: 80%;
+            margin: 20px auto;
+            border: 0;
+            border-top: 1px solid #dddddd;
+        }
+
+        .footer {
+            font-size: 12px;
+            color: #aaaaaa;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+
+<body>
+<div class="email-container">
+    <div class="header">有人已入住您房间的床位</div>
+
+    <div class="content">
+        <h2>[bookerName]，您好：</h2>
+
+        <p><span class="highlight">[mateName]</span> 已预订 <span class="highlight">[eventName]</span> 的名额，并使用了您为其保留的床位。</p>
+
+        <p>您无需做任何事。该预订属于对方——费用由其自行支付——而床位本就包含在您的预订中。</p>
+
+        <hr class="divider">
+
+        <p>您随时可以在自己的预订中查看；如果还有空余床位可以邀请他人，链接也在那里。</p>
+    </div>
+
+    <div class="footer">
+        <p>每当有人入住合住房间的床位时，此通知都会发送给预订该房间的人。</p>
+    </div>
+</div>
+</body></html>

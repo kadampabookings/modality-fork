@@ -1028,6 +1028,38 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
      * line found) is logged and the booking still succeeds — the mate simply stays unlinked, which the
      * back office can resolve. The TOKEN is the authorization; the client never names the owner line.
      */
+    /**
+     * Tells the room booker that one of their beds has been taken, and by whom.
+     *
+     * <p>Reads both sides from the two lines rather than from anything the mate's request carried: who
+     * holds the room, where to write to them, and the name on the booking that just joined.
+     *
+     * <p>Never fails the link. Its own result is swallowed here as well as by the chain it hangs off,
+     * because the three follow-ups are independent and one going wrong should not cost the others.
+     */
+    private static Future<Void> notifyBookerOfJoin(Object ownerLineId, Object mateLineId) {
+        // The window first, so a refusal costs nothing: no query, no mail, and the link already stands.
+        if (!MateJoinedMail.maySend(ownerLineId))
+            return Future.succeededFuture();
+        return MateInviteTokenStore.loadJoinNotice(ownerLineId, mateLineId)
+            .compose(notice -> {
+                if (notice == null)
+                    return Future.succeededFuture();
+                // The booker may follow their own link rather than the cart's button — it stays usable
+                // for an account already in the room, to put a second person in a triple. Telling them
+                // somebody took a bed, when that somebody was them, reads as a stranger walking in.
+                if (notice.mateIsTheBooker())
+                    return Future.succeededFuture();
+                return MateJoinedMail.send(notice.bookerName(), notice.bookerEmail(),
+                                           notice.bookerPersonId(), notice.mateName(),
+                                           notice.eventName(), notice.lang());
+            })
+            .otherwise(e -> {
+                Console.log("[MateInvite] linked, but the booker could not be told: " + e);
+                return null;
+            });
+    }
+
     private static Future<SubmitDocumentChangesResult> consumeMateInviteTokenIfPresent(DocumentSubmitRequest request, SubmitDocumentChangesResult result) {
         String token = request.argument().inviteToken();
         if (token == null || token.isBlank())
@@ -1061,8 +1093,15 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
                     // so a failure in them still reports LINKED.
                     return MateInviteTokenStore.recordFirstUse(token, mateLineId)
                         .compose(ignored -> MateInviteTokenStore.stampOwnerName(mateLineId, ownerLineId))
+                        // And tell the booker, who otherwise finds out only by looking at their own
+                        // booking — which answers the question for somebody who wonders, and misses the
+                        // person whose link is used days later. Sent whichever way the link reached its
+                        // reader: we emailed it, or they copied it themselves, and the booker wants to
+                        // know either way. Best effort, like the two above: a bed that is taken is
+                        // taken, and failing to mention it must never undo that.
+                        .compose(ignored -> notifyBookerOfJoin(ownerLineId, mateLineId))
                         .otherwise(e -> {
-                            Console.log("[MateInvite] linked, but recording first use or the owner name failed: " + e);
+                            Console.log("[MateInvite] linked, but recording first use, the owner name or the booker's note failed: " + e);
                             return null;
                         })
                         .map(ignored -> SubmitDocumentChangesResult.withMateInvite(result, SubmitDocumentChangesResult.MATE_INVITE_LINKED));

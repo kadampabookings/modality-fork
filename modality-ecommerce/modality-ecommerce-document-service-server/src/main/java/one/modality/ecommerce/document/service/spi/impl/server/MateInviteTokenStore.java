@@ -476,6 +476,61 @@ final class MateInviteTokenStore {
      * relying on this (room-mate plan Part C). One upcoming booking on staging owns two rooms today, and
      * its longest line is also its lowest-id one, so nothing is currently mis-bound.
      */
+    /** Who to tell that a bed has been taken, and who took it. */
+    record JoinNotice(String bookerName, String bookerEmail, Object bookerPersonId, String mateName,
+                      String eventName, String lang, boolean mateIsTheBooker) { }
+
+    /**
+     * Everything the "somebody took a bed" note needs, read from the two lines it is about.
+     *
+     * <p>The booker's address the way the mail trigger resolves one: their own, else their account
+     * login, else the address typed on the booking — a guest booker has no person row to carry one. A
+     * booking with none of the three is not written to, which {@link MateJoinedMail} treats as nothing
+     * to do rather than a failure.
+     */
+    static Future<JoinNotice> loadJoinNotice(Object ownerDocumentLineId, Object mateDocumentLineId) {
+        return QueryService.executeQuery(new QueryArgumentBuilder()
+                .setDataSourceId(dataSourceId())
+                .setStatement(
+                    "select coalesce(nullif(trim(coalesce(bp.first_name, '') || ' ' || coalesce(bp.last_name, '')), ''), bp.name), " +
+                    "coalesce(nullif(bp.email, ''), nullif(bfa.username, ''), nullif(od.person_email, '')), " +
+                    // NOT md.person_email as a last resort: a mate with no person row would then have
+                    // their ADDRESS printed to the booker as if it were their name — on the copy-link
+                    // route, to somebody who may never have known it. Only the anti-phishing rule in
+                    // nameOrNeutral keeps it out today, and that rule is there for a different job.
+                    "coalesce(nullif(trim(coalesce(mp.first_name, '') || ' ' || coalesce(mp.last_name, '')), ''), mp.name), " +
+                    "e.name, bl.iso_639_1, od.person_id, " +
+                    // A booker may follow their own link rather than the cart's own button — the link
+                    // stays usable for an account already in the room, to put a second person in a
+                    // triple — and telling them somebody took a bed when that somebody was them reads
+                    // as a stranger walking in.
+                    "(md.person_id is not null and md.person_id = od.person_id) " +
+                    "from document_line odl " +
+                    "join document od on od.id = odl.document_id " +
+                    "left join person bp on bp.id = od.person_id " +
+                    "left join frontend_account bfa on bfa.id = bp.frontend_account_id " +
+                    "left join language bl on bl.id = bp.language_id " +
+                    "join event e on e.id = od.event_id " +
+                    "join document_line mdl on mdl.id = $2 " +
+                    "join document md on md.id = mdl.document_id " +
+                    "left join person mp on mp.id = md.person_id " +
+                    "where odl.id = $1")
+                .setParameters(ownerDocumentLineId, mateDocumentLineId)
+                .build())
+            .map(rs -> {
+                if (rs.getRowCount() < 1)
+                    return null;
+                return new JoinNotice(
+                    text(rs.getValue(0, 0)), text(rs.getValue(0, 1)), rs.getValue(0, 5),
+                    text(rs.getValue(0, 2)), text(rs.getValue(0, 3)), text(rs.getValue(0, 4)),
+                    Boolean.TRUE.equals(rs.getValue(0, 6)));
+            });
+    }
+
+    private static String text(Object value) {
+        return value == null ? "" : value.toString().trim();
+    }
+
     /**
      * The names an invitation needs, for one slot of one room line.
      *
