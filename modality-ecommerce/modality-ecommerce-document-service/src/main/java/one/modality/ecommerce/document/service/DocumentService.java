@@ -60,6 +60,17 @@ public final class DocumentService {
         return getProvider().sendMateInvitation(documentId, mateSlot, email, lang);
     }
 
+    /**
+     * The invitations sent for this booking's room, as a JSON array — what the cart shows on a visit
+     * later than the one that sent them.
+     *
+     * <p>Carries no token, no hash and no address: a slot number, a date, and whether the mailer gave up.
+     * The cart already holds the names, in the room line it is displaying.
+     */
+    public static Future<String> listMateInvitations(Object documentId) {
+        return getProvider().listMateInvitations(documentId);
+    }
+
     public static Future<String> resolveMateInvite(String token, Object eventId) {
         return getProvider().resolveMateInvite(token, eventId);
     }

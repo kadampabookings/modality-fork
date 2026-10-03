@@ -476,6 +476,62 @@ final class MateInviteTokenStore {
      * relying on this (room-mate plan Part C). One upcoming booking on staging owns two rooms today, and
      * its longest line is also its lowest-id one, so nothing is currently mis-bound.
      */
+    /**
+     * The invitations sent for one room, as a small JSON array for the cart to read back on a later
+     * visit: {@code [{"slot":1,"date":"2026-10-02","failed":false}, ...]}, newest first.
+     *
+     * <p>Only the rows that were EMAILED — {@code invited_date} is null for a token the booker minted and
+     * handed over themselves, and there is nobody to report having written to.
+     *
+     * <p><b>No token, no hash, no address.</b> The slot is a number the caller already knows (they named
+     * the person in it), the date is a date, and {@code failed} is whether the mailer gave up on the
+     * message. The address lives on the recipient row and stays there: the cart has the booker's own copy
+     * of what they typed, and a read endpoint that hands back addresses is a read endpoint worth
+     * attacking.
+     *
+     * <p>Built by hand from values checked to have the expected shape — digits for the slot, an ISO date
+     * — like {@link #roomDescriptionJson} above and for the same reason.
+     */
+    static Future<String> loadInvitations(Object ownerDocumentLineId) {
+        return QueryService.executeQuery(new QueryArgumentBuilder()
+                .setDataSourceId(dataSourceId())
+                .setStatement(
+                    // The NEWEST row per slot. Each send mints its own token, so a slot invited twice has
+                    // two rows — and listing both would show one person twice, keep the panel pinned to
+                    // its warning variant over a delivery that has since been superseded, and say "2
+                    // invitations" about one roommate. It also bounds the reply to seven rows.
+                    "select s.invited_mate_slot, s.sent_on, s.failed from (" +
+                    "  select distinct on (t.invited_mate_slot) t.invited_mate_slot, " +
+                    // at time zone 'UTC' rather than a bare ::date: the cast would otherwise resolve
+                    // through the server session's TimeZone, so an invitation sent just after midnight
+                    // would be reported as the day before, and the answer would change with a GUC.
+                    "    (t.invited_date at time zone 'UTC')::date as sent_on, " +
+                    "    (m.transmitted and m.error is not null) as failed " +
+                    "  from mate_invite_token t left join mail m on m.id = t.invite_mail_id " +
+                    "  where t.owner_document_line_id = $1 and t.invited_date is not null " +
+                    "  order by t.invited_mate_slot, t.invited_date desc) s " +
+                    "order by s.sent_on desc")
+                .setParameters(ownerDocumentLineId)
+                .build())
+            .map(rs -> {
+                StringBuilder json = new StringBuilder("[");
+                for (int row = 0; row < rs.getRowCount(); row++) {
+                    Object slot = rs.getValue(row, 0);
+                    String slotText = slot == null ? null : slot.toString();
+                    // A row whose slot is not a small number names nobody the cart could show.
+                    if (slotText == null || !slotText.matches("[1-7]"))
+                        continue;
+                    if (json.length() > 1)
+                        json.append(',');
+                    json.append("{\"slot\":").append(slotText)
+                        .append(",\"date\":").append(isoDateJsonOrNull(rs.getValue(row, 1)))
+                        .append(",\"failed\":").append(Boolean.TRUE.equals(rs.getValue(row, 2)))
+                        .append('}');
+                }
+                return json.append(']').toString();
+            });
+    }
+
     /** Who to tell that a bed has been taken, and who took it. */
     record JoinNotice(String bookerName, String bookerEmail, Object bookerPersonId, String mateName,
                       String eventName, String lang, boolean mateIsTheBooker) { }

@@ -24,6 +24,8 @@ public interface DocumentServiceProvider {
 
     Future<Void> sendMateInvitation(Object documentId, int mateSlot, String email, String lang);
 
+    Future<String> listMateInvitations(Object documentId);
+
     /**
      * Reports whether a room-share invite link can still be followed, as one of USABLE, FULL,
      * EXPIRED or UNKNOWN — and nothing else. See {@code MateInviteStatus}.

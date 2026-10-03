@@ -23,6 +23,8 @@ public interface DocumentServiceBusAddresses {
 
     String SEND_MATE_INVITATION_ADDRESS = "modality/service/document/sendMateInvitation";
 
+    String LIST_MATE_INVITATIONS_ADDRESS = "modality/service/document/listMateInvitations";
+
     String RESOLVE_MATE_INVITE_ADDRESS = "modality/service/document/resolveMateInvite";
 
     String DESCRIBE_MATE_INVITE_ROOM_ADDRESS = "modality/service/document/describeMateInviteRoom";

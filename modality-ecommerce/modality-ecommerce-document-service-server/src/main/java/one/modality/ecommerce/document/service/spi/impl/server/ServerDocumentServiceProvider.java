@@ -699,6 +699,29 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
     }
 
     @Override
+    public Future<String> listMateInvitations(Object documentId) {
+        Object accountId = getUserAccountId(ThreadLocalStateHolder.getUserId());
+        // The same gate as the two ways of offering a bed, minus the free-bed test: a booker whose room
+        // has filled still has every right to see who was written to on its behalf.
+        if (accountId == null)
+            return Future.failedFuture("[MateInviteError] Only a signed-in booker can see their invitations");
+        if (documentId == null)
+            return Future.succeededFuture("[]");
+        return MateInviteTokenStore.loadOwnerLineForBooking(documentId).compose(ownerLine -> {
+            if (ownerLine == null)
+                // No room, so no invitations — not an error, just nothing to show.
+                return Future.succeededFuture("[]");
+            if (!MateLinkRules.sameId(ownerLine.frontendAccountId(), accountId))
+                // Nothing, rather than "not yours". A booking that does not exist, and one that is
+                // somebody else's, must answer alike: this is a cheap side-effect-free read with no
+                // throttle, so two distinguishable answers are an oracle for walking document ids to
+                // find live bookings holding a shareable room. The client treats both the same way.
+                return Future.succeededFuture("[]");
+            return MateInviteTokenStore.loadInvitations(ownerLine.ownerDocumentLineId());
+        });
+    }
+
+    @Override
     public Future<Void> sendMateInvitation(Object documentId, int mateSlot, String email, String lang) {
         // Captured synchronously, before the first async hop, like every other caller-derived value here.
         Object accountId = getUserAccountId(ThreadLocalStateHolder.getUserId());
