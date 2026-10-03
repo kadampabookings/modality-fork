@@ -202,9 +202,10 @@ final class MateInviteTokenStore {
     }
 
     /**
-     * Whether a token exists for this event but has lapsed — the one case worth separating from
-     * "unknown", so an invite that simply ran out of time can say so rather than looking invalid.
-     * Discloses nothing beyond that fact.
+     * Whether a token exists for this event but no longer works — because it ran out of time, or
+     * because the booker stopped it. The one case worth separating from "unknown", so an invite that
+     * simply lapsed can say so rather than looking invalid. Discloses nothing beyond that fact, and in
+     * particular does not say which of the two it was.
      */
     static Future<Boolean> isExpired(String rawToken, Object eventId) {
         if (rawToken == null || rawToken.isBlank())
@@ -212,7 +213,11 @@ final class MateInviteTokenStore {
         return QueryService.executeQuery(new QueryArgumentBuilder()
                 .setDataSourceId(dataSourceId())
                 .setStatement("select 1 from mate_invite_token " +
-                              "where token_hash = $1 and event_id = $2 and expires_date <= now()")
+                              // Revoked counts as lapsed. To whoever holds the link the two are the
+                              // same fact — it no longer works — and which of them it is is the
+                              // booker's business, not a stranger's.
+                              "where token_hash = $1 and event_id = $2 " +
+                              "and (expires_date <= now() or revoked_date is not null)")
                 .setParameters(hashToken(rawToken), eventId)
                 .build())
             .map(rs -> rs.getRowCount() >= 1);
@@ -337,7 +342,8 @@ final class MateInviteTokenStore {
         return QueryService.executeQuery(new QueryArgumentBuilder()
                 .setDataSourceId(dataSourceId())
                 .setStatement("select owner_document_line_id from mate_invite_token " +
-                              "where token_hash = $1 and event_id = $2 and expires_date > now()")
+                              "where token_hash = $1 and event_id = $2 and expires_date > now() " +
+                              "and revoked_date is null")
                 .setParameters(hashToken(rawToken), eventId)
                 .build())
             .map(rs -> rs.getRowCount() < 1 ? null : rs.getValue(0, 0));
@@ -477,6 +483,74 @@ final class MateInviteTokenStore {
      * its longest line is also its lowest-id one, so nothing is currently mis-bound.
      */
     /**
+     * Stops the live invitations for one room working, and says how many it stopped.
+     *
+     * <p>A slot of 1-7 revokes the invitations sent for that roommate; anything else revokes every live
+     * token the room has, which includes the un-slotted ones a booker minted with the cart's copy-link.
+     * Both are the same act from the booker's side — "stop that link working" — and the second is the
+     * only way to reach a link they handed over themselves, since nothing recorded where it went.
+     *
+     * <p>The rows are kept. They are also the record of what was sent, which the cart shows, and a
+     * booker who revoked an invitation is exactly the booker who wants to see that it happened.
+     *
+     * <p>Already-revoked rows are left alone rather than re-stamped, so the date keeps meaning "when it
+     * was stopped" and a second press reports nothing further to stop.
+     */
+    /**
+     * Which rows a revoke matches, as a WHERE fragment — the one decision in this that is worth testing
+     * without a database, and the one that decides how much a booker stops by pressing once.
+     *
+     * <p>Scoped to the BOOKING's share-owner lines rather than to one of them. `loadOwnerLineForBooking`
+     * picks a line by a tie-break it calls a guess, and 242 of 7,539 staging bookings own two — so a
+     * booker who modified their stay could otherwise find the record gone and the remedy matching
+     * nothing, with the link still live. For "stop this working", over-reaching inside the caller's own
+     * booking is the right direction to err.
+     */
+    static String revokeMatch(boolean oneSlot) {
+        return "owner_document_line_id in (select id from document_line"
+               + " where document_id = $1 and share_owner) and revoked_date is null"
+               + (oneSlot ? " and invited_mate_slot = $2" : "");
+    }
+
+    /** Whether this slot names one roommate, or stands for every live link the room has. */
+    static boolean revokesOneSlot(int mateSlot) {
+        return mateSlot >= 1 && mateSlot <= 7;
+    }
+
+    static Future<Integer> revokeInvitations(Object documentId, int mateSlot) {
+        boolean oneSlot = revokesOneSlot(mateSlot);
+        String match = revokeMatch(oneSlot);
+        Object[] parameters = oneSlot ? new Object[] { documentId, mateSlot }
+                                      : new Object[] { documentId };
+        // Counted BEFORE the update, which is the only way to say how many were stopped: afterwards
+        // there is nothing to tell a row this call revoked from one revoked last week, and
+        // SubmitResult.getRowCount counts RowSets rather than rows affected.
+        return QueryService.executeQuery(new QueryArgumentBuilder()
+                .setDataSourceId(dataSourceId())
+                .setStatement("select count(*) from mate_invite_token where " + match)
+                .setParameters(parameters)
+                .build())
+            .compose(rs -> {
+                // Through an Object local, NEVER String.valueOf(rs.getValue(...)): getValue is generic,
+                // so an unbounded inference variable makes javac pick String.valueOf(char[]) and emit a
+                // cast that throws on the Long a count returns. That is how createInvitation shipped
+                // unusable for five days with every check green.
+                Object counted = rs.getRowCount() < 1 ? null : rs.getValue(0, 0);
+                int live = counted instanceof Number number ? number.intValue() : 0;
+                if (live == 0)
+                    // Nothing live to stop. Not an error: pressing it twice, or after the last bed was
+                    // taken, is a booker making sure rather than a booker being wrong.
+                    return Future.succeededFuture(0);
+                return SubmitService.executeSubmit(new SubmitArgumentBuilder()
+                        .setDataSourceId(dataSourceId())
+                        .setStatement("update mate_invite_token set revoked_date = now() where " + match)
+                        .setParameters(parameters)
+                        .build())
+                    .map(ignored -> live);
+            });
+    }
+
+    /**
      * The invitations sent for one room, as a small JSON array for the cart to read back on a later
      * visit: {@code [{"slot":1,"date":"2026-10-02","failed":false}, ...]}, newest first.
      *
@@ -484,8 +558,8 @@ final class MateInviteTokenStore {
      * handed over themselves, and there is nobody to report having written to.
      *
      * <p><b>No token, no hash, no address.</b> The slot is a number the caller already knows (they named
-     * the person in it), the date is a date, and {@code failed} is whether the mailer gave up on the
-     * message. The address lives on the recipient row and stays there: the cart has the booker's own copy
+     * the person in it), the date is a date, {@code failed} is whether the mailer gave up on the message,
+     * and {@code revoked} is whether the booker has since stopped it working. The address lives on the recipient row and stays there: the cart has the booker's own copy
      * of what they typed, and a read endpoint that hands back addresses is a read endpoint worth
      * attacking.
      *
@@ -500,13 +574,14 @@ final class MateInviteTokenStore {
                     // two rows — and listing both would show one person twice, keep the panel pinned to
                     // its warning variant over a delivery that has since been superseded, and say "2
                     // invitations" about one roommate. It also bounds the reply to seven rows.
-                    "select s.invited_mate_slot, s.sent_on, s.failed from (" +
+                    "select s.invited_mate_slot, s.sent_on, s.failed, s.revoked from (" +
                     "  select distinct on (t.invited_mate_slot) t.invited_mate_slot, " +
                     // at time zone 'UTC' rather than a bare ::date: the cast would otherwise resolve
                     // through the server session's TimeZone, so an invitation sent just after midnight
                     // would be reported as the day before, and the answer would change with a GUC.
                     "    (t.invited_date at time zone 'UTC')::date as sent_on, " +
-                    "    (m.transmitted and m.error is not null) as failed " +
+                    "    (m.transmitted and m.error is not null) as failed, " +
+                    "    (t.revoked_date is not null) as revoked " +
                     "  from mate_invite_token t left join mail m on m.id = t.invite_mail_id " +
                     "  where t.owner_document_line_id = $1 and t.invited_date is not null " +
                     "  order by t.invited_mate_slot, t.invited_date desc) s " +
@@ -526,6 +601,7 @@ final class MateInviteTokenStore {
                     json.append("{\"slot\":").append(slotText)
                         .append(",\"date\":").append(isoDateJsonOrNull(rs.getValue(row, 1)))
                         .append(",\"failed\":").append(Boolean.TRUE.equals(rs.getValue(row, 2)))
+                        .append(",\"revoked\":").append(Boolean.TRUE.equals(rs.getValue(row, 3)))
                         .append('}');
                 }
                 return json.append(']').toString();

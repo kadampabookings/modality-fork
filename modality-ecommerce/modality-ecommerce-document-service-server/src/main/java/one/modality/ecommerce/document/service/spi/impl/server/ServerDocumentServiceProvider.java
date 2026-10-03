@@ -699,6 +699,25 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
     }
 
     @Override
+    public Future<Integer> revokeMateInvitations(Object documentId, int mateSlot) {
+        Object accountId = getUserAccountId(ThreadLocalStateHolder.getUserId());
+        if (accountId == null)
+            return Future.failedFuture("[MateInviteError] Only a signed-in booker can stop an invitation");
+        if (documentId == null)
+            return Future.succeededFuture(0);
+        return MateInviteTokenStore.loadOwnerLineForBooking(documentId).compose(ownerLine -> {
+            // Nothing to stop, and — for a booking that is somebody else's — the same answer as a
+            // booking with no room, for the reason the read beside this one gives: two distinguishable
+            // answers are an oracle, and this one is reachable without a booking of your own.
+            if (ownerLine == null || !MateLinkRules.sameId(ownerLine.frontendAccountId(), accountId))
+                return Future.succeededFuture(0);
+            // By BOOKING, not by the line the lookup happened to pick: the room above is the ownership
+            // check, and a booking owning two share-owner lines must not have half its links unreachable.
+            return MateInviteTokenStore.revokeInvitations(documentId, mateSlot);
+        });
+    }
+
+    @Override
     public Future<String> listMateInvitations(Object documentId) {
         Object accountId = getUserAccountId(ThreadLocalStateHolder.getUserId());
         // The same gate as the two ways of offering a bed, minus the free-bed test: a booker whose room

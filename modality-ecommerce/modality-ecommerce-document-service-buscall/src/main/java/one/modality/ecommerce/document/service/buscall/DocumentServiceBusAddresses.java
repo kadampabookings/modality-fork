@@ -25,6 +25,8 @@ public interface DocumentServiceBusAddresses {
 
     String LIST_MATE_INVITATIONS_ADDRESS = "modality/service/document/listMateInvitations";
 
+    String REVOKE_MATE_INVITATIONS_ADDRESS = "modality/service/document/revokeMateInvitations";
+
     String RESOLVE_MATE_INVITE_ADDRESS = "modality/service/document/resolveMateInvite";
 
     String DESCRIBE_MATE_INVITE_ROOM_ADDRESS = "modality/service/document/describeMateInviteRoom";

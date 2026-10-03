@@ -71,6 +71,20 @@ public final class DocumentService {
         return getProvider().listMateInvitations(documentId);
     }
 
+    /**
+     * Stops the live invitations for this booking's room working, and says how many were stopped.
+     *
+     * <p>A slot of 1-7 stops the ones sent for that roommate; anything else stops every live link the
+     * room has, including one the booker copied for themselves — which is the only way to reach that,
+     * since nothing recorded where it went.
+     *
+     * <p>Zero is an ordinary answer: pressing it twice, or after the last bed was taken, is a booker
+     * making sure rather than a booker being wrong.
+     */
+    public static Future<Integer> revokeMateInvitations(Object documentId, int mateSlot) {
+        return getProvider().revokeMateInvitations(documentId, mateSlot);
+    }
+
     public static Future<String> resolveMateInvite(String token, Object eventId) {
         return getProvider().resolveMateInvite(token, eventId);
     }

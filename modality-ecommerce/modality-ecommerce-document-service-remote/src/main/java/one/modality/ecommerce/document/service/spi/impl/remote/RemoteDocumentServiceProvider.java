@@ -45,6 +45,12 @@ public class RemoteDocumentServiceProvider implements DocumentServiceProvider {
     }
 
     @Override
+    public Future<Integer> revokeMateInvitations(Object documentId, int mateSlot) {
+        return BusCallService.call(DocumentServiceBusAddresses.REVOKE_MATE_INVITATIONS_ADDRESS,
+            new Object[] { documentId, mateSlot });
+    }
+
+    @Override
     public Future<String> listMateInvitations(Object documentId) {
         return BusCallService.call(DocumentServiceBusAddresses.LIST_MATE_INVITATIONS_ADDRESS, documentId);
     }
