@@ -662,6 +662,19 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
     public Future<String> mintMateInviteToken(Object documentId) {
         // Capture the caller synchronously — the thread-local is gone after the first async hop.
         Object accountId = getUserAccountId(ThreadLocalStateHolder.getUserId());
+        return authorisedRoomOf(documentId, accountId).compose(ownerLine ->
+            MateInviteTokenStore.mint(ownerLine.ownerDocumentLineId(), ownerLine.eventId(), accountId));
+    }
+
+    /**
+     * The room line of the caller's OWN booking, with a bed still free in it — or a failure saying which
+     * of those was not true.
+     *
+     * <p>Shared by the two ways a bed is offered, the link the booker copies and the invitation we send
+     * on their behalf, because they are the same act with different delivery and a second copy of these
+     * checks is a second thing to keep right.
+     */
+    private Future<MateInviteTokenStore.OwnerLine> authorisedRoomOf(Object documentId, Object accountId) {
         if (accountId == null)
             return Future.failedFuture("[MateInviteError] Only a signed-in booker can create a room-share invite");
         if (documentId == null)
@@ -680,9 +693,45 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
                     // a full room is not an error from the booker's point of view — everyone has booked
                     // — and the page should say so instead of reporting a failure.
                     return Future.failedFuture("[MateInviteError:ROOM_FULL] Every bed in this room is already taken");
-                return MateInviteTokenStore.mint(ownerLine.ownerDocumentLineId(), ownerLine.eventId(), accountId);
+                return Future.succeededFuture(ownerLine);
             });
         });
+    }
+
+    @Override
+    public Future<Void> sendMateInvitation(Object documentId, int mateSlot, String email, String lang) {
+        // Captured synchronously, before the first async hop, like every other caller-derived value here.
+        Object accountId = getUserAccountId(ThreadLocalStateHolder.getUserId());
+        if (mateSlot < 1 || mateSlot > 7)
+            return Future.failedFuture("[MateInviteError] That is not a roommate slot of this room");
+        String address = email == null ? "" : email.trim();
+        // Shape only, and deliberately not a strict parser: the point is to refuse junk and anything
+        // carrying a newline, not to adjudicate what a mailbox may be called.
+        if (address.isEmpty() || address.length() > 127 || !address.matches("[^\\s@]+@[^\\s@.]+(\\.[^\\s@.]+)+"))
+            return Future.failedFuture("[MateInviteError] That is not an address we can write to");
+        String origin = MateInvitationMail.configuredFrontOfficeOrigin();
+        if (origin == null)
+            // The booker is told, rather than a mail going out whose only button leads nowhere. The cart
+            // still offers them the link to copy, so this is recoverable where a broken link is not.
+            return Future.failedFuture("[MateInviteError:NO_ORIGIN] Invitations are not configured on this server");
+        // Before any work, and before the room is even loaded: a refusal here must cost nothing and leak
+        // nothing about the booking, and starting the window only on success would let a tight loop keep
+        // the gate open by failing.
+        if (!MateInvitationMail.maySend(address, documentId, mateSlot))
+            return Future.failedFuture("[MateInviteError:TOO_SOON] That invitation has just been sent — give it a few minutes");
+        return authorisedRoomOf(documentId, accountId).compose(ownerLine ->
+            MateInviteTokenStore.loadInvitationFacts(ownerLine.ownerDocumentLineId(), mateSlot).compose(facts -> {
+                if (facts == null || facts.mateName() == null || facts.mateName().isBlank())
+                    // Nobody is named in that slot, so there is nobody to invite. Refused rather than
+                    // sent to "Dear ,": the name is read from the booking, never from the request, and an
+                    // empty one means the request and the booking disagree about who is in the room.
+                    return Future.failedFuture("[MateInviteError] No roommate is named in that slot");
+                return MateInviteTokenStore.mint(ownerLine.ownerDocumentLineId(), ownerLine.eventId(), accountId, true)
+                    .compose(rawToken -> MateInvitationMail.send(
+                        MateInviteTokenStore.hashToken(rawToken),
+                        MateInvitationMail.inviteLink(origin, ownerLine.eventId(), rawToken),
+                        mateSlot, address, facts.mateName(), facts.bookerName(), facts.eventName(), lang));
+            }));
     }
 
     @Override

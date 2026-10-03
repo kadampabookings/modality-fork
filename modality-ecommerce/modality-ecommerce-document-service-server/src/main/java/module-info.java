@@ -3,12 +3,14 @@
 module modality.ecommerce.document.service.server {
 
     // Direct dependencies modules
+    requires modality.base.server.mail;
     requires modality.base.shared.entities;
     requires modality.ecommerce.document.service;
     requires modality.ecommerce.document.service.buscall;
     requires modality.ecommerce.history.server;
     requires webfx.platform.ast;
     requires webfx.platform.async;
+    requires webfx.platform.conf;
     requires webfx.platform.console;
     requires webfx.platform.scheduler;
     requires webfx.platform.util;
@@ -23,6 +25,9 @@ module modality.ecommerce.document.service.server {
 
     // Exported packages
     exports one.modality.ecommerce.document.service.spi.impl.server;
+
+    // Resources packages
+    opens one.modality.ecommerce.document.service.spi.impl.server;
 
     // Used services
     uses one.modality.ecommerce.document.service.GuestBookingAccessService;

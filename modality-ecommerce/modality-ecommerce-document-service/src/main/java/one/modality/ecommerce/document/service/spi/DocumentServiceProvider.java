@@ -22,6 +22,8 @@ public interface DocumentServiceProvider {
     /** Mints a room-share invite token for the given booking's room (steps 4-5). */
     Future<String> mintMateInviteToken(Object documentId);
 
+    Future<Void> sendMateInvitation(Object documentId, int mateSlot, String email, String lang);
+
     /**
      * Reports whether a room-share invite link can still be followed, as one of USABLE, FULL,
      * EXPIRED or UNKNOWN — and nothing else. See {@code MateInviteStatus}.

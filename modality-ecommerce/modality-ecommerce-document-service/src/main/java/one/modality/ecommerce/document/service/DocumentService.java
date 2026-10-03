@@ -44,6 +44,22 @@ public final class DocumentService {
         return getProvider().mintMateInviteToken(documentId);
     }
 
+    /**
+     * Invites the roommate named in one slot of the caller's own room to take the bed held for them.
+     *
+     * <p>Mints, writes and records in one server-side step, so the invitation link is never handed to the
+     * browser: the client says WHICH slot and where to write, and the server reads from the booking who
+     * that is, builds the link on its own origin and sends it. The alternative — mint, hand over, ask the
+     * server to post it — would mean a token on the wire for a message the sender never reads.
+     *
+     * @param mateSlot which of the room line's seven roommate name slots, 1-based
+     * @param email    where to write, as the booker typed it
+     * @param lang     the language to write in; English when there is no better guess
+     */
+    public static Future<Void> sendMateInvitation(Object documentId, int mateSlot, String email, String lang) {
+        return getProvider().sendMateInvitation(documentId, mateSlot, email, lang);
+    }
+
     public static Future<String> resolveMateInvite(String token, Object eventId) {
         return getProvider().resolveMateInvite(token, eventId);
     }

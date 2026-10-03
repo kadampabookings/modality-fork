@@ -54,6 +54,12 @@ final class MateInviteTokenStore {
     /** The room-booking line a booking offers to share, and the facts the mint path checks. */
     record OwnerLine(Object ownerDocumentLineId, Object eventId, Object frontendAccountId) { }
 
+    /**
+     * What an invitation says, read from the booking rather than from the request: who it is for, who is
+     * holding the bed, and which event. The caller chooses only the SLOT and the address.
+     */
+    record InvitationFacts(String mateName, String bookerName, String eventName) { }
+
     private MateInviteTokenStore() { }
 
     // --- Pure helpers (unit-tested by MateInviteTokenStoreCheck) ------------------------------------
@@ -271,11 +277,28 @@ final class MateInviteTokenStore {
      * verified that the account may mint for this line.
      */
     static Future<String> mint(Object ownerDocumentLineId, Object eventId, Object creatorAccountId) {
+        return mint(ownerDocumentLineId, eventId, creatorAccountId, false);
+    }
+
+    /**
+     * @param emailed whether this token is being posted to an address rather than handed to the booker,
+     *                which shortens its life — see the note in the body
+     */
+    static Future<String> mint(Object ownerDocumentLineId, Object eventId, Object creatorAccountId, boolean emailed) {
         String rawToken = generateToken();
         // expires = event end + 2 days grace, computed in SQL so the app holds no clock of its own.
+        //
+        // An EMAILED token is capped at a fortnight besides. The copy-link's lifetime assumes the booker
+        // chose where it went and can stop choosing; an address typed into a form is one keystroke from a
+        // stranger, and nothing revokes a token yet. Minted for a December event in March, the long form
+        // would leave a free bed claimable by the wrong inbox for nine months. The shorter window still
+        // covers the case it is for — somebody deciding whether to come — and the booker can send again.
+        String expiry = emailed
+            ? "least(e.end_date + interval '2 days', now() + interval '14 days')"
+            : "(e.end_date + interval '2 days')";
         String sql =
             "insert into mate_invite_token (token_hash, owner_document_line_id, event_id, creator_account_id, expires_date) " +
-            "select $1, $2, $3, $4, (e.end_date + interval '2 days') from event e where e.id = $3";
+            "select $1, $2, $3, $4, " + expiry + " from event e where e.id = $3";
         String hash = hashToken(rawToken);
         return SubmitService.executeSubmit(new SubmitArgumentBuilder()
                 .setDataSourceId(dataSourceId())
@@ -453,6 +476,43 @@ final class MateInviteTokenStore {
      * relying on this (room-mate plan Part C). One upcoming booking on staging owns two rooms today, and
      * its longest line is also its lowest-id one, so nothing is currently mis-bound.
      */
+    /**
+     * The names an invitation needs, for one slot of one room line.
+     *
+     * <p>All seven name columns are selected and the slot picked in Java rather than building the column
+     * name into the statement. The slot is validated and the database constrains it to 1-7 besides, so
+     * interpolating it would be safe today — but a column name assembled from a parameter is a habit that
+     * stops being safe the first time the validation moves, and seven columns of one row costs nothing.
+     *
+     * <p>The mate name may be null or blank: a booker can leave a slot unnamed, and an invitation to
+     * nobody is refused by the caller rather than sent to "Dear ".
+     */
+    static Future<InvitationFacts> loadInvitationFacts(Object ownerDocumentLineId, int mateSlot) {
+        return QueryService.executeQuery(new QueryArgumentBuilder()
+                .setDataSourceId(dataSourceId())
+                .setStatement(
+                    "select dl.share_owner_mate1_name, dl.share_owner_mate2_name, dl.share_owner_mate3_name, " +
+                    "dl.share_owner_mate4_name, dl.share_owner_mate5_name, dl.share_owner_mate6_name, " +
+                    "dl.share_owner_mate7_name, " +
+                    "coalesce(nullif(trim(coalesce(p.first_name, '') || ' ' || coalesce(p.last_name, '')), ''), p.name), " +
+                    "e.name " +
+                    "from document_line dl join document d on d.id = dl.document_id " +
+                    "join person p on p.id = d.person_id join event e on e.id = d.event_id " +
+                    "where dl.id = $1")
+                .setParameters(ownerDocumentLineId)
+                .build())
+            .map(rs -> {
+                if (rs.getRowCount() < 1)
+                    return null;
+                Object mateName = mateSlot >= 1 && mateSlot <= 7 ? rs.getValue(0, mateSlot - 1) : null;
+                Object bookerName = rs.getValue(0, 7), eventName = rs.getValue(0, 8);
+                return new InvitationFacts(
+                    mateName == null ? null : mateName.toString(),
+                    bookerName == null ? "" : bookerName.toString(),
+                    eventName == null ? "" : eventName.toString());
+            });
+    }
+
     static Future<OwnerLine> loadOwnerLineForBooking(Object documentId) {
         return QueryService.executeQuery(new QueryArgumentBuilder()
                 .setDataSourceId(dataSourceId())
