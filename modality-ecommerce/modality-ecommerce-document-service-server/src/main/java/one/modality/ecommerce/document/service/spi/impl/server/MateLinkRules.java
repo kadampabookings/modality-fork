@@ -33,8 +33,15 @@ final class MateLinkRules {
      * @param shareOwner the line books a room that others can share (share_owner)
      * @param documentId the booking the line belongs to
      * @param eventId    that booking's event
+     * @param ownedBySubmitter whether the submitting account may act on this line's booking, by
+     *                   {@code accountCanAccessPersonOrders} — the predicate the rest of the system uses,
+     *                   which reaches a household member through {@code person.accountPerson} as well as
+     *                   through {@code person.frontendAccount}. A booking made FOR a member of your
+     *                   account has no frontendAccount of its own, and that is the commonest shape of the
+     *                   very flow this rule exists for. Loaded by the caller, judged here. Only the
+     *                   front-office rule reads it.
      */
-    record LineFacts(boolean shareMate, boolean shareOwner, Object documentId, Object eventId) { }
+    record LineFacts(boolean shareMate, boolean shareOwner, Object documentId, Object eventId, boolean ownedBySubmitter) { }
 
     private MateLinkRules() { }
 
@@ -50,16 +57,21 @@ final class MateLinkRules {
      * @param ownerLineNamed    whether the event names an owner booking line
      * @param owner             that owner line, or null when it does not exist or none was named
      * @param ownerPersonNamed  whether the event names an owner person — the "booker has not booked yet" form
+     * @param submitterAccountId the account submitting, or null for a guest — a guest owns nothing, so the
+     *                          front-office rule refuses before it looks at anything else
      * @return a refusal message, or null when the link may be written
      */
     static String check(boolean backofficeSession, Boolean backofficeAccount,
-                        LineFacts mate, boolean ownerLineNamed, LineFacts owner, boolean ownerPersonNamed) {
-        // Security first. The account flag is set server-side and guarded by the write-authorization seam
+                        LineFacts mate, boolean ownerLineNamed, LineFacts owner, boolean ownerPersonNamed,
+                        Object submitterAccountId) {
+        // The account flag is set server-side and guarded by the write-authorization seam
         // (ManageBackofficeAccess); the session flag is whatever the client sent. Requiring both means a
-        // verified back-office account, working in the back-office app. The front office gets its own rule
-        // when it gains a link path (plan steps 4-5) — not a borrowed one.
-        if (!backofficeSession || !Boolean.TRUE.equals(backofficeAccount))
-            return ERROR_PREFIX + "Linking a roommate to a room booker is a back-office action";
+        // verified back-office account, working in the back-office app.
+        boolean backoffice = backofficeSession && Boolean.TRUE.equals(backofficeAccount);
+        // The front office gets its OWN rule rather than a borrowed one (room-mate plan Part C): a booker
+        // may link a mate into a room, but only into a room their own account booked.
+        if (!backoffice)
+            return checkBookerLink(mate, ownerLineNamed, owner, ownerPersonNamed, submitterAccountId);
         if (!ownerLineNamed && !ownerPersonNamed)
             return ERROR_PREFIX + "A link must name the room booker";
         if (mate == null)
@@ -76,6 +88,52 @@ final class MateLinkRules {
             if (sameId(mate.documentId(), owner.documentId()))
                 return ERROR_PREFIX + "A booking cannot be linked to itself";
         }
+        return null;
+    }
+
+    /**
+     * A booker linking their own roommate, from the front office (room-mate plan Part C).
+     *
+     * <p>The ownership check is the whole rule, not defence in depth. The booker's submit names the owner
+     * LINE ID where an invited mate presents an unguessable token, and Part C switches the bed count off
+     * for this path deliberately — so without ownership a forged id would be GUARANTEED to succeed rather
+     * than merely likely, attaching a mate to a stranger's room. Line ids are sequential and shown in the
+     * UI, so guessing one is not a thought experiment.
+     *
+     * <p><b>BOTH lines must be the submitter's, and the mate side matters as much as the room side.</b>
+     * An earlier draft of this checked only the room, which let an account that owned any room link a
+     * STRANGER's sharing line into it — and because the link trigger deletes the mate's attendances and
+     * replaces them with the room's, that destroys the stranger's stay and moves them into the attacker's
+     * room. Worse, before this rule existed the back-office branch refused every front-office link
+     * outright, so judging them here opened the event to the front office for the first time; a rule that
+     * only half-checks is then strictly worse than the refusal it replaced.
+     *
+     * <p><b>One refusal message for every failure here</b>, unlike the back-office branch above. A caller
+     * who can tell "no such line" from "not your line" from "not a shareable room" can walk the id space
+     * and learn which rooms exist and which are shared — the success of a link already discloses that, so
+     * the failures must not. The back office is told which rule it broke because it is already trusted
+     * with the data the message reveals.
+     *
+     * <p>A guest has no account to own anything, so a guest cannot link; the durable channels carry that
+     * case, as they do for minting (see "Still open" in the plan).
+     */
+    private static String checkBookerLink(LineFacts mate, boolean ownerLineNamed, LineFacts owner,
+                                          boolean ownerPersonNamed, Object submitterAccountId) {
+        String refusal = ERROR_PREFIX + "You can only add a roommate to a room you booked";
+        // Naming a PERSON rather than a line is the back office's "booker has not booked yet" form: it
+        // resolves to no room, so there is nothing to own and nothing for this rule to check.
+        if (!ownerLineNamed || ownerPersonNamed)
+            return refusal;
+        if (submitterAccountId == null)
+            return refusal; // a guest owns nothing
+        if (mate == null || !mate.shareMate() || !mate.ownedBySubmitter())
+            return refusal;
+        if (owner == null || !owner.shareOwner() || !owner.ownedBySubmitter())
+            return refusal;
+        if (!sameId(mate.eventId(), owner.eventId()))
+            return refusal;
+        if (sameId(mate.documentId(), owner.documentId()))
+            return refusal;
         return null;
     }
 

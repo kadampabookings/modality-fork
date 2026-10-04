@@ -45,6 +45,24 @@ public class RemoteDocumentServiceProvider implements DocumentServiceProvider {
     }
 
     @Override
+    public Future<Integer> revokeMateInvitations(Object documentId, int mateSlot) {
+        return BusCallService.call(DocumentServiceBusAddresses.REVOKE_MATE_INVITATIONS_ADDRESS,
+            new Object[] { documentId, mateSlot });
+    }
+
+    @Override
+    public Future<String> listMateInvitations(Object documentId) {
+        return BusCallService.call(DocumentServiceBusAddresses.LIST_MATE_INVITATIONS_ADDRESS, documentId);
+    }
+
+    @Override
+    public Future<Void> sendMateInvitation(Object documentId, int mateSlot, String email, String lang) {
+        // Four values across the one argument a bus call carries; the endpoint unpacks them.
+        return BusCallService.call(DocumentServiceBusAddresses.SEND_MATE_INVITATION_ADDRESS,
+            new Object[] { documentId, mateSlot, email, lang });
+    }
+
+    @Override
     public Future<String> resolveMateInvite(String token, Object eventId) {
         // Two arguments over a single-argument bus call: sent as an array, unpacked by the endpoint.
         return BusCallService.call(DocumentServiceBusAddresses.RESOLVE_MATE_INVITE_ADDRESS,

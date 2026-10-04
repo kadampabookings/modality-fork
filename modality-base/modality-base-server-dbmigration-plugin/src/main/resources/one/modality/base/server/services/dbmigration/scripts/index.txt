@@ -118,3 +118,5 @@ V0115__rate_dates_in_event_time_zone.sql
 V0116__money_account_booking_channel.sql
 V0117__share_mate_quantity.sql
 V0118__defer_allocate_reads_the_line.sql
+V0119__mate_invite_records_who_it_went_to.sql
+V0120__mate_invite_can_be_revoked.sql

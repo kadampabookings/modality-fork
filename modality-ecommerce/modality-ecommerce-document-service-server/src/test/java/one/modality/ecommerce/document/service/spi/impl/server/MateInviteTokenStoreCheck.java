@@ -88,8 +88,38 @@ public class MateInviteTokenStoreCheck {
             "{\"itemId\":55,\"arrival\":null,\"departure\":null}".equals(
                 MateInviteTokenStore.roomDescriptionJson(55, "27/11/2026\",\"x\":\"y", "not a date")));
 
+        checkRevokeScope();
+
         System.out.println(pass + " passed, " + fail + " failed");
         if (fail > 0)
             System.exit(1);
     }
+
+    /**
+     * How much one press of "stop this link working" stops.
+     *
+     * Pure, so the scope can be checked without a database — and the scope is the whole of it: too narrow
+     * leaves a live bearer link the booker believes they stopped, too wide kills a link a genuine
+     * roommate still needs. Both are silent.
+     */
+    static void checkRevokeScope() {
+        System.out.println("  revoke scope");
+        check("1-7 names one roommate", MateInviteTokenStore.revokesOneSlot(1)
+            && MateInviteTokenStore.revokesOneSlot(7));
+        check("anything else means every live link the room has",
+            !MateInviteTokenStore.revokesOneSlot(0) && !MateInviteTokenStore.revokesOneSlot(8)
+            && !MateInviteTokenStore.revokesOneSlot(-1));
+
+        String one = MateInviteTokenStore.revokeMatch(true), all = MateInviteTokenStore.revokeMatch(false);
+        check("one slot is matched by slot", one.contains("invited_mate_slot = $2"));
+        check("all is not", !all.contains("invited_mate_slot"));
+        // Scoped to the BOOKING's share-owner lines: loadOwnerLineForBooking picks one by a tie-break it
+        // calls a guess, and a booking owning two must not have half its links unreachable.
+        check("both are scoped to the booking's own share-owner lines",
+            one.contains("document_id = $1 and share_owner") && all.contains("document_id = $1 and share_owner"));
+        // Already-stopped rows keep the date they were stopped on, and are not counted again.
+        check("both leave an already-stopped link alone",
+            one.contains("revoked_date is null") && all.contains("revoked_date is null"));
+    }
+
 }

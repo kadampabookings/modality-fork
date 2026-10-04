@@ -6,6 +6,8 @@ module modality.base.server.mail {
     requires modality.base.shared.context;
     requires modality.base.shared.entities;
     requires webfx.platform.async;
+    requires webfx.platform.resource;
+    requires webfx.platform.util;
     requires webfx.stack.mail;
     requires webfx.stack.orm.datasourcemodel.service;
     requires webfx.stack.orm.domainmodel;

@@ -19,6 +19,7 @@ public final class SubmitDocumentChangesArgumentSerialCodec extends SerialCodecB
     private static final String QUEUE_CAPABLE_KEY = "queueCapable";
     private static final String CLIENT_ORIGIN_KEY = "clientOrigin";
     private static final String INVITE_TOKEN_KEY = "inviteToken";
+    private static final String OWNER_DOCUMENT_LINE_KEY = "ownerDocumentLine";
 
     public SubmitDocumentChangesArgumentSerialCodec() {
         super(SubmitDocumentChangesArgument.class, CODEC_ID);
@@ -31,6 +32,7 @@ public final class SubmitDocumentChangesArgumentSerialCodec extends SerialCodecB
         encodeBoolean(serial, QUEUE_CAPABLE_KEY,   arg.queueCapable());
         encodeString( serial, CLIENT_ORIGIN_KEY,   arg.clientOrigin());
         encodeString( serial, INVITE_TOKEN_KEY,    arg.inviteToken());
+        encodeObject( serial, OWNER_DOCUMENT_LINE_KEY, arg.ownerDocumentLine());
     }
 
     @Override
@@ -40,7 +42,8 @@ public final class SubmitDocumentChangesArgumentSerialCodec extends SerialCodecB
             decodeArray(      serial, DOCUMENT_EVENTS_KEY, AbstractDocumentEvent.class),
             decodeBooleanSafe(serial, QUEUE_CAPABLE_KEY),
             decodeString(     serial, CLIENT_ORIGIN_KEY),
-            decodeString(     serial, INVITE_TOKEN_KEY)
+            decodeString(     serial, INVITE_TOKEN_KEY),
+            decodeObject(     serial, OWNER_DOCUMENT_LINE_KEY)
         );
     }
 

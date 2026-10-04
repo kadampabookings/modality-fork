@@ -1,6 +1,8 @@
 package one.modality.ecommerce.document.service.spi.impl.server;
 
 import dev.webfx.platform.async.Future;
+
+import java.util.List;
 import dev.webfx.stack.db.query.QueryService;
 import dev.webfx.stack.db.query.QueryArgumentBuilder;
 import dev.webfx.stack.db.submit.SubmitService;
@@ -51,6 +53,12 @@ final class MateInviteTokenStore {
 
     /** The room-booking line a booking offers to share, and the facts the mint path checks. */
     record OwnerLine(Object ownerDocumentLineId, Object eventId, Object frontendAccountId) { }
+
+    /**
+     * What an invitation says, read from the booking rather than from the request: who it is for, who is
+     * holding the bed, and which event. The caller chooses only the SLOT and the address.
+     */
+    record InvitationFacts(String mateName, String bookerName, String eventName) { }
 
     private MateInviteTokenStore() { }
 
@@ -111,23 +119,32 @@ final class MateInviteTokenStore {
     }
 
     /**
+     * The room is still a room: neither the line nor the booking holding it is cancelled. Without it a
+     * booker could cancel their room and an invite would go on admitting people to it — and cancelling a
+     * BOOKING marks the document, not its lines, so the line alone would still look live.
+     *
+     * <p>Held apart from the bed count below, deliberately. They were one expression until a caller
+     * needed to exempt the count (room-mate plan Part C: a booker putting someone in their OWN room is
+     * not refused for a full room, which is their own doing and visible to them). Exempting a combined
+     * expression would have exempted this too, and admitted mates to a cancelled room — a far worse
+     * outcome than the one being allowed.
+     */
+    private static final String ROOM_IS_LIVE =
+        "exists (select 1 from document_line o join document od on od.id = o.document_id " +
+        "        where o.id = $2 and not o.cancelled and not od.cancelled)";
+
+    /**
      * True when the room booked on the line bound to {@code $2} still has a bed free — its item's
      * capacity, less the booker and the mates already linked to it.
      *
      * <p>An unknown capacity reads as "room available": this guard exists to catch the obvious
      * over-fill, not to become the authority on availability, which is the derived-availability
-     * work (plan §1c) still to come.
+     * work (plan §1c) still to come. Liveness is {@link #ROOM_IS_LIVE}'s job, not this one's.
      */
     private static final String ROOM_HAS_FREE_BED =
         "(select i.capacity is null or (select count(*) from document_line m " +
         "     where m.share_mate_owner_document_line_id = $2 and not m.cancelled) + 1 < i.capacity " +
-        // A CANCELLED room is not shareable: the subquery then returns no row, the expression is
-        // NULL, and the WHERE fails — which is the answer we want. Without this a booker could
-        // cancel their room and the invite would go on admitting people to it.
-        // Cancelling a BOOKING marks the document, not its lines — so the room line alone would still look
-        // live, and an old invite would go on admitting people to a cancelled booking.
-        " from document_line o join item i on i.id = o.item_id where o.id = $2 and not o.cancelled" +
-        "   and exists (select 1 from document od where od.id = o.document_id and not od.cancelled))";
+        " from document_line o join item i on i.id = o.item_id where o.id = $2)";
 
     /**
      * A line is a share-mate line by its own flag OR its item's — the rule MateLinkRules already
@@ -185,9 +202,10 @@ final class MateInviteTokenStore {
     }
 
     /**
-     * Whether a token exists for this event but has lapsed — the one case worth separating from
-     * "unknown", so an invite that simply ran out of time can say so rather than looking invalid.
-     * Discloses nothing beyond that fact.
+     * Whether a token exists for this event but no longer works — because it ran out of time, or
+     * because the booker stopped it. The one case worth separating from "unknown", so an invite that
+     * simply lapsed can say so rather than looking invalid. Discloses nothing beyond that fact, and in
+     * particular does not say which of the two it was.
      */
     static Future<Boolean> isExpired(String rawToken, Object eventId) {
         if (rawToken == null || rawToken.isBlank())
@@ -195,7 +213,11 @@ final class MateInviteTokenStore {
         return QueryService.executeQuery(new QueryArgumentBuilder()
                 .setDataSourceId(dataSourceId())
                 .setStatement("select 1 from mate_invite_token " +
-                              "where token_hash = $1 and event_id = $2 and expires_date <= now()")
+                              // Revoked counts as lapsed. To whoever holds the link the two are the
+                              // same fact — it no longer works — and which of them it is is the
+                              // booker's business, not a stranger's.
+                              "where token_hash = $1 and event_id = $2 " +
+                              "and (expires_date <= now() or revoked_date is not null)")
                 .setParameters(hashToken(rawToken), eventId)
                 .build())
             .map(rs -> rs.getRowCount() >= 1);
@@ -260,11 +282,28 @@ final class MateInviteTokenStore {
      * verified that the account may mint for this line.
      */
     static Future<String> mint(Object ownerDocumentLineId, Object eventId, Object creatorAccountId) {
+        return mint(ownerDocumentLineId, eventId, creatorAccountId, false);
+    }
+
+    /**
+     * @param emailed whether this token is being posted to an address rather than handed to the booker,
+     *                which shortens its life — see the note in the body
+     */
+    static Future<String> mint(Object ownerDocumentLineId, Object eventId, Object creatorAccountId, boolean emailed) {
         String rawToken = generateToken();
         // expires = event end + 2 days grace, computed in SQL so the app holds no clock of its own.
+        //
+        // An EMAILED token is capped at a fortnight besides. The copy-link's lifetime assumes the booker
+        // chose where it went and can stop choosing; an address typed into a form is one keystroke from a
+        // stranger, and nothing revokes a token yet. Minted for a December event in March, the long form
+        // would leave a free bed claimable by the wrong inbox for nine months. The shorter window still
+        // covers the case it is for — somebody deciding whether to come — and the booker can send again.
+        String expiry = emailed
+            ? "least(e.end_date + interval '2 days', now() + interval '14 days')"
+            : "(e.end_date + interval '2 days')";
         String sql =
             "insert into mate_invite_token (token_hash, owner_document_line_id, event_id, creator_account_id, expires_date) " +
-            "select $1, $2, $3, $4, (e.end_date + interval '2 days') from event e where e.id = $3";
+            "select $1, $2, $3, $4, " + expiry + " from event e where e.id = $3";
         String hash = hashToken(rawToken);
         return SubmitService.executeSubmit(new SubmitArgumentBuilder()
                 .setDataSourceId(dataSourceId())
@@ -303,7 +342,8 @@ final class MateInviteTokenStore {
         return QueryService.executeQuery(new QueryArgumentBuilder()
                 .setDataSourceId(dataSourceId())
                 .setStatement("select owner_document_line_id from mate_invite_token " +
-                              "where token_hash = $1 and event_id = $2 and expires_date > now()")
+                              "where token_hash = $1 and event_id = $2 and expires_date > now() " +
+                              "and revoked_date is null")
                 .setParameters(hashToken(rawToken), eventId)
                 .build())
             .map(rs -> rs.getRowCount() < 1 ? null : rs.getValue(0, 0));
@@ -332,13 +372,29 @@ final class MateInviteTokenStore {
     }
 
     /**
-     * Writes the share-mate link: points the mate line at the owner line. This is a raw UPDATE, not a
-     * LinkMateToOwnerDocumentLineEvent, because that event is gated to back-office callers
-     * (MateLinkRules); here the TOKEN is the authorization. The DB trigger on_share_linked_copy_info
-     * then copies the owner's site/item/room/attendances onto the mate. Returns true when a row was
-     * updated (the mate line existed and was not already pointing elsewhere-unchanged).
+     * Writes the share-mate link: points the mate line at the owner line. A raw UPDATE rather than a
+     * LinkMateToOwnerDocumentLineEvent, because that event carries the back-office rule; the two callers
+     * here are authorised before they arrive — an invited mate by an unguessable token, a booker by
+     * {@link MateLinkRules} proving the room is theirs. The DB trigger on_share_linked_copy_info then
+     * copies the owner's site/item/room/attendances onto the mate. Returns true when a row was updated
+     * (the mate line existed and was not already pointing elsewhere-unchanged).
+     *
+     * @param countBeds whether a full room refuses the link. True for an invited mate: a token is emailed
+     *                  and can be forwarded, so an unbounded claim there is a stranger's doing. False for
+     *                  a booker adding someone to their OWN room (room-mate plan Part C), who is allowed
+     *                  to put a third person in their own twin — visible to them, visible to registration,
+     *                  and their own doing — and whose capacity would otherwise be refused on the same
+     *                  data that produced a false sold-out on prod (camping pitches carry capacity 1, see
+     *                  V0103).
+     *                  <p>This is NOT where that path is bounded, and it must not be read as unbounded
+     *                  because of it: {@code refuseEventSharingLines} asks this room's own capacity before
+     *                  it exempts the submit from the event pool, so a request that reaches here with
+     *                  countBeds false was told moments earlier that the room had a bed. What is dropped
+     *                  is the re-test inside the write, which is what lets a booker exceed the room on
+     *                  purpose. The room still has to be live either way; that guard is separate for this
+     *                  reason.
      */
-    static Future<Boolean> link(Object mateDocumentLineId, Object ownerDocumentLineId) {
+    static Future<Boolean> link(Object mateDocumentLineId, Object ownerDocumentLineId, boolean countBeds) {
         return SubmitService.executeSubmit(new SubmitArgumentBuilder()
                 .setDataSourceId(dataSourceId())
                 // The capacity test is part of the UPDATE rather than a check before it, so the
@@ -361,7 +417,8 @@ final class MateInviteTokenStore {
                     "with owner_locked as (select o.id from document_line o where o.id = $2 for update) " +
                     "update document_line set share_mate_owner_document_line_id = $2 " +
                     "where id = $1 and exists (select 1 from owner_locked) " +
-                    "  and " + IS_SHARE_MATE_LINE + " and " + ROOM_HAS_FREE_BED)
+                    "  and " + IS_SHARE_MATE_LINE + " and " + ROOM_IS_LIVE +
+                    (countBeds ? " and " + ROOM_HAS_FREE_BED : ""))
                 .setParameters(mateDocumentLineId, ownerDocumentLineId)
                 .build())
             // Read back rather than trust the submit's row count (see the class note): a line that is
@@ -375,13 +432,19 @@ final class MateInviteTokenStore {
     }
 
     /**
-     * Records the room booker's name on the mate's line once the link is made, so the booking says
-     * who it shares with even where the mate typed nothing or typed it wrong.
+     * Fills in the room booker's name on the mate's line once the link is made, where the mate left it
+     * blank, so the booking still says who it shares with.
      *
-     * <p>The name is taken from the owner's OWN booking, never from the client — the link is the
-     * fact, and this only labels it. A blank owner name leaves whatever the mate typed in place
-     * rather than replacing a real name with an empty string, and any failure here is swallowed:
-     * the link stands on its own without the label.
+     * <p><b>It never overwrites what somebody wrote</b> (Bruno, 2026-10-01). It used to: any non-empty
+     * owner name replaced whatever the mate had typed, on the grounds that the mate might have typed it
+     * wrong. That reasoning does not survive the link existing — once the mate IS linked, who they share
+     * with is a fact of the link, and the typed name stops being the system's way of finding the owner
+     * and becomes a record of what that person said. Replacing it destroys that record and gains
+     * nothing; keeping it lets registration see a mismatch instead of having it quietly tidied away.
+     *
+     * <p>The name is taken from the owner's OWN booking, never from the client — the link is the fact,
+     * and this only labels it. A blank owner name leaves the line blank rather than writing an empty
+     * string, and any failure here is swallowed: the link stands on its own without the label.
      */
     static Future<Void> stampOwnerName(Object mateDocumentLineId, Object ownerDocumentLineId) {
         return SubmitService.executeSubmit(new SubmitArgumentBuilder()
@@ -391,7 +454,9 @@ final class MateInviteTokenStore {
                     "    select coalesce(d.person_first_name, '') || ' ' || coalesce(d.person_last_name, '') " +
                     "      from document_line o join document d on d.id = o.document_id where o.id = $2)), ''), " +
                     "  share_mate_owner_name) " +
-                    "where id = $1 and share_mate = true")
+                    // Only into a blank: the name the mate typed is theirs, and the link already says who
+                    // the room belongs to.
+                    "where id = $1 and share_mate = true and coalesce(trim(share_mate_owner_name), '') = ''")
                 .setParameters(mateDocumentLineId, ownerDocumentLineId)
                 .build())
             .map(r -> (Void) null)
@@ -403,7 +468,238 @@ final class MateInviteTokenStore {
      * account that owns the booking (document.person.frontendAccount) — what the mint path needs to
      * check ownership and bind the token. Returns null when the booking has no such line. Read-only
      * raw SQL; the ownership decision is made by the caller.
+     *
+     * <p><b>A booking can own more than one</b> — 242 of 7,539 on staging, and 221 of those are the SAME
+     * room item split across date ranges (an early-arrival night plus the main stay). The tie-break is
+     * therefore not cosmetic: {@code on_share_linked_copy_info} DELETES the mate's attendances and
+     * replaces them with the chosen line's, so binding to the early-arrival line truncates the mate's
+     * whole stay to that one night. It orders by nights for exactly that reason — longest stay first,
+     * because that is the field being overwritten — and falls back to the id only to break a true tie.
+     * Neither lowest nor highest id is defensible on its own: both are insertion order, which follows
+     * whatever order the client emitted the lines in.
+     *
+     * <p>Still a guess, and a caller that KNOWS which room is meant should name the line instead of
+     * relying on this (room-mate plan Part C). One upcoming booking on staging owns two rooms today, and
+     * its longest line is also its lowest-id one, so nothing is currently mis-bound.
      */
+    /**
+     * Stops the live invitations for one room working, and says how many it stopped.
+     *
+     * <p>A slot of 1-7 revokes the invitations sent for that roommate; anything else revokes every live
+     * token the room has, which includes the un-slotted ones a booker minted with the cart's copy-link.
+     * Both are the same act from the booker's side — "stop that link working" — and the second is the
+     * only way to reach a link they handed over themselves, since nothing recorded where it went.
+     *
+     * <p>The rows are kept. They are also the record of what was sent, which the cart shows, and a
+     * booker who revoked an invitation is exactly the booker who wants to see that it happened.
+     *
+     * <p>Already-revoked rows are left alone rather than re-stamped, so the date keeps meaning "when it
+     * was stopped" and a second press reports nothing further to stop.
+     */
+    /**
+     * Which rows a revoke matches, as a WHERE fragment — the one decision in this that is worth testing
+     * without a database, and the one that decides how much a booker stops by pressing once.
+     *
+     * <p>Scoped to the BOOKING's share-owner lines rather than to one of them. `loadOwnerLineForBooking`
+     * picks a line by a tie-break it calls a guess, and 242 of 7,539 staging bookings own two — so a
+     * booker who modified their stay could otherwise find the record gone and the remedy matching
+     * nothing, with the link still live. For "stop this working", over-reaching inside the caller's own
+     * booking is the right direction to err.
+     */
+    static String revokeMatch(boolean oneSlot) {
+        return "owner_document_line_id in (select id from document_line"
+               + " where document_id = $1 and share_owner) and revoked_date is null"
+               + (oneSlot ? " and invited_mate_slot = $2" : "");
+    }
+
+    /** Whether this slot names one roommate, or stands for every live link the room has. */
+    static boolean revokesOneSlot(int mateSlot) {
+        return mateSlot >= 1 && mateSlot <= 7;
+    }
+
+    static Future<Integer> revokeInvitations(Object documentId, int mateSlot) {
+        boolean oneSlot = revokesOneSlot(mateSlot);
+        String match = revokeMatch(oneSlot);
+        Object[] parameters = oneSlot ? new Object[] { documentId, mateSlot }
+                                      : new Object[] { documentId };
+        // Counted BEFORE the update, which is the only way to say how many were stopped: afterwards
+        // there is nothing to tell a row this call revoked from one revoked last week, and
+        // SubmitResult.getRowCount counts RowSets rather than rows affected.
+        return QueryService.executeQuery(new QueryArgumentBuilder()
+                .setDataSourceId(dataSourceId())
+                .setStatement("select count(*) from mate_invite_token where " + match)
+                .setParameters(parameters)
+                .build())
+            .compose(rs -> {
+                // Through an Object local, NEVER String.valueOf(rs.getValue(...)): getValue is generic,
+                // so an unbounded inference variable makes javac pick String.valueOf(char[]) and emit a
+                // cast that throws on the Long a count returns. That is how createInvitation shipped
+                // unusable for five days with every check green.
+                Object counted = rs.getRowCount() < 1 ? null : rs.getValue(0, 0);
+                int live = counted instanceof Number number ? number.intValue() : 0;
+                if (live == 0)
+                    // Nothing live to stop. Not an error: pressing it twice, or after the last bed was
+                    // taken, is a booker making sure rather than a booker being wrong.
+                    return Future.succeededFuture(0);
+                return SubmitService.executeSubmit(new SubmitArgumentBuilder()
+                        .setDataSourceId(dataSourceId())
+                        .setStatement("update mate_invite_token set revoked_date = now() where " + match)
+                        .setParameters(parameters)
+                        .build())
+                    .map(ignored -> live);
+            });
+    }
+
+    /**
+     * The invitations sent for one room, as a small JSON array for the cart to read back on a later
+     * visit: {@code [{"slot":1,"date":"2026-10-02","failed":false}, ...]}, newest first.
+     *
+     * <p>Only the rows that were EMAILED — {@code invited_date} is null for a token the booker minted and
+     * handed over themselves, and there is nobody to report having written to.
+     *
+     * <p><b>No token, no hash, no address.</b> The slot is a number the caller already knows (they named
+     * the person in it), the date is a date, {@code failed} is whether the mailer gave up on the message,
+     * and {@code revoked} is whether the booker has since stopped it working. The address lives on the recipient row and stays there: the cart has the booker's own copy
+     * of what they typed, and a read endpoint that hands back addresses is a read endpoint worth
+     * attacking.
+     *
+     * <p>Built by hand from values checked to have the expected shape — digits for the slot, an ISO date
+     * — like {@link #roomDescriptionJson} above and for the same reason.
+     */
+    static Future<String> loadInvitations(Object ownerDocumentLineId) {
+        return QueryService.executeQuery(new QueryArgumentBuilder()
+                .setDataSourceId(dataSourceId())
+                .setStatement(
+                    // The NEWEST row per slot. Each send mints its own token, so a slot invited twice has
+                    // two rows — and listing both would show one person twice, keep the panel pinned to
+                    // its warning variant over a delivery that has since been superseded, and say "2
+                    // invitations" about one roommate. It also bounds the reply to seven rows.
+                    "select s.invited_mate_slot, s.sent_on, s.failed, s.revoked from (" +
+                    "  select distinct on (t.invited_mate_slot) t.invited_mate_slot, " +
+                    // at time zone 'UTC' rather than a bare ::date: the cast would otherwise resolve
+                    // through the server session's TimeZone, so an invitation sent just after midnight
+                    // would be reported as the day before, and the answer would change with a GUC.
+                    "    (t.invited_date at time zone 'UTC')::date as sent_on, " +
+                    "    (m.transmitted and m.error is not null) as failed, " +
+                    "    (t.revoked_date is not null) as revoked " +
+                    "  from mate_invite_token t left join mail m on m.id = t.invite_mail_id " +
+                    "  where t.owner_document_line_id = $1 and t.invited_date is not null " +
+                    "  order by t.invited_mate_slot, t.invited_date desc) s " +
+                    "order by s.sent_on desc")
+                .setParameters(ownerDocumentLineId)
+                .build())
+            .map(rs -> {
+                StringBuilder json = new StringBuilder("[");
+                for (int row = 0; row < rs.getRowCount(); row++) {
+                    Object slot = rs.getValue(row, 0);
+                    String slotText = slot == null ? null : slot.toString();
+                    // A row whose slot is not a small number names nobody the cart could show.
+                    if (slotText == null || !slotText.matches("[1-7]"))
+                        continue;
+                    if (json.length() > 1)
+                        json.append(',');
+                    json.append("{\"slot\":").append(slotText)
+                        .append(",\"date\":").append(isoDateJsonOrNull(rs.getValue(row, 1)))
+                        .append(",\"failed\":").append(Boolean.TRUE.equals(rs.getValue(row, 2)))
+                        .append(",\"revoked\":").append(Boolean.TRUE.equals(rs.getValue(row, 3)))
+                        .append('}');
+                }
+                return json.append(']').toString();
+            });
+    }
+
+    /** Who to tell that a bed has been taken, and who took it. */
+    record JoinNotice(String bookerName, String bookerEmail, Object bookerPersonId, String mateName,
+                      String eventName, String lang, boolean mateIsTheBooker) { }
+
+    /**
+     * Everything the "somebody took a bed" note needs, read from the two lines it is about.
+     *
+     * <p>The booker's address the way the mail trigger resolves one: their own, else their account
+     * login, else the address typed on the booking — a guest booker has no person row to carry one. A
+     * booking with none of the three is not written to, which {@link MateJoinedMail} treats as nothing
+     * to do rather than a failure.
+     */
+    static Future<JoinNotice> loadJoinNotice(Object ownerDocumentLineId, Object mateDocumentLineId) {
+        return QueryService.executeQuery(new QueryArgumentBuilder()
+                .setDataSourceId(dataSourceId())
+                .setStatement(
+                    "select coalesce(nullif(trim(coalesce(bp.first_name, '') || ' ' || coalesce(bp.last_name, '')), ''), bp.name), " +
+                    "coalesce(nullif(bp.email, ''), nullif(bfa.username, ''), nullif(od.person_email, '')), " +
+                    // NOT md.person_email as a last resort: a mate with no person row would then have
+                    // their ADDRESS printed to the booker as if it were their name — on the copy-link
+                    // route, to somebody who may never have known it. Only the anti-phishing rule in
+                    // nameOrNeutral keeps it out today, and that rule is there for a different job.
+                    "coalesce(nullif(trim(coalesce(mp.first_name, '') || ' ' || coalesce(mp.last_name, '')), ''), mp.name), " +
+                    "e.name, bl.iso_639_1, od.person_id, " +
+                    // A booker may follow their own link rather than the cart's own button — the link
+                    // stays usable for an account already in the room, to put a second person in a
+                    // triple — and telling them somebody took a bed when that somebody was them reads
+                    // as a stranger walking in.
+                    "(md.person_id is not null and md.person_id = od.person_id) " +
+                    "from document_line odl " +
+                    "join document od on od.id = odl.document_id " +
+                    "left join person bp on bp.id = od.person_id " +
+                    "left join frontend_account bfa on bfa.id = bp.frontend_account_id " +
+                    "left join language bl on bl.id = bp.language_id " +
+                    "join event e on e.id = od.event_id " +
+                    "join document_line mdl on mdl.id = $2 " +
+                    "join document md on md.id = mdl.document_id " +
+                    "left join person mp on mp.id = md.person_id " +
+                    "where odl.id = $1")
+                .setParameters(ownerDocumentLineId, mateDocumentLineId)
+                .build())
+            .map(rs -> {
+                if (rs.getRowCount() < 1)
+                    return null;
+                return new JoinNotice(
+                    text(rs.getValue(0, 0)), text(rs.getValue(0, 1)), rs.getValue(0, 5),
+                    text(rs.getValue(0, 2)), text(rs.getValue(0, 3)), text(rs.getValue(0, 4)),
+                    Boolean.TRUE.equals(rs.getValue(0, 6)));
+            });
+    }
+
+    private static String text(Object value) {
+        return value == null ? "" : value.toString().trim();
+    }
+
+    /**
+     * The names an invitation needs, for one slot of one room line.
+     *
+     * <p>All seven name columns are selected and the slot picked in Java rather than building the column
+     * name into the statement. The slot is validated and the database constrains it to 1-7 besides, so
+     * interpolating it would be safe today — but a column name assembled from a parameter is a habit that
+     * stops being safe the first time the validation moves, and seven columns of one row costs nothing.
+     *
+     * <p>The mate name may be null or blank: a booker can leave a slot unnamed, and an invitation to
+     * nobody is refused by the caller rather than sent to "Dear ".
+     */
+    static Future<InvitationFacts> loadInvitationFacts(Object ownerDocumentLineId, int mateSlot) {
+        return QueryService.executeQuery(new QueryArgumentBuilder()
+                .setDataSourceId(dataSourceId())
+                .setStatement(
+                    "select dl.share_owner_mate1_name, dl.share_owner_mate2_name, dl.share_owner_mate3_name, " +
+                    "dl.share_owner_mate4_name, dl.share_owner_mate5_name, dl.share_owner_mate6_name, " +
+                    "dl.share_owner_mate7_name, " +
+                    "coalesce(nullif(trim(coalesce(p.first_name, '') || ' ' || coalesce(p.last_name, '')), ''), p.name), " +
+                    "e.name " +
+                    "from document_line dl join document d on d.id = dl.document_id " +
+                    "join person p on p.id = d.person_id join event e on e.id = d.event_id " +
+                    "where dl.id = $1")
+                .setParameters(ownerDocumentLineId)
+                .build())
+            .map(rs -> {
+                if (rs.getRowCount() < 1)
+                    return null;
+                Object mateName = mateSlot >= 1 && mateSlot <= 7 ? rs.getValue(0, mateSlot - 1) : null;
+                Object bookerName = rs.getValue(0, 7), eventName = rs.getValue(0, 8);
+                return new InvitationFacts(
+                    mateName == null ? null : mateName.toString(),
+                    bookerName == null ? "" : bookerName.toString(),
+                    eventName == null ? "" : eventName.toString());
+            });
+    }
+
     static Future<OwnerLine> loadOwnerLineForBooking(Object documentId) {
         return QueryService.executeQuery(new QueryArgumentBuilder()
                 .setDataSourceId(dataSourceId())
@@ -413,11 +709,44 @@ final class MateInviteTokenStore {
                     "join person p on p.id = d.person_id " +
                     "join item i on i.id = dl.item_id join item_family f on f.id = i.family_id " +
                     "where dl.document_id = $1 and dl.share_owner = true and f.code = 'acco' and not dl.cancelled " +
-                    "order by dl.id limit 1")
+                    "order by (select count(*) from attendance a where a.document_line_id = dl.id) desc, dl.id limit 1")
                 .setParameters(documentId)
                 .build())
             .map(rs -> rs.getRowCount() < 1 ? null
                 : new OwnerLine(rs.getValue(0, 0), rs.getValue(0, 1), rs.getValue(0, 2)));
+    }
+
+    /**
+     * Of the lines a submit declared to be share-owner lines, the one that is actually a live
+     * accommodation room — or null when none of them is, or when more than one is.
+     *
+     * <p>Judged among the NAMED lines rather than looked up from the booking, which is the whole point of
+     * the field this feeds: the caller knows which room it meant, and re-deriving it would reinstate the
+     * guess (242 of 7,539 bookings own two room lines). Validated all the same, because the same event
+     * stamps a headcount on non-accommodation lines too — a multi-head public talk marks refectory and
+     * diet lines, and none of those is a room a mate can join.
+     *
+     * <p>More than one live room among them returns null rather than a choice. A booking CAN hold two,
+     * and nothing here can tell which the booker meant; reporting neither leaves the client to ask, which
+     * is better than reporting the wrong one — linking to it would delete the mate's attendances and
+     * replace them with that room's.
+     */
+    static Future<Object> pickRoomLineAmong(List<Object> namedLineIds) {
+        if (namedLineIds.isEmpty())
+            return Future.succeededFuture(null);
+        StringBuilder placeholders = new StringBuilder();
+        for (int i = 0; i < namedLineIds.size(); i++)
+            placeholders.append(i == 0 ? "$" : ", $").append(i + 1);
+        return QueryService.executeQuery(new QueryArgumentBuilder()
+                .setDataSourceId(dataSourceId())
+                .setStatement(
+                    "select dl.id from document_line dl " +
+                    "join item i on i.id = dl.item_id join item_family f on f.id = i.family_id " +
+                    "where dl.id in (" + placeholders + ") and dl.share_owner = true and f.code = 'acco' " +
+                    "  and not dl.cancelled limit 2")
+                .setParameters(namedLineIds.toArray())
+                .build())
+            .map(rs -> rs.getRowCount() == 1 ? rs.getValue(0, 0) : null);
     }
 
     /**

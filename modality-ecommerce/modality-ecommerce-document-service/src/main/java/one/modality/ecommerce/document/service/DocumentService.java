@@ -44,6 +44,47 @@ public final class DocumentService {
         return getProvider().mintMateInviteToken(documentId);
     }
 
+    /**
+     * Invites the roommate named in one slot of the caller's own room to take the bed held for them.
+     *
+     * <p>Mints, writes and records in one server-side step, so the invitation link is never handed to the
+     * browser: the client says WHICH slot and where to write, and the server reads from the booking who
+     * that is, builds the link on its own origin and sends it. The alternative — mint, hand over, ask the
+     * server to post it — would mean a token on the wire for a message the sender never reads.
+     *
+     * @param mateSlot which of the room line's seven roommate name slots, 1-based
+     * @param email    where to write, as the booker typed it
+     * @param lang     the language to write in; English when there is no better guess
+     */
+    public static Future<Void> sendMateInvitation(Object documentId, int mateSlot, String email, String lang) {
+        return getProvider().sendMateInvitation(documentId, mateSlot, email, lang);
+    }
+
+    /**
+     * The invitations sent for this booking's room, as a JSON array — what the cart shows on a visit
+     * later than the one that sent them.
+     *
+     * <p>Carries no token, no hash and no address: a slot number, a date, and whether the mailer gave up.
+     * The cart already holds the names, in the room line it is displaying.
+     */
+    public static Future<String> listMateInvitations(Object documentId) {
+        return getProvider().listMateInvitations(documentId);
+    }
+
+    /**
+     * Stops the live invitations for this booking's room working, and says how many were stopped.
+     *
+     * <p>A slot of 1-7 stops the ones sent for that roommate; anything else stops every live link the
+     * room has, including one the booker copied for themselves — which is the only way to reach that,
+     * since nothing recorded where it went.
+     *
+     * <p>Zero is an ordinary answer: pressing it twice, or after the last bed was taken, is a booker
+     * making sure rather than a booker being wrong.
+     */
+    public static Future<Integer> revokeMateInvitations(Object documentId, int mateSlot) {
+        return getProvider().revokeMateInvitations(documentId, mateSlot);
+    }
+
     public static Future<String> resolveMateInvite(String token, Object eventId) {
         return getProvider().resolveMateInvite(token, eventId);
     }

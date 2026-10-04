@@ -25,7 +25,7 @@ import one.modality.base.shared.entities.Person;
 import one.modality.base.shared.util.ActivityHashUtil;
 import one.modality.crm.server.authn.gateway.shared.AccountSignInRestrictionStore;
 import one.modality.crm.server.authn.gateway.shared.GuestPersonLinker;
-import one.modality.crm.server.authn.gateway.shared.LocalizedMailTemplate;
+import one.modality.base.server.mail.LocalizedMailTemplate;
 import one.modality.crm.server.authn.gateway.shared.MagicLinkService;
 import one.modality.crm.server.authn.gateway.shared.PasswordClosedNotice;
 import one.modality.crm.server.authn.gateway.shared.RecoveryWindow;

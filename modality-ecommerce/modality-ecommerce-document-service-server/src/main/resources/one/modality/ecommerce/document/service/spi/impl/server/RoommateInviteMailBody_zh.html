@@ -1,0 +1,98 @@
+<html lang="zh" dir="ltr"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>已为您保留一个床位</title>
+    <style>
+        /* Global Styles */
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            background-color: #f9fafb;
+        }
+
+        .email-container {
+            max-width: 600px;
+            margin: 20px auto;
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            text-align: center;
+        }
+
+        .header {
+            background-color: #ffffff;
+            padding: 20px 0;
+            font-size: 32px;
+            color: #009fe3;
+            font-weight: bold;
+        }
+
+        .content {
+            padding: 20px 40px;
+            font-size: 16px;
+            color: #505050;
+        }
+
+        .content h2 {
+            font-size: 18px;
+            margin-bottom: 10px;
+            font-weight: normal;
+            color: #606060;
+        }
+
+        .highlight {
+            font-weight: bold;
+            color: #303030;
+        }
+
+        .button {
+            display: inline-block;
+            margin: 10px 0 20px;
+            padding: 12px 28px;
+            background-color: #009fe3;
+            color: #ffffff !important;
+            font-weight: bold;
+            text-decoration: none;
+            border-radius: 8px;
+        }
+
+        .divider {
+            width: 80%;
+            margin: 20px auto;
+            border: 0;
+            border-top: 1px solid #dddddd;
+        }
+
+        .footer {
+            font-size: 12px;
+            color: #aaaaaa;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+
+<body>
+<div class="email-container">
+    <div class="header">已为您保留一个床位</div>
+
+    <div class="content">
+        <h2>[mateName]，您好：</h2>
+
+        <p><span class="highlight">[bookerName]</span> 已预订 <span class="highlight">[eventName]</span> 的房间，并为您保留了其中一个床位。</p>
+
+        <p>房间费用已由对方支付，因此不会向您收取床位费。您仍需自行预订活动本身——课程、餐食以及您需要的其他内容——下方链接会直接设置为加入该房间，您无需自己查找。</p>
+
+        <p><a class="button" href="[inviteLink]">预订我的位置</a></p>
+
+        <hr class="divider">
+
+        <p>如果您并未预期收到此邮件，可以忽略它：没有以您的名义预订任何内容，除本邮件外也没有将您的邮箱提供给任何人。</p>
+    </div>
+
+    <div class="footer">
+        <p>发送此邀请，是因为预订合住房间的人请我们写信给您。房间所有床位订满后，该邀请即失效。</p>
+    </div>
+</div>
+</body></html>

@@ -337,4 +337,17 @@ public final class GuestBookingAccess {
     static synchronized void forgetRecoveryMails() {
         LAST_RECOVERY_MAIL.clear();
     }
+
+    /**
+     * Says a recovery mail could not be sent, without saying to whom.
+     *
+     * Lives here rather than at the call site because that module has no logging of its own, and
+     * because this is where the other "recovery mail not sent" line already is. The exception's TYPE
+     * only: a provider's message usually quotes the recipient, and the address of somebody asking to
+     * recover their bookings is the fact this whole path exists to conceal.
+     */
+    public static void logRecoveryMailFailure(Throwable error) {
+        Console.log("⚠️ Booking recovery mail could not be sent (" + error.getClass().getSimpleName() + ")");
+    }
+
 }

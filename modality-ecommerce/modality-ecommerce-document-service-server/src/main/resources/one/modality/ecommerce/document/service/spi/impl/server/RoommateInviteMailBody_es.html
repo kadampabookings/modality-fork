@@ -1,0 +1,98 @@
+<html lang="es" dir="ltr"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Te guardamos una cama</title>
+    <style>
+        /* Global Styles */
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            background-color: #f9fafb;
+        }
+
+        .email-container {
+            max-width: 600px;
+            margin: 20px auto;
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            text-align: center;
+        }
+
+        .header {
+            background-color: #ffffff;
+            padding: 20px 0;
+            font-size: 32px;
+            color: #009fe3;
+            font-weight: bold;
+        }
+
+        .content {
+            padding: 20px 40px;
+            font-size: 16px;
+            color: #505050;
+        }
+
+        .content h2 {
+            font-size: 18px;
+            margin-bottom: 10px;
+            font-weight: normal;
+            color: #606060;
+        }
+
+        .highlight {
+            font-weight: bold;
+            color: #303030;
+        }
+
+        .button {
+            display: inline-block;
+            margin: 10px 0 20px;
+            padding: 12px 28px;
+            background-color: #009fe3;
+            color: #ffffff !important;
+            font-weight: bold;
+            text-decoration: none;
+            border-radius: 8px;
+        }
+
+        .divider {
+            width: 80%;
+            margin: 20px auto;
+            border: 0;
+            border-top: 1px solid #dddddd;
+        }
+
+        .footer {
+            font-size: 12px;
+            color: #aaaaaa;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+
+<body>
+<div class="email-container">
+    <div class="header">Te guardamos una cama</div>
+
+    <div class="content">
+        <h2>Hola [mateName]:</h2>
+
+        <p><span class="highlight">[bookerName]</span> ha reservado una habitación en <span class="highlight">[eventName]</span> y te guarda una cama.</p>
+
+        <p>Esa persona ya ha pagado la habitación, así que la cama no se te cobrará. Aún tienes que hacer tu propia reserva para el evento en sí —las enseñanzas, las comidas y lo que quieras—, y el enlace de abajo la prepara para unirte a su habitación, sin que tengas que buscarla.</p>
+
+        <p><a class="button" href="[inviteLink]">Reservar mi plaza</a></p>
+
+        <hr class="divider">
+
+        <p>Si no esperabas este mensaje, puedes ignorarlo: no se ha reservado nada a tu nombre y tu dirección no se ha facilitado a nadie más allá de este correo.</p>
+    </div>
+
+    <div class="footer">
+        <p>Esta invitación se envía porque alguien que reserva una habitación compartida nos pidió escribirte. Deja de funcionar en cuanto todas las camas de la habitación estén ocupadas.</p>
+    </div>
+</div>
+</body></html>

@@ -27,6 +27,7 @@ import one.modality.ecommerce.document.service.events.registration.MarkDocumentA
 import one.modality.ecommerce.document.service.events.registration.MarkDocumentAsCheckedOutEvent;
 import one.modality.ecommerce.document.service.events.registration.documentline.AllocateDocumentLineEvent;
 import one.modality.ecommerce.document.service.events.registration.documentline.CancelDocumentLineEvent;
+import one.modality.ecommerce.document.service.events.book.EditShareOwnerInfoDocumentLineEvent;
 import one.modality.ecommerce.document.service.events.registration.documentline.LinkMateToOwnerDocumentLineEvent;
 import one.modality.base.shared.entities.DocumentLine;
 import dev.webfx.stack.orm.entity.Entities;
@@ -397,7 +398,9 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
                             if (mayNeedGuestLink)
                                 syncCartAccessLink(result.cartPrimaryKey());
                             return HistoryRecorder.completeDocumentHistoriesAfterSubmit(histories, request.argument().documentEvents())
-                                .compose(ignoredVoid -> consumeMateInviteTokenIfPresent(request, result));
+                                .compose(ignoredVoid -> consumeMateInviteTokenIfPresent(request, result))
+                                .compose(r -> linkBookerMateIfPresent(request, r))
+                                .compose(r -> reportRoomLineIfBooked(request, r));
                         }
                         return Future.succeededFuture(result); // submit refused by logic (e.g. sold-out)
                     });
@@ -500,12 +503,13 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
             : EntityStore.create().<Entity>executeQuery("select backoffice from FrontendAccount where id=$1", accountId)
                 .map(accounts -> accounts.isEmpty() ? null : Boolean.TRUE.equals(accounts.get(0).getBooleanFieldValue("backoffice")));
         return backofficeAccount.compose(isBackofficeAccount ->
-            validateMateLinksFrom(links, 0, request.backoffice(), isBackofficeAccount));
+            validateMateLinksFrom(links, 0, request.backoffice(), isBackofficeAccount, accountId));
     }
 
     /** Judges the links one after another; the first refusal fails the whole submit. */
     private static Future<Void> validateMateLinksFrom(List<LinkMateToOwnerDocumentLineEvent> links, int index,
-                                                     boolean backofficeSession, Boolean backofficeAccount) {
+                                                     boolean backofficeSession, Boolean backofficeAccount,
+                                                     Object submitterAccountId) {
         if (index >= links.size())
             return Future.succeededFuture();
         LinkMateToOwnerDocumentLineEvent link = links.get(index);
@@ -513,44 +517,85 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
         Object ownerPk = link.getOwnerDocumentLine();
         boolean ownerPersonNamed = link.getOwnerPerson() != null;
         if (matePk == null)
-            return refuseOrContinue(MateLinkRules.check(backofficeSession, backofficeAccount, null, ownerPk != null, null, ownerPersonNamed),
-                links, index, backofficeSession, backofficeAccount);
-        return EntityStore.create().<DocumentLine>executeQuery(
+            return refuseOrContinue(MateLinkRules.check(backofficeSession, backofficeAccount, null, ownerPk != null, null, ownerPersonNamed, submitterAccountId),
+                links, index, backofficeSession, backofficeAccount, submitterAccountId);
+        // document.person.frontendAccount is who OWNS the booking, which the front-office rule judges the
+        // link by — the same path mint checks before it will issue a token for a room.
+        return linesOwnedBy(submitterAccountId, matePk, ownerPk).compose(owned ->
+            EntityStore.create().<DocumentLine>executeQuery(
                 "select share_mate, share_owner, item.share_mate, document.event from DocumentLine where id=$1 or id=$2",
                 matePk, ownerPk != null ? ownerPk : matePk)
             .compose(lines -> {
                 MateLinkRules.LineFacts mate = null, owner = null;
                 for (DocumentLine line : lines) {
-                    MateLinkRules.LineFacts facts = lineFacts(line);
                     Object linePk = line.getPrimaryKey();
+                    MateLinkRules.LineFacts facts = lineFacts(line, isOwned(owned, linePk));
                     if (MateLinkRules.sameId(linePk, matePk))
                         mate = facts;
                     if (ownerPk != null && MateLinkRules.sameId(linePk, ownerPk))
                         owner = facts;
                 }
-                return refuseOrContinue(MateLinkRules.check(backofficeSession, backofficeAccount, mate, ownerPk != null, owner, ownerPersonNamed),
-                    links, index, backofficeSession, backofficeAccount);
-            });
+                return refuseOrContinue(MateLinkRules.check(backofficeSession, backofficeAccount, mate, ownerPk != null, owner, ownerPersonNamed, submitterAccountId),
+                    links, index, backofficeSession, backofficeAccount, submitterAccountId);
+            }));
     }
 
     private static Future<Void> refuseOrContinue(String refusal, List<LinkMateToOwnerDocumentLineEvent> links, int index,
-                                                 boolean backofficeSession, Boolean backofficeAccount) {
+                                                 boolean backofficeSession, Boolean backofficeAccount,
+                                                 Object submitterAccountId) {
         if (refusal != null) {
             Console.log(refusal);
             return Future.failedFuture(refusal);
         }
-        return validateMateLinksFrom(links, index + 1, backofficeSession, backofficeAccount);
+        return validateMateLinksFrom(links, index + 1, backofficeSession, backofficeAccount, submitterAccountId);
     }
 
-    /** The facts {@link MateLinkRules} judges, from a line loaded with share_mate, share_owner, item.share_mate and document.event. */
-    private static MateLinkRules.LineFacts lineFacts(DocumentLine line) {
+    /**
+     * The facts {@link MateLinkRules} judges, from a line loaded with share_mate, share_owner,
+     * item.share_mate and document.event. Ownership is not among them: it is a question about the
+     * SUBMITTER, answered by {@link #linesOwnedBy} and passed in.
+     */
+    /**
+     * Which of {@code lineIds} belong to a booking the account may act on, by the same
+     * {@code accountCanAccessPersonOrders} predicate the orders page and the read inventory use — so a
+     * room booked FOR a household member, whose person row has no frontendAccount of its own and reaches
+     * the account through accountPerson, counts as theirs. Asked as a WHERE clause rather than selected,
+     * which is how that function is used everywhere else; selecting it would mean projecting four levels
+     * of foreign key and trusting an emission path nothing else exercises.
+     *
+     * <p>An empty set for a guest: with no account there is nothing to compare against, and the rule
+     * refuses on that alone.
+     */
+    private static Future<List<Object>> linesOwnedBy(Object accountId, Object lineId1, Object lineId2) {
+        if (accountId == null)
+            return Future.succeededFuture(new ArrayList<>());
+        return EntityStore.create().<DocumentLine>executeQuery(
+                "select id from DocumentLine where (id=$1 or id=$2) and accountCanAccessPersonOrders($3, document.person)",
+                lineId1, lineId2 != null ? lineId2 : lineId1, accountId)
+            .map(lines -> {
+                List<Object> owned = new ArrayList<>();
+                for (DocumentLine line : lines)
+                    owned.add(line.getPrimaryKey());
+                return owned;
+            });
+    }
+
+    /** Whether {@code owned} names this line — primary keys compared by value, as everywhere else here. */
+    private static boolean isOwned(List<Object> owned, Object linePk) {
+        for (Object ownedPk : owned)
+            if (MateLinkRules.sameId(ownedPk, linePk))
+                return true;
+        return false;
+    }
+
+    private static MateLinkRules.LineFacts lineFacts(DocumentLine line, boolean owned) {
         Entity item = line.getForeignEntity("item");
         Entity document = line.getForeignEntity("document");
         boolean shareMate = Boolean.TRUE.equals(line.getBooleanFieldValue("share_mate"))
                             || item != null && Boolean.TRUE.equals(item.getBooleanFieldValue("share_mate"));
         Object documentPk = line.getForeignEntityId("document") == null ? null : Entities.getPrimaryKey(line.getForeignEntityId("document"));
         Object eventPk = document == null || document.getForeignEntityId("event") == null ? null : Entities.getPrimaryKey(document.getForeignEntityId("event"));
-        return new MateLinkRules.LineFacts(shareMate, Boolean.TRUE.equals(line.getBooleanFieldValue("share_owner")), documentPk, eventPk);
+        return new MateLinkRules.LineFacts(shareMate, Boolean.TRUE.equals(line.getBooleanFieldValue("share_owner")), documentPk, eventPk, owned);
     }
 
     private static Object getUserAccountId(Object userId) {
@@ -617,6 +662,19 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
     public Future<String> mintMateInviteToken(Object documentId) {
         // Capture the caller synchronously — the thread-local is gone after the first async hop.
         Object accountId = getUserAccountId(ThreadLocalStateHolder.getUserId());
+        return authorisedRoomOf(documentId, accountId).compose(ownerLine ->
+            MateInviteTokenStore.mint(ownerLine.ownerDocumentLineId(), ownerLine.eventId(), accountId));
+    }
+
+    /**
+     * The room line of the caller's OWN booking, with a bed still free in it — or a failure saying which
+     * of those was not true.
+     *
+     * <p>Shared by the two ways a bed is offered, the link the booker copies and the invitation we send
+     * on their behalf, because they are the same act with different delivery and a second copy of these
+     * checks is a second thing to keep right.
+     */
+    private Future<MateInviteTokenStore.OwnerLine> authorisedRoomOf(Object documentId, Object accountId) {
         if (accountId == null)
             return Future.failedFuture("[MateInviteError] Only a signed-in booker can create a room-share invite");
         if (documentId == null)
@@ -635,9 +693,87 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
                     // a full room is not an error from the booker's point of view — everyone has booked
                     // — and the page should say so instead of reporting a failure.
                     return Future.failedFuture("[MateInviteError:ROOM_FULL] Every bed in this room is already taken");
-                return MateInviteTokenStore.mint(ownerLine.ownerDocumentLineId(), ownerLine.eventId(), accountId);
+                return Future.succeededFuture(ownerLine);
             });
         });
+    }
+
+    @Override
+    public Future<Integer> revokeMateInvitations(Object documentId, int mateSlot) {
+        Object accountId = getUserAccountId(ThreadLocalStateHolder.getUserId());
+        if (accountId == null)
+            return Future.failedFuture("[MateInviteError] Only a signed-in booker can stop an invitation");
+        if (documentId == null)
+            return Future.succeededFuture(0);
+        return MateInviteTokenStore.loadOwnerLineForBooking(documentId).compose(ownerLine -> {
+            // Nothing to stop, and — for a booking that is somebody else's — the same answer as a
+            // booking with no room, for the reason the read beside this one gives: two distinguishable
+            // answers are an oracle, and this one is reachable without a booking of your own.
+            if (ownerLine == null || !MateLinkRules.sameId(ownerLine.frontendAccountId(), accountId))
+                return Future.succeededFuture(0);
+            // By BOOKING, not by the line the lookup happened to pick: the room above is the ownership
+            // check, and a booking owning two share-owner lines must not have half its links unreachable.
+            return MateInviteTokenStore.revokeInvitations(documentId, mateSlot);
+        });
+    }
+
+    @Override
+    public Future<String> listMateInvitations(Object documentId) {
+        Object accountId = getUserAccountId(ThreadLocalStateHolder.getUserId());
+        // The same gate as the two ways of offering a bed, minus the free-bed test: a booker whose room
+        // has filled still has every right to see who was written to on its behalf.
+        if (accountId == null)
+            return Future.failedFuture("[MateInviteError] Only a signed-in booker can see their invitations");
+        if (documentId == null)
+            return Future.succeededFuture("[]");
+        return MateInviteTokenStore.loadOwnerLineForBooking(documentId).compose(ownerLine -> {
+            if (ownerLine == null)
+                // No room, so no invitations — not an error, just nothing to show.
+                return Future.succeededFuture("[]");
+            if (!MateLinkRules.sameId(ownerLine.frontendAccountId(), accountId))
+                // Nothing, rather than "not yours". A booking that does not exist, and one that is
+                // somebody else's, must answer alike: this is a cheap side-effect-free read with no
+                // throttle, so two distinguishable answers are an oracle for walking document ids to
+                // find live bookings holding a shareable room. The client treats both the same way.
+                return Future.succeededFuture("[]");
+            return MateInviteTokenStore.loadInvitations(ownerLine.ownerDocumentLineId());
+        });
+    }
+
+    @Override
+    public Future<Void> sendMateInvitation(Object documentId, int mateSlot, String email, String lang) {
+        // Captured synchronously, before the first async hop, like every other caller-derived value here.
+        Object accountId = getUserAccountId(ThreadLocalStateHolder.getUserId());
+        if (mateSlot < 1 || mateSlot > 7)
+            return Future.failedFuture("[MateInviteError] That is not a roommate slot of this room");
+        String address = email == null ? "" : email.trim();
+        // Shape only, and deliberately not a strict parser: the point is to refuse junk and anything
+        // carrying a newline, not to adjudicate what a mailbox may be called.
+        if (address.isEmpty() || address.length() > 127 || !address.matches("[^\\s@]+@[^\\s@.]+(\\.[^\\s@.]+)+"))
+            return Future.failedFuture("[MateInviteError] That is not an address we can write to");
+        String origin = MateInvitationMail.configuredFrontOfficeOrigin();
+        if (origin == null)
+            // The booker is told, rather than a mail going out whose only button leads nowhere. The cart
+            // still offers them the link to copy, so this is recoverable where a broken link is not.
+            return Future.failedFuture("[MateInviteError:NO_ORIGIN] Invitations are not configured on this server");
+        // Before any work, and before the room is even loaded: a refusal here must cost nothing and leak
+        // nothing about the booking, and starting the window only on success would let a tight loop keep
+        // the gate open by failing.
+        if (!MateInvitationMail.maySend(address, documentId, mateSlot))
+            return Future.failedFuture("[MateInviteError:TOO_SOON] That invitation has just been sent — give it a few minutes");
+        return authorisedRoomOf(documentId, accountId).compose(ownerLine ->
+            MateInviteTokenStore.loadInvitationFacts(ownerLine.ownerDocumentLineId(), mateSlot).compose(facts -> {
+                if (facts == null || facts.mateName() == null || facts.mateName().isBlank())
+                    // Nobody is named in that slot, so there is nobody to invite. Refused rather than
+                    // sent to "Dear ,": the name is read from the booking, never from the request, and an
+                    // empty one means the request and the booking disagree about who is in the room.
+                    return Future.failedFuture("[MateInviteError] No roommate is named in that slot");
+                return MateInviteTokenStore.mint(ownerLine.ownerDocumentLineId(), ownerLine.eventId(), accountId, true)
+                    .compose(rawToken -> MateInvitationMail.send(
+                        MateInviteTokenStore.hashToken(rawToken),
+                        MateInvitationMail.inviteLink(origin, ownerLine.eventId(), rawToken),
+                        mateSlot, address, facts.mateName(), facts.bookerName(), facts.eventName(), lang));
+            }));
     }
 
     @Override
@@ -834,14 +970,83 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
             : MateInviteTokenStore.resolve(token, eventPk).compose(ownerLineId -> ownerLineId == null
                 ? Future.succeededFuture(false)
                 : MateInviteTokenStore.hasFreeBed(ownerLineId));
-        return invitedToFreeBed
-            // The link stands in for the bed count only; the item must still be one this event offers.
-            .compose(invited -> SharingPlaceAvailability.firstOverbooked(eventPk, requestedLinesByItemPk, !invited))
+        // A BOOKER putting someone in their own room is exempt from the event-wide POOL too (room-mate
+        // plan Part C). That pool is the free beds in the event's booked rooms LESS every unlinked
+        // sharing place anywhere in it, so a queue of other people's unplaced sharers can exhaust it —
+        // and a booker who has just paid for a whole twin is then told there is no bed in it. The figure
+        // is wrong about that one room, which is what this drops.
+        //
+        // It does NOT drop the room's OWN count, although the plan said to drop both. The reasoning there
+        // — that the worst a booker can do is put a third person in their own twin — is true of the
+        // booking FORM and not of the submit: with no per-room ceiling anywhere, a crafted request can
+        // hang any number of £0 lines off one room, and nothing downstream counts them, because a LINKED
+        // mate never reaches the allocation trigger (defer_allocate skips it) and so meets neither its
+        // capacity check nor its sold-out check. The pool used to be that ceiling by accident, being
+        // self-limiting as it is consumed. Asking the room itself restores a ceiling and makes it the
+        // thing the booker actually controls; it is also the check the invited-mate path keeps.
+        //
+        // Gated on OWNERSHIP, and it has to be, because this runs BEFORE the write — the ownership check
+        // in linkBookerMateIfPresent is too late to decide whether the submit may be accepted at all.
+        // Without it, naming any line id would buy a sharing place the event cannot supply; the link would
+        // then be refused afterwards, leaving exactly the unlinked £0 sharing line this gate exists to
+        // prevent. The singleLine guard applies for the same reason it applies to a token.
+        Object bookerRoomLineId = request.argument().ownerDocumentLine();
+        Future<Boolean> booksOwnRoom = !singleLine || bookerRoomLineId == null ? Future.succeededFuture(false)
+            : ownsRoomAtEvent(bookerRoomLineId, eventPk, getUserAccountId(request.userId()))
+                .compose(ownsRoom -> ownsRoom ? MateInviteTokenStore.hasFreeBed(bookerRoomLineId)
+                                              : Future.succeededFuture(false));
+        return Future.all(invitedToFreeBed, booksOwnRoom)
+            .map(exemptions -> Boolean.TRUE.equals(exemptions.resultAt(0)) || Boolean.TRUE.equals(exemptions.resultAt(1)))
+            // Either exemption stands in for the bed COUNT only; the item must still be one this event
+            // offers as a sharing place, which is what firstOverbooked keeps checking.
+            .compose(exempt -> SharingPlaceAvailability.firstOverbooked(eventPk, requestedLinesByItemPk, !exempt))
             .map(refusedItemPk -> {
                 if (refusedItemPk == null)
                     return null;
                 Console.log("[SharingAvailability] refused a sharing place with no free bed: event=" + eventPk + " item=" + refusedItemPk);
                 return SubmitDocumentChangesResult.createSoldOutResult(firstLineByItemPk.get(refusedItemPk).getSitePrimaryKey(), refusedItemPk);
+            });
+    }
+
+    /**
+     * Whether {@code ownerDocumentLineId} is a live room of {@code eventPk} that {@code accountId} may act
+     * on — the pre-write half of the booker's room-share authorisation (room-mate plan Part C).
+     *
+     * <p>Asks the same question as {@link MateLinkRules}' ownership test, and must keep asking it: this
+     * decides whether the submit is exempt from the event's sharing pool, and that decision is made before
+     * anything is written, where the post-write check cannot help. Answering yes for a room that is not
+     * the caller's would hand them a sharing place the event cannot supply, and the link would then be
+     * refused afterwards — leaving an unlinked line priced at zero.
+     *
+     * <p>Two queries rather than one, deliberately. {@code accountCanAccessPersonOrders} is passed a bare
+     * {@code person} at every other call site in the repository, and this would have been the first to
+     * hand it a traversed one ({@code document.person}). That may well compile, but its failure mode is
+     * silent — the query errors, this answers false, and the exemption simply never applies, which is the
+     * bug it exists to fix wearing the costume of working correctly. So the line is resolved to its
+     * booking first, and the ownership question is then asked in the shape everything else uses.
+     *
+     * <p>Any failure answers false: the pool check then stays on, which refuses too much rather than too
+     * little.
+     */
+    private static Future<Boolean> ownsRoomAtEvent(Object ownerDocumentLineId, Object eventPk, Object accountId) {
+        if (ownerDocumentLineId == null || eventPk == null || accountId == null)
+            return Future.succeededFuture(false);
+        return EntityStore.create().<DocumentLine>executeQuery(
+                "select document from DocumentLine where id=$1 and share_owner and !cancelled"
+                + " and item.family.code='acco' and document.event=$2",
+                ownerDocumentLineId, eventPk)
+            .compose(lines -> {
+                if (lines.isEmpty())
+                    return Future.succeededFuture(false); // not a live room of this event
+                Object documentPk = Entities.getPrimaryKey(lines.get(0).getForeignEntityId("document"));
+                return EntityStore.create().executeQuery(
+                        "select id from Document where id=$1 and !cancelled and accountCanAccessPersonOrders($2, person)",
+                        documentPk, accountId)
+                    .map(documents -> !documents.isEmpty());
+            })
+            .otherwise(e -> {
+                Console.log("[MateLink] could not confirm the booker owns the room; keeping the bed count on: " + e);
+                return false;
             });
     }
 
@@ -865,6 +1070,38 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
      * line found) is logged and the booking still succeeds — the mate simply stays unlinked, which the
      * back office can resolve. The TOKEN is the authorization; the client never names the owner line.
      */
+    /**
+     * Tells the room booker that one of their beds has been taken, and by whom.
+     *
+     * <p>Reads both sides from the two lines rather than from anything the mate's request carried: who
+     * holds the room, where to write to them, and the name on the booking that just joined.
+     *
+     * <p>Never fails the link. Its own result is swallowed here as well as by the chain it hangs off,
+     * because the three follow-ups are independent and one going wrong should not cost the others.
+     */
+    private static Future<Void> notifyBookerOfJoin(Object ownerLineId, Object mateLineId) {
+        // The window first, so a refusal costs nothing: no query, no mail, and the link already stands.
+        if (!MateJoinedMail.maySend(ownerLineId))
+            return Future.succeededFuture();
+        return MateInviteTokenStore.loadJoinNotice(ownerLineId, mateLineId)
+            .compose(notice -> {
+                if (notice == null)
+                    return Future.succeededFuture();
+                // The booker may follow their own link rather than the cart's button — it stays usable
+                // for an account already in the room, to put a second person in a triple. Telling them
+                // somebody took a bed, when that somebody was them, reads as a stranger walking in.
+                if (notice.mateIsTheBooker())
+                    return Future.succeededFuture();
+                return MateJoinedMail.send(notice.bookerName(), notice.bookerEmail(),
+                                           notice.bookerPersonId(), notice.mateName(),
+                                           notice.eventName(), notice.lang());
+            })
+            .otherwise(e -> {
+                Console.log("[MateInvite] linked, but the booker could not be told: " + e);
+                return null;
+            });
+    }
+
     private static Future<SubmitDocumentChangesResult> consumeMateInviteTokenIfPresent(DocumentSubmitRequest request, SubmitDocumentChangesResult result) {
         String token = request.argument().inviteToken();
         if (token == null || token.isBlank())
@@ -887,7 +1124,8 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
                     Console.log("[MateInvite] token did not resolve (unknown, expired, or another event); booking left unlinked");
                     return Future.succeededFuture(SubmitDocumentChangesResult.withMateInvite(result, SubmitDocumentChangesResult.MATE_INVITE_NOT_LINKED));
                 }
-                return MateInviteTokenStore.link(mateLineId, ownerLineId).compose(linked -> {
+                // An emailed token can be forwarded, so the bed count stays on for this caller.
+                return MateInviteTokenStore.link(mateLineId, ownerLineId, true).compose(linked -> {
                     if (!linked) { // the room filled or was cancelled after the invite was sent
                         Console.log("[MateInvite] link refused (no free bed, room cancelled, or not a share-mate line); booking left unlinked");
                         return Future.succeededFuture(SubmitDocumentChangesResult.withMateInvite(result, SubmitDocumentChangesResult.MATE_INVITE_NOT_LINKED));
@@ -897,8 +1135,15 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
                     // so a failure in them still reports LINKED.
                     return MateInviteTokenStore.recordFirstUse(token, mateLineId)
                         .compose(ignored -> MateInviteTokenStore.stampOwnerName(mateLineId, ownerLineId))
+                        // And tell the booker, who otherwise finds out only by looking at their own
+                        // booking — which answers the question for somebody who wonders, and misses the
+                        // person whose link is used days later. Sent whichever way the link reached its
+                        // reader: we emailed it, or they copied it themselves, and the booker wants to
+                        // know either way. Best effort, like the two above: a bed that is taken is
+                        // taken, and failing to mention it must never undo that.
+                        .compose(ignored -> notifyBookerOfJoin(ownerLineId, mateLineId))
                         .otherwise(e -> {
-                            Console.log("[MateInvite] linked, but recording first use or the owner name failed: " + e);
+                            Console.log("[MateInvite] linked, but recording first use, the owner name or the booker's note failed: " + e);
                             return null;
                         })
                         .map(ignored -> SubmitDocumentChangesResult.withMateInvite(result, SubmitDocumentChangesResult.MATE_INVITE_LINKED));
@@ -915,6 +1160,112 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
             // mate almost certainly chose the sharing place and expects to be placed: say NOT_LINKED
             // rather than leave them believing they share the room.
             Console.log("[MateInvite] token consume errored; booking left unlinked: " + e);
+            return SubmitDocumentChangesResult.withMateInvite(result, SubmitDocumentChangesResult.MATE_INVITE_NOT_LINKED);
+        });
+    }
+
+    /**
+     * Tells a booking that just took a whole room which line that is, so the booker's NEXT submit — their
+     * roommate's booking — can name the exact room (room-mate plan Part C). Without it the server would
+     * have to guess from the document, and 242 of 7,539 bookings own two room lines, where guessing wrong
+     * replaces the mate's attendances with the wrong line's.
+     *
+     * <p>Reports the line the submit NAMED, not one re-derived from the booking: re-deriving would put
+     * back the very guess this field exists to remove. It is still validated — the same event stamps a
+     * headcount on non-accommodation lines (a multi-head public talk marks refectory and diet lines), and
+     * none of those is a room anyone can join.
+     *
+     * <p>Only for a submit that declared a share-owner line, so an ordinary booking pays for no extra
+     * query. Best-effort throughout: a booking is not failed, nor its result withheld, because the
+     * follow-up convenience could not be filled in.
+     */
+    private static Future<SubmitDocumentChangesResult> reportRoomLineIfBooked(DocumentSubmitRequest request, SubmitDocumentChangesResult result) {
+        if (result.status() != DocumentChangesStatus.APPROVED || result.documentPrimaryKey() == null)
+            return Future.succeededFuture(result);
+        // The lines the submit itself declared to be share-owner lines. Their primary keys are already
+        // resolved: HistoryRecorder.completeDocumentHistoriesAfterSubmit rewrites the client's negative
+        // ids to real ones, synchronously, earlier in this same compose chain.
+        List<Object> namedRoomLines = new ArrayList<>();
+        for (AbstractDocumentEvent documentEvent : request.argument().documentEvents())
+            if (documentEvent instanceof EditShareOwnerInfoDocumentLineEvent shareOwner
+                && shareOwner.getDocumentLinePrimaryKey() != null)
+                namedRoomLines.add(shareOwner.getDocumentLinePrimaryKey());
+        if (namedRoomLines.isEmpty())
+            return Future.succeededFuture(result);
+        return MateInviteTokenStore.pickRoomLineAmong(namedRoomLines)
+            .map(roomLineId -> roomLineId == null ? result
+                : SubmitDocumentChangesResult.withOwnerDocumentLine(result, roomLineId))
+            .otherwise(e -> {
+                Console.log("[MateLink] could not report the room line of the new booking: " + e);
+                return result;
+            });
+    }
+
+    /**
+     * Links a roommate's booking to the room its booker names (room-mate plan Part C) — the booker's own
+     * counterpart to {@link #consumeMateInviteTokenIfPresent}, and deliberately shaped like it: the link is
+     * written AFTER the booking, so nothing in the submit has to name a line that does not exist yet.
+     *
+     * <p>What differs is the authorisation, because the two carry different things. An invite token is an
+     * unguessable credential and names the room by itself. A line id is sequential and shown in the UI, so
+     * here the ownership check IS the authorisation: {@link MateLinkRules} requires the named line to
+     * belong to a booking of the submitting account. Part C switches the bed count off for a booker
+     * putting someone in their own room, so this check is what stands between a guessed id and a mate
+     * attached to a stranger's room.
+     *
+     * <p>Judged by the FRONT-OFFICE rule whoever sends it: the back office has its own link action with
+     * its own rule, so there is no reason for this argument to grant back-office powers to anything that
+     * sets it.
+     *
+     * <p>Reported like the token path, and for the same reason: once the booking holds a sharing place,
+     * a mate left unlinked must be TOLD rather than left believing they share the room.
+     */
+    private static Future<SubmitDocumentChangesResult> linkBookerMateIfPresent(DocumentSubmitRequest request, SubmitDocumentChangesResult result) {
+        Object ownerLineId = request.argument().ownerDocumentLine();
+        if (ownerLineId == null || result.status() != DocumentChangesStatus.APPROVED || result.documentPrimaryKey() == null)
+            return Future.succeededFuture(result);
+        Object submitterAccountId = getUserAccountId(request.userId());
+        return MateInviteTokenStore.findMateShareLineId(result.documentPrimaryKey()).compose(mateLineId -> {
+            if (mateLineId == null) {
+                Console.log("[MateLink] no share-mate line on the new booking; nothing to link");
+                return Future.succeededFuture(result);
+            }
+            return linesOwnedBy(submitterAccountId, mateLineId, ownerLineId).compose(owned ->
+                EntityStore.create().<DocumentLine>executeQuery(
+                    "select share_mate, share_owner, item.share_mate, document.event from DocumentLine where id=$1 or id=$2",
+                    mateLineId, ownerLineId)
+                .compose(lines -> {
+                    MateLinkRules.LineFacts mate = null, owner = null;
+                    for (DocumentLine line : lines) {
+                        Object linePk = line.getPrimaryKey();
+                        MateLinkRules.LineFacts facts = lineFacts(line, isOwned(owned, linePk));
+                        if (MateLinkRules.sameId(linePk, mateLineId))
+                            mate = facts;
+                        if (MateLinkRules.sameId(linePk, ownerLineId))
+                            owner = facts;
+                    }
+                    String refusal = MateLinkRules.check(false, false, mate, true, owner, false, submitterAccountId);
+                    if (refusal != null) {
+                        Console.log("[MateLink] " + refusal + " (owner line " + ownerLineId + ")");
+                        return Future.succeededFuture(SubmitDocumentChangesResult.withMateInvite(result, SubmitDocumentChangesResult.MATE_INVITE_NOT_LINKED));
+                    }
+                    // The room's remaining capacity is NOT tested here: Part C accepts a booker putting an
+                    // extra person in their own room, which is visible to them and to registration and is
+                    // their own doing. link() still refuses a cancelled room and a line that is not a
+                    // sharing place.
+                    return MateInviteTokenStore.link(mateLineId, ownerLineId, false).compose(linked -> {
+                        if (!linked) {
+                            Console.log("[MateLink] link refused (room cancelled, or not a share-mate line); booking left unlinked");
+                            return Future.succeededFuture(SubmitDocumentChangesResult.withMateInvite(result, SubmitDocumentChangesResult.MATE_INVITE_NOT_LINKED));
+                        }
+                        // Fills the owner's name only where the booker left it blank — it never overwrites
+                        // what they wrote. Both link paths label the line the same way for that reason.
+                        return MateInviteTokenStore.stampOwnerName(mateLineId, ownerLineId)
+                            .map(ignored -> SubmitDocumentChangesResult.withMateInvite(result, SubmitDocumentChangesResult.MATE_INVITE_LINKED));
+                    });
+                }));
+        }).otherwise(e -> {
+            Console.log("[MateLink] booker link errored; booking left unlinked: " + e);
             return SubmitDocumentChangesResult.withMateInvite(result, SubmitDocumentChangesResult.MATE_INVITE_NOT_LINKED);
         });
     }

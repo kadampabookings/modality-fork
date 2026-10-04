@@ -6,6 +6,7 @@ import dev.webfx.platform.util.Strings;
 import dev.webfx.stack.mail.MailMessage;
 import dev.webfx.stack.mail.MailService;
 import one.modality.base.server.mail.ModalityMailMessage;
+import one.modality.base.server.mail.LocalizedMailTemplate;
 import one.modality.base.shared.context.ModalityContext;
 
 /**
