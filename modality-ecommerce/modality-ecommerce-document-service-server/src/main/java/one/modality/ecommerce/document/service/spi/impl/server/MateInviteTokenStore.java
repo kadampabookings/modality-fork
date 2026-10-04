@@ -459,8 +459,14 @@ final class MateInviteTokenStore {
      * <p>The name is taken from the owner's OWN booking, never from the client — the link is the fact,
      * and this only labels it. A blank owner name leaves the line blank rather than writing an empty
      * string, and any failure here is swallowed: the link stands on its own without the label.
+     *
+     * <p><b>Returns the name the line ended up carrying</b>, read back rather than assumed: this writes
+     * only into a blank, so the result is the owner's name OR whatever the mate typed, and the caller
+     * reports it to the mate who has just booked a bed in that room. Null when there is none, or when
+     * anything here failed. Read back for the reason the class note gives — a submit's row count counts
+     * RowSets, not rows.
      */
-    static Future<Void> stampOwnerName(Object mateDocumentLineId, Object ownerDocumentLineId) {
+    static Future<String> stampOwnerName(Object mateDocumentLineId, Object ownerDocumentLineId) {
         return SubmitService.executeSubmit(new SubmitArgumentBuilder()
                 .setDataSourceId(dataSourceId())
                 .setStatement(
@@ -473,7 +479,19 @@ final class MateInviteTokenStore {
                     "where id = $1 and share_mate = true and coalesce(trim(share_mate_owner_name), '') = ''")
                 .setParameters(mateDocumentLineId, ownerDocumentLineId)
                 .build())
-            .map(r -> (Void) null)
+            .compose(ignored -> QueryService.executeQuery(new QueryArgumentBuilder()
+                .setDataSourceId(dataSourceId())
+                .setStatement("select share_mate_owner_name from document_line where id = $1")
+                .setParameters(mateDocumentLineId)
+                .build()))
+            .map(rs -> {
+                if (rs.getRowCount() < 1) return null;
+                // Through an Object local: getValue() is generic, and String.valueOf() on it makes javac
+                // pick valueOf(char[]) and emit a cast that fails at runtime. That bug has shipped twice.
+                Object name = rs.getValue(0, 0);
+                String text = name == null ? null : name.toString().trim();
+                return text == null || text.isEmpty() ? null : text;
+            })
             .otherwise(e -> null); // label only — never fail a booking over it
     }
 

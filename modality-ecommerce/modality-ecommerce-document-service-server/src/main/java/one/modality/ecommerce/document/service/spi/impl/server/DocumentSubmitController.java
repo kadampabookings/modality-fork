@@ -183,7 +183,15 @@ final class DocumentSubmitController {
 
     static SubmitDocumentChangesResult fetchEventQueueResult(Object queueToken) {
         SubmitDocumentChangesResult result = pushingResults.remove(queueToken);
-        Console.log("☀️ Fetched result for token " + queueToken + ": " + result);
+        // The OUTCOME, not the result object. It is a record, so printing it calls toString() and puts
+        // every component in the log: that now includes the room booker's name on a linked invite, which
+        // is personal data landing where neither the anonymiser nor an erasure request reaches it, and it
+        // has always included cartUuid, which is a bearer token for the cart. Neither belongs in
+        // CloudWatch, and neither is what this line is for — it is here to say whether a token found a
+        // result waiting.
+        Console.log("☀️ Fetched result for token " + queueToken + ": "
+                    + (result == null ? "none waiting"
+                       : result.status() + (result.mateInvite() == null ? "" : "/" + result.mateInvite())));
         return result;
     }
 }
