@@ -240,17 +240,31 @@ final class MateInviteTokenStore {
 
     /**
      * The room on {@code ownerDocumentLineId}, as {@link #roomDescriptionJson} describes it: its item, and
-     * the first and last attendance day of the booking holding it (over that booking's live lines). The
-     * caller must already have established that the link naming this room is usable.
+     * the nights THAT LINE is booked for. The caller must already have established that the link naming
+     * this room is usable.
+     *
+     * <p><b>The bed's own attendances, not the booking's.</b> This read used to span every live line of
+     * the booking holding the room, which is the booker's whole stay — teachings, meals and all — and
+     * only coincides with the bed when something happens to be booked on the first and last day of it.
+     * On staging, 56 of 223 upcoming room bookings disagree with it, 53 of them on the departure. It
+     * mattered because the invitation carries these dates to the mate's booking form as the answer to
+     * "which nights?": a room booked for the night AFTER a one-day course reported arrival = departure =
+     * the course day, which reads as a DAY VISIT — answering an invitation to a bed by booking no bed at
+     * all — and a both-nights room lost its second night whenever no departure-morning meal was booked.
+     *
+     * <p>An accommodation line's attendance rows ARE its nights, one per night, dated by the night. So
+     * the arrival is the first of them and the departure is the morning after the last: {@code max + 1}.
+     *
+     * <p>Null when the line has no attendance of its own (3 of those 223, all unconfirmed), and null is
+     * the right answer: the mate's form then asks them to choose rather than filling in a guess, which is
+     * the direction this whole path errs in deliberately.
      */
     static Future<String> describeRoom(Object ownerDocumentLineId) {
         return QueryService.executeQuery(new QueryArgumentBuilder()
                 .setDataSourceId(dataSourceId())
                 .setStatement("select o.item_id, " +
-                              "(select min(a.date) from attendance a join document_line l on l.id = a.document_line_id " +
-                              "   where l.document_id = o.document_id and not l.cancelled), " +
-                              "(select max(a.date) from attendance a join document_line l on l.id = a.document_line_id " +
-                              "   where l.document_id = o.document_id and not l.cancelled) " +
+                              "(select min(a.date) from attendance a where a.document_line_id = o.id), " +
+                              "(select max(a.date) + 1 from attendance a where a.document_line_id = o.id) " +
                               "from document_line o where o.id = $1")
                 .setParameters(ownerDocumentLineId)
                 .build())
