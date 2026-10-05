@@ -92,6 +92,59 @@ final class MateLinkRules {
     }
 
     /**
+     * Whether a submit may say that a line IS a sharing place.
+     *
+     * <p>The flag is the price. {@code EditShareMateInfoDocumentLineEvent} writes
+     * {@code document_line.share_mate}, and that flag alone makes
+     * {@code compute_document_line_pricing_quantity} price the line at <b>0</b> (V0039, V0117) and keeps
+     * the defer-allocate trigger off it (V0118). So the question "may this line be a sharing place" is
+     * the question "may this line cost nothing", and it cannot be answered by the client that benefits.
+     *
+     * <p><b>A line may only be BORN a sharing place.</b> Created as one, it faces
+     * {@code refuseSharingPlaceWithoutFreeBed}: the item must be one the event offers as a sharing
+     * option and a bed must be free for it, or a token or the booker's own room must stand in for the
+     * count. Acquiring the flag afterwards faced nothing — that guard returns before any check when a
+     * submit adds no line — so a booker could pay for a whole room and then, in a second submit carrying
+     * this event alone, reprice their own line to nothing while the pool absorbed the bed.
+     *
+     * <p><b>Why the availability check is not the fix here.</b> Since virtual sharing options (Part B) a
+     * sharing line names the ROOM's own item, so that check would find the attacker's twin genuinely
+     * "offered as a sharing option" and then ask only whether the event has a free shared bed anywhere —
+     * which it usually does. Routing acquisition through it would have let the attack through on most
+     * events. What separates the two is not the item or the bed but the EDIT: creating a sharing line
+     * takes a bed, converting a paid line keeps the room's money and takes a bed as well.
+     *
+     * <p>An already-flagged line passes. No current flow needs that: both front-office emitters take the
+     * line id from the {@code AddDocumentLineEvent} in the same submit and send nothing when there is
+     * none ({@code bookAccommodationOption}), so today every legitimate share-mate event names a line
+     * being created. The branch is there so that a flow which later re-sends the event on an unchanged
+     * line meets a no-op rather than a refusal, and it cannot be abused: saying a line is what it already
+     * is changes neither its price nor its allocation. What is refused is the flag being ACQUIRED.
+     *
+     * @param backofficeSession the client-asserted session flag
+     * @param backofficeAccount the account's own flag from the database; null when the submitter has none
+     * @param createdByThisSubmit the submit carries an AddDocumentLineEvent for this line, so the line is
+     *                          being born here and the availability guard has judged it
+     * @param alreadySharing    the line's {@code share_mate} as the database holds it, or null when no
+     *                          such line exists
+     * @return a refusal message, or null when the flag may be written
+     */
+    static String checkShareMateFlag(boolean backofficeSession, Boolean backofficeAccount,
+                                     boolean createdByThisSubmit, Boolean alreadySharing) {
+        // Both flags, as check() above combines them and for the same reason: a verified back-office
+        // account, working in the back-office app. The back office is authoritative for placement here as
+        // it is for the allocation check itself.
+        if (backofficeSession && Boolean.TRUE.equals(backofficeAccount))
+            return null;
+        if (createdByThisSubmit || Boolean.TRUE.equals(alreadySharing))
+            return null;
+        // One message for "no such line" and for "that line is not a sharing place", as checkBookerLink
+        // gives one for all its failures: line ids are sequential and shown in the UI, so a caller able to
+        // tell the two apart could walk the id space and learn which bookings hold a sharing line.
+        return ERROR_PREFIX + "This booking line cannot become a sharing place";
+    }
+
+    /**
      * A booker linking their own roommate, from the front office (room-mate plan Part C).
      *
      * <p>The ownership check is the whole rule, not defence in depth. The booker's submit names the owner

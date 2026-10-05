@@ -159,6 +159,34 @@ public class MateLinkRulesCheck {
         check("...and may not link into somebody else's",
             MateLinkRules.check(false, true, MY_MATE, true, THEIR_ROOM, false, MY_ACCOUNT) != null);
 
+        // ── The flag that decides the price ──────────────────────────────────
+        // share_mate alone prices a line at 0 and keeps it out of allocation, so "may this line be a
+        // sharing place" IS "may this line cost nothing". Created as one it is judged by the availability
+        // guard; acquired afterwards it used to be judged by nothing, which let a booker pay for a whole
+        // room and then reprice their own line to nothing in a second submit carrying only this event.
+        check("a line created by this submit may be flagged — the availability guard has it",
+            MateLinkRules.checkShareMateFlag(false, null, true, null) == null);
+        // Defensive rather than needed today: both emitters take the line id from the submit's own
+        // AddDocumentLineEvent, so no current flow re-sends this for an existing line. Saying a line is
+        // what it already is changes neither its price nor its allocation.
+        check("a line that already carries the flag may be re-sent",
+            MateLinkRules.checkShareMateFlag(false, null, false, true) == null);
+        check("an EXISTING ordinary line may NOT become a sharing place",
+            MateLinkRules.checkShareMateFlag(false, null, false, false) != null);
+        check("...nor may a line that does not exist",
+            MateLinkRules.checkShareMateFlag(false, null, false, null) != null);
+        check("the two refusals say the same thing, so failure does not map the id space",
+            MateLinkRules.checkShareMateFlag(false, null, false, false)
+                .equals(MateLinkRules.checkShareMateFlag(false, null, false, null)));
+        // Authoritative for placement, as it is for the allocation check itself — and both flags, so a
+        // front-office client cannot reach this branch by asserting the session's.
+        check("the back office may convert a line",
+            MateLinkRules.checkShareMateFlag(true, true, false, false) == null);
+        check("a session claiming the back office without the account cannot",
+            MateLinkRules.checkShareMateFlag(true, false, false, false) != null);
+        check("...nor can one whose account is unknown",
+            MateLinkRules.checkShareMateFlag(true, null, false, false) != null);
+
         System.out.println(pass + " passed, " + fail + " failed");
         if (fail > 0)
             System.exit(1);

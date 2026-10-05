@@ -358,6 +358,9 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
         // A roommate link names the booking line it points at, and the replay below would write whatever the
         // client sent — so a link is judged against the database BEFORE it can be queued (MateLinkRules).
         return validateMateLinks(request)
+            // And the flag that decides a line's PRICE is judged here too, before the queue: a line may be
+            // born a sharing place but never become one (refuseShareMateFlagAcquisition).
+            .compose(ignored -> refuseShareMateFlagAcquisition(request))
             .compose(ignored -> DocumentSubmitController.submitDocumentChanges(request));
     }
 
@@ -538,6 +541,66 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
                 return refuseOrContinue(MateLinkRules.check(backofficeSession, backofficeAccount, mate, ownerPk != null, owner, ownerPersonNamed, submitterAccountId),
                     links, index, backofficeSession, backofficeAccount, submitterAccountId);
             }));
+    }
+
+    /**
+     * Refuses a submit that turns a line it did not create into a sharing place — the flag that prices it
+     * at nothing (room-mate plan, "Security and personal data" item 7).
+     *
+     * <p>The rule is {@link MateLinkRules#checkShareMateFlag}; this loads the facts it judges. Costs
+     * nothing on ordinary traffic: a submit whose share-mate events all belong to lines it is adding —
+     * which is every submit the booking form produces when a mate books — asks the database nothing.
+     *
+     * <p>Placed beside {@code validateMateLinks} rather than inside
+     * {@code refuseSharingPlaceWithoutFreeBed} for two reasons: that guard answers "is there a bed",
+     * whose answer is a SOLD_OUT result, while this answers "may you say this at all", whose answer is a
+     * refusal; and like a link, a crafted flag should be refused before the submit is queued rather than
+     * when the queue gets to it.
+     */
+    private static Future<Void> refuseShareMateFlagAcquisition(DocumentSubmitRequest request) {
+        Set<String> addedLinePks = new HashSet<>();
+        List<Object> flaggedLinePks = new ArrayList<>();
+        // One pass, then the filter: an Add event may follow the Edit that flags its line, and a submit
+        // whose order decided whether a line could be free would be a submit worth reordering.
+        for (AbstractDocumentEvent documentEvent : request.argument().documentEvents()) {
+            if (documentEvent instanceof AddDocumentLineEvent add)
+                addedLinePks.add(String.valueOf(add.getDocumentLinePrimaryKey()));
+            else if (documentEvent instanceof EditShareMateInfoDocumentLineEvent mate)
+                flaggedLinePks.add(mate.getDocumentLinePrimaryKey());
+        }
+        flaggedLinePks.removeIf(linePk -> addedLinePks.contains(String.valueOf(linePk)));
+        if (flaggedLinePks.isEmpty())
+            return Future.succeededFuture();
+        // Only now, on the path no ordinary submit takes: the account's own flag, from the database.
+        Object accountId = getUserAccountId(request.userId());
+        Future<Boolean> backofficeAccount = accountId == null
+            ? Future.succeededFuture(null)
+            : EntityStore.create().<Entity>executeQuery("select backoffice from FrontendAccount where id=$1", accountId)
+                .map(accounts -> accounts.isEmpty() ? null : Boolean.TRUE.equals(accounts.get(0).getBooleanFieldValue("backoffice")));
+        return backofficeAccount.compose(isBackofficeAccount ->
+            refuseFlagAcquisitionFrom(request.backoffice(), isBackofficeAccount, flaggedLinePks, 0));
+    }
+
+    /** One line at a time, as the neighbours walk their lists: the list is empty on every ordinary submit. */
+    private static Future<Void> refuseFlagAcquisitionFrom(boolean backofficeSession, Boolean backofficeAccount,
+                                                         List<Object> linePks, int index) {
+        if (index >= linePks.size())
+            return Future.succeededFuture();
+        Object linePk = linePks.get(index);
+        return EntityStore.create().<DocumentLine>executeQuery(
+                "select share_mate from DocumentLine where id=$1", linePk)
+            .compose(lines -> {
+                Boolean alreadySharing = lines.isEmpty() ? null : Boolean.TRUE.equals(lines.get(0).isShareMate());
+                String refusal = MateLinkRules.checkShareMateFlag(backofficeSession, backofficeAccount,
+                    false, alreadySharing);
+                if (refusal != null) {
+                    // The line and the caller stay in the log, where the message to the client does not put
+                    // them: this is reached only by a crafted submit, so it is worth being able to see whose.
+                    Console.log(refusal + " (line=" + linePk + ", alreadySharing=" + alreadySharing + ")");
+                    return Future.failedFuture(refusal);
+                }
+                return refuseFlagAcquisitionFrom(backofficeSession, backofficeAccount, linePks, index + 1);
+            });
     }
 
     private static Future<Void> refuseOrContinue(String refusal, List<LinkMateToOwnerDocumentLineEvent> links, int index,
