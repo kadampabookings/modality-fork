@@ -606,14 +606,19 @@ final class MateInviteTokenStore {
                     // two rows — and listing both would show one person twice, keep the panel pinned to
                     // its warning variant over a delivery that has since been superseded, and say "2
                     // invitations" about one roommate. It also bounds the reply to seven rows.
-                    "select s.invited_mate_slot, s.sent_on, s.failed, s.revoked from (" +
+                    "select s.invited_mate_slot, s.sent_on, s.failed, s.revoked, s.used_on from (" +
                     "  select distinct on (t.invited_mate_slot) t.invited_mate_slot, " +
                     // at time zone 'UTC' rather than a bare ::date: the cast would otherwise resolve
                     // through the server session's TimeZone, so an invitation sent just after midnight
                     // would be reported as the day before, and the answer would change with a GUC.
                     "    (t.invited_date at time zone 'UTC')::date as sent_on, " +
                     "    (m.transmitted and m.error is not null) as failed, " +
-                    "    (t.revoked_date is not null) as revoked " +
+                    "    (t.revoked_date is not null) as revoked, " +
+                    // Whether somebody followed it (recordFirstUse). Without this the cart went on
+                    // showing a used invitation as live, offering to stop a link whose bed is taken —
+                    // which is every successful invitation, not a rare case: the record belongs to the
+                    // BOOKER, so they read it after their mate has booked.
+                    "    (t.used_date at time zone 'UTC')::date as used_on " +
                     "  from mate_invite_token t left join mail m on m.id = t.invite_mail_id " +
                     "  where t.owner_document_line_id = $1 and t.invited_date is not null " +
                     "  order by t.invited_mate_slot, t.invited_date desc) s " +
@@ -634,6 +639,7 @@ final class MateInviteTokenStore {
                         .append(",\"date\":").append(isoDateJsonOrNull(rs.getValue(row, 1)))
                         .append(",\"failed\":").append(Boolean.TRUE.equals(rs.getValue(row, 2)))
                         .append(",\"revoked\":").append(Boolean.TRUE.equals(rs.getValue(row, 3)))
+                        .append(",\"usedOn\":").append(isoDateJsonOrNull(rs.getValue(row, 4)))
                         .append('}');
                 }
                 return json.append(']').toString();
