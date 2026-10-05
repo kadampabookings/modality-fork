@@ -20,9 +20,9 @@ here that adds, renames or drops a table or column needs an update there, **in t
 change**:
 
 - Classify every new table and column, with a reason, **whether or not it holds personal
-  data**. An unclassified text/date/inet/jsonb column fails the next staging refresh; any
-  other type passes unseen, so a table of person ids and timestamps leaks silently unless
-  you classify it.
+  data**. An unclassified text/date/inet/jsonb column makes the next staging refresh refuse
+  to start; any other type passes unseen, so a table of person ids and timestamps leaks
+  silently unless you classify it.
 - A column that is `anonymised` needs a rewrite in `20-anonymise.sql`, guarded on the
   catalog — the anonymiser runs at production's schema version, which lags staging — and its
   table in that file's section 4 trigger list.
