@@ -3,6 +3,14 @@
 The rules for writing a migration are in the header of
 `src/main/resources/one/modality/base/server/services/dbmigration/scripts/index.txt`.
 
+**Before choosing a `V00NN`, check the other branches for it** — two migrations have already
+had to be renumbered after a collision (`c4f067ad1`, `ebc743e15`): `git fetch`, then
+`git log --all --oneline -- <scripts dir>/index.txt` and
+`git show origin/staging:<scripts dir>/index.txt | tail`, with `<scripts dir>` given from the
+modality-fork root.
+
+The relative `../../../` links below resolve only inside the kbs3-aggregate checkout.
+
 ## A migration is not finished until the staging anonymiser knows about it
 
 The staging database is a production dump, anonymised by the kbs3-aggregate repo's
@@ -12,11 +20,12 @@ here that adds, renames or drops a table or column needs an update there, **in t
 change**:
 
 - Classify every new table and column, with a reason, **whether or not it holds personal
-  data**. An unclassified text/date/inet/jsonb column fails the next staging refresh; any
-  other type passes unseen, so a table of person ids and timestamps leaks silently unless
-  you classify it.
+  data**. An unclassified text/date/inet/jsonb column makes the next staging refresh refuse
+  to start; any other type passes unseen, so a table of person ids and timestamps leaks
+  silently unless you classify it.
 - A column that is `anonymised` needs a rewrite in `20-anonymise.sql`, guarded on the
-  catalog — the anonymiser runs at production's schema version, which lags staging.
+  catalog — the anonymiser runs at production's schema version, which lags staging — and its
+  table in that file's section 4 trigger list.
 - A new constraint or trigger on a column the anonymiser rewrites must accept what it writes.
 
 The procedure is "Changing the database schema" in
