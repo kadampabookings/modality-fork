@@ -835,7 +835,8 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
                     .compose(rawToken -> MateInvitationMail.send(
                         MateInviteTokenStore.hashToken(rawToken),
                         MateInvitationMail.inviteLink(origin, ownerLine.eventId(), rawToken),
-                        mateSlot, address, facts.mateName(), facts.bookerName(), facts.eventName(), lang));
+                        mateSlot, address, facts.mateName(), facts.bookerName(), facts.eventName(),
+                        MateInviteTokenStore.roomNameIn(facts, lang), lang));
             }));
     }
 

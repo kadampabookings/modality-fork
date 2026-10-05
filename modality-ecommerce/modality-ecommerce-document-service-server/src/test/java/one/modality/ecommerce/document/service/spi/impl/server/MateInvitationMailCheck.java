@@ -87,6 +87,48 @@ public class MateInvitationMailCheck {
         check("a note with no address enqueues nothing",
             MateJoinedMail.send("Olive", "  ", 1, "Dermot", "Fall Festival", "en").isComplete());
 
+        // ── Which name the room is given ─────────────────────────────────────
+        // The invitation names the room because KBS cannot tell a double from a twin: capacity counts
+        // PEOPLE and no column counts beds, so printing the organization's own name for the room says
+        // what the reception manager asked for without us inferring a bed layout (2026-10-05).
+        //
+        // The fallback is the whole of it. Two thirds of live accommodation items carry a label at all,
+        // and the French and German columns of those are themselves incomplete, so "no label in this
+        // language" is the ordinary case and not the edge one.
+        java.util.Map<String, String> labels = new java.util.HashMap<>();
+        labels.put("en", "Ensuite Twin (2 single beds)");
+        labels.put("fr", "Chambre twin avec salle de bain");
+        labels.put("", "Ensuite twin");
+        MateInviteTokenStore.InvitationFacts full =
+            new MateInviteTokenStore.InvitationFacts("Carol", "Olive", "Amitayus Retreat", labels);
+
+        check("the room is named in the language the invitation is written in",
+            "Chambre twin avec salle de bain".equals(MateInviteTokenStore.roomNameIn(full, "fr")));
+        check("a language with no label falls back to English, not to nothing",
+            "Ensuite Twin (2 single beds)".equals(MateInviteTokenStore.roomNameIn(full, "de")));
+
+        java.util.Map<String, String> unlabelled = new java.util.HashMap<>();
+        unlabelled.put("", "  1 Single + 1 bunk bed  ");
+        MateInviteTokenStore.InvitationFacts bare =
+            new MateInviteTokenStore.InvitationFacts("Carol", "Olive", "Amitayus Retreat", unlabelled);
+        check("an item with no label at all falls back to its own name, trimmed",
+            "1 Single + 1 bunk bed".equals(MateInviteTokenStore.roomNameIn(bare, "de")));
+
+        java.util.Map<String, String> blank = new java.util.HashMap<>();
+        blank.put("de", "   ");
+        blank.put("en", "Ensuite twin");
+        check("a label present but EMPTY is not a translation",
+            "Ensuite twin".equals(MateInviteTokenStore.roomNameIn(
+                new MateInviteTokenStore.InvitationFacts("C", "O", "E", blank), "de")));
+
+        // A line with no item, or no room at all: the sentence loses its room rather than the mail its
+        // send. Naming nothing reads oddly; failing to invite reads worse.
+        check("no room name at all is empty, never null",
+            "".equals(MateInviteTokenStore.roomNameIn(
+                new MateInviteTokenStore.InvitationFacts("C", "O", "E", new java.util.HashMap<>()), "en")));
+        check("...and so is a missing facts record",
+            "".equals(MateInviteTokenStore.roomNameIn(null, "en")));
+
         System.out.println(pass + " passed, " + fail + " failed");
         if (fail > 0)
             System.exit(1);

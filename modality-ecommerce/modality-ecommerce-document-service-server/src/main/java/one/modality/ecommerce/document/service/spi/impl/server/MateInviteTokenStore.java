@@ -2,7 +2,9 @@ package one.modality.ecommerce.document.service.spi.impl.server;
 
 import dev.webfx.platform.async.Future;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import dev.webfx.stack.db.query.QueryService;
 import dev.webfx.stack.db.query.QueryArgumentBuilder;
 import dev.webfx.stack.db.submit.SubmitService;
@@ -58,7 +60,35 @@ final class MateInviteTokenStore {
      * What an invitation says, read from the booking rather than from the request: who it is for, who is
      * holding the bed, and which event. The caller chooses only the SLOT and the address.
      */
-    record InvitationFacts(String mateName, String bookerName, String eventName) { }
+    /**
+     * @param roomLabels the room item's name in each language the invitation can be written in, plus the
+     *                   item's own untranslated name as the last resort — see {@link #roomNameIn}
+     */
+    record InvitationFacts(String mateName, String bookerName, String eventName, Map<String, String> roomLabels) { }
+
+    /** The label columns, by the language code the mail templates use. `zh` reads the simplified column. */
+    private static final String[] LABEL_COLUMNS = { "en", "fr", "es", "de", "pt", "vi", "zhs" };
+    private static final String[] LABEL_LANGS = { "en", "fr", "es", "de", "pt", "vi", "zh" };
+
+    /**
+     * The room's name as the invitation should print it: the label in the language the mail is written in,
+     * falling back to English and then to the item's own name.
+     *
+     * <p>The fallback is not theoretical. Of the live accommodation items on staging, about two thirds
+     * carry a label at all, and of those the French and German columns are themselves incomplete — so a
+     * German invitation naming a room may well name it in English. That is the behaviour before this
+     * existed, printed one line later.
+     */
+    static String roomNameIn(InvitationFacts facts, String lang) {
+        if (facts == null || facts.roomLabels() == null)
+            return "";
+        String label = facts.roomLabels().get(lang);
+        if (label == null || label.isBlank())
+            label = facts.roomLabels().get("en");
+        if (label == null || label.isBlank())
+            label = facts.roomLabels().get("");  // the item's own name
+        return label == null ? "" : label.trim();
+    }
 
     private MateInviteTokenStore() { }
 
@@ -720,9 +750,16 @@ final class MateInviteTokenStore {
                     "dl.share_owner_mate4_name, dl.share_owner_mate5_name, dl.share_owner_mate6_name, " +
                     "dl.share_owner_mate7_name, " +
                     "coalesce(nullif(trim(coalesce(p.first_name, '') || ' ' || coalesce(p.last_name, '')), ''), p.name), " +
-                    "e.name " +
+                    "e.name, " +
+                    // The room's name, one column per language the invitation can be written in, and the
+                    // item's own name last. Every column named here rather than one chosen by `lang`:
+                    // lang arrives from the client, and a column name cannot be a bound parameter, so
+                    // picking in Java is what keeps this statement free of anything the caller wrote.
+                    "l.en, l.fr, l.es, l.de, l.pt, l.vi, l.zhs, i.name " +
                     "from document_line dl join document d on d.id = dl.document_id " +
                     "join person p on p.id = d.person_id join event e on e.id = d.event_id " +
+                    // Left joins: an item without a label, or a line without an item, still invites.
+                    "left join item i on i.id = dl.item_id left join label l on l.id = i.label_id " +
                     "where dl.id = $1")
                 .setParameters(ownerDocumentLineId)
                 .build())
@@ -731,10 +768,19 @@ final class MateInviteTokenStore {
                     return null;
                 Object mateName = mateSlot >= 1 && mateSlot <= 7 ? rs.getValue(0, mateSlot - 1) : null;
                 Object bookerName = rs.getValue(0, 7), eventName = rs.getValue(0, 8);
+                Map<String, String> roomLabels = new HashMap<>();
+                for (int i = 0; i < LABEL_LANGS.length; i++) {
+                    Object label = rs.getValue(0, 9 + i);
+                    if (label != null) roomLabels.put(LABEL_LANGS[i], label.toString());
+                }
+                Object itemName = rs.getValue(0, 9 + LABEL_LANGS.length);
+                // Keyed on "" so the last resort travels with the rest rather than as a second field.
+                if (itemName != null) roomLabels.put("", itemName.toString());
                 return new InvitationFacts(
                     mateName == null ? null : mateName.toString(),
                     bookerName == null ? "" : bookerName.toString(),
-                    eventName == null ? "" : eventName.toString());
+                    eventName == null ? "" : eventName.toString(),
+                    roomLabels);
             });
     }
 

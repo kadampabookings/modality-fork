@@ -127,13 +127,19 @@ final class MateInvitationMail {
      * @param lang       the language to write in; English when we have no better guess
      */
     static Future<Void> send(String tokenHash, String inviteLink, int mateSlot, String email,
-                             String mateName, String bookerName, String eventName, String lang) {
+                             String mateName, String bookerName, String eventName, String roomName, String lang) {
         String body = mail().renderBody(lang)
             .replace("[inviteLink]", inviteLink)
             .replace("[mateName]", MateMails.nameOrNeutral(mateName, mail().getMessage(lang, "neutralMateName")))
             .replace("[bookerName]", MateMails.nameOrNeutral(bookerName, mail().getMessage(lang, "neutralBookerName")))
             // The event's name is ours, not a booker's free text, so it is escaped and printed as it is.
-            .replace("[eventName]", MateMails.escapeHtml(eventName));
+            .replace("[eventName]", MateMails.escapeHtml(eventName))
+            // And the room's name, on the same terms: typed in the back office, so it is ours — but
+            // escaped all the same, because "ours" describes who typed it and not what they typed.
+            // It is what the booker chose and what the invitee will be shown on arrival, which is the
+            // point of naming it: KBS cannot tell a double from a twin (capacity counts people, and no
+            // column counts beds), so it prints the name rather than inferring the shape.
+            .replace("[roomName]", MateMails.escapeHtml(roomName));
 
         SubmitArgument[] message = MateMails.mailAndRecipient(
             // No person: the invitee is a stranger to this system and may never become one.
