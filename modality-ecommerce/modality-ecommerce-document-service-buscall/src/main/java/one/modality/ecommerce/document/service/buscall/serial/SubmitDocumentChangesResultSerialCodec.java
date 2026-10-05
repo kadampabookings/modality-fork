@@ -28,6 +28,7 @@ public final class SubmitDocumentChangesResultSerialCodec extends SerialCodecBas
     private static final String ERROR_KEY = "error";
     private static final String MATE_INVITE_KEY = "mateInvite";
     private static final String OWNER_DOCUMENT_LINE_KEY = "ownerDocumentLine";
+    private static final String MATE_INVITE_OWNER_NAME_KEY = "mateInviteOwnerName";
 
     public SubmitDocumentChangesResultSerialCodec() {
         super(SubmitDocumentChangesResult.class, CODEC_ID);
@@ -53,6 +54,10 @@ public final class SubmitDocumentChangesResultSerialCodec extends SerialCodecBas
         if (arg.mateInvite() != null)
             encodeString(serial, MATE_INVITE_KEY,           arg.mateInvite());
         encodeObject(serial, OWNER_DOCUMENT_LINE_KEY,       arg.ownerDocumentLine());
+        // Only when there is one, which is only on a LINKED result: a key that is absent reads back as
+        // null, so a server that has not been deployed yet and one that has are both decoded correctly.
+        if (arg.mateInviteOwnerName() != null)
+            encodeString(serial, MATE_INVITE_OWNER_NAME_KEY, arg.mateInviteOwnerName());
     }
 
     @Override
@@ -72,7 +77,8 @@ public final class SubmitDocumentChangesResultSerialCodec extends SerialCodecBas
             decodeBoolean(serial, PRIORITY_KEY, false),
             decodeString(serial, ERROR_KEY),
             decodeString(serial, MATE_INVITE_KEY),
-            decodeObject(serial, OWNER_DOCUMENT_LINE_KEY)
+            decodeObject(serial, OWNER_DOCUMENT_LINE_KEY),
+            decodeString(serial, MATE_INVITE_OWNER_NAME_KEY)
             );
     }
 

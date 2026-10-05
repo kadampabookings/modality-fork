@@ -1141,12 +1141,15 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
                         // reader: we emailed it, or they copied it themselves, and the booker wants to
                         // know either way. Best effort, like the two above: a bed that is taken is
                         // taken, and failing to mention it must never undo that.
-                        .compose(ignored -> notifyBookerOfJoin(ownerLineId, mateLineId))
+                        .compose(ownerName -> notifyBookerOfJoin(ownerLineId, mateLineId).map(ignored -> ownerName))
                         .otherwise(e -> {
                             Console.log("[MateInvite] linked, but recording first use, the owner name or the booker's note failed: " + e);
                             return null;
                         })
-                        .map(ignored -> SubmitDocumentChangesResult.withMateInvite(result, SubmitDocumentChangesResult.MATE_INVITE_LINKED));
+                        // Named only now. Before the link, this caller is just somebody holding a URL and
+                        // the endpoints they can reach must not name anybody (plan constraint 4); after
+                        // it, they have a bed in that person's room and are about to share it with them.
+                        .map(ownerName -> SubmitDocumentChangesResult.linkedToRoomOf(result, ownerName));
                 });
             }).otherwise(e -> {
                 // Resolving or linking errored after the booking took a sharing place: it is unlinked
@@ -1261,7 +1264,7 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
                         // Fills the owner's name only where the booker left it blank — it never overwrites
                         // what they wrote. Both link paths label the line the same way for that reason.
                         return MateInviteTokenStore.stampOwnerName(mateLineId, ownerLineId)
-                            .map(ignored -> SubmitDocumentChangesResult.withMateInvite(result, SubmitDocumentChangesResult.MATE_INVITE_LINKED));
+                            .map(ownerName -> SubmitDocumentChangesResult.linkedToRoomOf(result, ownerName));
                     });
                 }));
         }).otherwise(e -> {
