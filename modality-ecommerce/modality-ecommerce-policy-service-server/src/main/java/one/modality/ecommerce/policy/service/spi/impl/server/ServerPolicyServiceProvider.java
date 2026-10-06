@@ -65,6 +65,8 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
         // The nights the availability is computed for — the first and last date of the scheduled items
         // below. It bounds the event configurations considered: a scheduled item bound to the event or in
         // one of its parts can fall outside the event's own dates.
+        // (An aggregate CTE without GROUP BY: the DQL compiler gives it row_number() as its id because
+        // min/max are flagged as aggregates — webfx-stack Function, same change.)
         ", sd as materialized (select min(si.date) as sdFirst, max(si.date) as sdLast from ScheduledItem si where bookableScheduledItem=id" +
         SCHEDULED_ITEMS_SCOPE + ")" +
         // Candidate resource configurations, resolved ONCE (materialized, same reason as ep): every
