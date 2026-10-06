@@ -92,8 +92,10 @@ final class DocumentSubmitController {
             .compose(event -> EntityStore.create()
                 .<ScheduledItem>executeQuery(
                     // Load all ScheduledItems with resource management (i.e. whose site & item have at least one
-                    // ResourceConfiguration applicable to this event: bound to it, or a global config whose date range
-                    // covers the scheduled item's date — other events' configs are ignored). Resolved on the fly from
+                    // ResourceConfiguration that MAY be in force on the scheduled item's date: an event configuration whose
+                    // event covers that night, end date included — of ANY event — or a global config whose date range covers
+                    // it). A looser superset of the rule in ServerPolicyServiceProvider and V0123 (it ignores which one wins on
+                    // a night): it only decides whether a booking waits in the fair queue, and erring towards "managed" is safe. Resolved on the fly from
                     // ResourceConfiguration (not scheduled_resource), so it no longer depends on scheduled_resource rows
                     // existing — a missing row used to misclassify a resource-managed booking as priority, fast-tracking
                     // it past the bookingProcessStart fair queue.
@@ -104,7 +106,8 @@ final class DocumentSubmitController {
                     " select site,item from ScheduledItem si, e" +
                     " where (si.event = e.finalEvent" +
                     "        or si.event=null and si.site = e.venue and (si.date >= coalesce(e.preDate, e.startDate) and si.date <= coalesce(e.postDate, e.endDate) or exists(select ep where si.date>=coalesce(ep.startBoundary.date, ep.startBoundary.scheduledItem.date) and si.date<=coalesce(ep.endBoundary.date, ep.endBoundary.scheduledItem.date))))" +
-                    " and exists(select ResourceConfiguration rc where rc.resource.site=si.site and rc.item=si.item and (rc.event=$1 or rc.event=null and (rc.startDate=null or rc.startDate<=si.date) and (rc.endDate=null or rc.endDate>=si.date)))",
+                    // `rc.event?.` (outer join): a plain dotted path would be an inner join and drop every global row.
+                    " and exists(select ResourceConfiguration rc where rc.resource.site=si.site and rc.item=si.item and (rc.event!=null and coalesce(rc.event?.preDate, rc.event?.startDate)<=si.date and coalesce(rc.event?.postDate, rc.event?.endDate)>=si.date or rc.event=null and (rc.startDate=null or rc.startDate<=si.date) and (rc.endDate=null or rc.endDate>=si.date)))",
                     eventPk)
                 .map(resourceManagedScheduledItems -> new DocumentSubmitEventQueue(event, resourceManagedScheduledItems))
             );
