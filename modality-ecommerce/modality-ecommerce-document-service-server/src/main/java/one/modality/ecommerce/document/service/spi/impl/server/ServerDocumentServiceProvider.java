@@ -4,6 +4,8 @@ import dev.webfx.platform.ast.AST;
 import dev.webfx.platform.ast.ReadOnlyAstArray;
 import dev.webfx.platform.async.Future;
 import dev.webfx.platform.console.Console;
+import dev.webfx.stack.db.query.QueryArgumentBuilder;
+import dev.webfx.stack.db.query.QueryService;
 import dev.webfx.platform.util.Arrays;
 import dev.webfx.platform.util.Numbers;
 import dev.webfx.platform.util.Strings;
@@ -365,12 +367,58 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
     }
 
     static Future<SubmitDocumentChangesResult> submitDocumentChangesNow(DocumentSubmitRequest request) {
-        // A sharing place with no bed left is refused first. Here rather than before the queue: a booking
-        // opening's burst is absorbed before any policy is loaded, the count is as fresh as it can be, and
-        // by now the event is known even for a modification.
-        return refuseSharingPlaceWithoutFreeBed(request).compose(soldOut -> soldOut != null
-            ? Future.succeededFuture(soldOut)
-            : submitDocumentChangesAfterChecks(request));
+        // A modification built on a booking that has gained lines since is refused first, before anything
+        // else is judged against a booking the client has not seen. Here, after the queue, because the
+        // queue runs one submit at a time per event: the booking cannot change between this read and the
+        // write below through another submit.
+        return refuseIfBookingChanged(request).compose(changed -> changed != null
+            ? Future.succeededFuture(changed)
+            // A sharing place with no bed left is refused next. Here rather than before the queue: a booking
+            // opening's burst is absorbed before any policy is loaded, the count is as fresh as it can be, and
+            // by now the event is known even for a modification.
+            : refuseSharingPlaceWithoutFreeBed(request).compose(soldOut -> soldOut != null
+                ? Future.succeededFuture(soldOut)
+                : submitDocumentChangesAfterChecks(request)));
+    }
+
+    /**
+     * Refuses a modification whose booking has gained a document line or an attendance since the client
+     * loaded the version its changes were built on ({@link BookingChangedRule}). Only submits that send a
+     * base are checked — front-office modifications; new bookings, the back office and older clients
+     * send none and pass untouched.
+     *
+     * <p>The ids are counted exactly as {@link #buildBatchQueries} loads them (lines with a site, and the
+     * present attendances OF those lines — an attendance on a site-less line is dropped when the aggregate
+     * is assembled), since the client's base is the highest of what that load returned: counting more here
+     * would refuse every modification of a booking holding a row the load leaves out, reload or not.
+     */
+    private static Future<SubmitDocumentChangesResult> refuseIfBookingChanged(DocumentSubmitRequest request) {
+        long documentId = BookingChangedRule.idOf(request.argument().baseDocument());
+        // Only the booking this submit modifies. The base comes from the client, and judging another
+        // booking would answer, through accepted or refused, a question about a document that is not
+        // this caller's to ask about.
+        Document document = request.document();
+        if (documentId <= 0 || document == null || BookingChangedRule.idOf(document.getPrimaryKey()) != documentId)
+            return Future.succeededFuture(null);
+        return QueryService.executeQuery(new QueryArgumentBuilder()
+                .setDataSourceId(DataSourceModelService.getDefaultDataSourceModel().getDataSourceId())
+                .setStatement("select (select max(id) from document_line where document_id=$1 and site_id is not null)" +
+                              ", (select max(a.id) from attendance a join document_line dl on dl.id=a.document_line_id" +
+                              " where dl.document_id=$1 and dl.site_id is not null and a.present)")
+                .setParameters(documentId)
+                .build())
+            .map(rs -> {
+                // Through Object locals: getValue is generic (see MateInviteTokenStore on String.valueOf).
+                Object lastLine = rs.getRowCount() < 1 ? null : rs.getValue(0, 0);
+                Object lastAttendance = rs.getRowCount() < 1 ? null : rs.getValue(0, 1);
+                if (!BookingChangedRule.changedSince(request.argument().baseLastDocumentLine(), request.argument().baseLastAttendance(), lastLine, lastAttendance))
+                    return null;
+                // Ids only: what a refusal looks like in the logs, and how often, with nothing about the person.
+                Console.log("[BookingChanged] Refused a submit built on an older version of document " + documentId
+                            + " (lines " + request.argument().baseLastDocumentLine() + " -> " + lastLine
+                            + ", attendances " + request.argument().baseLastAttendance() + " -> " + lastAttendance + ")");
+                return SubmitDocumentChangesResult.createBookingChangedResult();
+            });
     }
 
     private static Future<SubmitDocumentChangesResult> submitDocumentChangesAfterChecks(DocumentSubmitRequest request) {

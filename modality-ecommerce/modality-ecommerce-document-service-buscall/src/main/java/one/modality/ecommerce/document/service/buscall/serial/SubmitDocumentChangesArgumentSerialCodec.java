@@ -20,6 +20,9 @@ public final class SubmitDocumentChangesArgumentSerialCodec extends SerialCodecB
     private static final String CLIENT_ORIGIN_KEY = "clientOrigin";
     private static final String INVITE_TOKEN_KEY = "inviteToken";
     private static final String OWNER_DOCUMENT_LINE_KEY = "ownerDocumentLine";
+    private static final String BASE_DOCUMENT_KEY = "baseDocument";
+    private static final String BASE_LAST_DOCUMENT_LINE_KEY = "baseLastDocumentLine";
+    private static final String BASE_LAST_ATTENDANCE_KEY = "baseLastAttendance";
 
     public SubmitDocumentChangesArgumentSerialCodec() {
         super(SubmitDocumentChangesArgument.class, CODEC_ID);
@@ -33,6 +36,9 @@ public final class SubmitDocumentChangesArgumentSerialCodec extends SerialCodecB
         encodeString( serial, CLIENT_ORIGIN_KEY,   arg.clientOrigin());
         encodeString( serial, INVITE_TOKEN_KEY,    arg.inviteToken());
         encodeObject( serial, OWNER_DOCUMENT_LINE_KEY, arg.ownerDocumentLine());
+        encodeObject( serial, BASE_DOCUMENT_KEY,   arg.baseDocument());
+        encodeObject( serial, BASE_LAST_DOCUMENT_LINE_KEY, arg.baseLastDocumentLine());
+        encodeObject( serial, BASE_LAST_ATTENDANCE_KEY, arg.baseLastAttendance());
     }
 
     @Override
@@ -43,7 +49,10 @@ public final class SubmitDocumentChangesArgumentSerialCodec extends SerialCodecB
             decodeBooleanSafe(serial, QUEUE_CAPABLE_KEY),
             decodeString(     serial, CLIENT_ORIGIN_KEY),
             decodeString(     serial, INVITE_TOKEN_KEY),
-            decodeObject(     serial, OWNER_DOCUMENT_LINE_KEY)
+            decodeObject(     serial, OWNER_DOCUMENT_LINE_KEY),
+            decodeObject(     serial, BASE_DOCUMENT_KEY),
+            decodeObject(     serial, BASE_LAST_DOCUMENT_LINE_KEY),
+            decodeObject(     serial, BASE_LAST_ATTENDANCE_KEY)
         );
     }
 

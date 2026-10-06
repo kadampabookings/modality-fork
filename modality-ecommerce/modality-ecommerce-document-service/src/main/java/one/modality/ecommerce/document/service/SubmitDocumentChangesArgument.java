@@ -27,7 +27,18 @@ public record SubmitDocumentChangesArgument(
     // (MateLinkRules). That check is load-bearing, not defence in depth: Part C switches the bed count off
     // for this path, so without it a guessed id would be guaranteed to attach a mate to a stranger's room
     // rather than merely likely to.
-    Object ownerDocumentLine
+    Object ownerDocumentLine,
+    // The booking these changes were built on, for a front-office modification: the document, and the
+    // highest document line and attendance ids it held when the client loaded it (counted as the server
+    // loads them: lines with a site, present attendances). Changes are a diff against that booking and
+    // the server applies them as sent, so a client still holding it after its own submit re-added the
+    // same lines a second time (bookings 674 and 1164 paid their shuttles twice). When the booking has
+    // gained a line or an attendance since, the submit is refused as BOOKING_CHANGED. Letters,
+    // payments and flags add neither, so they never count. Null on every other submission — new
+    // bookings and the back office are not checked.
+    Object baseDocument,
+    Object baseLastDocumentLine,
+    Object baseLastAttendance
 ) {
 
     // Alternative factory method for simple changes (1 change in most cases but possibly several) that avoids
@@ -38,6 +49,6 @@ public record SubmitDocumentChangesArgument(
     // Note: providing a second constructor instead of a factory method causes a GWT crash
 
     public static SubmitDocumentChangesArgument of(String historyComment, AbstractDocumentEvent... documentEvents) {
-        return new SubmitDocumentChangesArgument(historyComment, documentEvents, false, null, null, null);
+        return new SubmitDocumentChangesArgument(historyComment, documentEvents, false, null, null, null, null, null, null);
     }
 }

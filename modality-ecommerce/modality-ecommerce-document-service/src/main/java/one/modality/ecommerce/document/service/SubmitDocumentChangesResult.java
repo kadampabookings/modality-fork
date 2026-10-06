@@ -59,6 +59,10 @@ public record SubmitDocumentChangesResult(
         return new SubmitDocumentChangesResult(DocumentChangesStatus.REJECTED, DocumentChangesRejectedReason.ALREADY_BOOKED, null, null, null, null, null, null, null, 0, false, null, null, null, null);
     }
 
+    public static SubmitDocumentChangesResult createBookingChangedResult() {
+        return new SubmitDocumentChangesResult(DocumentChangesStatus.REJECTED, DocumentChangesRejectedReason.BOOKING_CHANGED, null, null, null, null, null, null, null, 0, false, null, null, null, null);
+    }
+
     public static SubmitDocumentChangesResult createEventOnHoldResult() {
         return new SubmitDocumentChangesResult(DocumentChangesStatus.REJECTED, DocumentChangesRejectedReason.EVENT_ON_HOLD, null, null, null, null, null, null, null, 0, false, null, null, null, null);
     }
