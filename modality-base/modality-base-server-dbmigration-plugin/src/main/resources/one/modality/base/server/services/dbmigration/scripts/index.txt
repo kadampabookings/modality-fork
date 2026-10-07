@@ -123,3 +123,4 @@ V0120__mate_invite_can_be_revoked.sql
 V0121__drop_ongoing_event_room_configurations.sql
 V0122__event_room_configuration_rules.sql
 V0123__allocation_reads_configuration_per_night.sql
+V0124__uncharged_lines_priced_zero.sql

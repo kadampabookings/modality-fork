@@ -34,12 +34,15 @@ final class Kbs2PriceAlgorithm {
         // server already set their price_net to the non-refundable charge (compute_document_prices:
         // "net becomes non refundable"), so use that loaded value directly, keyed by item, and add it
         // to the total via the DocumentBill. (Restores the KBS2 cancelled-lines pricing.)
+        // An abandoned line is never charged: the server always prices it at £0, so its loaded
+        // price_net - which may predate the abandonment (see V0124) - is not read.
         Map<Object, Integer> cancelledLinesPricesByItem = new HashMap<>();
         documentLineStream.forEach(line -> {
-            if (Boolean.TRUE.equals(line.isCancelled()) || Boolean.TRUE.equals(line.getBooleanFieldValue("abandoned"))) {
+            boolean abandoned = Boolean.TRUE.equals(line.getBooleanFieldValue("abandoned"));
+            if (Boolean.TRUE.equals(line.isCancelled()) || abandoned) {
                 Item cancelledItem = line.getItem();
                 if (cancelledItem != null) {
-                    Integer priceNet = line.getPriceNet();
+                    Integer priceNet = abandoned ? null : line.getPriceNet();
                     cancelledLinesPricesByItem.merge(cancelledItem.getPrimaryKey(), priceNet == null ? 0 : priceNet, Integer::sum);
                 }
                 return;
