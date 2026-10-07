@@ -15,14 +15,12 @@
 -- Custom-priced lines (left as they were, as the pricing loop does) and the rounding line (item 23, which
 -- the function manages itself) are not touched.
 --
--- Existing stale lines are set to 0 too. Changing a line's price fires defer_compute_document_prices, so
--- their bookings are recomputed when this migration commits - which could reprice them in other ways (see
--- V0115). Only bookings whose total a recompute leaves unchanged are corrected: compute_document_prices
--- called on a booking not flagged for recompute writes nothing and returns the total it would store. On
--- staging (7 October 2026) that was 27 bookings of 28; the one left out, at a 2020 event, recomputes to 0
--- instead of 35, and is corrected only when something next recomputes it. Finding the lines reads the
--- whole attendance table (about 9 s on staging).
---
+-- Existing stale lines are NOT corrected here: a line is corrected the next time its booking is recomputed.
+-- Correcting them in this migration failed on production (7 October 2026): changing a line's price
+-- recomputes its booking at commit, which rewrites its lines' dates, which can trigger room allocation, and
+-- allocation reads get_transaction_parameter() - a temporary table the migration transaction never creates
+-- (42P01: relation "transaction_parameter" does not exist). A migration must not reallocate rooms anyway.
+
 -- Body of compute_document_prices = scripts/compute_document_prices.sql in the aggregate repo.
 
 CREATE OR REPLACE FUNCTION public.compute_document_prices(document_id integer, trace boolean)
@@ -573,25 +571,3 @@ RETURN document.price_net;
 END;
   $function$
 ;
-
--- Lines none of whose attendances is charged, still holding a price.
-with stale_lines as materialized (
-    select dl.id, dl.document_id
-        from document_line dl
-        join (select a.document_line_id from attendance a group by a.document_line_id having not bool_or(a.charged)) u
-            on u.document_line_id = dl.id
-        where dl.item_id <> 23 and not dl.price_is_custom
-          and (coalesce(dl.price_net, 0) <> 0 or coalesce(dl.price_min_deposit, 0) <> 0 or coalesce(dl.price_non_refundable, 0) <> 0)
-), unchanged_total_documents as materialized (
-    select d.id
-        from document d
-        where d.id in (select s.document_id from stale_lines s)
-          and not d.trigger_defer_compute_prices
-          and compute_document_prices(d.id, false) is not distinct from d.price_net
-)
-update document_line as dl set
-             price_net            = 0,
-             price_min_deposit    = 0,
-             price_non_refundable = 0
-    from stale_lines s
-    where s.id = dl.id and s.document_id in (select u.id from unchanged_total_documents u);
