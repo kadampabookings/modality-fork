@@ -30,7 +30,7 @@
                 <package>net.authorize.api.controller</package>
             </exported-packages>
         </library>
-        <library name="jakarta-xml-bind" artifact="jakarta.xml.bind:jakarta.xml.bind-api:4.0.2"/>
+        <library name="jakarta-xml-bind" artifact="jakarta.xml.bind:jakarta.xml.bind-api:4.0.5"/>
         <library name="org.apache.httpcomponents.client5.httpclient5" artifact="org.apache.httpcomponents.client5:httpclient5:5.3.1"/>
         <library name="org.apache.log4j" artifact="org.apache.logging.log4j:log4j-1.2-api:2.23.1"/>
     </required-libraries>
