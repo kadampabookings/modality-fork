@@ -245,13 +245,16 @@ public final class StripePaymentGateway implements PaymentGateway {
     }
 
     /**
-     * Creates a card-only PaymentIntent. We restrict payment_method_types to {@code ['card']}
+     * Creates a card-only PaymentIntent. We restrict allowed_payment_method_types to {@code ['card']}
      * (rather than using {@code automatic_payment_methods}) because our gateway already exposes
      * CARD / GOOGLE_PAY / APPLE_PAY as discrete user-selectable methods upstream — by the time
      * we reach here the user has explicitly picked one. Restricting types keeps the embedded
      * Payment Element clean: no extra method tabs (MB WAY, Satispay, Bancontact, etc.) and no
      * Link "save my info for faster checkout" CTA, which would otherwise re-introduce email /
      * phone / full-name fields we just told Stripe to hide via fields.billingDetails.
+     * (Stripe API 2026-09-30.endive removed the request-side payment_method_types; the PaymentIntent
+     * still reports the resolved types under that name. Stripe now counts some Link funding sources
+     * as {@code card}, so the Payment Element's wallets.link='never' is what keeps Link hidden.)
      *
      * <p>Wallet flows (GOOGLE_PAY / APPLE_PAY) still work fine with {@code ['card']} because the
      * Payment Request Button tokenizes a card under the hood.
@@ -260,7 +263,7 @@ public final class StripePaymentGateway implements PaymentGateway {
         PaymentIntentCreateParams.Builder paramsBuilder = PaymentIntentCreateParams.builder()
             .setAmount(order.amount())
             .setCurrency(currencyCode.toLowerCase())
-            .addPaymentMethodType("card")
+            .addAllowedPaymentMethodType(PaymentIntentCreateParams.AllowedPaymentMethodType.CARD)
             .setDescription(truncate(order.longName(), 1000))
             // The reference is what links the Stripe-side payment back to our MoneyTransfer
             // when the webhook delivers payment_intent.succeeded.
