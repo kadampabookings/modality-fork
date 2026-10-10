@@ -70,6 +70,25 @@ final class ClientWriteSecrets {
         // This is step 2b of the front-office write-authorization plan, and it is what finally closes
         // the two-step claim: point a stranger's member row at your own address, then claim it.
         ClientWriteDenyList.denyTable("person");
+        // Where payments go and how they are made. Found 2026-10-10: a caller with NO identity at all —
+        // never signed in, or a back-office tab whose session had lapsed — could rewrite a gateway's
+        // parameters (secrets included), the URL a payer is sent to after paying, and which gateway a
+        // money account uses: nothing on the client path asked who was writing, and neither gateway
+        // table was even on the observe-only per-entity list. Payment fraud and phishing in one write.
+        //
+        // No live client writes any of them: no screen in either React app names these entities outside
+        // the generated type files, and production recorded no client write of any of the three in
+        // the 30 days of logs available. The legacy GWT back office can create a money account
+        // (AddNewMoneyAccountExecutor) and loses that, by the same decision that closed `person` to it:
+        // one user, who accepted it. KBS2 writes to the database itself and is unaffected. So the
+        // tables close outright rather than behind a permission — and any refusal here is an attempt,
+        // so it pages the critical alarm on purpose.
+        //
+        // PassTemplate was on the same list and is NOT here: the back-office pass designer writes it
+        // (2 inserts, 5 updates by staff in those 30 days), so it stays behind EditPassTemplate in
+        // ProtectedEntityWritesJob instead.
+        for (String table : new String[] { "gateway_parameter", "gateway_company", "money_account" })
+            ClientWriteDenyList.denyTable(table);
         // The LINK between a person and an account, which says "this row, in somebody else's account,
         // IS this human". Setting it hands that account the row's bookings, and TAKES its recordings
         // (the media screens stop listing a linked row in its own account). Any client could set it on

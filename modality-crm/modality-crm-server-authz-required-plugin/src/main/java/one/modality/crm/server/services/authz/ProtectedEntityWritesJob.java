@@ -289,6 +289,29 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
                     + " authorization entirely: " + shortened);
     }
 
+    /**
+     * Whether a write to a protected entity is refused for having nobody behind it — enforced whatever
+     * {@link #ENFORCING} says.
+     *
+     * <p>Found 2026-10-10: while this rule only observed, a client with no signed-in person could rewrite
+     * letter content (emailed to members from the organisation), organisations and pass templates —
+     * nothing else on the client path asked who was writing. Production logged 19 such letter writes in
+     * 30 days, most likely back-office tabs whose session had lapsed; an anonymous connection to the
+     * public front office is in exactly the same state.
+     *
+     * <p>Why not flip {@link #ENFORCING}: the same 30 days show two SIGNED-IN members of staff whose roles
+     * open the pass designer and the letter editor without holding EditPassTemplate or
+     * EditLetterContent. Enforcing would lock them out; this refuses only the caller who has no person at
+     * all — anonymous, a guest, a support view ({@link GrantTableWritePolicy#callerPersonId}) — which no
+     * legitimate writer of these entities is.
+     *
+     * <p><b>Client writes only.</b> This rule also sees server writes, which run with no principal; they
+     * are not what this closes and must not be refused by it.
+     */
+    static boolean refusesWithoutIdentity(Object userId, boolean clientOrigin) {
+        return clientOrigin && GrantTableWritePolicy.callerPersonId(userId) == null;
+    }
+
     private Future<Boolean> isWriteAuthorized(ProtectedEntityWriteRegistry.WriteRequest request) {
         String entityName = request.entityName();
         ProtectedEntityWriteRegistry.WriteVerb verb = request.verb();
@@ -302,6 +325,11 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         // ran with no principal at all, was answered with the PUBLIC grants, and refused a super admin.
         Object capturedState = ThreadLocalStateHolder.getThreadLocalState();
         Object userId = ThreadLocalStateHolder.getUserId();
+        if (refusesWithoutIdentity(userId, ThreadLocalStateHolder.isClientOrigin())) {
+            Console.log("🛡 REFUSED " + verb + " on " + entityName + " by " + userId
+                        + " (no signed-in person behind this client write)");
+            return Future.succeededFuture(false);
+        }
         return holdsAllGroups(groups, capturedState)
             .map(authorized -> {
                 if (Boolean.TRUE.equals(authorized))
