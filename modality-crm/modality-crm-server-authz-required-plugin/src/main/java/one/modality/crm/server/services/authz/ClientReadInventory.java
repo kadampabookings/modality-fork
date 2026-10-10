@@ -180,6 +180,18 @@ final class ClientReadInventory implements ClientReadInspectionRegistry.ReadInsp
      * OFFICE is in use — {@code Minus}, {@code Multiply} and {@code Like} — which is why a weekend sample was
      * not enough to write this from, and why a quiet week should not be read as a narrower dialect.
      *
+     * <p><b>Two working days were not enough either.</b> {@code NotLike} arrived on 2026-10-06, once, in
+     * 2328 logged shapes — {@code operationCode not like 'Route%'} in the back office's operations screen
+     * (use-operations.ts), which an administrator opens rarely. The instrument named the term and the entity
+     * and allowed the query, which is the whole reason it reports rather than refuses.
+     *
+     * <p>It was added on that evidence and nothing else was added alongside it. The grammar holds terms this
+     * has never seen — {@code Cast}, {@code Divide}, {@code Any}, {@code All}, {@code CteColumnRef} — and
+     * admitting them pre-emptively would make the list allow more than the traffic needs, which is the one
+     * thing it must not do. The client source was searched for each: the {@code ::} occurrences are CSS and
+     * TypeScript, {@code any(} and {@code all(} are JavaScript. When one of them is genuinely sent, this will
+     * say so, by name, on the first occurrence.
+     *
      * <p><b>This does not refuse anything.</b> A term outside it is logged and allowed, because the cost of
      * the two mistakes is not symmetric: a construct nobody anticipated is a line in a log, while refusing a
      * legitimate screen is an outage — and this list is an observation of five days' traffic, not a proof
@@ -188,8 +200,8 @@ final class ClientReadInventory implements ClientReadInspectionRegistry.ReadInsp
     private static final Set<String> CDQL_CONSTRUCTS = new HashSet<>(Arrays.asList(
         "Alias", "And", "As", "Call", "Constant", "DomainField", "Dot", "Equals", "Exists", "ExpressionArray",
         "GreaterThan", "GreaterThanOrEquals", "IdExpression", "In", "LessThan", "LessThanOrEquals", "Like",
-        "Minus", "Multiply", "Not", "NotEquals", "Or", "Ordered", "ParameterReference", "Plus", "Select",
-        "SelectExpression", "TernaryExpression", "Union"));
+        "Minus", "Multiply", "Not", "NotEquals", "NotLike", "Or", "Ordered", "ParameterReference", "Plus",
+        "Select", "SelectExpression", "TernaryExpression", "Union"));
 
     /** Occurrences of a term class outside {@link #CDQL_CONSTRUCTS}. Occurrences, not shapes. */
     private final AtomicLong unexpectedConstructs = new AtomicLong();

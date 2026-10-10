@@ -38,10 +38,13 @@ public class CdqlConstructsCheck {
         check("the observed census is entirely inside the dialect",
               logged.stream().noneMatch(l -> l.contains("CDQL-UNEXPECTED")));
 
-        // Like appears only under back-office search, so no weekend or light-traffic census contains it.
+        // Two terms are in the dialect that no census above contains, each for a stated reason. Like appears
+        // only under back-office search. NotLike arrived on 2026-10-06, once in 2328 logged shapes, from
+        // `operationCode not like 'Route%'` in the operations screen — which is what the report is FOR.
         logged.clear();
         inventory.onRead(shape("Person", "select", new String[]{"Like", "And", "DomainField"}));
-        check("Like is in the dialect although this census did not see it",
+        inventory.onRead(shape("Operation", "select", new String[]{"NotLike", "DomainField"}));
+        check("Like and NotLike are in the dialect although this census did not see them",
               logged.stream().noneMatch(l -> l.contains("CDQL-UNEXPECTED")));
 
         // And the reporting has to actually fire, or its silence means nothing.
