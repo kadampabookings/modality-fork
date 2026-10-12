@@ -176,8 +176,8 @@ final class AccountOwnerRules {
             // they cannot get a new one. Discarding the cause made that outage invisible in the log
             // and visible only as sign-up complaints.
             //
-            // The CLASS of failure, never the error's own text: the loader's messages end in
-            // "(token: <the credential>)", and this line goes to a rolling file that ships to log
+            // The CLASS of failure, never the error's own text: the loader's messages used to end in
+            // "(token: <the credential>)" (they no longer do, since 2026-10-12), and this line goes to a rolling file that ships to log
             // aggregation and backups. loadSupportViewLinkAndMarkAsUsed refuses to log a token for
             // exactly that reason, and a line that fires on a routine miss must not be the exception.
             .recover(error -> {

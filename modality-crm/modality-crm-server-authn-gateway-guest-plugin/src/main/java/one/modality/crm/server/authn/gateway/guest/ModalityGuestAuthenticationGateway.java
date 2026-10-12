@@ -149,10 +149,10 @@ public final class ModalityGuestAuthenticationGateway implements ServerAuthentic
             .compose(carts -> {
                 Cart cart = Collections.first(carts);
                 if (cart == null)
-                    return Future.failedFuture("Cart not found: " + cartUuid);
+                    return Future.failedFuture("Cart not found");
                 return GuestBookingAccess.linkToRedeem(cart.getPrimaryKey(), dataSourceModel).compose(magicLink -> {
                     if (magicLink == null)
-                        return Future.failedFuture("No magic link associated with cart: " + cartUuid);
+                        return Future.failedFuture("No magic link associated with cart #" + cart.getPrimaryKey());
                     // Validate via the shared service (handles BOOKING_ACCESS expiry rules)
                     // Refuses an address whose account has its password closed (V0096), as for every link it validates
                     return MagicLinkService.loadMagicLinkFromTokenOrVerificationCode(

@@ -333,7 +333,7 @@ public final class MagicLinkService {
                         return Future.succeededFuture(ml);
                     return Future.failedFuture(attempt >= MAX_CODE_ATTEMPTS
                         ? attemptsExceededFailure()
-                        : "[%s] Magic link not found (token: %s)".formatted(ModalityAuthenticationI18nKeys.LoginLinkUnrecognisedError, tokenOrVerificationCode));
+                        : "[%s] Magic link not found".formatted(ModalityAuthenticationI18nKeys.LoginLinkUnrecognisedError));
                 });
         } else {
             // BOOKING_ACCESS links are multi-use (usageDate is set after first use), so we do NOT
@@ -346,7 +346,7 @@ public final class MagicLinkService {
         return findFuture
             .compose(magicLink -> {
                 if (magicLink == null)
-                    return Future.failedFuture("[%s] Magic link not found (token: %s)".formatted(ModalityAuthenticationI18nKeys.LoginLinkUnrecognisedError, tokenOrVerificationCode));
+                    return Future.failedFuture("[%s] Magic link not found".formatted(ModalityAuthenticationI18nKeys.LoginLinkUnrecognisedError));
                 // Only the two genuine login flavours may pass. Every caller of this method ends up
                 // authenticating the bearer AS the account holder with full rights; a support pass
                 // of either flavour (SUPPORT_VIEW, BACKOFFICE_VIEW) is the opposite — a read-only
@@ -362,19 +362,19 @@ public final class MagicLinkService {
                 // which tokens exist.
                 MagicLinkType linkType = magicLink.getLinkType();
                 if (linkType != MagicLinkType.LOGIN && linkType != MagicLinkType.BOOKING_ACCESS)
-                    return Future.failedFuture("[%s] Magic link not found (token: %s)".formatted(ModalityAuthenticationI18nKeys.LoginLinkUnrecognisedError, tokenOrVerificationCode));
+                    return Future.failedFuture("[%s] Magic link not found (magic link #%s)".formatted(ModalityAuthenticationI18nKeys.LoginLinkUnrecognisedError, magicLink.getPrimaryKey()));
                 // 2) Checking the magic link is still valid. BOOKING_ACCESS links are multi-use and
                 //    have a much longer expiry than single-use LOGIN links.
                 if (checkValidity && !SKIP_LINK_VALIDITY_CHECK) {
                     boolean isBookingAccess = magicLink.isBookingAccess();
                     // LOGIN links become invalid once used; BOOKING_ACCESS links tolerate repeated use.
                     if (!isBookingAccess && magicLink.getUsageDate() != null)
-                        return Future.failedFuture("[%s] Magic link already used (token: %s)".formatted(ModalityAuthenticationI18nKeys.LoginLinkAlreadyUsedError, tokenOrVerificationCode));
+                        return Future.failedFuture("[%s] Magic link already used (magic link #%s)".formatted(ModalityAuthenticationI18nKeys.LoginLinkAlreadyUsedError, magicLink.getPrimaryKey()));
                     Duration expiry = isBookingAccess ? BOOKING_ACCESS_EXPIRATION_DURATION
                         : isVerificationCode ? CODE_EXPIRATION_DURATION : LINK_EXPIRATION_DURATION;
                     Instant now = now();
                     if (magicLink.getCreationDate() == null || now.isAfter(magicLink.getCreationDate().plus(expiry))) {
-                        return Future.failedFuture("[%s] Magic link expired (token: %s)".formatted(ModalityAuthenticationI18nKeys.LoginLinkExpiredError, tokenOrVerificationCode));
+                        return Future.failedFuture("[%s] Magic link expired (magic link #%s)".formatted(ModalityAuthenticationI18nKeys.LoginLinkExpiredError, magicLink.getPrimaryKey()));
                     }
                 }
                 return Future.succeededFuture(magicLink);
@@ -399,7 +399,7 @@ public final class MagicLinkService {
         String usageRunId = ThreadLocalStateHolder.getRunId();
         return loadValidatedMagicLink(token, true, dataSourceModel)
             .compose(magicLink -> magicLink.getOldEmail() == null
-                ? Future.<MagicLink>failedFuture("[%s] Magic link not found (token: %s)".formatted(ModalityAuthenticationI18nKeys.LoginLinkUnrecognisedError, token))
+                ? Future.<MagicLink>failedFuture("[%s] Magic link not found (magic link #%s)".formatted(ModalityAuthenticationI18nKeys.LoginLinkUnrecognisedError, magicLink.getPrimaryKey()))
                 : markMagicLinkAsUsed(magicLink, usageRunId).map(ignored -> magicLink));
     }
 
@@ -549,7 +549,7 @@ public final class MagicLinkService {
      */
     public static Future<MagicLink> loadMagicLinkRedeemedByThisSession(String tokenOrVerificationCode, String runId, DataSourceModel dataSourceModel) {
         if (tokenOrVerificationCode == null || runId == null)
-            return notFound(tokenOrVerificationCode);
+            return notFound();
         // One column, chosen the way the redeem path chooses it: an OR across both would match neither
         // index. LOGIN in SQL for the reason the code branch gives — a BOOKING_ACCESS row minted later
         // with the same six digits must not shadow it.
@@ -559,29 +559,29 @@ public final class MagicLinkService {
                 + " where " + column + "=$1 and linkType=$2 and usageRunId=$3 order by id desc limit 1",
                 tokenOrVerificationCode, MagicLinkType.LOGIN.name(), runId)
             .map(Collections::first)
-            .compose(ml -> ml == null ? MagicLinkService.<MagicLink>notFound(tokenOrVerificationCode)
+            .compose(ml -> ml == null ? MagicLinkService.<MagicLink>notFound()
                 : Future.succeededFuture(ml));
     }
 
-    private static <T> Future<T> notFound(String tokenOrVerificationCode) {
-        return Future.failedFuture("[%s] Magic link not found (token: %s)"
-            .formatted(ModalityAuthenticationI18nKeys.LoginLinkUnrecognisedError, tokenOrVerificationCode));
+    private static <T> Future<T> notFound() {
+        return Future.failedFuture("[%s] Magic link not found"
+            .formatted(ModalityAuthenticationI18nKeys.LoginLinkUnrecognisedError));
     }
 
     public static Future<MagicLink> loadMagicLinkForAccountCreation(String tokenOrVerificationCode, String runId, DataSourceModel dataSourceModel) {
         return loadMagicLinkFromTokenOrVerificationCode(tokenOrVerificationCode, false, dataSourceModel)
             .compose(magicLink -> {
                 if (magicLink.getLinkType() != MagicLinkType.LOGIN)
-                    return Future.failedFuture("[%s] Magic link not found (token: %s)".formatted(ModalityAuthenticationI18nKeys.LoginLinkUnrecognisedError, tokenOrVerificationCode));
+                    return Future.failedFuture("[%s] Magic link not found (magic link #%s)".formatted(ModalityAuthenticationI18nKeys.LoginLinkUnrecognisedError, magicLink.getPrimaryKey()));
                 if (magicLink.getUsageDate() != null) {
                     boolean claimedByThisSession = runId != null && runId.equals(magicLink.getUsageRunId());
                     if (claimedByThisSession)
                         return Future.succeededFuture(magicLink);
-                    return Future.failedFuture("[%s] Magic link already used (token: %s)".formatted(ModalityAuthenticationI18nKeys.LoginLinkAlreadyUsedError, tokenOrVerificationCode));
+                    return Future.failedFuture("[%s] Magic link already used (magic link #%s)".formatted(ModalityAuthenticationI18nKeys.LoginLinkAlreadyUsedError, magicLink.getPrimaryKey()));
                 }
                 Duration expiry = looksLikeVerificationCode(tokenOrVerificationCode) ? CODE_EXPIRATION_DURATION : LINK_EXPIRATION_DURATION;
                 if (!SKIP_LINK_VALIDITY_CHECK && (magicLink.getCreationDate() == null || now().isAfter(magicLink.getCreationDate().plus(expiry))))
-                    return Future.failedFuture("[%s] Magic link expired (token: %s)".formatted(ModalityAuthenticationI18nKeys.LoginLinkExpiredError, tokenOrVerificationCode));
+                    return Future.failedFuture("[%s] Magic link expired (magic link #%s)".formatted(ModalityAuthenticationI18nKeys.LoginLinkExpiredError, magicLink.getPrimaryKey()));
                 return Future.succeededFuture(magicLink);
             });
     }

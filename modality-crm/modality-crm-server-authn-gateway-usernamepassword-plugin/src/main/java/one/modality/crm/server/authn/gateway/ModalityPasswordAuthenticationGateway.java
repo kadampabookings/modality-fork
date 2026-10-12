@@ -443,7 +443,7 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
                 ? Future.succeededFuture(magicLink)
                 // Only account-creation / login links may open the sign-up form. Reported as
                 // unrecognised: to whoever pasted a booking-access token here, that is the truth.
-                : Future.<MagicLink>failedFuture("[%s] Magic link not found (token: %s)".formatted(ModalityAuthenticationI18nKeys.LoginLinkUnrecognisedError, credentials.magicLinkTokenOrVerificationCode())))
+                : Future.<MagicLink>failedFuture("[%s] Magic link not found".formatted(ModalityAuthenticationI18nKeys.LoginLinkUnrecognisedError)))
             .compose(magicLink -> MagicLinkService.loadUserPersonFromMagicLink(magicLink)
                 .compose(userPerson -> {
                     String email = magicLink.getEmail();

@@ -133,7 +133,8 @@ public class AccountOwnerCheck {
         check("it matches one column rather than an OR across two, which would match neither index",
             loader.contains("looksLikeVerificationCode(tokenOrVerificationCode) ? \"verificationCode\" : \"token\""));
 
-        // The log line fires on every miss, and the loader's own messages end in "(token: <credential>)".
+        // The log line fires on every miss, and the loader's own messages used to end in "(token: <credential>)".
+        // Still pinned: an error's text is not this line's to log, whatever the loader puts in it today.
         check("a refusal does not log the credential",
             !rules.contains("link: \" + error") && rules.contains("error.getClass().getSimpleName()"));
 
