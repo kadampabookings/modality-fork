@@ -3,6 +3,11 @@ package one.modality.crm.server.services.authz;
 import dev.webfx.platform.console.Console;
 import dev.webfx.stack.db.submit.ClientWriteDenyList;
 
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.Map;
+import java.util.Set;
+
 /**
  * What no client may write: the sign-in links, and the account columns that decide who can sign in as whom and what
  * an account is allowed to be.
@@ -65,11 +70,11 @@ final class ClientWriteSecrets {
 
     static void declare() {
         // Sign-in links: a client that could write one could sign in as anybody
-        ClientWriteDenyList.denyTable("magic_link");
+        denyTable("magic_link");
         // People. Every legitimate person write is an endpoint now, on both apps; see the class note.
         // This is step 2b of the front-office write-authorization plan, and it is what finally closes
         // the two-step claim: point a stranger's member row at your own address, then claim it.
-        ClientWriteDenyList.denyTable("person");
+        denyTable("person");
         // Where payments go and how they are made. Found 2026-10-10: a caller with NO identity at all —
         // never signed in, or a back-office tab whose session had lapsed — could rewrite a gateway's
         // parameters (secrets included), the URL a payer is sent to after paying, and which gateway a
@@ -88,7 +93,7 @@ final class ClientWriteSecrets {
         // (2 inserts, 5 updates by staff in those 30 days), so it stays behind EditPassTemplate in
         // ProtectedEntityWritesJob instead.
         for (String table : new String[] { "gateway_parameter", "gateway_company", "money_account" })
-            ClientWriteDenyList.denyTable(table);
+            denyTable(table);
         // The LINK between a person and an account, which says "this row, in somebody else's account,
         // IS this human". Setting it hands that account the row's bookings, and TAKES its recordings
         // (the media screens stop listing a linked row in its own account). Any client could set it on
@@ -102,17 +107,17 @@ final class ClientWriteSecrets {
         // The revoked date goes with it. Writable alone, it is an un-revoke: a withdrawn link reads as
         // live again the moment that column is cleared, without touching the link itself.
         for (String column : new String[] { "account_person_id", "account_person_revoked_date" })
-            ClientWriteDenyList.denyColumn("person", column);
+            denyColumn("person", column);
         // Signing in: the password, its salt, the name it is checked against, and the reset route
         for (String column : new String[] { "password", "salt", "username", "pwdreset_token", "pwdreset_expires" })
-            ClientWriteDenyList.denyColumn("frontend_account", column);
+            denyColumn("frontend_account", column);
         // Whether the account works at all, and which organisation's sign-in it answers to
-        ClientWriteDenyList.denyColumn("frontend_account", "disabled");
-        ClientWriteDenyList.denyColumn("frontend_account", "corporation_id");
+        denyColumn("frontend_account", "disabled");
+        denyColumn("frontend_account", "corporation_id");
         // Privilege and legacy flags no member sets for themselves — KBS2 reads some of them
         for (String column : new String[] { "admin", "developer", "security", "tester", "translator",
                                             "trigger_send_password", "trigger_send_password_event_id" })
-            ClientWriteDenyList.denyColumn("frontend_account", column);
+            denyColumn("frontend_account", column);
         // An invitation is what PersonService accepts as evidence that somebody asked for a link, and
         // approving one gives an account sight of another person's bookings and recordings. It is only
         // evidence if the client cannot author it: a client able to set `inviter_id` could name anybody
@@ -129,7 +134,7 @@ final class ClientWriteSecrets {
         // legacy JavaFX front office DOES still insert them (InvitationLinkService), and would be
         // refused — but only the back-office GWT app is built and deployed, so nothing live reaches it.
         for (String column : new String[] { "token", "inviter_id", "invitee_id" })
-            ClientWriteDenyList.denyColumn("invitation", column);
+            denyColumn("invitation", column);
         // A mail's delivery record, and the sign-in link a mail can be pointed at.
         //
         // `transmitted` is what stops a mail being sent twice, so a client able to clear it can make the
@@ -146,9 +151,31 @@ final class ClientWriteSecrets {
         // What a client may still do to a mail is bounded by MailWritePolicy, not by this list: compose
         // its own, and nothing to anybody else's.
         for (String column : new String[] { "transmitted", "transmission_date", "error", "magic_link_id" })
-            ClientWriteDenyList.denyColumn("mail", column);
-        Console.log("🛡 Client writes may not touch people, sign-in links or invitation authorship, a"
-                    + " mail's delivery record, nor the account's sign-in, status or privilege columns"
-                    + " (magic_link and person entirely, plus 23 columns across 4 tables)");
+            denyColumn("mail", column);
+        int columns = DENIED_COLUMNS.values().stream().mapToInt(Set::size).sum();
+        Console.log("🛡 Client writes may not touch people, payment configuration, sign-in links or invitation"
+                    + " authorship, a mail's delivery record, nor the account's sign-in, status or privilege"
+                    + " columns (" + String.join(", ", DENIED_TABLES) + " entirely, plus " + columns
+                    + " columns across " + DENIED_COLUMNS.size() + " tables)");
+    }
+
+    /*
+     * What this class has closed, recorded as it closes it, so the boot line above says what was
+     * actually declared. It used to be fixed text, and went stale the day the payment tables were
+     * added: a line operators read to learn what is closed must not be able to disagree with the list.
+     * Same names as ClientWriteDenyList's on purpose — PersonLinkCheck reads this file for
+     * denyTable("person") and denyColumn("invitation".
+     */
+    private static final Set<String> DENIED_TABLES = new LinkedHashSet<>();
+    private static final Map<String, Set<String>> DENIED_COLUMNS = new LinkedHashMap<>();
+
+    private static void denyTable(String sqlTableName) {
+        ClientWriteDenyList.denyTable(sqlTableName);
+        DENIED_TABLES.add(sqlTableName);
+    }
+
+    private static void denyColumn(String sqlTableName, String sqlColumnName) {
+        ClientWriteDenyList.denyColumn(sqlTableName, sqlColumnName);
+        DENIED_COLUMNS.computeIfAbsent(sqlTableName, t -> new LinkedHashSet<>()).add(sqlColumnName);
     }
 }
