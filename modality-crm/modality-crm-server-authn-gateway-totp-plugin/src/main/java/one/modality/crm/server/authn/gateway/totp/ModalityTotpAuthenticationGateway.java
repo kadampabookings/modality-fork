@@ -19,6 +19,8 @@ import dev.webfx.stack.orm.entity.EntityList;
 import dev.webfx.stack.orm.entity.EntityStore;
 import dev.webfx.stack.push.server.PushServerService;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
+import dev.webfx.stack.session.token.SessionAudience;
+import dev.webfx.stack.session.token.SessionMethod;
 import dev.webfx.stack.session.token.AuthenticatedState;
 import one.modality.base.shared.entities.FrontendAccount;
 import one.modality.base.shared.entities.Person;
@@ -336,7 +338,11 @@ public final class ModalityTotpAuthenticationGateway implements ServerAuthentica
         // by now the thread-local has been restored by the database round trips above, so reading it
         // here would answer "front office" for every login (the webauthn gateway's note).
         ModalityUserPrincipal principal = new ModalityUserPrincipal(verified.personId(), verified.accountId());
-        return AuthenticatedState.createFor(principal, verified.backoffice())
+        // `pwd,totp` — both. Same certainty about the password as the webauthn gateway's completion: the
+        // entry this released was created by the password step, and nothing else creates one.
+        return AuthenticatedState.createFor(principal, verified.backoffice(),
+                SessionAudience.ofBackofficeFlag(verified.backoffice()),
+                SessionMethod.of(SessionMethod.PASSWORD, SessionMethod.TOTP))
             .compose(authenticatedState -> PushServerService.pushState(authenticatedState, runId));
     }
 

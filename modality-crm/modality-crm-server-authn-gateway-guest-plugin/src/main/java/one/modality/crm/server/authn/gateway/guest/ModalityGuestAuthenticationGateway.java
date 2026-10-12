@@ -10,6 +10,8 @@ import dev.webfx.stack.mail.MailService;
 import dev.webfx.stack.orm.domainmodel.DataSourceModel;
 import dev.webfx.stack.orm.entity.EntityStore;
 import dev.webfx.stack.push.server.PushServerService;
+import dev.webfx.stack.session.token.SessionAudience;
+import dev.webfx.stack.session.token.SessionMethod;
 import dev.webfx.stack.session.token.AuthenticatedState;
 import dev.webfx.stack.session.state.StateAccessor;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
@@ -160,7 +162,9 @@ public final class ModalityGuestAuthenticationGateway implements ServerAuthentic
                             // Mints, rather than merely asserting the principal: the cart uuid and its magic link
                             // have just been validated, so this IS a credential check, and a guest reaching the
                             // cart page is exactly as much in need of a proven identity as a logged-in user.
-                            return AuthenticatedState.createFor(guestPrincipal, backofficeSession)
+                            return AuthenticatedState.createFor(guestPrincipal, backofficeSession,
+                                    SessionAudience.ofBackofficeFlag(backofficeSession),
+                                    SessionMethod.of(SessionMethod.CART_LINK))
                                 .compose(authenticatedState -> PushServerService.pushState(authenticatedState, usageRunId))
                                 .map(ignored -> "");  // no requestedPath needed — CartPage handles navigation
                         });

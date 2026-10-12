@@ -38,6 +38,8 @@ import dev.webfx.stack.orm.entity.EntityStore;
 import dev.webfx.stack.push.server.PushServerService;
 import dev.webfx.stack.session.state.StateAccessor;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
+import dev.webfx.stack.session.token.SessionAudience;
+import dev.webfx.stack.session.token.SessionMethod;
 import dev.webfx.stack.session.token.AuthenticatedState;
 import dev.webfx.stack.session.token.SessionTokenService;
 import dev.webfx.stack.session.token.SecurityAlarm;
@@ -447,7 +449,12 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
                         // other gateways pass the client-asserted flag they captured at method entry;
                         // this one can do better — originIsBackoffice was proven by the signature over
                         // clientDataJSON, and the cross-check above already forced the two to agree.
-                        return AuthenticatedState.createFor(principal, originIsBackoffice)
+                        // `pk` alone: a passkey sign-in, not a second step — the branch above returned
+                        // for that case. The audience here is the only one in the system that is PROVEN
+                        // rather than claimed, out of the signature over clientDataJSON.
+                        return AuthenticatedState.createFor(principal, originIsBackoffice,
+                                SessionAudience.ofBackofficeFlag(originIsBackoffice),
+                                SessionMethod.of(SessionMethod.PASSKEY))
                             .compose(authenticatedState -> PushServerService.pushState(authenticatedState, runId));
                     });
             });
@@ -455,11 +462,10 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
 
     /**
      * Claims the pending login this assertion has just satisfied and mints from it — password plus
-     * passkey, which would be {@code pwd,pk} once {@code $amr} exists (design milestone M1). TODAY
-     * THE MINTED SESSION RECORDS NEITHER: {@code AuthenticatedState.createFor} takes a principal and
-     * a back-office flag and no method argument, so what this produces is indistinguishable from a
-     * passkey-only or a password-only session. The strength is in having required both, not in
-     * anything the token says.
+     * passkey, which the token now says: {@code $amr=pwd,pk}. Nothing reads it yet, so the strength is
+     * still in having required both rather than in anything a policy enforces from it; what changed is
+     * that the session is no longer indistinguishable from a passkey-only or a password-only one, which
+     * is what the second-factor policy needs before it can leave {@code off}.
      *
      * <p>The consume is the gate, not a tidy-up ({@code ModalityTotpAuthenticationGateway} says the
      * same of its own): {@link PendingSecondFactorStore#consumeAfterSuccess} releases the entry to
@@ -540,7 +546,12 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
         // budget counts, and one a guesser of codes cannot produce. Keyed by the normalised id, which
         // is what the TOTP gateway counts under, so the two spell the same account the same way.
         SecondFactorAttemptLimiter.clear(releasedAccountId);
-        return AuthenticatedState.createFor(principal, released.backoffice())
+        // `pwd,pk` — both, which is the whole point of this path and is now recorded rather than merely
+        // having happened. The password is certain: the entry being released was created by the password
+        // step, which is the only thing that creates one.
+        return AuthenticatedState.createFor(principal, released.backoffice(),
+                SessionAudience.ofBackofficeFlag(released.backoffice()),
+                SessionMethod.of(SessionMethod.PASSWORD, SessionMethod.PASSKEY))
             .compose(authenticatedState -> PushServerService.pushState(authenticatedState, runId));
     }
 

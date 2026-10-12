@@ -37,6 +37,8 @@ import one.modality.crm.server.authn.gateway.shared.StoredPasswords;
 import one.modality.crm.server.authn.gateway.shared.PendingSecondFactor;
 import one.modality.crm.server.authn.gateway.shared.PendingSecondFactorStore;
 import one.modality.crm.server.authn.gateway.shared.SecondFactorMarker;
+import dev.webfx.stack.session.token.SessionAudience;
+import dev.webfx.stack.session.token.SessionMethod;
 import one.modality.crm.server.authn.gateway.shared.SecondFactorPolicy;
 import one.modality.crm.server.authn.gateway.shared.SecondFactorVerifiers;
 import one.modality.crm.shared.services.authn.ModalityAuthenticationI18nKeys;
@@ -364,7 +366,11 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
 
     /** The login as it has always been: mint the session from the captured back-office flag, then push it. */
     private Future<Object> mintAndPush(ModalityUserPrincipal principal, boolean isBackofficeAuthentication, String runId) {
-        return AuthenticatedState.createFor(principal, isBackofficeAuthentication)
+        // `pwd` alone, and reaching here means alone: a login that needed a second factor returned above
+        // and is minted by whichever gateway completes it, naming both.
+        return AuthenticatedState.createFor(principal, isBackofficeAuthentication,
+                SessionAudience.ofBackofficeFlag(isBackofficeAuthentication),
+                SessionMethod.of(SessionMethod.PASSWORD))
             .compose(authenticatedState -> PushServerService.pushState(authenticatedState, runId))
             .map(ignored -> null);
     }

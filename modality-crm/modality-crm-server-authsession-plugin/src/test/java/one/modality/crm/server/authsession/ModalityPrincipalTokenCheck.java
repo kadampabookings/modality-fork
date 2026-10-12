@@ -4,6 +4,7 @@ import dev.webfx.stack.com.serial.SerialCodecManager;
 import dev.webfx.stack.session.token.IdentityToken;
 import dev.webfx.stack.session.token.PrincipalToken;
 import dev.webfx.stack.session.token.SessionAudience;
+import dev.webfx.stack.session.token.SessionMethod;
 import dev.webfx.stack.session.token.SessionTier;
 import dev.webfx.stack.session.token.SignedToken;
 import one.modality.crm.shared.services.authn.ModalityGuestPrincipal;
@@ -55,7 +56,8 @@ public class ModalityPrincipalTokenCheck {
     /** A token whose session ends at NOW + 60s, minted the way a login mints one. */
     static Object roundTrip(Object principal) {
         String token = PrincipalToken.mint(principal, null, 0, SessionTier.FRONT_OFFICE,
-                                           SessionAudience.FRONT_OFFICE, NOW + 60_000, NOW);
+                                           SessionAudience.FRONT_OFFICE,
+                                           SessionMethod.of(SessionMethod.MAGIC_LINK), NOW + 60_000, NOW);
         IdentityToken identity = PrincipalToken.verify(token, NOW);
         return identity == null ? null : identity.principal();
     }

@@ -18,6 +18,7 @@ import dev.webfx.stack.session.state.StateAccessor;
 import dev.webfx.stack.session.token.AuthenticatedState;
 import dev.webfx.stack.session.token.SecurityAlarm;
 import dev.webfx.stack.session.token.SessionAudience;
+import dev.webfx.stack.session.token.SessionMethod;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 import one.modality.base.shared.entities.FrontendAccount;
 import one.modality.base.shared.entities.MagicLink;
@@ -258,14 +259,20 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
     }
 
     private Future<String> authenticateWithMagicLink(AuthenticateWithMagicLinkCredentials credentials) {
-        return authenticateWithMagicLink(credentials.token());
+        return authenticateWithMagicLink(credentials.token(), SessionMethod.MAGIC_LINK);
     }
 
     private Future<String> authenticateWithVerificationCode(AuthenticateWithVerificationCodeCredentials credentials) {
-        return authenticateWithMagicLink(credentials.verificationCode());
+        return authenticateWithMagicLink(credentials.verificationCode(), SessionMethod.VERIFICATION_CODE);
     }
 
-    private Future<String> authenticateWithMagicLink(String tokenOrVerificationCode) {
+    /**
+     * @param method which of the two delivered the secret. The same proof either way — control of the
+     *               address, at the time it was sent — but recorded apart, because a policy that wants
+     *               to treat a clicked link and a typed code differently cannot if the token conflates
+     *               them, and conflating them is not reversible once the tokens are minted.
+     */
+    private Future<String> authenticateWithMagicLink(String tokenOrVerificationCode, SessionMethod method) {
         String usageRunId = ThreadLocalStateHolder.getRunId();
         // Read on THIS thread, before the first async hop: ThreadLocalStateHolder is restored when the
         // synchronous part of the call returns, and this decides the session's lifetime tier for good.
@@ -303,7 +310,8 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
                         // 4) Pushing the userId to the magic link client which is identified by runId = usageRunId.
                         // Pushing the userId will cause a login, and subsequently a push of the authorizations.
                         return guestBookingsAttached
-                            .compose(ignoredAttach -> AuthenticatedState.createFor(userId, backofficeSession))
+                            .compose(ignoredAttach -> AuthenticatedState.createFor(userId, backofficeSession,
+                                SessionAudience.ofBackofficeFlag(backofficeSession), SessionMethod.of(method)))
                             .compose(authenticatedState -> PushServerService.pushState(authenticatedState, usageRunId))
                             .compose(ignored -> { // indicates that the magic link client acknowledged this login push
                                 // 5) For LOGIN links: mark as used (single-use) and push userId to the original
@@ -346,7 +354,9 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
                                         //    named here rather than left to be discovered at the M1 flip.
                                         //    (docs/security/backoffice-second-factor-totp-design.md, M1.)
                                         if (MagicLinkService.isWithinRequesterPushWindow(magicLink))
-                                            AuthenticatedState.createFor(userId, backofficeSession)
+                                            AuthenticatedState.createFor(userId, backofficeSession,
+                                                    SessionAudience.ofBackofficeFlag(backofficeSession),
+                                                    SessionMethod.of(method))
                                                 .compose(authenticatedState -> PushServerService.pushState(authenticatedState, magicLink.getLoginRunId()));
                                     });
                             });
@@ -650,7 +660,8 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
                         // FRONT_OFFICE stated, not derived: a support view shows the customer their own
                         // front office, and that is true of the pass rather than of the connection. The
                         // guard above forces the flag to agree today — this survives the guard changing.
-                        return AuthenticatedState.createFor(userId, backofficeSession, SessionAudience.FRONT_OFFICE)
+                        return AuthenticatedState.createFor(userId, backofficeSession, SessionAudience.FRONT_OFFICE,
+                                SessionMethod.of(SessionMethod.SUPPORT_VIEW_PASS))
                             .compose(authenticatedState -> PushServerService.pushState(authenticatedState, usageRunId))
                             .map(ignored -> Strings.toSafeString(magicLink.getRequestedPath()));
                     });
@@ -834,7 +845,8 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
                     // method: the flag is client-claimed, so deriving the audience from it would take the
                     // audience from the caller — exactly what the claim exists to stop. The pass was
                     // minted by a super admin FOR the back office, and that is what gets signed.
-                    return AuthenticatedState.createFor(userId, backofficeSession, SessionAudience.BACK_OFFICE)
+                    return AuthenticatedState.createFor(userId, backofficeSession, SessionAudience.BACK_OFFICE,
+                            SessionMethod.of(SessionMethod.BACKOFFICE_VIEW_PASS))
                         .compose(authenticatedState -> PushServerService.pushState(authenticatedState, usageRunId))
                         .map(ignored -> Strings.toSafeString(magicLink.getRequestedPath()));
                 });
