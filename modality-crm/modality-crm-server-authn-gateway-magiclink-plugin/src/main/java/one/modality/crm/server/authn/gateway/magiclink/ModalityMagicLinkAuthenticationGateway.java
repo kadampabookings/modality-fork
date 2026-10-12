@@ -17,6 +17,7 @@ import dev.webfx.stack.push.server.PushServerService;
 import dev.webfx.stack.session.state.StateAccessor;
 import dev.webfx.stack.session.token.AuthenticatedState;
 import dev.webfx.stack.session.token.SecurityAlarm;
+import dev.webfx.stack.session.token.SessionAudience;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 import one.modality.base.shared.entities.FrontendAccount;
 import one.modality.base.shared.entities.MagicLink;
@@ -322,14 +323,28 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
                                         //    in only when the click lands inside the requester window. Past that,
                                         //    the requester is far more likely to be someone who asked for a link
                                         //    to an address that is not theirs, waiting for its owner to click.
-                                        //    KNOWN LIMITATION on the lifetime tier, not on the identity: this
-                                        //    token is minted with the REDEEMING client's backoffice flag but
-                                        //    handed to the tab that requested the link, which may be a different
-                                        //    app — click a back-office login link on a phone and that back-office
-                                        //    session lands on the front-office tier. It affects how long the
-                                        //    session may live, never what it may do, and it is the same gap the
-                                        //    audience field closes: the tier will come from the session's own
-                                        //    audience rather than from whichever client happened to redeem.
+                                        //    KNOWN LIMITATION, and it GREW when $aud arrived: this token is
+                                        //    minted with the REDEEMING client's backoffice flag but handed to the
+                                        //    tab that requested the link, which may be a different app — click a
+                                        //    back-office login link on a phone and that back-office tab gets a
+                                        //    token minted for a front-office client.
+                                        //
+                                        //    Until now that cost only lifetime: the session landed on the
+                                        //    front-office tier, which affects how long it may live and never what
+                                        //    it may do. The audience is now frozen into the same token, so the
+                                        //    back-office tab also holds one stamped `fo` — inert today, because
+                                        //    nothing reads it, and a REFUSAL once M1 demands `$aud == bo` at the
+                                        //    back-office guards. M1 therefore cannot ship without fixing this
+                                        //    site: the requester's audience is the one to mint here, not the
+                                        //    redeemer's.
+                                        //
+                                        //    And `magic_link` does not record it — the row carries
+                                        //    `login_run_id` and the `link` it handed out, with no flag for which
+                                        //    app asked. So the fix is a column written when the link is
+                                        //    requested, or the origin of the stored `link`, which was built for
+                                        //    the requesting client. Not a one-line change, which is why it is
+                                        //    named here rather than left to be discovered at the M1 flip.
+                                        //    (docs/security/backoffice-second-factor-totp-design.md, M1.)
                                         if (MagicLinkService.isWithinRequesterPushWindow(magicLink))
                                             AuthenticatedState.createFor(userId, backofficeSession)
                                                 .compose(authenticatedState -> PushServerService.pushState(authenticatedState, magicLink.getLoginRunId()));
@@ -562,8 +577,10 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
     private Future<String> authenticateWithSupportView(AuthenticateWithSupportViewCredentials credentials) {
         String usageRunId = ThreadLocalStateHolder.getRunId();
         // Always false here — the guard below refuses a back-office caller outright — but captured and
-        // passed rather than hard-coded, so the tier keeps coming from one rule. A support view is
-        // recognised by its principal in any case, and lands on the 30-minute tier either way.
+        // passed rather than hard-coded, so the TIER keeps coming from one rule. A support view is
+        // recognised by its principal in any case, and lands on the 30-minute tier either way. The
+        // AUDIENCE is stated at the mint below instead, because that one is the pass's own nature and
+        // must not depend on the guard staying where it is.
         boolean backofficeSession = ThreadLocalStateHolder.isBackoffice();
         // A support view belongs in the front office. The back office would hand the session the
         // customer's own back-office grants, which is not what "see what the customer sees" means.
@@ -630,7 +647,10 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
                             targetPerson.getPrimaryKey(), targetAccount.getPrimaryKey(), agentPerson.getPrimaryKey());
                         Console.log("🔎 Support view opened: person %s → person %s".formatted(
                             agentPerson.getPrimaryKey(), targetPerson.getPrimaryKey()));
-                        return AuthenticatedState.createFor(userId, backofficeSession)
+                        // FRONT_OFFICE stated, not derived: a support view shows the customer their own
+                        // front office, and that is true of the pass rather than of the connection. The
+                        // guard above forces the flag to agree today — this survives the guard changing.
+                        return AuthenticatedState.createFor(userId, backofficeSession, SessionAudience.FRONT_OFFICE)
                             .compose(authenticatedState -> PushServerService.pushState(authenticatedState, usageRunId))
                             .map(ignored -> Strings.toSafeString(magicLink.getRequestedPath()));
                     });
@@ -810,7 +830,11 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
                         targetPerson.getPrimaryKey(), targetAccount.getPrimaryKey(), agentPerson.getPrimaryKey());
                     Console.log("🔎 Back-office view opened: person %s → person %s".formatted(
                         agentPerson.getPrimaryKey(), targetPerson.getPrimaryKey()));
-                    return AuthenticatedState.createFor(userId, backofficeSession)
+                    // BACK_OFFICE stated, not derived, and here it matters more than in the mirror
+                    // method: the flag is client-claimed, so deriving the audience from it would take the
+                    // audience from the caller — exactly what the claim exists to stop. The pass was
+                    // minted by a super admin FOR the back office, and that is what gets signed.
+                    return AuthenticatedState.createFor(userId, backofficeSession, SessionAudience.BACK_OFFICE)
                         .compose(authenticatedState -> PushServerService.pushState(authenticatedState, usageRunId))
                         .map(ignored -> Strings.toSafeString(magicLink.getRequestedPath()));
                 });
