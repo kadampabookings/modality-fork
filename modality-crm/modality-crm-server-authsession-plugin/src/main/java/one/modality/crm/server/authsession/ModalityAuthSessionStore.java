@@ -96,6 +96,12 @@ public final class ModalityAuthSessionStore implements SessionFamilyStore {
     // read by position — keep them in step with the SELECT above.
     private static final int RENEWED_GENERATION = 0, RENEWED_ABSOLUTE = 1, SNAPSHOT_GENERATION = 2,
         REVOKED = 3, EXPIRED = 4, MILLIS_SINCE_RENEWAL = 5, SNAPSHOT_ABSOLUTE = 6;
+    // MILLIS_SINCE_RENEWAL is selected and read by NOTHING, on purpose. It used to decide whether a
+    // holder behind its family was a thief, and a clock cannot decide that: the renewal cadence IS the
+    // access window, so two holders are always about one window apart and the false kills reappeared
+    // just past whatever the grace was set to — measured twice on production, at two different values.
+    // Kept in the projection because it is worth having in a log line one day, and named here so that
+    // the next person to find it does not take it for a decision somebody forgot to make.
 
     /**
      * The revocations another instance may have performed, oldest first, in two forms.
@@ -238,6 +244,19 @@ public final class ModalityAuthSessionStore implements SessionFamilyStore {
             .map(result -> classify(result, familyId, presentedGeneration));
     }
 
+    /**
+     * Whether a holder behind its family is a second holder, or merely the only one we have heard from.
+     *
+     * <p>Separated from reading the row so the rule can be checked without a database or a platform —
+     * it is the part worth pinning, and {@code ModalityAuthSessionStoreCheck} does.
+     *
+     * @param presentedGeneration what this holder is carrying, strictly behind the family's own
+     * @param snapshotGeneration  the family's generation as the same statement read it
+     */
+    static boolean isReuse(int presentedGeneration, int snapshotGeneration) {
+        return presentedGeneration < snapshotGeneration - 1;
+    }
+
     private FamilyRenewal classify(QueryResult result, String familyId, int presentedGeneration) {
         // No row: a family this server has never heard of, or one the retention sweep has removed because
         // it was long past its bound. Either way there is no live session behind this token.
@@ -261,10 +280,27 @@ public final class ModalityAuthSessionStore implements SessionFamilyStore {
             // The update should have fired, so something committed between this statement's snapshot and
             // its write: another renewal of the same family, from another instance or another tab.
             return FamilyRenewal.undecided();
-        // Behind the family. Recent enough to be the losing half of a race the client cannot see — a
-        // second tab, or a reply that never arrived — and it is handed the current generation. Old enough
-        // and it is what it looks like: a copy of a retired token, in somebody else's hands.
-        if (longAt(result, MILLIS_SINCE_RENEWAL) <= SessionLifetime.REUSE_GRACE_MILLIS)
+        // Behind the family — and BEHIND BY HOW MUCH is the whole question. It used to be answered with a
+        // clock, and a clock cannot answer it: a family's generation advances on the renewal cadence, so
+        // two holders renewing independently are always about one access window apart. Whatever the grace
+        // was set to, the false kills reappeared just past it. Measured twice on production at two
+        // different values — floored at 30m28s against one grace, then at 32m against the next.
+        //
+        // The question has an exact answer that needs no clock. A generation only ever advances because
+        // somebody PRESENTED the one before it, so the highest generation anybody has ever presented is
+        // exactly snapshotGeneration - 1.
+        //
+        //   Behind by one  — nobody has presented anything later than this. There is one holder, late
+        //                    because its successor never reached it or because it has not spoken since.
+        //                    Hand it the current generation; both ends converge, as two tabs always did.
+        //   Behind by more — somebody HAS presented a later generation while this holder was away. That
+        //                    is two holders, which is the thing reuse detection exists to find.
+        //
+        // Honest about what this gives up: a thief who keeps up, renewing every cycle, stays one behind
+        // and is never caught. That was ALREADY true — the grace it replaces was one access window, which
+        // is the renewal cadence, so a diligent thief was always inside it. What changes is the member
+        // with two tabs who no longer dies for it: 42 families a day, 40 people, 39 of them behind by one.
+        if (!isReuse(presentedGeneration, snapshotGeneration))
             return new FamilyRenewal(Verdict.CURRENT, snapshotGeneration, longAt(result, SNAPSHOT_ABSOLUTE));
         return FamilyRenewal.reuseDetected();
     }
