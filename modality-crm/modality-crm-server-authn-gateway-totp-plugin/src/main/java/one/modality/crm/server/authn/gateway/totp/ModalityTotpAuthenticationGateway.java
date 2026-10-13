@@ -18,6 +18,7 @@ import dev.webfx.stack.orm.domainmodel.HasDataSourceModel;
 import dev.webfx.stack.orm.entity.EntityList;
 import dev.webfx.stack.orm.entity.EntityStore;
 import dev.webfx.stack.push.server.PushServerService;
+import dev.webfx.stack.session.state.StateAccessor;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 import dev.webfx.stack.session.token.SessionAudience;
 import dev.webfx.stack.session.token.SessionMethod;
@@ -637,6 +638,26 @@ public final class ModalityTotpAuthenticationGateway implements ServerAuthentica
 
     /** Fails with the enrolment key unless the principal's person is a super administrator. */
     private Future<Void> requireSuperAdmin(ModalityUserPrincipal principal) {
+        // Opened FOR the back office, as the token says — not as this message claims. Everything behind
+        // this decides something about somebody else's account or reveals a posture meant to be silent,
+        // and the `backoffice` flag can say `fo` at login (skipping the account check, the brisk tier and
+        // the second factor) then `bo` afterwards to arrive here. The audience was settled when a
+        // credential was checked, so it cannot be moved by asking. Read before the async step below,
+        // while the thread still holds the caller's state.
+        //
+        // Deliberately NOT on the dispatch that routes here: that same dispatch carries a member's own
+        // passkey enrolment and management, done from the FRONT office, which this would refuse.
+        //
+        // Note what stays reachable from anywhere: RAISING the alarm, which is not behind this guard.
+        // Somebody whose laptop has just been stolen is reporting it from their phone.
+        if (!Boolean.TRUE.equals(StateAccessor.getVerifiedBackoffice(ThreadLocalStateHolder.getThreadLocalState()))) {
+            // The SAME refusal a non-super-administrator gets, by design: a caller must not be able to
+            // tell "you are not one" from "not from here", nor which they sent. Distinguished only in
+            // the log, where the operator needs to know which fence fired.
+            Console.log(LOG_PREFIX + "Super-administrator second-factor operation refused: person "
+                        + principal.getUserPersonId() + " is on a session that was not opened for the back office");
+            return enrolmentFailure();
+        }
         return SuperAdminMembership.isSuperAdmin(principal, dataSourceModel)
             .compose(isSuperAdmin -> {
                 if (!Boolean.TRUE.equals(isSuperAdmin)) {

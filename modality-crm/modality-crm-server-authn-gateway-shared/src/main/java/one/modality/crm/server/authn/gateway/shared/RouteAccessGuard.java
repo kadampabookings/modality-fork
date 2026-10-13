@@ -40,6 +40,33 @@ public final class RouteAccessGuard {
     private RouteAccessGuard() {
     }
 
+    /**
+     * Whether this session was OPENED for the back office, as its token says.
+     *
+     * <p>The point is what it refuses: a session that claimed the front office at login — skipping the
+     * back-office account check, the three-hour tier and the second factor — and then claimed the back
+     * office afterwards to come here. The {@code backoffice} flag is re-sent on every message and can
+     * differ between any two of them, so reading it here would ask the caller to mark their own homework.
+     * The audience was decided when a credential was checked and signed into the token, so a caller
+     * claiming back-office privileges has necessarily accepted the back office's entry conditions.
+     *
+     * <p>Be exact about what that proves: not that the caller IS the back office — no web client can
+     * prove that, see SessionAudience — but that whoever holds this session passed what a back-office
+     * login demands. That is the bar worth setting, and the one that can be met.
+     *
+     * <p>Null refuses. It means nothing verified on this message, which the family check above already
+     * refuses; kept explicit so this reads correctly if ever called on its own.
+     *
+     * <p><b>Both back offices report themselves truthfully today, and one of them does so by accident.</b>
+     * The React back office sets it (BusProvider backoffice={true}); the legacy WebFX/GWT one relies on
+     * Meta.getBackoffice() falling back to matching "backoffice" in its module name, which
+     * kbs-backoffice-application-gwt happens to contain. Rename that module and every legacy session
+     * silently becomes a front-office one, refused here, with nothing failing until staff cannot work.
+     */
+    private static boolean openedForTheBackOffice(Object state) {
+        return Boolean.TRUE.equals(StateAccessor.getVerifiedBackoffice(state));
+    }
+
     /** What every refusal here says, whatever its reason — a caller learns that it was refused, and no more. */
     public static <T> Future<T> refused() {
         return Future.failedFuture("This operation is not available to you");
@@ -64,7 +91,8 @@ public final class RouteAccessGuard {
         Object state = ThreadLocalStateHolder.getThreadLocalState();
         Object userId = StateAccessor.getUserId(state);
         boolean verifiedSession = StateAccessor.getSessionFamilyId(state) != null;
-        if (!(userId instanceof ModalityUserPrincipal principal) || principal.isSupportView() || !verifiedSession)
+        if (!(userId instanceof ModalityUserPrincipal principal) || principal.isSupportView() || !verifiedSession
+            || !openedForTheBackOffice(state))
             return refused();
         Object personId = principal.getUserPersonId();
         EntityStore entityStore = EntityStore.create(DataSourceModelService.getDefaultDataSourceModel());
@@ -95,7 +123,8 @@ public final class RouteAccessGuard {
         Object state = ThreadLocalStateHolder.getThreadLocalState();
         Object userId = StateAccessor.getUserId(state);
         boolean verifiedSession = StateAccessor.getSessionFamilyId(state) != null;
-        if (!(userId instanceof ModalityUserPrincipal principal) || principal.isSupportView() || !verifiedSession)
+        if (!(userId instanceof ModalityUserPrincipal principal) || principal.isSupportView() || !verifiedSession
+            || !openedForTheBackOffice(state))
             return refused();
         Object personId = principal.getUserPersonId();
         EntityStore entityStore = EntityStore.create(DataSourceModelService.getDefaultDataSourceModel());

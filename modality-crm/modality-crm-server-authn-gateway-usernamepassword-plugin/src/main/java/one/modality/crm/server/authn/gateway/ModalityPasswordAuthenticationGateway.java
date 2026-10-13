@@ -17,6 +17,7 @@ import dev.webfx.stack.orm.entity.UpdateStore;
 import dev.webfx.stack.push.server.PushServerService;
 import dev.webfx.stack.session.state.AuditActorRegistry;
 import dev.webfx.stack.session.state.RestrictedPrincipalRegistry;
+import dev.webfx.stack.session.state.StateAccessor;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 import dev.webfx.stack.session.state.TransactionPreambleRegistry;
 import dev.webfx.stack.session.token.AuthenticatedState;
@@ -237,6 +238,14 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
         return EntityStore.create(dataSourceModel)
             // Note: accounts are created from the front-office and can first be used only to log in in the front-office,
             // but an admin or superadmin can mark them as back-office and can then be used to log in in the back-office as well.
+            //
+            // $3 here is the CLAIMED flag, and deliberately so — unlike the same condition in
+            // queryModalityUserPerson, which reads the token's audience instead. There is no token yet at
+            // this point: this IS the login, and the flag is the only thing that exists to go on. It is
+            // also the moment the audience is frozen FROM that flag, which is what makes the asymmetry
+            // sound rather than an oversight: the flag decides once, here, where it costs the caller the
+            // back-office account check and the second factor; the token enforces that decision on every
+            // message afterwards, where the flag can no longer be changed to escape it.
             .<Person>executeQuery("select id,frontendAccount.(password, salt) from Person where frontendAccount.(corporation=$1 and lower(username)=lower($2) and !removed and !disabled and ($3=false or backoffice)) order by owner desc, id limit 1", 1, username, isBackofficeAuthentication)
             .compose(persons -> {
                 if (persons.size() != 1)
@@ -590,7 +599,23 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
     private Future<Person> queryModalityUserPerson(String fields) {
         // Capturing the required client state info from thread local (before it will be wiped out by the async call)
         Object userId = ThreadLocalStateHolder.getUserId();
-        boolean isBackofficeAuthentication = ThreadLocalStateHolder.isBackoffice();
+        // The back-office account check below is driven by the token's audience, NOT by the `backoffice`
+        // flag this message carries. Same condition, different source, and the change is only visible to
+        // one caller: the flag could say `fo` to have the check skipped and `bo` afterwards to use what
+        // passing it grants, which is the hole the audience closes. The audience was settled when a
+        // credential was checked and signed in, so it cannot be moved by asking.
+        //
+        // NOT a stricter check. The check stays CONDITIONAL, because making it unconditional would refuse
+        // every member in the front office — their accounts are not `backoffice`, and nor should they be.
+        // A front-office session skips it exactly as before; a back-office one must pass it, as it already
+        // did. Only the lie stops working.
+        //
+        // Null (nothing verified on this message) reads as front office, which keeps an untokened caller
+        // behaving as it does today rather than failing a check it has never been asked. That is safe here
+        // because the audience only ever RELAXES this query: it cannot grant anything, and what a
+        // back-office session may then DO is fenced by RouteAccessGuard, which refuses a null outright.
+        boolean isBackofficeAuthentication =
+            Boolean.TRUE.equals(StateAccessor.getVerifiedBackoffice(ThreadLocalStateHolder.getThreadLocalState()));
         if (!(userId instanceof ModalityUserPrincipal modalityUserPrincipal))
             return Future.failedFuture("[%s] This userId object is not recognized by Modality".formatted(ModalityAuthenticationI18nKeys.AuthnUnrecognizedUserIdError));
         return EntityStore.create(dataSourceModel)
