@@ -36,11 +36,22 @@
              the acceptance path, so that is the moment to check. See
              docs/design/identity-binding-spec.md.
 
-             MojoAuth stays: it verifies (Jwks.verifyAccessToken). -->
+             MojoAuth was kept when those two went, on the grounds that it verifies
+             (Jwks.verifyAccessToken) — an argument about it being SAFE, not about it being NEEDED. KBS
+             never offered it either, and confirmed on 2026-10-13 that it never will, which leaves it in
+             exactly the position the paragraph above describes: an acceptance path kept for a login
+             nobody is given. So it goes the same way, and for the same reason.
 
-        <!-- + MojoAuth SSO -->
-        <plugin-module>webfx-stack-authn-login-server-gateway-mojoauth-plugin</plugin-module>
-        <plugin-module>webfx-stack-authn-server-gateway-mojoauth-plugin</plugin-module>
+             What it was costing meanwhile: registered through META-INF/services, so acceptsUserCredentials
+             (a prefix test) was asked on every authenticate call and authenticateImpl ran a third-party
+             SDK on unauthenticated input. No API key was ever provisioned — no MOJOAUTH variable exists in
+             either deploy workflow — so it could only fail, but by accident of configuration rather than
+             by design. The SDK also put javax.servlet:servlet-api 2.5 (2006) and commons-codec 1.9 (2013)
+             in the production jar for nothing.
+
+             KBS was the only project using those modules, so they are deleted outright rather than merely
+             unreferenced. Restoring SSO means restoring a module AND its verification — see the paragraph
+             above, which is the one that matters at that moment. -->
 
     </dependencies>
 
