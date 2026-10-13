@@ -15,12 +15,15 @@ import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 import dev.webfx.stack.session.token.SecurityAlarm;
 import dev.webfx.stack.session.token.SessionFamilyStore;
 import dev.webfx.stack.session.token.SessionLifetime;
+import dev.webfx.stack.session.token.SessionAudience;
+import dev.webfx.stack.session.token.SessionMethod;
 import dev.webfx.stack.session.token.SessionTier;
 import one.modality.crm.shared.services.authn.ModalityUserPrincipal;
 
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Keeps each login session's generation counter in the {@code auth_session} table (V0083).
@@ -58,9 +61,10 @@ public final class ModalityAuthSessionStore implements SessionFamilyStore {
      * are what the token carries and what Java computed, and converting in SQL avoids depending on how
      * any particular driver maps a Java time type onto {@code timestamptz}.
      */
-    private static final String OPEN_SQL =
-        "insert into auth_session (id, person_id, account_id, tier, generation, issued, last_renewed, absolute_expiry)" +
-        " values ($1, $2::int, $3::int, $4, 0, now(), now(), to_timestamp($5::bigint / 1000.0))";
+    // Package-private so ModalityAuthSessionStoreCheck can count its columns against its values.
+    static final String OPEN_SQL =
+        "insert into auth_session (id, person_id, account_id, tier, generation, issued, last_renewed, absolute_expiry, audience, methods)" +
+        " values ($1, $2::int, $3::int, $4, 0, now(), now(), to_timestamp($5::bigint / 1000.0), $6, $7)";
 
     /**
      * Advances the family by one, and reports what the row looked like either way, in one round trip.
@@ -223,13 +227,32 @@ public final class ModalityAuthSessionStore implements SessionFamilyStore {
 
     @Override
     public Future<String> open(Object principal, SessionTier tier, long absoluteExpiryMillis) {
+        return open(principal, tier, null, SessionMethod.NONE, absoluteExpiryMillis);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>The two claims are written here and never updated, because that is what they are: settled when
+     * a credential was checked, carried through every renewal unchanged. A row disagreeing with its own
+     * token would be a bug, not drift, so there is no reconciliation to do and none to go wrong.
+     *
+     * <p>Null and empty are stored as NULL rather than as {@code ''} or {@code 'none'}: the column means
+     * "not recorded", which is true of every row opened before V0126 and of a legacy token upgraded into
+     * a family. A reader counting methods must treat NULL as unknown, exactly as a reader of {@code $amr}
+     * must — writing an empty string here would turn "we do not know" into "we know it was nothing".
+     */
+    @Override
+    public Future<String> open(Object principal, SessionTier tier, SessionAudience audience,
+                               Set<SessionMethod> methods, long absoluteExpiryMillis) {
         String familyId = Uuid.randomUuid();
         Integer personId = personIdOf(principal);
         Integer accountId = accountIdOf(principal);
         return asServer(() -> SubmitService.executeSubmit(new SubmitArgumentBuilder()
                 .setDataSourceId(dataSourceId())
                 .setStatement(OPEN_SQL)
-                .setParameters(familyId, personId, accountId, tier.code(), absoluteExpiryMillis)
+                .setParameters(familyId, personId, accountId, tier.code(), absoluteExpiryMillis,
+                    audience == null ? null : audience.code(), SessionMethod.joinCodes(methods))
                 .build()))
             .map(ignored -> familyId);
     }

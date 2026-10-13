@@ -62,6 +62,29 @@ public class ModalityAuthSessionStoreCheck {
             everKilled |= ModalityAuthSessionStore.isReuse(generation - 1, generation);
         check("a thousand rotations and not one false kill", !everKilled);
 
+        System.out.println("the insert that opens a family is self-consistent:");
+        // Not pedantry: this statement runs on EVERY login, so a column list and a values list that
+        // disagree is total — nobody can sign in — and the mistake is one careless edit away, because
+        // adding a column means touching both halves AND the parameter list. V0126 added two columns and
+        // did exactly that. A mismatch would otherwise surface as a Postgres syntax error on the first
+        // login after a deploy, which is a bad moment to find out.
+        String columns = ModalityAuthSessionStore.OPEN_SQL.substring(
+            ModalityAuthSessionStore.OPEN_SQL.indexOf('(') + 1, ModalityAuthSessionStore.OPEN_SQL.indexOf(')'));
+        int valuesStart = ModalityAuthSessionStore.OPEN_SQL.indexOf("values (") + "values (".length();
+        String values = ModalityAuthSessionStore.OPEN_SQL.substring(
+            valuesStart, ModalityAuthSessionStore.OPEN_SQL.lastIndexOf(')'));
+        check("as many values as columns",
+              columns.split(",").length == values.split(",").length);
+        // The parameters are passed positionally, so the highest $n must be the number of them and no
+        // index may be skipped — $8 with only seven arguments binds null and writes it silently.
+        int highest = 0;
+        for (int i = 1; i <= 99; i++)
+            if (ModalityAuthSessionStore.OPEN_SQL.contains("$" + i + "") && !ModalityAuthSessionStore.OPEN_SQL.contains("$" + i + "0"))
+                highest = Math.max(highest, i);
+        check("the placeholders run 1..N with no gap", highest == 7);
+        check("and it records the two claims V0126 added",
+              columns.contains("audience") && columns.contains("methods"));
+
         System.out.println("\n" + pass + " passed, " + fail + " failed");
         if (fail > 0) System.exit(1);
     }
