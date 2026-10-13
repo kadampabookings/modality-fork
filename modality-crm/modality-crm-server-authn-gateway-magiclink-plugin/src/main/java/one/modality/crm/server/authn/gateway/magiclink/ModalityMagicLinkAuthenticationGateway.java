@@ -331,33 +331,44 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
                                         //    in only when the click lands inside the requester window. Past that,
                                         //    the requester is far more likely to be someone who asked for a link
                                         //    to an address that is not theirs, waiting for its owner to click.
-                                        //    KNOWN LIMITATION, and it GREW when $aud arrived: this token is
-                                        //    minted with the REDEEMING client's backoffice flag but handed to the
-                                        //    tab that requested the link, which may be a different app — click a
-                                        //    back-office login link on a phone and that back-office tab gets a
-                                        //    token minted for a front-office client.
+                                        //    This mints a SECOND, independent session — createFor opens its own
+                                        //    family — so the two tabs are not two holders of one token. What was
+                                        //    wrong is whose app it was minted for: everything here runs inside the
+                                        //    REDEEMING client's request, so taking the flag from this thread
+                                        //    described the wrong client. Click a back-office login link on a phone
+                                        //    and the back-office tab was handed a front-office session.
                                         //
-                                        //    Until now that cost only lifetime: the session landed on the
-                                        //    front-office tier, which affects how long it may live and never what
-                                        //    it may do. The audience is now frozen into the same token, so the
-                                        //    back-office tab also holds one stamped `fo` — inert today, because
-                                        //    nothing reads it, and a REFUSAL once M1 demands `$aud == bo` at the
-                                        //    back-office guards. M1 therefore cannot ship without fixing this
-                                        //    site: the requester's audience is the one to mint here, not the
-                                        //    redeemer's.
+                                        //    That cost lifetime only, until $aud arrived and froze the same
+                                        //    mistake into the signature: inert while nothing reads it, and a
+                                        //    REFUSAL once M1 demands `$aud == bo` at the back-office guards.
                                         //
-                                        //    And `magic_link` does not record it — the row carries
-                                        //    `login_run_id` and the `link` it handed out, with no flag for which
-                                        //    app asked. So the fix is a column written when the link is
-                                        //    requested, or the origin of the stored `link`, which was built for
-                                        //    the requesting client. Not a one-line change, which is why it is
-                                        //    named here rather than left to be discovered at the M1 flip.
-                                        //    (docs/security/backoffice-second-factor-totp-design.md, M1.)
-                                        if (MagicLinkService.isWithinRequesterPushWindow(magicLink))
-                                            AuthenticatedState.createFor(userId, backofficeSession,
-                                                    SessionAudience.ofBackofficeFlag(backofficeSession),
-                                                    SessionMethod.of(method))
-                                                .compose(authenticatedState -> PushServerService.pushState(authenticatedState, magicLink.getLoginRunId()));
+                                        //    So the requester's own reported app decides it. The push registry
+                                        //    already holds that per runId, recorded when that client last spoke —
+                                        //    the same assertion by the same client, simply not read off a thread
+                                        //    that belongs to somebody else. No column is needed: `magic_link`
+                                        //    records what was asked for, and this is a fact about who is listening
+                                        //    now.
+                                        if (MagicLinkService.isWithinRequesterPushWindow(magicLink)) {
+                                            Object requesterRunId = magicLink.getLoginRunId();
+                                            Boolean requesterBackoffice = PushServerService.getClientBackoffice(requesterRunId);
+                                            if (requesterBackoffice == null) {
+                                                // Not "front office" — unknown. The requester is not registered
+                                                // here (gone, or on the other half of a blue/green pair) or has
+                                                // never said which app it is, and a push to it would fail from
+                                                // this instance anyway. Minting on a guess would hand somebody a
+                                                // session stamped for an app they are not, which no later message
+                                                // can correct, to save them a login form they are already looking
+                                                // at. Left to log in normally.
+                                                Console.log("🔗 Not signing in the tab that requested a magic link:"
+                                                            + " it has not reported which app it is (runId=" + requesterRunId + ")");
+                                            } else {
+                                                boolean requesterIsBackoffice = requesterBackoffice;
+                                                AuthenticatedState.createFor(userId, requesterIsBackoffice,
+                                                        SessionAudience.ofBackofficeFlag(requesterIsBackoffice),
+                                                        SessionMethod.of(method))
+                                                    .compose(authenticatedState -> PushServerService.pushState(authenticatedState, requesterRunId));
+                                            }
+                                        }
                                     });
                             });
                     });
