@@ -126,3 +126,4 @@ V0123__allocation_reads_configuration_per_night.sql
 V0124__uncharged_lines_priced_zero.sql
 V0125__cart_letter_scope_restored.sql
 V0126__auth_session_audience_and_methods.sql
+V0127__requeue_nobody_approved_passkeys.sql
