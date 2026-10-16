@@ -44,6 +44,7 @@
         <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.crm.server.person.ClaimMembersEndpoint</provider>
         <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.crm.server.person.RequestRefundEndpoint</provider>
         <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.crm.server.person.ContactCentreEndpoint</provider>
+        <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.crm.server.person.SendDocumentLetterEndpoint</provider>
     </providers>
 
 </project>

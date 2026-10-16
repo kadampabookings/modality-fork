@@ -87,14 +87,30 @@ public final class RouteAccessGuard {
      * @param eventId        the event owning that row, or null when it belongs to none
      * @param work           what to do once the caller has been allowed — not started otherwise
      */
-    public static <T> Future<T> whenCallerMayReach(String route, Object organizationId, Object eventId, Supplier<Future<T>> work) {
-        Object state = ThreadLocalStateHolder.getThreadLocalState();
+    /**
+     * The person behind a caller who has cleared every fence that does not depend on the target — or null,
+     * which every caller of this must read as a refusal.
+     *
+     * <p>A real principal, a session this server established, not a support view, and a token whose audience
+     * says back office. It is the cheap half of the guards below, split out for two reasons: it was written
+     * inline in each of them and four copies of a fence drift, and an endpoint whose scope has to be read
+     * from the database needs to refuse an anonymous caller BEFORE doing that read rather than after.
+     *
+     * <p>A null person id is a refusal here rather than a value passed on, which is what the membership
+     * queries already did with it — they answer false for a null person — so nothing downstream changes.
+     */
+    public static Object backOfficeCallerPersonId(Object state) {
         Object userId = StateAccessor.getUserId(state);
-        boolean verifiedSession = StateAccessor.getSessionFamilyId(state) != null;
-        if (!(userId instanceof ModalityUserPrincipal principal) || principal.isSupportView() || !verifiedSession
-            || !openedForTheBackOffice(state))
+        if (!(userId instanceof ModalityUserPrincipal principal) || principal.isSupportView()
+            || StateAccessor.getSessionFamilyId(state) == null || !openedForTheBackOffice(state))
+            return null;
+        return principal.getUserPersonId();
+    }
+
+    public static <T> Future<T> whenCallerMayReach(String route, Object organizationId, Object eventId, Supplier<Future<T>> work) {
+        Object personId = backOfficeCallerPersonId(ThreadLocalStateHolder.getThreadLocalState());
+        if (personId == null)
             return refused();
-        Object personId = principal.getUserPersonId();
         EntityStore entityStore = EntityStore.create(DataSourceModelService.getDefaultDataSourceModel());
         return RouteGrantMembership.mayReachRoute(personId, route, organizationId, eventId, entityStore)
             .compose(mayReach -> Boolean.TRUE.equals(mayReach)
@@ -120,17 +136,72 @@ public final class RouteAccessGuard {
      * this server established. Before these endpoints, ANY of them could write any person row directly.
      */
     public static <T> Future<T> whenCallerMayReachAnywhere(String route, Supplier<Future<T>> work) {
-        Object state = ThreadLocalStateHolder.getThreadLocalState();
-        Object userId = StateAccessor.getUserId(state);
-        boolean verifiedSession = StateAccessor.getSessionFamilyId(state) != null;
-        if (!(userId instanceof ModalityUserPrincipal principal) || principal.isSupportView() || !verifiedSession
-            || !openedForTheBackOffice(state))
+        Object personId = backOfficeCallerPersonId(ThreadLocalStateHolder.getThreadLocalState());
+        if (personId == null)
             return refused();
-        Object personId = principal.getUserPersonId();
         EntityStore entityStore = EntityStore.create(DataSourceModelService.getDefaultDataSourceModel());
         return RouteGrantMembership.mayReachRouteAnywhere(personId, route, entityStore)
             .compose(mayReach -> Boolean.TRUE.equals(mayReach)
                 ? Future.succeededFuture(true)
+                : SuperAdminMembership.isSuperAdminPerson(personId, entityStore))
+            .compose(allowed -> Boolean.TRUE.equals(allowed) ? work.get() : refused());
+    }
+
+    /**
+     * Runs {@code work} when the caller HOLDS an operation for this target, and refuses otherwise — the
+     * same fences as the route guards above, asked of an operation code rather than a screen's path.
+     *
+     * <p><b>For an action that is not a page.</b> Most grants here are "may you open this screen", spelled
+     * as {@code Operation.grantRoute}. A few are "may you do this thing": they carry no route and gate a
+     * control rather than a page — {@code EditLetterProperties}, {@code ViewAsCustomer} and
+     * {@code ViewAsBackOfficeUser} are the precedents, seeded by V0106 with no {@code grant_route}
+     * precisely because "they gate a control, not a page". This is the server-side guard for that shape,
+     * and the first one: before it, such an operation was checked only by the client that drew the control.
+     *
+     * <p><b>Scoped to the target, like {@link #whenCallerMayReach} and unlike
+     * {@link RoleOperationMembership#holdsThroughRole}.</b> An action performed ON a row has an owner, so
+     * the grant must be held THERE. The unscoped question suits a privilege that is about the caller
+     * (may you view as a customer); it does not suit one exercised on somebody's booking, where it would
+     * let a grant held for one centre act on every other centre's rows.
+     *
+     * <p>MUST be called on the caller's thread, for the reason {@link #whenCallerMayReach} gives.
+     *
+     * @param operationCode  the {@code operation.operation_code} the action requires
+     * @param organizationId the organization owning the row being acted on
+     * @param eventId        the event owning that row, or null when it belongs to none
+     */
+    public static <T> Future<T> whenCallerHoldsOperation(String operationCode, Object organizationId, Object eventId,
+                                                         Supplier<Future<T>> work) {
+        return whenCallerHoldsOperation(ThreadLocalStateHolder.getThreadLocalState(), operationCode,
+            organizationId, eventId, work);
+    }
+
+    /**
+     * The same, for a caller whose state was read earlier — and it has to be, for any target whose owner
+     * must be looked up before the grant can be scoped to it.
+     *
+     * <p><b>Why this overload exists.</b> The guards above read the thread-local themselves, which works
+     * when the scope arrives in the call (a residency names its centre) and does NOT work when the scope
+     * has to be read from the database first: by the time that query answers, the thread-local has been
+     * restored and there is no caller left to read. Taking the organization from the CLIENT instead would
+     * close the gap in the wrong direction — a caller would name an organization they hold the grant in
+     * while acting on a row belonging to another, which is the confused deputy this scoping exists to
+     * stop. So the endpoint captures the state synchronously, resolves the row's owner, and hands both
+     * here.
+     *
+     * @param state the caller's state, captured on the caller's own thread before the first async step
+     */
+    public static <T> Future<T> whenCallerHoldsOperation(Object state, String operationCode,
+                                                         Object organizationId, Object eventId,
+                                                         Supplier<Future<T>> work) {
+        Object personId = backOfficeCallerPersonId(state);
+        if (personId == null)
+            return refused();
+        EntityStore entityStore = EntityStore.create(DataSourceModelService.getDefaultDataSourceModel());
+        return RoleOperationMembership.holdsThroughRoleFor(personId, operationCode, organizationId, eventId, entityStore)
+            .compose(holds -> Boolean.TRUE.equals(holds)
+                ? Future.succeededFuture(true)
+                // A super administrator holds no operation row of their own, exactly as above
                 : SuperAdminMembership.isSuperAdminPerson(personId, entityStore))
             .compose(allowed -> Boolean.TRUE.equals(allowed) ? work.get() : refused());
     }
