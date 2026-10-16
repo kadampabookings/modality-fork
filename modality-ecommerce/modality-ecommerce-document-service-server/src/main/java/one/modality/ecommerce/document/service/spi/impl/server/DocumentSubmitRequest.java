@@ -18,7 +18,7 @@ record DocumentSubmitRequest(
     SubmitDocumentChangesArgument argument,
     String runId,
     Object userId,  // captured at request time — ThreadLocal is gone when the queue processes this later
-    boolean backoffice, // captured at request time too — drives the DB transaction parameters (back-office allocation semantics)
+    boolean backoffice, // VERIFIED at request time (VerifiedBackoffice) — drives the DB transaction parameters, so it must not be the client's claim
     UpdateStore updateStore,
     Document document,
     DocumentLine documentLine,
@@ -30,7 +30,9 @@ record DocumentSubmitRequest(
         // Capturing the required client state info from thread local (before it will be wiped out by the async call)
         String runId = ThreadLocalStateHolder.getRunId();
         Object userId = ThreadLocalStateHolder.getUserId();
-        boolean backoffice = ThreadLocalStateHolder.isBackoffice();
+        // The verified audience, not the client's own flag: this selects the back-office transaction, which
+        // lifts EVENT_ON_HOLD / EVENT_CLOSED / DOUBLEBOOKING and the free-bed check. See VerifiedBackoffice.
+        boolean backoffice = VerifiedBackoffice.of(ThreadLocalStateHolder.getThreadLocalState());
 
         UpdateStore updateStore = UpdateStore.create(DataSourceModelService.getDefaultDataSourceModel());
         Document document = null;

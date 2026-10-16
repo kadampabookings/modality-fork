@@ -169,8 +169,9 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
         // filter), restrict to documents accessible by the authenticated user.
         // Registered users: filtered by account via accountCanAccessPersonOrders().
         // Guest users (ModalityGuestPrincipal): filtered by person_email match.
-        // Back-office callers bypass this check.
-        if (argumentForAccessControl != null && docPk != null && !ThreadLocalStateHolder.isBackoffice()) {
+        // Back-office callers bypass this check — VERIFIED ones only. It used to read the client's own flag,
+        // which let any connection, anonymous included, load any booking by its sequential id. See VerifiedBackoffice.
+        if (argumentForAccessControl != null && docPk != null && !VerifiedBackoffice.of(ThreadLocalStateHolder.getThreadLocalState())) {
             Object userId = ThreadLocalStateHolder.getUserId();
             Object userAccountId = getUserAccountId(userId);
             String guestEmail = getGuestEmail(userId);
