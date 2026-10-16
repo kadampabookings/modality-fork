@@ -78,7 +78,7 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
         boolean accountProvided = argument.accountPrimaryKey() != null;
 
         if (!personProvided && !accountProvided)
-            return loadBatchForDocumentPk(docPk, argument);
+            return loadBatchForDocumentPk(docPk, DocumentAccess.ofCaller());
 
         // Two-round-trip approach:
         // Round 1 — fast indexed query on Document alone to resolve the PK(s).
@@ -91,18 +91,32 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
         // to a full 1.26 M-row seq scan on document_line (~8 s).  Two round trips each hitting
         // only an index are far faster in practice.
         Object primaryKey = personProvided ? argument.personPrimaryKey() : argument.accountPrimaryKey();
+
+        // Read the caller HERE, before the compose below: the principal and the verified audience are
+        // thread-locals and are gone after the first async hop.
+        DocumentAccess access = DocumentAccess.ofCaller();
+        if (access.readsNothing())
+            return Future.failedFuture("Authentication required to access this document");
+
         // %extra% adds "or id=$3" inside the parentheses when a known docPk must be included
         // alongside the latest doc for this person/event (e.g. the booking confirmation flow).
-        String findDocsDql = "select id from Document where !cancelled and (%field%=$1 and event=$2%extra%) order by id desc%limit%"
-                .replace("%field%", personProvided ? "person" : "person.frontendAccount")
-                .replace("%extra%", docPk != null ? " or id=$3" : "")
-                .replace("%limit%", limitTo1 ? " limit 1" : "");
+        //
+        // %access% is what makes round 1 a filter at all. $1, $2 and $3 all come from the REQUEST, so
+        // without it this resolved ids the CALLER chose rather than ids they may see — and since AND binds
+        // tighter than OR, `person=$1 and event=$2 or id=$3` reads as `(person=$1 and event=$2) or id=$3`,
+        // so the id arm alone returned any booking at all, whereupon round 2 loaded it with the check off.
+        // The clause is ANDed OUTSIDE the parentheses, so it governs both arms.
+        String findDocsDql = findDocsDql(personProvided, docPk != null, limitTo1, access);
 
         return resolveEventPk(argument.eventPrimaryKey()).compose(resolvedEventPk -> {
         Object eventPk = Numbers.toShortestNumber(resolvedEventPk);
-        EntityStoreQuery findDocsQuery = docPk != null
-                ? new EntityStoreQuery(findDocsDql, primaryKey, eventPk, docPk)
-                : new EntityStoreQuery(findDocsDql, primaryKey, eventPk);
+        EntityStoreQuery findDocsQuery = access.readsAnything()
+                ? (docPk != null
+                    ? new EntityStoreQuery(findDocsDql, primaryKey, eventPk, docPk)
+                    : new EntityStoreQuery(findDocsDql, primaryKey, eventPk))
+                : (docPk != null
+                    ? new EntityStoreQuery(findDocsDql, primaryKey, eventPk, docPk, access.parameter())
+                    : new EntityStoreQuery(findDocsDql, primaryKey, eventPk, access.parameter()));
 
         return EntityStore.create()
                 .executeQueryBatch(new EntityStoreQuery[]{findDocsQuery})
@@ -111,10 +125,11 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
                     List<Document> docs = (List<Document>) entityLists[0];
                     if (docs.isEmpty())
                         return Future.succeededFuture(new DocumentAggregate[0]);
-                    // Pass null for argumentForAccessControl: round 1 already filtered by
-                    // person/account, so the per-PK account check in loadBatchForDocumentPk
-                    // is redundant and would incorrectly reject unauthenticated sessions that
-                    // are allowed to book (e.g. noAccountBooking events).
+                    // Pass null for argumentForAccessControl: round 1 filtered by the CALLER, above, so
+                    // every id here is one they may read and checking again would only cost a second
+                    // clause. That is a different claim from the one this comment used to make — that
+                    // round 1 "already filtered by person/account" — which was true of ids the caller
+                    // supplied and therefore filtered nothing.
                     if (docs.size() == 1)
                         return loadBatchForDocumentPk(docs.get(0).getPrimaryKey(), null);
                     // Multiple docs (loadDocuments path): load and flatten sequentially.
@@ -134,6 +149,62 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
                     return combined;
                 });
         });
+    }
+
+    /**
+     * Round 1's query: the booking ids for this person or account and event, limited to the ones the
+     * CALLER may read.
+     *
+     * <p>Extracted so the composed text can be asserted. A clause carrying the wrong parameter index
+     * filters by the wrong value and says nothing about it — there is no error to see, only the wrong
+     * rows — so the index is the one thing here that has to be checked rather than read.
+     *
+     * <p>{@code %extra%} adds {@code or id=$3} when a known booking must come back alongside the latest
+     * for this person and event (the legacy booking form's confirmation step). It is left in place and
+     * governed instead of removed: ANDing {@code %access%} OUTSIDE the parentheses covers both arms, which
+     * matters because AND binds tighter than OR — {@code person=$1 and event=$2 or id=$3} reads as
+     * {@code (person=$1 and event=$2) or id=$3}, so the id arm alone used to return any booking at all.
+     */
+    static String findDocsDql(boolean personProvided, boolean hasDocPk, boolean limitTo1, DocumentAccess access) {
+        return "select id from Document where !cancelled and (%field%=$1 and event=$2%extra%)%access% order by id desc%limit%"
+                .replace("%field%", personProvided ? "person" : "person.frontendAccount")
+                .replace("%extra%", hasDocPk ? " or id=$3" : "")
+                .replace("%access%", access.readsAnything() ? ""
+                        : " and " + access.clause(hasDocPk ? 4 : 3, "person", "person_email"))
+                .replace("%limit%", limitTo1 ? " limit 1" : "");
+    }
+
+    /**
+     * The history of one booking by its id, limited to what the caller may read.
+     *
+     * <p>The booking is reached as {@code document in (select id from Document where …)} rather than by
+     * navigating {@code document.person} from the History row, so the access clause keeps the exact shape
+     * already running in production: bare {@code person} and {@code person_email} on a Document select.
+     * {@code accountCanAccessPersonOrders} declares its second argument a Person and its body navigates it
+     * ({@code p?.frontendAccount}); whether it inlines correctly when handed a dot path is a question only
+     * the runtime DQL compiler can answer, and an authorization fix is the wrong place to find out. A
+     * failure there would fail closed — a broken history load, not an open booking — but broken all the same.
+     */
+    static String historyByDocumentSelect(DocumentAccess access) {
+        return "select changes from History where document%scope% and id<=$2 order by id"
+                .replace("%scope%", access.readsAnything() ? "=$1"
+                        : " in (select id from Document where id=$1 and "
+                          + access.clause(3, "person", "person_email") + ")");
+    }
+
+    /**
+     * The history of this person's latest booking for an event, limited to what the caller may read.
+     *
+     * <p>The clause goes INSIDE the booking lookup, which is where it belongs: it decides which booking
+     * this caller may name, and the history rows then follow from that one id. Putting it on the outer
+     * select instead would have meant navigating from History, and would have had to dodge the fact that
+     * this select contains TWO {@code " order by "} substrings — {@code .replace(" order by ", …)} lands on
+     * the subquery's, filtering the booking lookup by accident and returning the history rows regardless.
+     */
+    static String historyByPersonAndEventSelect(DocumentAccess access) {
+        return "select changes from History where document in (select id from Document where person=$1 and event=$2 and !cancelled%access% order by id desc limit 1) and id<=$3 order by id"
+                .replace("%access%", access.readsAnything() ? ""
+                        : " and " + access.clause(4, "person", "person_email"));
     }
 
     /**
@@ -163,31 +234,29 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
      * Called after the document PK has already been resolved (either passed in directly or
      * from a person/event lookup).
      */
-    private Future<DocumentAggregate[]> loadBatchForDocumentPk(Object docPk, LoadDocumentArgument argumentForAccessControl) {
+    /**
+     * Loads one booking by primary key, filtered to what {@code access} may read.
+     *
+     * <p>{@code access} is null when the caller has ALREADY been applied — the person/account path
+     * resolves its ids through a caller-filtered round 1, so every id reaching here is one they may read.
+     * Null for any other reason is an unfiltered read of a booking by its sequential id.
+     *
+     * <p>The rule itself is {@link DocumentAccess}, not written out here: it governs three query shapes in
+     * this file and three copies of it would drift. A verified back office is unfiltered; a member is
+     * limited by {@code accountCanAccessPersonOrders}; a guest by their {@code person_email}; anyone else
+     * reads nothing. VERIFIED, never the client's own back-office flag — that claim let any connection,
+     * anonymous included, load any booking by its id. See {@link VerifiedBackoffice}.
+     */
+    private Future<DocumentAggregate[]> loadBatchForDocumentPk(Object docPk, DocumentAccess access) {
         EntityStoreQuery[] queries = buildBatchQueries(docPk);
-        // Frontoffice access control: when loading by document PK only (no person/account
-        // filter), restrict to documents accessible by the authenticated user.
-        // Registered users: filtered by account via accountCanAccessPersonOrders().
-        // Guest users (ModalityGuestPrincipal): filtered by person_email match.
-        // Back-office callers bypass this check — VERIFIED ones only. It used to read the client's own flag,
-        // which let any connection, anonymous included, load any booking by its sequential id. See VerifiedBackoffice.
-        if (argumentForAccessControl != null && docPk != null && !VerifiedBackoffice.of(ThreadLocalStateHolder.getThreadLocalState())) {
-            Object userId = ThreadLocalStateHolder.getUserId();
-            Object userAccountId = getUserAccountId(userId);
-            String guestEmail = getGuestEmail(userId);
-            if (userAccountId == null && guestEmail == null) {
+        if (access != null && docPk != null && !access.readsAnything()) {
+            if (access.readsNothing())
                 return Future.failedFuture("Authentication required to access this document");
-            }
-            String docQuery = queries[0].getSelect();
-            if (userAccountId != null) {
-                // Registered user: filter by account-level access.
-                docQuery = docQuery.replace(" order by ", " and accountCanAccessPersonOrders($2, person) order by ");
-                queries[0] = new EntityStoreQuery(docQuery, docPk, userAccountId);
-            } else {
-                // Guest user: filter to documents whose person_email matches the guest's email.
-                docQuery = docQuery.replace(" order by ", " and lower(person_email)=lower($2) order by ");
-                queries[0] = new EntityStoreQuery(docQuery, docPk, guestEmail);
-            }
+            // This query has one parameter, so the clause takes $2. Unlike the history selects, its
+            // single " order by " makes the replace unambiguous.
+            String docQuery = queries[0].getSelect()
+                .replace(" order by ", " and " + access.clause(2, "person", "person_email") + " order by ");
+            queries[0] = new EntityStoreQuery(docQuery, docPk, access.parameter());
         }
         return executeQueryBatchAndMap(queries);
     }
@@ -270,16 +339,26 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
     }
 
     private Future<DocumentAggregate> loadDocumentFromHistory(LoadDocumentArgument argument) {
+        // Both branches took their ids from the REQUEST and applied no access check of any kind, so either
+        // one returned the full change history of any booking — and History.changes holds the booking's
+        // events, which carry the person's name and email as they were submitted. Same rule as everywhere
+        // else in this service; read on this thread, before the compose below.
+        DocumentAccess access = DocumentAccess.ofCaller();
+        if (access.readsNothing())
+            return Future.failedFuture("Authentication required to access this document");
+        // Reached through the History row's own document, since History has no person of its own.
         // When loaded by docPk we don't need the event PK at all — execute directly.
         if (argument.documentPrimaryKey() != null) {
-            return runLoadDocumentFromHistory(
-                "select changes from History where document=$1 and id<=$2 order by id",
-                new Object[]{argument.documentPrimaryKey(), argument.historyPrimaryKey()});
+            return runLoadDocumentFromHistory(historyByDocumentSelect(access), access.readsAnything()
+                ? new Object[]{argument.documentPrimaryKey(), argument.historyPrimaryKey()}
+                : new Object[]{argument.documentPrimaryKey(), argument.historyPrimaryKey(), access.parameter()});
         }
         // When loaded by person+event, eventPrimaryKey() may be a slug — resolve first.
-        return resolveEventPk(argument.eventPrimaryKey()).compose(resolvedEventPk -> runLoadDocumentFromHistory(
-            "select changes from History where document=(select Document where person=$1 and event=$2 and !cancelled order by id desc limit 1) and id<=$3 order by id",
-            new Object[]{argument.personPrimaryKey(), resolvedEventPk, argument.historyPrimaryKey()}));
+        return resolveEventPk(argument.eventPrimaryKey()).compose(resolvedEventPk -> {
+            return runLoadDocumentFromHistory(historyByPersonAndEventSelect(access), access.readsAnything()
+                ? new Object[]{argument.personPrimaryKey(), resolvedEventPk, argument.historyPrimaryKey()}
+                : new Object[]{argument.personPrimaryKey(), resolvedEventPk, argument.historyPrimaryKey(), access.parameter()});
+        });
     }
 
     private static Future<DocumentAggregate> runLoadDocumentFromHistory(String select, Object[] parameters) {
@@ -710,7 +789,7 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
         return new MateLinkRules.LineFacts(shareMate, Boolean.TRUE.equals(line.getBooleanFieldValue("share_owner")), documentPk, eventPk, owned);
     }
 
-    private static Object getUserAccountId(Object userId) {
+    static Object getUserAccountId(Object userId) {
         if (userId == null) return null;
         try {
             return userId.getClass().getMethod("getUserAccountId").invoke(userId);
@@ -723,7 +802,7 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
      * Extracts the email from a ModalityGuestPrincipal, or null for any other principal type.
      * Uses reflection to avoid a direct module dependency on modality.crm.shared.authn.
      */
-    private static String getGuestEmail(Object userId) {
+    static String getGuestEmail(Object userId) {
         if (userId == null) return null;
         try {
             // ModalityGuestPrincipal has getEmail(); ModalityUserPrincipal does not.

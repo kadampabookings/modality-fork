@@ -504,7 +504,12 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
                 }
                 // If there is a deposit, we remove all options added after the last successful payment (that is
                 // meant to pay all previous options).
-                return DocumentService.loadDocumentWithPolicyAndWholeHistory(document)
+                // The SYSTEM reads this history, not a user: it runs after several async hops, so there is
+                // no principal left on the thread, and the document service refuses a reader it cannot
+                // identify. Same marker the two submitDocumentChanges calls in this method already use;
+                // the wrapper covers the read because Future.all evaluates loadDocument synchronously.
+                return SystemUserId.SYSTEM.callAndReturn(() ->
+                    DocumentService.loadDocumentWithPolicyAndWholeHistory(document))
                     .compose(policyAndDocumentAggregates -> {
                         DocumentAggregate documentAggregate = policyAndDocumentAggregates.documentAggregate();
                         // Searching for the last successful payment (shouldn't be null as there is a price deposit)
