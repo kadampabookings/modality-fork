@@ -9,7 +9,17 @@ import one.modality.crm.server.authn.gateway.shared.RouteAccessGuard;
  * Sending a booking's letter — the replacement for clients writing
  * {@code document.trigger_send_letter_id} themselves.
  *
- * <p>Argument: {@code [documentId, letterId]}.
+ * <p>Argument: {@code [documentId, letterId]} — ONE argument that is an array of two, which is the
+ * shape every staff endpoint here uses ({@code ADD_RESIDENT}, {@code MERGE_DUPLICATE_PERSONS} and the
+ * rest), and the length is checked exactly.
+ *
+ * <p><b>Do not relax that to "at least two" for forward compatibility.</b> It looks like the
+ * future-proof choice and cuts the wrong way on this endpoint: tolerating extra elements means a
+ * later argument that TIGHTENS something — a confirmation, a reason, an asserted recipient — would be
+ * silently ignored by an older server during a mixed-version window, which is a quiet downgrade.
+ * Refusing is loud and recoverable, and the client and server ship from the same deploy, so the window
+ * is short. If this ever needs optional or named fields, move it to the {@code $codec} typed-argument
+ * form the authentication endpoints already use, rather than loosening the array.
  *
  * <p>Why it exists, and why it is guarded on an operation rather than a route, is in
  * {@link DocumentLetterRules}. In short: the trigger that column fires composes a letter and lets the
