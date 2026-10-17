@@ -29,6 +29,11 @@ import java.util.Set;
  * do to the mail itself — compose one, and nothing to anybody else's — is a row rule rather than a column
  * list, and lives in {@code MailWritePolicy}.
  *
+ * <p>{@code document.trigger_send_letter_id} is closed because writing it SENDS a letter: the send_letter
+ * trigger composes it and the database addresses it, and the standard letters carry the booking's cart link,
+ * a bearer token for the booking, payment included. The send is a named, granted act now
+ * (SendDocumentLetterEndpoint, SendDocumentLetter), and the column is how a client would step round it.
+ *
  * <p>{@code magic_link} is closed entirely: a client able to insert a row there could mint a sign-in link for any
  * account and follow it. No client writes it; the server creates, stamps and retires every row.
  *
@@ -152,9 +157,29 @@ final class ClientWriteSecrets {
         // its own, and nothing to anybody else's.
         for (String column : new String[] { "transmitted", "transmission_date", "error", "magic_link_id" })
             denyColumn("mail", column);
+        // The trigger that SENDS a booking's letter. Writing it fires send_letter, which composes the letter
+        // and leaves the database to address it, from document.person_email for every letter carrying the
+        // cart link ([yourCart]): a bearer token for the booking, payment included. So a client able to set
+        // person_email and then this could mail itself any booking's cart, by sequential id. Sending is
+        // a named act now: modality/service/document/sendLetter, granted by SendDocumentLetter (V0128,
+        // V0129) and scoped to the booking's organization, which writes this column server-side
+        // (ServerWrite.asServerActingFor), where this guard never looks.
+        //
+        // Last of three steps, in this order on purpose: the React clients moved to the endpoint (live
+        // 2026-10-16), the operation was granted to the roles that open Programs (V0129), and only then this.
+        // Earlier, every legitimate send would have been refused, and a refusal here pages the critical tier.
+        //
+        // The legacy JavaFX back office still writes it when confirming a booking with a letter
+        // (ToggleConfirmDocumentExecutor) and is refused from now on. It cannot use the endpoint instead,
+        // which requires a verified back-office token that client never obtains. It is being retired.
+        //
+        // What this does NOT close: a holder of SendDocumentLetter can still edit person_email and then
+        // send. Only a letter without a bearer token in it ends that.
+        denyColumn("document", "trigger_send_letter_id");
         int columns = DENIED_COLUMNS.values().stream().mapToInt(Set::size).sum();
         Console.log("🛡 Client writes may not touch people, payment configuration, sign-in links or invitation"
-                    + " authorship, a mail's delivery record, nor the account's sign-in, status or privilege"
+                    + " authorship, a mail's delivery record, a booking's letter trigger, nor the account's"
+                    + " sign-in, status or privilege"
                     + " columns (" + String.join(", ", DENIED_TABLES) + " entirely, plus " + columns
                     + " columns across " + DENIED_COLUMNS.size() + " tables)");
     }
