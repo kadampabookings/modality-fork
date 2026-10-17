@@ -62,7 +62,7 @@ public final class RouteGrantMembership {
         // The grant's own scope: this organization, and either the whole of it or this event.
         String scopeClause =
             " and exists(select AuthorizationOrganizationUserAccess ua where ua.role=ro.role and ua.user=$3"
-            + " and ua.organization=$4 and (ua.event=null or ua.event=$5))";
+            + " and ua.organization=$4 and (ua.event=null or ua.event=$5)" + READ_ONLY_FENCE + ")";
         return anyGrantCovering(route, scopeClause, entityStore, personId, organizationId, eventId);
     }
 
@@ -79,7 +79,7 @@ public final class RouteGrantMembership {
      */
     private static Future<Boolean> anyGrantCovering(String route, String scopeClause,
                                                     EntityStore entityStore, Object... scopeParameters) {
-        return entityStore.<Operation>executeQuery("select group.id,grantRoute from Operation where grantRoute!=null")
+        return entityStore.<Operation>executeQuery("select group.id,grantRoute,readOnly from Operation where grantRoute!=null")
             .compose(operations -> {
                 List<Operation> covering = new ArrayList<>();
                 for (Operation operation : operations)
@@ -124,8 +124,35 @@ public final class RouteGrantMembership {
         // belongs to no event, and a person belongs to none.
         return anyGrantCovering(route,
             " and exists(select AuthorizationOrganizationUserAccess ua where ua.role=ro.role and ua.user=$3"
-            + " and ua.event=null)",
+            + " and ua.event=null" + READ_ONLY_FENCE + ")",
             entityStore, personId);
+    }
+
+    /**
+     * Where {@link #answerFrom} puts the read-only fence, inside the clause's {@code exists(...)}.
+     *
+     * <p>A token rather than an append, because the fence has to sit INSIDE the subquery that names
+     * {@code ua} and both clauses close that subquery themselves. Leaving a clause with an unbalanced
+     * parenthesis for the body to finish would read as a typo to whoever edits it next.
+     */
+    private static final String READ_ONLY_FENCE = "<readOnlyFence>";
+
+    /**
+     * The statement asking whether this person holds the operation granting this route, fence resolved.
+     *
+     * <p>Unless the operation is marked {@code read_only}, a read-only access does not grant it. The
+     * flag is read from the operation in Java, not joined in the statement: {@code ro.operation} is null
+     * on a row matched through its group, where a clause reading {@code ro.operation.readOnly} would
+     * compare against nothing and let every group-granted route through.
+     *
+     * <p>Extracted so a check can read it without a database — the fence must land inside the
+     * {@code exists(...)}, and one placed after it would run and apply to nothing.
+     */
+    static String grantedStatement(String scopeClause, Operation operation) {
+        return "select AuthorizationRoleOperation ro where (ro.operation=$1 or ro.operationGroup=$2)"
+               + scopeClause.replace(READ_ONLY_FENCE,
+                     Boolean.TRUE.equals(operation.isReadOnly()) ? "" : " and !ua.readOnly")
+               + " limit 1";
     }
 
     /**
@@ -144,8 +171,7 @@ public final class RouteGrantMembership {
             parameters[1] = Entities.getPrimaryKey(operation.getGroupId());
             System.arraycopy(scopeParameters, 0, parameters, 2, scopeParameters.length);
             answers.add(entityStore.executeQuery(
-                    "select AuthorizationRoleOperation ro where (ro.operation=$1 or ro.operationGroup=$2)"
-                    + scopeClause + " limit 1",
+                    grantedStatement(scopeClause, operation),
                     parameters)
                 .map(roleOperations -> !roleOperations.isEmpty()));
         }

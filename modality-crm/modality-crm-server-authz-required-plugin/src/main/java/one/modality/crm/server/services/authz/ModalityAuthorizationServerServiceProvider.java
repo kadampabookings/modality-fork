@@ -3,6 +3,7 @@ package one.modality.crm.server.services.authz;
 import dev.webfx.platform.async.Batch;
 import dev.webfx.platform.async.CompositeFuture;
 import dev.webfx.platform.async.Future;
+import dev.webfx.platform.util.Booleans;
 import dev.webfx.platform.util.Strings;
 import dev.webfx.stack.authn.AuthenticationService;
 import dev.webfx.stack.authz.core.InMemoryAuthorizationRuleRegistry;
@@ -176,14 +177,22 @@ public final class ModalityAuthorizationServerServiceProvider extends Authorizat
             loggedInGrantsFuture,
             // Loading operations (and rules, while RULE_GRANTS_APPLIED) granted to the user
             entityStore.<AuthorizationOrganizationUserAccess>executeQuery(
-                    "select organization.id,event.id,role.id from AuthorizationOrganizationUserAccess where user=$1 order by organization.id,event?.id", personId)
+                    "select organization.id,event.id,role.id,readOnly from AuthorizationOrganizationUserAccess where user=$1 order by organization.id,event?.id", personId)
                 .compose(userAccesses -> {
                     int n = userAccesses.size();
                     return new Batch<>(userAccesses.toArray(new AuthorizationOrganizationUserAccess[n]))
                         .executeParallel(CompositeFuture[]::new, userAccess ->
                             Future.all(
-                                entityStore.executeQuery("select operationCode, grantRoute from Operation op where ($1 and backoffice or !$1 and frontoffice) and exists(select AuthorizationRoleOperation ro where ro.role=$2 and (ro.operation = op or ro.operationGroup = op.group))", backoffice, userAccess.getRole()),
-                                RULE_GRANTS_APPLIED
+                                // A READ-ONLY access grants only the operations marked read_only. The server asks the
+                                // same question of the database on every write (RoleOperationMembership,
+                                // RouteGrantMembership), so leaving it out here would hand the browser buttons the
+                                // server then refuses — the drift the capability catalogue exists to report.
+                                entityStore.executeQuery("select operationCode, grantRoute from Operation op where ($1 and backoffice or !$1 and frontoffice)"
+                                                         + (Booleans.isTrue(userAccess.isReadOnly()) ? " and op.readOnly" : "")
+                                                         + " and exists(select AuthorizationRoleOperation ro where ro.role=$2 and (ro.operation = op or ro.operationGroup = op.group))", backoffice, userAccess.getRole()),
+                                // Free-text rules are the one thing a read-only access can never keep: a rule can
+                                // grant anything, including a write, and nothing classifies what it grants.
+                                RULE_GRANTS_APPLIED && !Booleans.isTrue(userAccess.isReadOnly())
                                     ? entityStore.<AuthorizationRule>executeQuery("select rule from AuthorizationRule where role=$1", userAccess.getRole())
                                     : Future.<EntityList<AuthorizationRule>>succeededFuture(null)
                             )

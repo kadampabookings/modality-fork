@@ -69,6 +69,37 @@ public final class RoleOperationMembership {
     }
 
     /**
+     * What stops a READ-ONLY access granting an operation that writes: unless the operation is marked
+     * {@code read_only}, the access row must not be.
+     *
+     * <p>Read from the operation in Java rather than joined in the statement, because
+     * {@code ro.operation} is null on a row matched through {@code ro.operationGroup} — a group grant —
+     * and a clause reading {@code ro.operation.readOnly} would compare against nothing there and let
+     * every group-granted operation through. The group-only shape is rare (one row in staging against
+     * twenty-six operation rows) and would have been the last thing anybody tested.
+     *
+     * <p>An unmarked operation is treated as writing. That is the fail-closed direction: a read-only
+     * holder loses an operation nobody has classified yet, which is visible and reversible, where the
+     * opposite would hand them a write nobody had looked at.
+     */
+    static String readOnlyFence(Operation operation) {
+        return Boolean.TRUE.equals(operation.isReadOnly()) ? "" : " and !ua.readOnly";
+    }
+
+    /**
+     * The statement asking whether this person holds this operation, fence included.
+     *
+     * <p>Extracted so a check can read it without a database: the fence has to sit INSIDE the
+     * {@code exists(...)} that names {@code ua}, and a fence appended after the closing parenthesis
+     * would parse, run, and silently apply to nothing.
+     */
+    static String heldStatement(String scopeClause, Operation operation) {
+        return "select AuthorizationRoleOperation ro where (ro.operation=$1 or ro.operationGroup=$2)"
+               + " and exists(select AuthorizationOrganizationUserAccess ua where ua.role=ro.role and ua.user=$3"
+               + scopeClause + readOnlyFence(operation) + ") limit 1";
+    }
+
+    /**
      * Whether any operation with this code is held by the person under {@code scopeClause}.
      *
      * <p>The two public questions differ ONLY in that clause, and they are written through one body for the
@@ -81,7 +112,7 @@ public final class RoleOperationMembership {
      */
     private static Future<Boolean> anyRoleHolding(String operationCode, String scopeClause,
                                                   EntityStore entityStore, Object... scopeParameters) {
-        return entityStore.<Operation>executeQuery("select group.id from Operation where operationCode=$1", operationCode)
+        return entityStore.<Operation>executeQuery("select group.id,readOnly from Operation where operationCode=$1", operationCode)
             .compose(operations -> {
                 if (operations.isEmpty()) // the operation has not been seeded yet => nobody holds it
                     return Future.succeededFuture(false);
@@ -92,9 +123,7 @@ public final class RoleOperationMembership {
                     parameters[1] = Entities.getPrimaryKey(operation.getGroupId());
                     System.arraycopy(scopeParameters, 0, parameters, 2, scopeParameters.length);
                     answers.add(entityStore.executeQuery(
-                            "select AuthorizationRoleOperation ro where (ro.operation=$1 or ro.operationGroup=$2)"
-                            + " and exists(select AuthorizationOrganizationUserAccess ua where ua.role=ro.role and ua.user=$3"
-                            + scopeClause + ") limit 1",
+                            heldStatement(scopeClause, operation),
                             parameters)
                         .map(roleOperations -> !roleOperations.isEmpty()));
                 }
