@@ -312,6 +312,29 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         return clientOrigin && GrantTableWritePolicy.callerPersonId(userId) == null;
     }
 
+    /**
+     * Whether a write that failed its authorization is actually refused, or only logged.
+     *
+     * <p><b>Enforcement is for CLIENT writes.</b> The server's own jobs write these entities with no
+     * principal of their own, and judging them against the public grants refuses them: the KDM sync in
+     * {@code OrganisationUpdateJob} updates {@code Organization} rows on every boot, reports failure to
+     * {@code Console::error} and nothing else, so with enforcement on and no client-origin fence every
+     * start would have silently stopped syncing centres. That is also what the census has been showing
+     * all along — the {@code WOULD REFUSE … by null} rows, which since 2026-10-10 can only be server
+     * writes, because a client write with no person is refused earlier and logged differently.
+     *
+     * <p>Gated on {@code clientOrigin} being TRUE, never on "no principal, therefore the server": a
+     * client whose session has lapsed has no principal either, and that is the case this rule most
+     * wants to refuse. The two have been conflated elsewhere in this system and the fix was the same.
+     *
+     * <p>{@code enforcing} is a parameter rather than a read of the constant so that the behaviour
+     * after the flip can be asserted while the constant is still false — the alternative is a check
+     * that can only exercise the half that is live today.
+     */
+    static boolean refusesOnFailedAuthorization(boolean enforcing, boolean clientOrigin) {
+        return enforcing && clientOrigin;
+    }
+
     private Future<Boolean> isWriteAuthorized(ProtectedEntityWriteRegistry.WriteRequest request) {
         String entityName = request.entityName();
         ProtectedEntityWriteRegistry.WriteVerb verb = request.verb();
@@ -325,7 +348,8 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         // ran with no principal at all, was answered with the PUBLIC grants, and refused a super admin.
         Object capturedState = ThreadLocalStateHolder.getThreadLocalState();
         Object userId = ThreadLocalStateHolder.getUserId();
-        if (refusesWithoutIdentity(userId, ThreadLocalStateHolder.isClientOrigin())) {
+        boolean clientOrigin = ThreadLocalStateHolder.isClientOrigin();
+        if (refusesWithoutIdentity(userId, clientOrigin)) {
             Console.log("🛡 REFUSED " + verb + " on " + entityName + " by " + userId
                         + " (no signed-in person behind this client write)");
             return Future.succeededFuture(false);
@@ -334,14 +358,19 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
             .map(authorized -> {
                 if (Boolean.TRUE.equals(authorized))
                     return true;
+                boolean refusing = refusesOnFailedAuthorization(ENFORCING, clientOrigin);
                 // The principal is logged because this line exists to be acted on: knowing that SOMETHING
                 // was refused is not enough to tell whether a real administrator is about to be locked
                 // out. It is an account identity, not personal data about a data subject.
-                Console.log("🛡 " + (ENFORCING ? "REFUSED" : "WOULD REFUSE") + " " + verb + " on "
-                            + entityName + " by " + userId + " (needs "
+                //
+                // A server write says so, so that a census reader is not left inferring it from a null
+                // principal — which is how the KDM sync sat in these rows unnoticed.
+                Console.log("🛡 " + (refusing ? "REFUSED" : "WOULD REFUSE") + " " + verb + " on "
+                            + entityName + " by " + userId + (clientOrigin ? "" : " [server write, allowed]")
+                            + " (needs "
                             + groups.stream().map(g -> String.join(" or ", g)).collect(java.util.stream.Collectors.joining(" and "))
                             + ")");
-                return !ENFORCING;
+                return !refusing;
             });
     }
 
