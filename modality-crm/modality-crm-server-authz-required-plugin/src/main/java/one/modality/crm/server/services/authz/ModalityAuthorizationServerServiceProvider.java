@@ -77,6 +77,29 @@ public final class ModalityAuthorizationServerServiceProvider extends Authorizat
     // a queue.
     private final Map<AuthzCacheKey, CachedAuthz> authzCache = new ConcurrentHashMap<>();
 
+    /**
+     * Discards the PUSHED grants as well as the parsed registries.
+     *
+     * <p>Two caches hold a principal's rights: the base class's registries, which answer
+     * {@code isAuthorized} and therefore decide what the server refuses, and {@link #authzCache} here,
+     * which holds the string pushed to the browser and therefore decides what the screen offers. The
+     * invalidation hook on an authorization write used to clear only the first.
+     *
+     * <p>That is the dangerous direction, and it was observed: a grant edited to read-only took effect
+     * on the server at once while the browser kept being offered the old tiles for up to the TTL — a
+     * button the server refuses, which is the exact drift the shared grant string exists to prevent.
+     * The TTL still bounded it at two minutes, but that bound is there for the instances that did NOT
+     * see the write, not for the one that did.
+     *
+     * <p>Overridden rather than cleared beside the call, because the bug was somebody clearing one cache
+     * and not the other: a caller who remembers this method is now enough.
+     */
+    @Override
+    public void invalidateAllRuleRegistries() {
+        super.invalidateAllRuleRegistries();
+        authzCache.clear();
+    }
+
     @Override
     public Future<Void> pushAuthorizations() {
         // Capturing userId and runId from the thread local state holder (won't be present on later async callbacks)
