@@ -59,11 +59,7 @@ public final class RouteGrantMembership {
     public static Future<Boolean> mayReachRoute(Object personId, String route, Object organizationId, Object eventId, EntityStore entityStore) {
         if (personId == null || Strings.isEmpty(route) || organizationId == null)
             return Future.succeededFuture(false);
-        // The grant's own scope: this organization, and either the whole of it or this event.
-        String scopeClause =
-            " and exists(select AuthorizationOrganizationUserAccess ua where ua.role=ro.role and ua.user=$3"
-            + " and ua.organization=$4 and (ua.event=null or ua.event=$5)" + READ_ONLY_FENCE + ")";
-        return anyGrantCovering(route, scopeClause, entityStore, personId, organizationId, eventId);
+        return anyGrantCovering(route, TARGET_SCOPE_CLAUSE, entityStore, personId, organizationId, eventId);
     }
 
     /**
@@ -121,11 +117,11 @@ public final class RouteGrantMembership {
         // /customers for one event, who sees the screen only while that event is selected, would have
         // passed this unconditionally and reached every person row there is. `ua.event=null` is also
         // what mayReachRoute means by a null eventId: a row belonging to no event needs a grant that
-        // belongs to no event, and a person belongs to none.
-        return anyGrantCovering(route,
-            " and exists(select AuthorizationOrganizationUserAccess ua where ua.role=ro.role and ua.user=$3"
-            + " and ua.event=null" + READ_ONLY_FENCE + ")",
-            entityStore, personId);
+        // belongs to no event, and a person belongs to none. `ua.eventType=null` is here for the same
+        // reason and would have been the same bug (V0133): somebody granted /customers for one event
+        // TYPE also sees the screen only while an event of that type is selected, so an unconditional
+        // pass here would reach every person row there is.
+        return anyGrantCovering(route, ANYWHERE_SCOPE_CLAUSE, entityStore, personId);
     }
 
     /**
@@ -136,6 +132,27 @@ public final class RouteGrantMembership {
      * parenthesis for the body to finish would read as a typo to whoever edits it next.
      */
     private static final String READ_ONLY_FENCE = "<readOnlyFence>";
+
+    /**
+     * The grant's own scope for a target: this organization, and either the whole of it, this event, or
+     * every event of one type (V0133) — see {@link RoleOperationMembership#TARGET_SCOPE_CLAUSE} for why
+     * the type is reached through the event rather than resolved first.
+     *
+     * <p>Package-private so a check reads the clause that ships rather than a copy of it.
+     */
+    static final String TARGET_SCOPE_CLAUSE =
+        " and exists(select AuthorizationOrganizationUserAccess ua where ua.role=ro.role and ua.user=$3"
+        + " and ua.organization=$4 and (ua.event=null or ua.event=$5)"
+        + " and (ua.eventType=null or exists(select Event e where e.id=$5 and e.type=ua.eventType))"
+        + READ_ONLY_FENCE + ")";
+
+    /**
+     * Organization-WIDE grants only, for {@link #mayReachRouteAnywhere}: no organization to match, and
+     * neither scope key set.
+     */
+    static final String ANYWHERE_SCOPE_CLAUSE =
+        " and exists(select AuthorizationOrganizationUserAccess ua where ua.role=ro.role and ua.user=$3"
+        + " and ua.event=null and ua.eventType=null" + READ_ONLY_FENCE + ")";
 
     /**
      * The statement asking whether this person holds the operation granting this route, fence resolved.

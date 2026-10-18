@@ -48,6 +48,7 @@
     "id": 136,
     "date": "Temporal.PlainDate",
     "event": "Event",
+    "eventType": "EventType",
     "organization": "Organization",
     "readOnly": "boolean",
     "role": "AuthorizationRole",

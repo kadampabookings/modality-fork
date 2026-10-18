@@ -7,7 +7,10 @@ import java.time.LocalDate;
 
 /**
  * Entity representing user access authorization within an organization.
- * Links a user to a role within an organization, optionally scoped to a specific event.
+ * Links a user to a role within an organization, optionally scoped to a specific event or to every
+ * event of one type (V0133). At most one of the two scope keys is set — a database CHECK
+ * (access_one_scope_key) refuses a row carrying both, since the membership queries read such a row as
+ * neither "that event as well" nor "that event only if of that type".
  *
  * @author Claude Code
  */
@@ -17,6 +20,7 @@ public interface AuthorizationOrganizationUserAccess extends Entity {
     String ORGANIZATION = "organization";
     String USER = "user";
     String EVENT = "event";
+    String EVENT_TYPE = "eventType";
     String ROLE = "role";
     String READ_ONLY = "readOnly";
     String DATE = "date";
@@ -61,6 +65,21 @@ public interface AuthorizationOrganizationUserAccess extends Entity {
 
     default Event getEvent() {
         return getForeignEntity(EVENT);
+    }
+
+    // Event type (optional - every event of this type, the level between the organization and one
+    // event). Mutually exclusive with EVENT; see the class comment.
+
+    default void setEventType(Object value) {
+        setForeignField(EVENT_TYPE, value);
+    }
+
+    default EntityId getEventTypeId() {
+        return getForeignEntityId(EVENT_TYPE);
+    }
+
+    default EventType getEventType() {
+        return getForeignEntity(EVENT_TYPE);
     }
 
     // Role (required)

@@ -200,7 +200,7 @@ public final class ModalityAuthorizationServerServiceProvider extends Authorizat
             loggedInGrantsFuture,
             // Loading operations (and rules, while RULE_GRANTS_APPLIED) granted to the user
             entityStore.<AuthorizationOrganizationUserAccess>executeQuery(
-                    "select organization.id,event.id,role.id,readOnly from AuthorizationOrganizationUserAccess where user=$1 order by organization.id,event?.id", personId)
+                    "select organization.id,event.id,eventType.id,role.id,readOnly from AuthorizationOrganizationUserAccess where user=$1 order by organization.id,event?.id", personId)
                 .compose(userAccesses -> {
                     int n = userAccesses.size();
                     return new Batch<>(userAccesses.toArray(new AuthorizationOrganizationUserAccess[n]))
@@ -229,6 +229,11 @@ public final class ModalityAuthorizationServerServiceProvider extends Authorizat
                                 Object eventId = Entities.getPrimaryKey(userAccess.getEventId());
                                 if (eventId != null)
                                     sb.append(",eventId=").append(eventId);
+                                // The intermediate scope (V0133): every event of one type. At most one
+                                // of the two keys is set, so these never both appear on a context line.
+                                Object eventTypeId = Entities.getPrimaryKey(userAccess.getEventTypeId());
+                                if (eventTypeId != null)
+                                    sb.append(",eventTypeId=").append(eventTypeId);
                                 sb.append("\n");
                                 grantOperations(operations, sb);
                                 if (rules != null)

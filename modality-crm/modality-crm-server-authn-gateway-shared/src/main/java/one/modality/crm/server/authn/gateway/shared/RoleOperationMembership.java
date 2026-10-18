@@ -29,16 +29,33 @@ public final class RoleOperationMembership {
     }
 
     /**
-     * Whether this person holds the operation through a role, in any organization. Operation codes are not unique (a
-     * back-office and a front-office row may share one), so every operation with the code counts, whichever tier it
-     * belongs to. No person, or an operation that has not been seeded, means no: fail closed.
+     * Whether this person holds the operation through a role for a WHOLE organization — asked where the
+     * thing being done belongs to no organization in particular, so there is nothing to scope it to.
+     * Operation codes are not unique (a back-office and a front-office row may share one), so every
+     * operation with the code counts, whichever tier it belongs to. No person, or an operation that has
+     * not been seeded, means no: fail closed.
+     *
+     * <p><b>A scoped grant does not satisfy this.</b> The organization clause is dropped because the
+     * caller has no organization to offer; the scope keys are not, and dropping them too was a hole:
+     * somebody granted a role for ONE event — or, since V0133, for one event TYPE — sees the screens it
+     * opens only while that event is selected, and would have passed this unconditionally. Concretely,
+     * the one caller asks whether the agent may view as ANY customer; an access row covering one retreat
+     * is not an answer to that. Same reasoning, and the same conjuncts, as
+     * {@link RouteGrantMembership#ANYWHERE_SCOPE_CLAUSE}; the two were inconsistent until 2026-10-18,
+     * and only the route half carried the comment explaining why.
      */
     public static Future<Boolean> holdsThroughRole(Object personId, String operationCode, EntityStore entityStore) {
         if (personId == null)
             return Future.succeededFuture(false);
-        // Held anywhere: the caller's access row need only exist, with no organization or event to match.
-        return anyRoleHolding(operationCode, "", entityStore, personId);
+        return anyRoleHolding(operationCode, ANYWHERE_SCOPE_CLAUSE, entityStore, personId);
     }
+
+    /**
+     * Organization-WIDE grants only: no organization to match, and neither scope key set.
+     *
+     * <p>Package-private so a check reads the clause that ships rather than a copy of it.
+     */
+    static final String ANYWHERE_SCOPE_CLAUSE = " and ua.event=null and ua.eventType=null";
 
     /**
      * The same question asked about a TARGET: does this person hold the operation in the organization —
@@ -62,11 +79,25 @@ public final class RoleOperationMembership {
                                                       Object organizationId, Object eventId, EntityStore entityStore) {
         if (personId == null || organizationId == null)
             return Future.succeededFuture(false);
-        // The grant's own scope: this organization, and either the whole of it or this event.
-        return anyRoleHolding(operationCode,
-            " and ua.organization=$4 and (ua.event=null or ua.event=$5)",
-            entityStore, personId, organizationId, eventId);
+        return anyRoleHolding(operationCode, TARGET_SCOPE_CLAUSE, entityStore, personId, organizationId, eventId);
     }
+
+    /**
+     * The grant's own scope for a target: this organization, and either the whole of it, this event, or
+     * every event of one type (V0133).
+     *
+     * <p>The type is reached through the event already in hand rather than resolved first: a correlated
+     * {@code exists} costs no extra round trip and no new parameter, and leaves every caller's signature
+     * alone. With no event in scope it is false, so a type-scoped grant correctly matches nothing — the
+     * same answer {@code ua.event=$5} gives an event-scoped one.
+     *
+     * <p>Package-private rather than inlined so a check can assert against the clause that SHIPS. The
+     * read-only fence check used to carry its own copy of this string, and the copy went stale the day
+     * the real one gained a conjunct.
+     */
+    static final String TARGET_SCOPE_CLAUSE =
+        " and ua.organization=$4 and (ua.event=null or ua.event=$5)"
+        + " and (ua.eventType=null or exists(select Event e where e.id=$5 and e.type=ua.eventType))";
 
     /**
      * What stops a READ-ONLY access granting an operation that writes: unless the operation is marked
