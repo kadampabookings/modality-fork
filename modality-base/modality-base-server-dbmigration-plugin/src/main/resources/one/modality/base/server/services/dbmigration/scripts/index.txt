@@ -131,3 +131,4 @@ V0128__send_document_letter_operation.sql
 V0129__grant_send_document_letter.sql
 V0130__organization_write_operations.sql
 V0131__route_to_my_organization_operation.sql
+V0132__education_program_write_operations.sql
