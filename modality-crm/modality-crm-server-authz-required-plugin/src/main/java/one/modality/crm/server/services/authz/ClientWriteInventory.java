@@ -6,7 +6,10 @@ import dev.webfx.stack.session.state.RestrictedPrincipalRegistry;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
@@ -134,6 +137,37 @@ final class ClientWriteInventory implements ProtectedEntityWriteRegistry.WriteIn
     @Override
     public void onWrite(ProtectedEntityWriteRegistry.WriteRequest request) {
         record(shapeOf(request));
+        Submit submit = openSubmit.get();
+        if (submit != null)
+            submit.add(request);
+    }
+
+    /**
+     * One submit is beginning on this thread.
+     *
+     * <p>Thread-local because that is exactly the scope the framework guarantees: a submit's writes are
+     * all started synchronously on the caller's own thread before any future completes. Two callers
+     * cannot interleave within one thread, and a thread's own group is closed before it yields.
+     *
+     * <p>A begin arriving while one is open should not happen — submits do not nest — so the open one is
+     * closed rather than discarded: losing the writes already accumulated would under-report composition,
+     * which is the one thing this is here to measure.
+     */
+    @Override
+    public void onSubmitBegin(int statementCount) {
+        if (openSubmit.get() != null)
+            onSubmitEnd();
+        openSubmit.set(new Submit(statementCount));
+    }
+
+    @Override
+    public void onSubmitEnd() {
+        Submit submit = openSubmit.get();
+        openSubmit.remove();
+        // A submit none of whose statements was inspected says nothing about composition: it is a job's
+        // write, or raw SQL, or touches no protected entity. Counting those would bury the ones that do.
+        if (submit != null && submit.writes > 0)
+            record(submit.shape());
     }
 
     /**
@@ -146,6 +180,86 @@ final class ClientWriteInventory implements ProtectedEntityWriteRegistry.WriteIn
     @Override
     public void onUnparseableStatement(String statement) {
         record("UNPARSEABLE by " + callerClass());
+    }
+
+    /** The submit being accumulated on this thread, or null between submits. */
+    private final ThreadLocal<Submit> openSubmit = new ThreadLocal<>();
+
+    /**
+     * What ONE caller action contained — the question a stream of statement shapes cannot answer.
+     *
+     * <p>Two things are being measured, both for the declared-intent step of the write model
+     * ({@code docs/security/server-side-authorization-spec.md}, amendment 2026-10-17):
+     *
+     * <ol>
+     *   <li><b>Can each submit name a single operation?</b> Answered by its COMPOSITION — how many
+     *       statements, over which entities and verbs. A submit writing one entity is one action by
+     *       construction; one writing four is the composite case the amendment says must either split
+     *       or keep the per-entity map.</li>
+     *   <li><b>Does any submit span two contexts?</b> Answered only PARTLY, and the limit is worth
+     *       stating where somebody will read the output: a statement's context is derivable here only
+     *       when the statement NAMES it — an insert setting {@code organization}, say. An update like
+     *       {@code set confirmed=true where id=5} carries no context at all; resolving it means reading
+     *       the row, which an inventory has no business doing. So a submit reported as touching two
+     *       organizations really does; one reported as touching one, or none, is not thereby proven
+     *       single-context. The amendment says as much — "the proof is the declared context plus a
+     *       log" — and this is the filter before that proof, not a substitute for it.</li>
+     * </ol>
+     *
+     * <p>Contexts are COUNTED, never named. Which centre a write belonged to is not needed to answer
+     * whether one submit touched two of them, and an id is a reference to somebody's centre.
+     */
+    private static final class Submit {
+
+        private final int statementCount;
+        private final Set<String> parts = new TreeSet<>();
+        private final Set<String> contexts = new HashSet<>();
+        private int writes;
+        private boolean anyWithoutContext;
+
+        Submit(int statementCount) {
+            this.statementCount = statementCount;
+        }
+
+        void add(ProtectedEntityWriteRegistry.WriteRequest request) {
+            writes++;
+            parts.add(request.entityName() + " " + request.verb());
+            String context = contextOf(request);
+            if (context == null)
+                anyWithoutContext = true;
+            else
+                contexts.add(context);
+        }
+
+        /**
+         * The context this statement names, or null when it names none.
+         *
+         * <p>Read from the written VALUES, which is the only place a statement says where it belongs
+         * without the row being fetched. {@code UNRESOLVED_VALUE} is the registry's sentinel for a
+         * value it could not read — present, but unusable — and is treated as naming nothing rather
+         * than as a context of its own.
+         */
+        private static String contextOf(ProtectedEntityWriteRegistry.WriteRequest request) {
+            Map<String, Object> values = request.writtenValues();
+            if (values == null)
+                return null;
+            Object organization = values.get("organization");
+            if (organization == null || organization == ProtectedEntityWriteRegistry.UNRESOLVED_VALUE)
+                return null;
+            Object event = values.get("event");
+            return event == null || event == ProtectedEntityWriteRegistry.UNRESOLVED_VALUE
+                   ? String.valueOf(organization)
+                   : organization + "/" + event;
+        }
+
+        /** The shape of this submit: its size, its parts, and how many contexts it named. */
+        String shape() {
+            return "SUBMIT n=" + statementCount
+                   + (writes == statementCount ? "" : " (inspected " + writes + ")")
+                   + " {" + String.join(", ", parts) + "}"
+                   + " contexts=" + contexts.size() + (anyWithoutContext ? "+unnamed" : "")
+                   + " by " + callerClass();
+        }
     }
 
     /**
