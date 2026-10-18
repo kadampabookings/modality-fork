@@ -4,12 +4,18 @@ import dev.webfx.extras.operation.HasOperationCode;
 import dev.webfx.platform.async.Future;
 import dev.webfx.platform.boot.spi.ApplicationJob;
 import dev.webfx.platform.console.Console;
+import dev.webfx.stack.authz.core.HasAuthorizationContext;
 import dev.webfx.stack.authz.server.AuthorizationServerService;
 import dev.webfx.stack.authz.server.spi.AuthorizationServerServiceProvider;
 import dev.webfx.stack.authz.server.spi.impl.AuthorizationServerServiceProviderBase;
 import dev.webfx.stack.db.query.ClientReadInspectionRegistry;
 import dev.webfx.stack.db.submit.ClientSubmitGuard;
 import dev.webfx.stack.db.submit.ProtectedEntityWriteRegistry;
+import dev.webfx.stack.orm.datasourcemodel.service.DataSourceModelService;
+import dev.webfx.stack.orm.entity.Entities;
+import dev.webfx.stack.orm.entity.Entity;
+import dev.webfx.stack.orm.entity.EntityStore;
+import dev.webfx.stack.session.state.StateAccessor;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 
 import java.util.ArrayList;
@@ -354,24 +360,60 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
                         + " (no signed-in person behind this client write)");
             return Future.succeededFuture(false);
         }
-        return holdsAllGroups(groups, capturedState)
-            .map(authorized -> {
-                if (Boolean.TRUE.equals(authorized))
-                    return true;
+        // Where the row lives decides which grants can answer (see authorizationContexts). The lookups are
+        // asynchronous, which is why the state was captured above: every check below restores it explicitly.
+        // Ends every AUTHORIZATION refusal line, so one log filter ("REFUSED" "(needs") catches all of them
+        // (and nothing else: a failed owner lookup is worded differently, below).
+        String needs = " (needs " + groups.stream().map(g -> String.join(" or ", g))
+            .collect(java.util.stream.Collectors.joining(" and ")) + ")";
+        // Where the row lives decides which grants can answer (see authorizationContexts). The lookups are
+        // asynchronous, which is why the state was captured above: every check below restores it explicitly.
+        return authorizationContexts(request, DATABASE_LOOKUP)
+            .compose(contexts -> holdsInEveryContext(groups, contexts, capturedState)
+                .map(authorized -> {
+                    if (Boolean.TRUE.equals(authorized))
+                        return true;
+                    boolean refusing = refusesOnFailedAuthorization(ENFORCING, clientOrigin);
+                    // The principal is logged because this line exists to be acted on: knowing that SOMETHING
+                    // was refused is not enough to tell whether a real administrator is about to be locked
+                    // out. It is an account identity, not personal data about a data subject. So is where it
+                    // was refused: the organization and event ids say which grant is missing.
+                    //
+                    // A server write says so, so that a census reader is not left inferring it from a null
+                    // principal — which is how the KDM sync sat in these rows unnoticed.
+                    Console.log("🛡 " + (refusing ? "REFUSED" : "WOULD REFUSE") + " " + verb + " on " + entityName
+                                + " by " + userId + (clientOrigin ? "" : " [server write, allowed]")
+                                + " in " + describe(contexts) + needs);
+                    return !refusing;
+                }))
+            // A lookup that fails has not said where the row is, and so cannot have authorized it. The refusal
+            // still answers to the switch: while observing, nothing is refused for it either.
+            .recover(failure -> {
                 boolean refusing = refusesOnFailedAuthorization(ENFORCING, clientOrigin);
-                // The principal is logged because this line exists to be acted on: knowing that SOMETHING
-                // was refused is not enough to tell whether a real administrator is about to be locked
-                // out. It is an account identity, not personal data about a data subject.
-                //
-                // A server write says so, so that a census reader is not left inferring it from a null
-                // principal — which is how the KDM sync sat in these rows unnoticed.
-                Console.log("🛡 " + (refusing ? "REFUSED" : "WOULD REFUSE") + " " + verb + " on "
-                            + entityName + " by " + userId + (clientOrigin ? "" : " [server write, allowed]")
-                            + " (needs "
-                            + groups.stream().map(g -> String.join(" or ", g)).collect(java.util.stream.Collectors.joining(" and "))
-                            + ")");
-                return !refusing;
+                // Its own wording, deliberately NOT ending in "(needs …)": this is a failed read, not a missing
+                // grant, and the production alarm filters match per message — a database blip that read like an
+                // authorization refusal would be triaged as somebody lacking a grant.
+                Console.log("🛡 " + (refusing ? "REFUSED" : "WOULD REFUSE") + " " + verb + " on " + entityName
+                            + " by " + userId + (clientOrigin ? "" : " [server write, allowed]")
+                            + " — OWNER LOOKUP FAILED, so where the row lives is unknown: " + failure.getMessage());
+                return Future.succeededFuture(!refusing);
             });
+    }
+
+    /** Every group in every context: the write must be allowed wherever it lands. */
+    private Future<Boolean> holdsInEveryContext(java.util.List<String[]> groups, List<Map<String, String>> contexts,
+                                                Object capturedState) {
+        List<Future<Boolean>> answers = new ArrayList<>(contexts.size());
+        for (Map<String, String> context : contexts)
+            answers.add(holdsAllGroups(groups, context, capturedState));
+        return Future.all(new ArrayList<>(answers))
+            .map(composite -> {
+                for (int i = 0; i < answers.size(); i++)
+                    if (!Boolean.TRUE.equals(composite.resultAt(i)))
+                        return false;
+                return true;
+            })
+            .otherwise(false);
     }
 
     /**
@@ -423,10 +465,10 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
      * <p>The cost of not short-circuiting is one extra cached lookup per group. The cost of
      * short-circuiting was a super admin being refused.
      */
-    private Future<Boolean> holdsAllGroups(java.util.List<String[]> groups, Object capturedState) {
+    private Future<Boolean> holdsAllGroups(java.util.List<String[]> groups, Map<String, String> context, Object capturedState) {
         List<Future<Boolean>> answers = new ArrayList<>(groups.size());
         for (String[] group : groups)
-            answers.add(holdsAnyOf(group, capturedState));
+            answers.add(holdsAnyOf(group, context, capturedState));
         return Future.all(new ArrayList<>(answers))
             .map(composite -> {
                 for (int i = 0; i < answers.size(); i++)
@@ -443,11 +485,11 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
      * <p>isAuthorized() reads the principal from the thread local itself, so restoring that state
      * around the call is what makes the answer about this caller rather than about the public.
      */
-    private Future<Boolean> holdsAnyOf(String[] codes, Object capturedState) {
+    private Future<Boolean> holdsAnyOf(String[] codes, Map<String, String> context, Object capturedState) {
         List<Future<Boolean>> answers = new ArrayList<>(codes.length);
         for (String code : codes)
             answers.add(ThreadLocalStateHolder.runWithState(capturedState,
-                () -> AuthorizationServerService.isAuthorized(new OperationRequest(code)).otherwise(false)));
+                () -> AuthorizationServerService.isAuthorized(new OperationRequest(code, context)).otherwise(false)));
         return Future.all(new ArrayList<>(answers))
             .map(composite -> {
                 for (int i = 0; i < answers.size(); i++)
@@ -458,11 +500,204 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
             .otherwise(false);
     }
 
-    /** The question put to the rule registry. Only {@link HasOperationCode} requests match operation rules. */
-    private record OperationRequest(String operationCode) implements HasOperationCode {
+    /**
+     * The question put to the rule registry: an operation code, in the context of the row being written.
+     *
+     * <p>Only {@link HasOperationCode} requests match operation rules. The context is what lets a role's grant
+     * answer at all: a role reaches a person through an access row naming an organization (and sometimes an
+     * event), so every role-derived grant sits under {@code context:organizationId=…}. The registry applies a
+     * section only when the request's context matches it, and judges a request that reports none in no context
+     * — where only unscoped grants (a super administrator's) apply. Until 2026-10-18 this record carried no
+     * context, so the rule asked "held with no context" and no role grant could ever satisfy it.
+     */
+    record OperationRequest(String operationCode, Map<String, String> authorizationContext)
+        implements HasOperationCode, HasAuthorizationContext {
         @Override
         public Object getOperationCode() {
             return operationCode;
         }
+
+        @Override
+        public Map<String, String> getAuthorizationContext() {
+            return authorizationContext;
+        }
+    }
+
+    // ── Where a protected row lives ─────────────────────────────────────────────────────────────────
+
+    /** The context keys the grant push writes ({@code context:organizationId=…,eventId=…}). */
+    static final String ORGANIZATION_KEY = "organizationId", EVENT_KEY = "eventId";
+
+    /** No context: only unscoped grants apply — a super administrator's {@code operation:*}, nobody's role. */
+    static final Map<String, String> NO_CONTEXT = Map.of();
+
+    /**
+     * The fields that say which organization (and event) owns a row, per entity scoped this way.
+     *
+     * <p>{@code Organization} is not listed because its owner is itself: the target id IS the organization.
+     * The eight grant tables are not listed either and keep being asked in no context: they are walled to
+     * super administrators by {@link GrantTableWritePolicy} whatever this rule says, so a context would change
+     * nothing but the number of lookups.
+     */
+    static final Map<String, String[]> OWNER_FIELDS = Map.of(
+        "Letter",       new String[] { "organization", "event" },
+        "PassTemplate", new String[] { "organization" },
+        // Defensive, not reached by clients: ClientWriteSecrets denies money_account to them outright, so this
+        // entry is only ever consulted for server writes, which pass whatever it says. It is here so the
+        // entity is placed correctly if that deny is ever narrowed.
+        "MoneyAccount", new String[] { "organization", "event" }
+    );
+
+    /** A row's owner as stored: ids, either of which may be null. */
+    record Owner(Object organizationId, Object eventId) {}
+
+    /** The two reads the context needs. An interface so the check can answer them without a database. */
+    interface OwnerLookup {
+        /** The stored owner of this row, or a future of null when there is no such row. */
+        Future<Owner> rowOwner(String entityName, String[] ownerFields, Object id);
+
+        /** The organization an event belongs to, or a future of null when there is no such event. */
+        Future<Object> eventOrganization(Object eventId);
+    }
+
+    /** The production lookup: two indexed reads by primary key, made as the server. */
+    static final OwnerLookup DATABASE_LOOKUP = new OwnerLookup() {
+        @Override
+        public Future<Owner> rowOwner(String entityName, String[] ownerFields, Object id) {
+            return EntityStore.create(DataSourceModelService.getDefaultDataSourceModel())
+                .<Entity>executeQuery("select " + String.join(",", ownerFields) + " from " + entityName + " where id=$1", id)
+                .map(rows -> {
+                    if (rows.isEmpty())
+                        return null;
+                    Entity row = rows.get(0);
+                    return new Owner(Entities.getPrimaryKey(row.getForeignEntityId(ownerFields[0])),
+                        ownerFields.length > 1 ? Entities.getPrimaryKey(row.getForeignEntityId(ownerFields[1])) : null);
+                });
+        }
+
+        @Override
+        public Future<Object> eventOrganization(Object eventId) {
+            return EntityStore.create(DataSourceModelService.getDefaultDataSourceModel())
+                .<Entity>executeQuery("select organization from Event where id=$1", eventId)
+                .map(rows -> rows.isEmpty() ? null : Entities.getPrimaryKey(rows.get(0).getForeignEntityId("organization")));
+        }
+    };
+
+    /**
+     * Every context this write must be authorized in — ALL of them, never any.
+     *
+     * <p><b>An update or delete is judged where the row lives now</b>, read from the database by its target id:
+     * the client's payload never says where a row is, because a caller granted in organization A would simply
+     * claim A while writing a row of B. A target that cannot be read (no {@code id = …} the parser can find, or
+     * no such row) has no owner and is judged in no context — exactly what it was judged in before this existed,
+     * so no write that passed before is refused by a second route.
+     *
+     * <p><b>A write that sets an owner field is ALSO judged where the row will live.</b> Otherwise a holder in A
+     * could move a letter into B's event by updating its {@code event}. For an insert that is the only context,
+     * there being no row yet. Owner fields not written keep the row's stored value.
+     *
+     * <p><b>An event decides the organization.</b> When the row names an event, its context is the EVENT's
+     * organization plus the event, read from the database: for {@code Letter} that is what the
+     * {@code letter_organization_consistency} trigger will store whatever the client sent, and for every entity
+     * it stops an organization field from vouching for an event elsewhere. A written organization that differs
+     * from the event's is required as well, so an inconsistent pair is judged on both counts.
+     *
+     * <p><b>Where nothing names an organization, there is no context</b> and only unscoped grants apply. For a
+     * letter that is the {@code eventTypeGlobal} scope — a letter for every organization's events of a type,
+     * which no organization owns — and for {@code Organization} an insert, i.e. creating an organization. Both
+     * are a super administrator's acts, so refusing them to role holders is the right answer, not a lost create.
+     *
+     * <p>Event-scoped grants follow from the keys: a row with an event carries {@code eventId}, which an
+     * event-scoped section needs and an organization-wide one ignores; a row with no event carries none, and
+     * an event-scoped section never matches it — the same direction as the client's rule that no event
+     * selected does not satisfy an event-scoped section.
+     */
+    static Future<List<Map<String, String>>> authorizationContexts(ProtectedEntityWriteRegistry.WriteRequest request,
+                                                                   OwnerLookup lookup) {
+        String entityName = request.entityName();
+        if ("Organization".equals(entityName))
+            return Future.succeededFuture(List.of(request.targetId() == null ? NO_CONTEXT
+                : Map.of(ORGANIZATION_KEY, String.valueOf(request.targetId()))));
+        String[] ownerFields = OWNER_FIELDS.get(entityName);
+        if (ownerFields == null)
+            return Future.succeededFuture(List.of(NO_CONTEXT));
+        boolean insert = request.verb() == ProtectedEntityWriteRegistry.WriteVerb.INSERT;
+        Future<Owner> stored = insert || request.targetId() == null ? Future.succeededFuture(null)
+            : asServer(() -> lookup.rowOwner(entityName, ownerFields, request.targetId()));
+        return stored.compose(current -> {
+            List<Future<List<Map<String, String>>>> parts = new ArrayList<>();
+            if (!insert)
+                parts.add(contextsOf(current, lookup));
+            boolean movesOwner = false;
+            for (String field : ownerFields)
+                movesOwner |= request.writtenValues().containsKey(field);
+            if (insert || movesOwner) {
+                Object organization = ownerAfterWrite(request, ownerFields[0], current == null ? null : current.organizationId());
+                Object event = ownerFields.length < 2 ? null
+                    : ownerAfterWrite(request, ownerFields[1], current == null ? null : current.eventId());
+                parts.add(contextsOf(new Owner(organization, event), lookup));
+            }
+            return Future.all(new ArrayList<>(parts)).map(all -> {
+                java.util.LinkedHashSet<Map<String, String>> contexts = new java.util.LinkedHashSet<>();
+                for (int i = 0; i < parts.size(); i++)
+                    contexts.addAll(all.<List<Map<String, String>>>resultAt(i));
+                return new ArrayList<>(contexts);
+            });
+        });
+    }
+
+    /**
+     * Runs a lookup as the SERVER, not as the caller whose write is being judged.
+     *
+     * <p>The first lookup leaves on the caller's thread, before any async hop, so the caller's state — client
+     * origin included — would still be on it. The read inventory records every query made under a client-origin
+     * state as a client read, and its output is the evidence the read rule is written from: these two
+     * statements, which no client ever sent, would be recorded among them and each compiled a second time by the
+     * client read guard. An empty state is what the server's own reads run with (as ServerWrite.asServer).
+     */
+    static <T> T asServer(java.util.function.Supplier<T> lookup) {
+        return ThreadLocalStateHolder.runWithState(StateAccessor.createEmptyState(), lookup);
+    }
+
+    /** The owner field's value once the write is applied: the written value when written, else the stored one. */
+    private static Object ownerAfterWrite(ProtectedEntityWriteRegistry.WriteRequest request, String field, Object stored) {
+        return request.writtenValues().containsKey(field) ? request.writtenValues().get(field) : stored;
+    }
+
+    /** The contexts one owner is judged in (see {@link #authorizationContexts}). */
+    private static Future<List<Map<String, String>>> contextsOf(Owner owner, OwnerLookup lookup) {
+        if (owner == null)
+            return Future.succeededFuture(List.of(NO_CONTEXT));
+        String organization = idOf(owner.organizationId());
+        String event = idOf(owner.eventId());
+        if (owner.eventId() != null && event == null) // an event we cannot name (a row this batch creates): no context
+            return Future.succeededFuture(List.of(NO_CONTEXT));
+        if (event == null)
+            return Future.succeededFuture(List.of(organization == null ? NO_CONTEXT : Map.of(ORGANIZATION_KEY, organization)));
+        return asServer(() -> lookup.eventOrganization(event)).map(eventOrganizationId -> {
+            String eventOrganization = idOf(eventOrganizationId);
+            if (eventOrganization == null) // no such event
+                return List.of(NO_CONTEXT);
+            Map<String, String> eventContext = Map.of(ORGANIZATION_KEY, eventOrganization, EVENT_KEY, event);
+            return organization == null || organization.equals(eventOrganization) ? List.of(eventContext)
+                : List.of(eventContext, Map.of(ORGANIZATION_KEY, organization));
+        });
+    }
+
+    /** An id as the grant push writes it, or null for anything that is not one (a same-batch reference, say). */
+    private static String idOf(Object value) {
+        if (value instanceof Number || value instanceof String)
+            return String.valueOf(value);
+        return null;
+    }
+
+    /** How a refusal line names where it was refused. */
+    private static String describe(List<Map<String, String>> contexts) {
+        List<String> parts = new ArrayList<>();
+        for (Map<String, String> context : contexts)
+            parts.add(context.isEmpty() ? "no organization"
+                : "organization " + context.get(ORGANIZATION_KEY)
+                  + (context.containsKey(EVENT_KEY) ? " event " + context.get(EVENT_KEY) : ""));
+        return String.join(" and ", parts);
     }
 }
