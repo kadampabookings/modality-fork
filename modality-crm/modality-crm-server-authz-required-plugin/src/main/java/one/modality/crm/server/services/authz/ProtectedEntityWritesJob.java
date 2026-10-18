@@ -47,6 +47,16 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
     private static final String MANAGE_AUTHORIZATIONS = "ManageAuthorizations";
 
     /**
+     * Writing an organisation, split three ways (V0130) because three kinds of person do it: whoever
+     * maintains a centre's description, whoever holds its media credentials, and whoever sets up its
+     * residents. One code over the whole entity meant a centre's technical person had to be made a
+     * super administrator to set a video key, which hands them every other centre's data too.
+     */
+    private static final String EDIT_ORGANIZATION_DETAILS = "EditOrganizationDetails",
+        EDIT_ORGANIZATION_MEDIA = "EditOrganizationMedia",
+        EDIT_ORGANIZATION_RESIDENTS_EVENT = "EditOrganizationResidentsEvent";
+
+    /**
      * The raw statements a client may still send: the transaction prefixes the legacy JavaFX/GWT clients put at the
      * head of a batch (Triggers.backOfficeTransaction / frontOfficeTransaction). Matched exactly, with no parameters.
      * The React apps send none — they ask for the server's preamble instead.
@@ -97,7 +107,11 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         // does not match a code beginning with RouteTo, so requiring RouteToOrganizations here would
         // refuse even a super admin. A code that means "may change these rows" is the right question
         // anyway — opening a screen and writing through it are not the same right.
-        Map.entry("Organization", new String[] { "ManageOrganizations" }),
+        // Any of the three: the backstop for a statement whose assignments cannot be read field by
+        // field, which the field rules below then narrow to the group actually written. ManageOrganizations
+        // is retired rather than seeded — it covered all three and was held by nobody but super admins.
+        Map.entry("Organization", new String[] { EDIT_ORGANIZATION_DETAILS, EDIT_ORGANIZATION_MEDIA,
+                                                 EDIT_ORGANIZATION_RESIDENTS_EVENT }),
         Map.entry("MoneyAccount", new String[] { "ManageMoneyAccounts" })
     );
 
@@ -128,8 +142,29 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
      * an account that sets it reaches an empty dashboard. This closes an unauthorized write, not an
      * escalation.
      */
-    private static final Map<String, String[]> REQUIRED_OPERATIONS_BY_FIELD = Map.of(
-        "FrontendAccount.backoffice", new String[] { "ManageBackofficeAccess" }
+    private static final Map<String, String[]> REQUIRED_OPERATIONS_BY_FIELD = Map.ofEntries(
+        Map.entry("FrontendAccount.backoffice", new String[] { "ManageBackofficeAccess" }),
+        // The organisation's own description. The dialog writes these as one statement, separately from
+        // the media credentials below, so the two groups are judged apart without anything being split here.
+        Map.entry("Organization.name",         new String[] { EDIT_ORGANIZATION_DETAILS }),
+        Map.entry("Organization.type",         new String[] { EDIT_ORGANIZATION_DETAILS }),
+        Map.entry("Organization.country",      new String[] { EDIT_ORGANIZATION_DETAILS }),
+        Map.entry("Organization.closed",       new String[] { EDIT_ORGANIZATION_DETAILS }),
+        Map.entry("Organization.email",        new String[] { EDIT_ORGANIZATION_DETAILS }),
+        Map.entry("Organization.phone",        new String[] { EDIT_ORGANIZATION_DETAILS }),
+        Map.entry("Organization.street",       new String[] { EDIT_ORGANIZATION_DETAILS }),
+        Map.entry("Organization.cityName",     new String[] { EDIT_ORGANIZATION_DETAILS }),
+        Map.entry("Organization.postCode",     new String[] { EDIT_ORGANIZATION_DETAILS }),
+        // The media credentials. `bunnyApiKey` is a secret a browser can write and is on no deny list,
+        // so this makes writing it a named act rather than a side effect of managing a centre. Closing
+        // it means a server endpoint and a column deny, which is a separate change.
+        Map.entry("Organization.bunnyApiKey",              new String[] { EDIT_ORGANIZATION_MEDIA }),
+        Map.entry("Organization.audioBunnyPullZoneId",     new String[] { EDIT_ORGANIZATION_MEDIA }),
+        Map.entry("Organization.audioBunnyStorageZoneId",  new String[] { EDIT_ORGANIZATION_MEDIA }),
+        // The residents event, written from /residents rather than from the organisations page. It also
+        // INSERTS the Event it points at, and Event is in no rule here, so this guards the pointer and
+        // not the creation.
+        Map.entry("Organization.residentEvent", new String[] { EDIT_ORGANIZATION_RESIDENTS_EVENT })
     );
 
     /** The languages EntityHasI18nFields carries; a bare language code IS a body field. */

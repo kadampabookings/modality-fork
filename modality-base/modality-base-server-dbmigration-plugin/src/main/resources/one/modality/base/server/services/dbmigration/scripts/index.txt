@@ -129,3 +129,4 @@ V0126__auth_session_audience_and_methods.sql
 V0127__requeue_nobody_approved_passkeys.sql
 V0128__send_document_letter_operation.sql
 V0129__grant_send_document_letter.sql
+V0130__organization_write_operations.sql
