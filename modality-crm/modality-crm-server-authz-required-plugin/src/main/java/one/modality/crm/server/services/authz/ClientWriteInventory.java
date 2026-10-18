@@ -2,6 +2,7 @@ package one.modality.crm.server.services.authz;
 
 import dev.webfx.platform.console.Console;
 import dev.webfx.stack.db.submit.ProtectedEntityWriteRegistry;
+import dev.webfx.stack.db.submit.WriteIntent;
 import dev.webfx.stack.session.state.RestrictedPrincipalRegistry;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 
@@ -160,6 +161,21 @@ final class ClientWriteInventory implements ProtectedEntityWriteRegistry.WriteIn
         openSubmit.set(new Submit(statementCount));
     }
 
+    /**
+     * What one statement of the open submit declared. Untrusted, and nothing here acts on it.
+     *
+     * <p>Folded into the submit rather than paired with a write, because the question is about the
+     * caller's ACTION: did the statements of one flush name one operation, or several? Several is the
+     * composite case the declared-intent step must either split or keep the per-entity map for, and it
+     * is invisible one statement at a time.
+     */
+    @Override
+    public void onDeclaredIntent(WriteIntent intent) {
+        Submit submit = openSubmit.get();
+        if (submit != null)
+            submit.declare(intent);
+    }
+
     @Override
     public void onSubmitEnd() {
         Submit submit = openSubmit.get();
@@ -214,8 +230,10 @@ final class ClientWriteInventory implements ProtectedEntityWriteRegistry.WriteIn
         private final int statementCount;
         private final Set<String> parts = new TreeSet<>();
         private final Set<String> contexts = new HashSet<>();
+        private final Set<String> declaredCodes = new TreeSet<>();
         private int writes;
         private boolean anyWithoutContext;
+        private boolean anyDeclaredWithoutContext;
 
         Submit(int statementCount) {
             this.statementCount = statementCount;
@@ -229,6 +247,30 @@ final class ClientWriteInventory implements ProtectedEntityWriteRegistry.WriteIn
                 anyWithoutContext = true;
             else
                 contexts.add(context);
+        }
+
+        /**
+         * One statement's declaration, as the caller sent it.
+         *
+         * <p>The CODE is named in the shape — it is an operation code, which is configuration rather
+         * than anybody's data, and the whole point is to read which codes an action claims. The
+         * declared context is not named, for the same reason the derived one is not: counting answers
+         * the question.
+         */
+        void declare(WriteIntent intent) {
+            if (intent == null)
+                return;
+            if (intent.getOperationCode() != null)
+                declaredCodes.add(intent.getOperationCode());
+            if (intent.isGlobal())
+                contexts.add("global");
+            else if (intent.getOrganizationId() != null)
+                contexts.add(String.valueOf(intent.getOrganizationId())
+                             + (intent.getEventId() == null ? "" : "/" + intent.getEventId()));
+            else
+                // A code with no context at all: refusable once anything enforces this, and worth
+                // seeing now, because it is what a call site declaring the easy half looks like.
+                anyDeclaredWithoutContext = true;
         }
 
         /**
@@ -257,6 +299,8 @@ final class ClientWriteInventory implements ProtectedEntityWriteRegistry.WriteIn
             return "SUBMIT n=" + statementCount
                    + (writes == statementCount ? "" : " (inspected " + writes + ")")
                    + " {" + String.join(", ", parts) + "}"
+                   + " codes=" + (declaredCodes.isEmpty() ? "none" : declaredCodes.toString())
+                   + (anyDeclaredWithoutContext ? "+NO-CONTEXT" : "")
                    + " contexts=" + contexts.size() + (anyWithoutContext ? "+unnamed" : "")
                    + " by " + callerClass();
         }

@@ -1,6 +1,7 @@
 package one.modality.crm.server.services.authz;
 
 import dev.webfx.stack.db.submit.ProtectedEntityWriteRegistry;
+import dev.webfx.stack.db.submit.WriteIntent;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -162,6 +163,57 @@ public class ClientWriteInventoryCheck {
         // Not even the context itself: which centre a write belonged to is not needed to answer whether
         // one submit touched two of them, and an id is a reference to somebody's centre.
         check("a submit line names no context id", !contextLine.contains("42") && !contextLine.contains("/7"));
+
+        // --- the declared intent, which is what the submit grouping was built to measure ---
+        submitLines.clear();
+        submitInventory.onSubmitBegin(2);
+        submitInventory.onDeclaredIntent(WriteIntent.inOrganization("ToggleConfirmDocument", 151));
+        submitInventory.onWrite(request("Document", ProtectedEntityWriteRegistry.WriteVerb.UPDATE, 1, "confirmed"));
+        submitInventory.onDeclaredIntent(WriteIntent.inOrganization("ToggleConfirmDocument", 151));
+        submitInventory.onWrite(request("DocumentLine", ProtectedEntityWriteRegistry.WriteVerb.UPDATE, 2, "cancelled"));
+        submitInventory.onSubmitEnd();
+        String declaredLine = submitLines.stream().filter(line -> line.contains("SUBMIT")).findFirst().orElse("");
+        check("one action declaring one code reads as one code", declaredLine.contains("codes=[ToggleConfirmDocument]"));
+        check("a declared context is counted", declaredLine.contains("contexts=1"));
+
+        // The composite case: two codes in one flush is what the amendment says must either split or
+        // keep the per-entity map, and it is invisible one statement at a time.
+        submitLines.clear();
+        submitInventory.onSubmitBegin(2);
+        submitInventory.onDeclaredIntent(WriteIntent.inOrganization("EditOrganizationDetails", 151));
+        submitInventory.onWrite(request("Organization", ProtectedEntityWriteRegistry.WriteVerb.UPDATE, 1, "name"));
+        submitInventory.onDeclaredIntent(WriteIntent.inOrganization("EditOrganizationMedia", 151));
+        submitInventory.onWrite(request("Organization", ProtectedEntityWriteRegistry.WriteVerb.UPDATE, 1, "bunnyApiKey"));
+        submitInventory.onSubmitEnd();
+        String compositeLine = submitLines.stream().filter(line -> line.contains("SUBMIT")).findFirst().orElse("");
+        check("a composite action names both its codes",
+            compositeLine.contains("EditOrganizationDetails") && compositeLine.contains("EditOrganizationMedia"));
+
+        // A code declared with no context is refusable once anything enforces this, and is what a call
+        // site declaring the easy half looks like -- so it must be visible before then.
+        submitLines.clear();
+        submitInventory.onSubmitBegin(1);
+        submitInventory.onDeclaredIntent(WriteIntent.decoded("EditOrganizationDetails", null, null, false));
+        submitInventory.onWrite(request("Organization", ProtectedEntityWriteRegistry.WriteVerb.UPDATE, 1, "name"));
+        submitInventory.onSubmitEnd();
+        String noContextLine = submitLines.stream().filter(line -> line.contains("SUBMIT")).findFirst().orElse("");
+        check("a code declared with no context says so", noContextLine.contains("NO-CONTEXT"));
+
+        // Global is explicit and must never read as absent: the authorization tables belong to no
+        // organization, and "nothing declared" becoming "global" would make the laziest call site the
+        // most privileged.
+        submitLines.clear();
+        submitInventory.onSubmitBegin(1);
+        submitInventory.onDeclaredIntent(WriteIntent.global("ManageAuthorizations"));
+        submitInventory.onWrite(request("AuthorizationRole", ProtectedEntityWriteRegistry.WriteVerb.UPDATE, 1, "name"));
+        submitInventory.onSubmitEnd();
+        String globalLine = submitLines.stream().filter(line -> line.contains("SUBMIT")).findFirst().orElse("");
+        check("a global claim is counted as a context, not as none",
+            globalLine.contains("contexts=1") && !globalLine.contains("NO-CONTEXT"));
+
+        // And a declaration carries no written value into the log, like everything else here.
+        check("no declared line carries a written value",
+            submitLines.stream().noneMatch(line -> line.contains("jane@example.com")));
 
         // --- the log threshold ---
         check("first occurrence logs", ClientWriteInventory.isPowerOfTen(1));
