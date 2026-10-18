@@ -670,7 +670,10 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
             return Future.succeededFuture(List.of(NO_CONTEXT));
         String organization = idOf(owner.organizationId());
         String event = idOf(owner.eventId());
-        if (owner.eventId() != null && event == null) // an event we cannot name (a row this batch creates): no context
+        // An owner we cannot name — written as an expression (UNRESOLVED_VALUE), or a row this batch creates —
+        // cannot be placed. It must not read as "no event" or "no organization": that would let the caller pick
+        // where the write is judged by choosing to write an expression.
+        if (owner.eventId() != null && event == null || owner.organizationId() != null && organization == null)
             return Future.succeededFuture(List.of(NO_CONTEXT));
         if (event == null)
             return Future.succeededFuture(List.of(organization == null ? NO_CONTEXT : Map.of(ORGANIZATION_KEY, organization)));
