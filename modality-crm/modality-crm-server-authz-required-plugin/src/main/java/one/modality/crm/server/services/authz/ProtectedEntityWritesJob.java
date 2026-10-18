@@ -658,7 +658,7 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
             return Future.succeededFuture(List.of(NO_CONTEXT));
         boolean insert = request.verb() == ProtectedEntityWriteRegistry.WriteVerb.INSERT;
         Future<Owner> stored = insert || request.targetId() == null ? Future.succeededFuture(null)
-            : asServer(() -> lookup.rowOwner(entityName, ownerFields, request.targetId()));
+            : asServer(() -> lookup.rowOwner(entityName, ownerFields, primaryKeyOf(request.targetId())));
         return stored.compose(current -> {
             List<Future<List<Map<String, String>>>> parts = new ArrayList<>();
             if (!insert)
@@ -712,7 +712,7 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
             return Future.succeededFuture(List.of(NO_CONTEXT));
         if (event == null)
             return Future.succeededFuture(List.of(organization == null ? NO_CONTEXT : Map.of(ORGANIZATION_KEY, organization)));
-        return asServer(() -> lookup.eventOrganization(event)).map(eventOrganizationId -> {
+        return asServer(() -> lookup.eventOrganization(primaryKeyOf(event))).map(eventOrganizationId -> {
             String eventOrganization = idOf(eventOrganizationId);
             if (eventOrganization == null) // no such event
                 return List.of(NO_CONTEXT);
@@ -720,6 +720,28 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
             return organization == null || organization.equals(eventOrganization) ? List.of(eventContext)
                 : List.of(eventContext, Map.of(ORGANIZATION_KEY, organization));
         });
+    }
+
+    /**
+     * An id as a query parameter: a number. The seam hands ids over as strings (targetIdOf and writtenValuesOf
+     * turn every number into one), and the PostgreSQL driver refuses a string bound where the column is an
+     * integer ("can not be coerced to the expected class = [java.lang.Number]"). That is how the first staging
+     * run of this rule failed every owner lookup. A string that is not a number is passed on unchanged, and its
+     * lookup fails — closed — rather than being guessed at.
+     */
+    static Object primaryKeyOf(Object id) {
+        if (id instanceof String text) {
+            try {
+                return Integer.valueOf(text.trim());
+            } catch (NumberFormatException notAnInteger) {
+                try {
+                    return Long.valueOf(text.trim());
+                } catch (NumberFormatException notANumber) {
+                    return id;
+                }
+            }
+        }
+        return id;
     }
 
     /** An id as the grant push writes it, or null for anything that is not one (a same-batch reference, say). */
