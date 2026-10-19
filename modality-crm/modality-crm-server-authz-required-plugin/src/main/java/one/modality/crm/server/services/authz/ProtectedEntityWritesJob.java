@@ -138,7 +138,8 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         Map.entry("MoneyAccount", new String[] { "ManageMoneyAccounts" }),
         // A booking's own tables (see EDIT_BOOKING_DETAILS). The entity rule is the backstop for a statement
         // whose fields cannot be read; the field rules below and MANAGE_BOOKINGS for the rest do the real work.
-        Map.entry("Document",     new String[] { EDIT_BOOKING_DETAILS, RUN_EDUCATION_PROGRAM_REGISTRATION }),
+        Map.entry("Document",     new String[] { EDIT_BOOKING_DETAILS, RUN_EDUCATION_PROGRAM_REGISTRATION,
+                                                 "ManageEducationProgramRegistrants" }),
         Map.entry("DocumentLine", new String[] { ALLOCATE_ROOMS }),
         Map.entry("Attendance",   new String[] { EDIT_MEDIA_ACCESS })
     );
@@ -213,8 +214,12 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         Map.entry("Document.request",      new String[] { EDIT_BOOKING_DETAILS }),
         Map.entry("Document.comment",      new String[] { EDIT_BOOKING_DETAILS }),
         Map.entry("Document.specialNeeds", new String[] { EDIT_BOOKING_DETAILS }),
-        // Who pays: set by education programmes' registration, or by whoever edits the booking.
-        Map.entry("Document.payer", new String[] { RUN_EDUCATION_PROGRAM_REGISTRATION, EDIT_BOOKING_DETAILS }),
+        // Who pays: set by education programmes — both when a run registers people and when a registrant's payer
+        // is changed afterwards (use-registrant-mutations changes ListItem.payer and Document.payer together, as
+        // managing registrants) — or by whoever edits the booking. The client's declaration is not what decides
+        // this: the server reads the caller's GRANTS, so every code that legitimately writes the field is listed.
+        Map.entry("Document.payer", new String[] {
+            RUN_EDUCATION_PROGRAM_REGISTRATION, "ManageEducationProgramRegistrants", EDIT_BOOKING_DETAILS }),
         // Which room a line is in: the rooming tab, rooms setup and event room setup.
         Map.entry("DocumentLine.resourceConfiguration", new String[] { ALLOCATE_ROOMS }),
         // How long a booked recording stays watchable.
