@@ -26,6 +26,7 @@ import one.modality.base.shared.entities.MagicLinkType;
 import one.modality.base.shared.entities.Person;
 import one.modality.base.shared.util.ActivityHashUtil;
 import one.modality.crm.server.authn.gateway.shared.AccountSignInRestrictionStore;
+import one.modality.crm.server.authn.gateway.shared.CallerRateLimit;
 import one.modality.crm.server.authn.gateway.shared.GuestPersonLinker;
 import one.modality.base.server.mail.LocalizedMailTemplate;
 import one.modality.crm.server.authn.gateway.shared.MagicLinkService;
@@ -177,21 +178,32 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
         // still create a login link in the database for history purpose, even though it's not technically necessary as
         // the "Unknown account" email doesn't propose any further action.
         String loginRunId = ThreadLocalStateHolder.getRunId(); // Capturing the loginRunId before async operation
+        // Every admitted call sends a mail to an address the caller typed, so it is counted per caller address and
+        // in total (2026-10-19). Read on the caller's thread, like the run id. A refusal says nothing about the
+        // address: it is refused whatever was typed.
+        if (!CallerRateLimit.RECOVERY_MAIL.tryAcquire(ThreadLocalStateHolder.getClientAddress()))
+            return Future.failedFuture("[%s] Too many requests, please try again later"
+                .formatted(ModalityAuthenticationI18nKeys.AuthnMagicLinkRateLimitedError));
         // Pick up the user's chosen UI language so the recovery email matches what they saw on the login page.
         String lang = Strings.toSafeString(request.getLanguage());
-        return EntityStore.create(dataSourceModel)
-            .<FrontendAccount>executeQuery("select FrontendAccount where corporation=$1 and lower(username)=lower($2) limit 1", 1, request.getEmail())
-            .compose(accounts -> {
-                    boolean unknown = accounts.isEmpty();
+        return RecoveryAddressResolver.accountUsernameFor(request.getEmail(), dataSourceModel)
+            .compose(accountUsername -> {
+                    boolean unknown = accountUsername == null;
+                    // Known: the mail goes to the account's own address, which is not always the one typed — see
+                    // RecoveryAddressResolver for the household case. Unknown: the "Unknown account" mail goes to
+                    // the address typed, as it always has. The caller is told neither.
+                    SendMagicLinkCredentials resolved = unknown || accountUsername.equals(request.getEmail()) ? request
+                        : new SendMagicLinkCredentials(accountUsername, request.getClientOrigin(), request.getRequestedPath(),
+                            request.getLanguage(), request.isVerificationCodeOnly(), request.getContext());
                     // An account whose owner stopped their password working gets no link and no code (V0096): the
                     // passkey is its way in. Asked by address, resolving the account as the link's redeem would.
                     // Read fail-OPEN here, because the redeem path reads it again fail-closed: a link sent on a blip
                     // still opens nothing.
                     Future<Boolean> passwordClosed = unknown ? Future.succeededFuture(false)
-                        : AccountSignInRestrictionStore.isPasswordClosedForEmail(request.getEmail());
+                        : AccountSignInRestrictionStore.isPasswordClosedForEmail(resolved.getEmail());
                     return passwordClosed.compose(closed -> Boolean.TRUE.equals(closed)
-                        ? PasswordClosedNotice.send(request.getEmail(), lang)
-                        : sendRecoveryOrUnknownAccountMail(request, unknown, loginRunId, lang));
+                        ? PasswordClosedNotice.send(resolved.getEmail(), lang)
+                        : sendRecoveryOrUnknownAccountMail(resolved, unknown, loginRunId, lang));
                 }
             );
     }

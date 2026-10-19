@@ -6,6 +6,7 @@ public interface ModalityAuthenticationI18nKeys {
     Object AuthnBackofficeMethodNotAllowedError = "AuthnBackofficeMethodNotAllowedError";
     Object AuthnEmailSignInClosedError = "AuthnEmailSignInClosedError";
     Object AuthnLastPasskeyWhilePasswordClosedError = "AuthnLastPasskeyWhilePasswordClosedError";
+    Object AuthnMagicLinkRateLimitedError = "AuthnMagicLinkRateLimitedError";
     Object AuthnMagicLinkSuspendedError = "AuthnMagicLinkSuspendedError";
     Object AuthnNewPasswordTooShortError = "AuthnNewPasswordTooShortError";
     Object AuthnNoSuchUserAccountError = "AuthnNoSuchUserAccountError";
