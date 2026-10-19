@@ -439,11 +439,48 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
         // notification.
         // A roommate link names the booking line it points at, and the replay below would write whatever the
         // client sent — so a link is judged against the database BEFORE it can be queued (MateLinkRules).
-        return validateMateLinks(request)
+        // Whose bookings, and which kinds of change (DocumentSubmitAuthorization) — judged first, before the
+        // queue. The access is built HERE, on the caller's thread: the principal and the verified audience are
+        // thread-locals that are gone after the first async hop.
+        DocumentAccess access = DocumentAccess.ofCaller();
+        return authorizeSubmit(request, access)
+            .compose(ignored -> validateMateLinks(request))
             // And the flag that decides a line's PRICE is judged here too, before the queue: a line may be
             // born a sharing place but never become one (refuseShareMateFlagAcquisition).
             .compose(ignored -> refuseShareMateFlagAcquisition(request))
             .compose(ignored -> DocumentSubmitController.submitDocumentChanges(request));
+    }
+
+    /**
+     * Refuses (once enforcing) a submit naming bookings that are not the caller's, or carrying kinds of change the
+     * front office does not make — see {@link DocumentSubmitAuthorization}. While observing, logs what it would
+     * refuse and lets it through. A failed ownership read refuses while enforcing, like any rule that cannot answer.
+     */
+    private static Future<Void> authorizeSubmit(DocumentSubmitRequest request, DocumentAccess access) {
+        AbstractDocumentEvent[] events = request.argument().documentEvents();
+        boolean backofficeOrServer = access.readsAnything();
+        Future<String> refusal;
+        try {
+            refusal = DocumentSubmitAuthorization.refusal(
+                DocumentSubmitAuthorization.eventKinds(events),
+                DocumentSubmitAuthorization.existingTargets(events),
+                backofficeOrServer, access.readsNothing(),
+                backofficeOrServer || access.readsNothing() ? null : DocumentSubmitAuthorization.databaseLookup(access));
+        } catch (RuntimeException e) {
+            refusal = Future.failedFuture(e);
+        }
+        return refusal
+            .recover(failure -> Future.succeededFuture("could not check the submit: " + failure.getMessage()))
+            .compose(reason -> {
+                if (reason == null)
+                    return Future.succeededFuture();
+                // The census line. The caller's principal and booking ids are identities, not personal data.
+                Console.log("🛡 " + (DocumentSubmitAuthorization.ENFORCING ? "REFUSED" : "WOULD REFUSE")
+                            + " a booking submit by " + request.userId() + " — " + reason);
+                return DocumentSubmitAuthorization.ENFORCING
+                    ? Future.failedFuture(DocumentSubmitAuthorization.REFUSED)
+                    : Future.succeededFuture();
+            });
     }
 
     static Future<SubmitDocumentChangesResult> submitDocumentChangesNow(DocumentSubmitRequest request) {
