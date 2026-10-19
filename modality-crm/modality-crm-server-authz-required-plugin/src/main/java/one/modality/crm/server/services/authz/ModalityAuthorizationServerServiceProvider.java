@@ -3,6 +3,7 @@ package one.modality.crm.server.services.authz;
 import dev.webfx.platform.async.Batch;
 import dev.webfx.platform.async.CompositeFuture;
 import dev.webfx.platform.async.Future;
+import dev.webfx.platform.console.Console;
 import dev.webfx.platform.util.Booleans;
 import dev.webfx.platform.util.Strings;
 import dev.webfx.stack.authn.AuthenticationService;
@@ -98,6 +99,9 @@ public final class ModalityAuthorizationServerServiceProvider extends Authorizat
     public void invalidateAllRuleRegistries() {
         super.invalidateAllRuleRegistries();
         authzCache.clear();
+        // The read scope is derived from the same grant rows, so an edit that invalidates one invalidates the
+        // other. Clearing only this one is the bug the override above exists to prevent, one cache further on.
+        CallerReadScope.clearCache();
     }
 
     @Override
@@ -196,7 +200,7 @@ public final class ModalityAuthorizationServerServiceProvider extends Authorizat
             .map(operations -> grantOperations(operations, new StringBuilder()).toString());
         if (personId == null)
             return loggedInGrantsFuture;
-        return Future.all(
+        Future<String> grantsFuture = Future.all(
             loggedInGrantsFuture,
             // Loading operations (and rules, while RULE_GRANTS_APPLIED) granted to the user
             entityStore.<AuthorizationOrganizationUserAccess>executeQuery(
@@ -271,6 +275,20 @@ public final class ModalityAuthorizationServerServiceProvider extends Authorizat
             String superAdminGrants = (String) compositeFuture.list().get(3);
             return superAdminGrants.isEmpty() ? loggedInGrants + userGrants + adminGrants : superAdminGrants;
         });
+        if (!backoffice)
+            return grantsFuture; // the front office reads by its account, not by grants - see CallerReadScope
+        // The read scope is primed HERE, on the same trigger as the grants, because the endpoint that binds it
+        // runs before the first async hop and cannot await a query. Joined so that a client holding its grants
+        // also has a scope computed, rather than racing the first query it then sends.
+        //
+        // A scope that fails to compute must not take the grants down with it: the caller would be left unable
+        // to open anything, where the worst a missing scope costs is a bind that matches nothing and is counted.
+        return CallerReadScope.load(personId)
+            .recover(e -> {
+                Console.error("CallerReadScope: could not compute the read scope for person " + personId, e);
+                return Future.succeededFuture(null);
+            })
+            .compose(ignoredScope -> grantsFuture);
     }
 
     private StringBuilder grantOperations(List<Operation> operations, StringBuilder sb) {
