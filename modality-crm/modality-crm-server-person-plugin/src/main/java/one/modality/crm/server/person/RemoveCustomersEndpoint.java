@@ -34,7 +34,7 @@ public final class RemoveCustomersEndpoint extends AsyncFunctionBusCallEndpoint<
             if (personIds.isEmpty())
                 return RouteAccessGuard.refused();
             Object callerUserId = StateAccessor.getUserId(ThreadLocalStateHolder.getThreadLocalState());
-            return RouteAccessGuard.whenCallerMayReachAnywhere(UpdateCustomerEndpoint.CUSTOMERS_ROUTE,
+            return RouteAccessGuard.whenCallerHoldsOperationAnywhere(CustomerOperations.REMOVE_CUSTOMERS,
                 () -> AccountMergeRules.removeCustomers(personIds, callerUserId));
         });
     }

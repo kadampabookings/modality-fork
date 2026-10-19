@@ -121,8 +121,8 @@ public class AccountMergeCheck {
         String endpoint = AccountOwnerCheck.readSource(
             "modality-fork/modality-crm/modality-crm-server-person-plugin/src/main/java/"
             + "one/modality/crm/server/person/MergeIntoAccountEndpoint.java");
-        check("the merge is under the customers grant, like the screen it serves",
-            endpoint.contains("whenCallerMayReachAnywhere(UpdateCustomerEndpoint.CUSTOMERS_ROUTE"));
+        check("the merge requires MergeCustomers (V0134), not merely reaching the screen it serves",
+            endpoint.contains("whenCallerHoldsOperationAnywhere(CustomerOperations.MERGE_CUSTOMERS"));
         check("and reads super-admin membership itself, for the question the guard does not ask",
             endpoint.contains("SuperAdminMembership"));
 

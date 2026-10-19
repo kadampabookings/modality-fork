@@ -149,9 +149,15 @@ public class StaffPersonCheck {
             check(residentField + " is not member-editable", !PersonFields.isEditable(residentField));
         }
 
-        // --- one route per endpoint, and they are not the same route ---
-        check("the customers endpoint checks /customers",
-            "/customers".equals(UpdateCustomerEndpoint.CUSTOMERS_ROUTE));
+        // --- one question per endpoint, and they are not the same question ---
+        // The customers endpoints ask an OPERATION since V0134 — the act, not the screen — and each act its
+        // own, so that being able to look people up no longer means being able to merge or remove them.
+        check("editing, merging and removing customers are three different operations",
+            java.util.Set.of(CustomerOperations.EDIT_CUSTOMERS, CustomerOperations.MERGE_CUSTOMERS,
+                             CustomerOperations.REMOVE_CUSTOMERS).size() == 3);
+        check("and none of them is a route code (operation:* never matches RouteTo…, so a super admin would be refused)",
+            !CustomerOperations.EDIT_CUSTOMERS.startsWith("RouteTo") && !CustomerOperations.MERGE_CUSTOMERS.startsWith("RouteTo")
+            && !CustomerOperations.REMOVE_CUSTOMERS.startsWith("RouteTo"));
         check("the users endpoint checks /users",
             "/users".equals(UpdateUserEndpoint.USERS_ROUTE));
         // /users LOOKS like /customers and is not: its screen lists from
@@ -166,10 +172,8 @@ public class StaffPersonCheck {
             !StaffPersonRules.updateStatementFor(names("firstName")).contains("authorization_organization_user_access"));
         check("both residents endpoints check /residents",
             "/residents".equals(SetResidentEndpoint.RESIDENTS_ROUTE));
-        check("no two of them share a route, which would merge their grants",
-            !UpdateCustomerEndpoint.CUSTOMERS_ROUTE.equals(UpdateUserEndpoint.USERS_ROUTE)
-            && !UpdateCustomerEndpoint.CUSTOMERS_ROUTE.equals(SetResidentEndpoint.RESIDENTS_ROUTE)
-            && !UpdateUserEndpoint.USERS_ROUTE.equals(SetResidentEndpoint.RESIDENTS_ROUTE));
+        check("users and residents do not share a route, which would merge their grants",
+            !UpdateUserEndpoint.USERS_ROUTE.equals(SetResidentEndpoint.RESIDENTS_ROUTE));
 
         // --- and only the residents one is scoped, because only its target has an organization ---
         String residents = AccountOwnerCheck.readSource(
@@ -185,9 +189,17 @@ public class StaffPersonCheck {
         String customers = AccountOwnerCheck.readSource(
             "modality-fork/modality-crm/modality-crm-server-person-plugin/src/main/java/"
             + "one/modality/crm/server/person/UpdateCustomerEndpoint.java");
-        // Only ONE of the four, and only because its screen genuinely has no organization condition.
-        check("only /customers uses the unscoped guard, knowingly",
-            customers.contains("whenCallerMayReachAnywhere(CUSTOMERS_ROUTE"));
+        // Unscoped, and only because a person genuinely has no owning organization; asked of the act.
+        check("editing a customer requires EditCustomers, held anywhere, knowingly",
+            customers.contains("whenCallerHoldsOperationAnywhere(CustomerOperations.EDIT_CUSTOMERS"));
+        check("removing customers requires RemoveCustomers",
+            AccountOwnerCheck.readSource("modality-fork/modality-crm/modality-crm-server-person-plugin/src/main/java/"
+                + "one/modality/crm/server/person/RemoveCustomersEndpoint.java")
+                .contains("whenCallerHoldsOperationAnywhere(CustomerOperations.REMOVE_CUSTOMERS"));
+        check("merging duplicates requires MergeCustomers, still scoped to each affected booking's organization",
+            AccountOwnerCheck.readSource("modality-fork/modality-crm/modality-crm-server-person-plugin/src/main/java/"
+                + "one/modality/crm/server/person/MergeDuplicatePersonsEndpoint.java")
+                .contains("RouteAccessGuard.whenCallerHoldsOperation(state,\n                    CustomerOperations.MERGE_CUSTOMERS, organizationId, eventId, work)"));
         String users = AccountOwnerCheck.readSource(
             "modality-fork/modality-crm/modality-crm-server-person-plugin/src/main/java/"
             + "one/modality/crm/server/person/UpdateUserEndpoint.java");

@@ -148,6 +148,31 @@ public final class RouteAccessGuard {
     }
 
     /**
+     * Runs {@code work} when the caller holds an operation ANYWHERE, and refuses otherwise — the operation
+     * counterpart of {@link #whenCallerMayReachAnywhere}, with the same fences (an established session, no
+     * support view, a person of their own) and the same super-administrator fallback.
+     *
+     * <p><b>Only for a target with no owner to scope to.</b> A person has none: {@code person.organization_id}
+     * is a centre the member chose, not who may edit them — the reason the customers screen's route grant is
+     * asked "anywhere" too. Everything that HAS an owner (a booking, a letter) must use
+     * {@link #whenCallerHoldsOperation} with that owner, or a grant held for one centre acts on all of them.
+     *
+     * <p>Read-only access rows grant only operations marked read_only, as everywhere else
+     * ({@link RoleOperationMembership#holdsThroughRole}). MUST be called on the caller's thread.
+     */
+    public static <T> Future<T> whenCallerHoldsOperationAnywhere(String operationCode, Supplier<Future<T>> work) {
+        Object personId = backOfficeCallerPersonId(ThreadLocalStateHolder.getThreadLocalState());
+        if (personId == null)
+            return refused();
+        EntityStore entityStore = EntityStore.create(DataSourceModelService.getDefaultDataSourceModel());
+        return RoleOperationMembership.holdsThroughRole(personId, operationCode, entityStore)
+            .compose(holds -> Boolean.TRUE.equals(holds)
+                ? Future.succeededFuture(true)
+                : SuperAdminMembership.isSuperAdminPerson(personId, entityStore))
+            .compose(allowed -> Boolean.TRUE.equals(allowed) ? work.get() : refused());
+    }
+
+    /**
      * Runs {@code work} when the caller HOLDS an operation for this target, and refuses otherwise — the
      * same fences as the route guards above, asked of an operation code rather than a screen's path.
      *

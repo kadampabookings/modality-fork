@@ -51,7 +51,7 @@ public final class MergeIntoAccountEndpoint extends AsyncFunctionBusCallEndpoint
             Object state = ThreadLocalStateHolder.getThreadLocalState();
             Object callerUserId = StateAccessor.getUserId(state);
             ModalityUserPrincipal principal = callerUserId instanceof ModalityUserPrincipal p ? p : null;
-            return RouteAccessGuard.whenCallerMayReachAnywhere(UpdateCustomerEndpoint.CUSTOMERS_ROUTE,
+            return RouteAccessGuard.whenCallerHoldsOperationAnywhere(CustomerOperations.MERGE_CUSTOMERS,
                 // The principal-taking overload, rather than building an EntityStore here: that pulled
                 // webfx-stack-orm-entity into this module's pom and module-info for one line.
                 () -> SuperAdminMembership

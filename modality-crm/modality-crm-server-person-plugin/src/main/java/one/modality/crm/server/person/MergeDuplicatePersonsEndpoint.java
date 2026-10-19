@@ -51,8 +51,10 @@ public final class MergeDuplicatePersonsEndpoint extends AsyncFunctionBusCallEnd
             // explicitly so the trail still names them.
             Object callerUserId = StateAccessor.getUserId(state);
             return PersonMergeCascade.mergeDuplicatePerson(ids[0], ids[1], callerUserId,
-                (organizationId, eventId, work) -> ThreadLocalStateHolder.runWithState(state,
-                    () -> RouteAccessGuard.whenCallerMayReach("/customers", organizationId, eventId, work)));
+                // Scoped to each affected booking's organization and event, as before; only the question
+                // changed, from "may you open /customers there" to "may you merge people there" (V0134).
+                (organizationId, eventId, work) -> RouteAccessGuard.whenCallerHoldsOperation(state,
+                    CustomerOperations.MERGE_CUSTOMERS, organizationId, eventId, work));
         });
     }
 }

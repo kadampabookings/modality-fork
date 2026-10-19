@@ -15,8 +15,9 @@ import one.modality.crm.server.authn.gateway.shared.RouteAccessGuard;
  *
  * <p><b>The only one of the four staff endpoints with no target scope</b>, and the one case where that
  * is honest: a person has no owning organization, and the customers list has no organization condition
- * — it is every person in the database, by design. So "may you reach /customers anywhere" is the same
- * question the screen asks. The other three all have a centre to be scoped to, and are.
+ * — it is every person in the database, by design. So the grant is asked "anywhere": EditCustomers held
+ * in any organization (V0134 — it was the /customers route grant until then, which made opening the screen
+ * the right to change people).
  *
  * @author Claude Code
  */
@@ -24,9 +25,6 @@ public final class UpdateCustomerEndpoint extends AsyncFunctionBusCallEndpoint<O
 
     /** The bus address — mirrored in the React client's BUS_ADDRESSES.UPDATE_CUSTOMER. */
     public static final String UPDATE_CUSTOMER_ADDRESS = "modality/service/person/updateCustomer";
-
-    /** The route the back office's own router requires for this screen — asked again here, of the database. */
-    static final String CUSTOMERS_ROUTE = "/customers";
 
     public UpdateCustomerEndpoint() {
         super(UPDATE_CUSTOMER_ADDRESS, argument -> {
@@ -40,7 +38,8 @@ public final class UpdateCustomerEndpoint extends AsyncFunctionBusCallEndpoint<O
             // On the caller's thread: person's audit triggers stamp changed_by_person_id from the
             // principal, and by the guard's first async step there is none left to read.
             Object callerUserId = StateAccessor.getUserId(ThreadLocalStateHolder.getThreadLocalState());
-            return RouteAccessGuard.whenCallerMayReachAnywhere(CUSTOMERS_ROUTE,
+            // The act, not the screen (V0134): opening /customers no longer implies changing people.
+            return RouteAccessGuard.whenCallerHoldsOperationAnywhere(CustomerOperations.EDIT_CUSTOMERS,
                 () -> StaffPersonRules.updateCustomer(personId, namesAndValues, callerUserId)
                     .map(x -> (Object) x));
         });
