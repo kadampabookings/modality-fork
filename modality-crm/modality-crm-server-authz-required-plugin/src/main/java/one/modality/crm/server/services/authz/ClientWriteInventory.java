@@ -4,6 +4,7 @@ import dev.webfx.platform.console.Console;
 import dev.webfx.stack.db.submit.ProtectedEntityWriteRegistry;
 import dev.webfx.stack.db.submit.WriteIntent;
 import dev.webfx.stack.session.state.RestrictedPrincipalRegistry;
+import dev.webfx.stack.session.state.LogoutUserId;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 
 import java.util.Arrays;
@@ -367,6 +368,12 @@ final class ClientWriteInventory implements ProtectedEntityWriteRegistry.WriteIn
         Object userId = ThreadLocalStateHolder.getUserId();
         if (userId == null)
             return "anonymous";
+        // A client that signed out sends the LOGOUT_USER_ID sentinel, a String, rather than nothing. Named for what
+        // it means: "String" was the one label a reader could not interpret, and it hid the larger no-principal
+        // population (2026-10-19 census: 245 signed-out lines against 120 anonymous). Changing the label changes
+        // the shape key, so these callers' shapes all log once more as new on the deploy that brings it.
+        if (LogoutUserId.isLogoutUserIdOrNull(userId))
+            return "logged-out";
         String name = userId.getClass().getSimpleName();
         return RestrictedPrincipalRegistry.isUserRestricted(userId) ? name + "(restricted)" : name;
     }
