@@ -260,8 +260,10 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         // ClientWriteGuardCheck asserts the deny rule and their absence TOGETHER: restoring the table
         // without restoring the rules is what would reopen the holes they covered. What they knew that
         // the deny rule does not say is written down in docs/security/frontoffice-write-authorization-plan.md.
+        // - and a booking's own tables written by anything but the back office (2026-10-19), observing until
+        //   its own switch flips. See BackofficeOnlyWritePolicy.
         ClientSubmitGuard.registerWritePolicy(new ClientWritePolicies(
-            new GrantTableWritePolicy(), new UnscopedWritePolicy(), new MailWritePolicy()));
+            new GrantTableWritePolicy(), new UnscopedWritePolicy(), new MailWritePolicy(), new BackofficeOnlyWritePolicy()));
         Console.log("🛡 Write authorization active on " + REQUIRED_OPERATIONS.size() + " entities and "
                     + REQUIRED_OPERATIONS_BY_FIELD.size() + " fields"
                     + (ENFORCING ? " — ENFORCING" : " — observing only, nothing is refused yet"));
@@ -272,7 +274,8 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         // rules below it are NOT gated by that switch. An operator reading only the line above would
         // triage a write that started failing on this deploy by looking anywhere but here.
         Console.log("🛡 Client write row rules ENFORCING — grant tables, unbounded writes, mail"
-                    + " (person is closed outright by the deny list, not by a row rule)");
+                    + " (person is closed outright by the deny list, not by a row rule); booking tables back-office only — "
+                    + (BackofficeOnlyWritePolicy.ENFORCING ? "ENFORCING" : "observing only"));
     }
 
     /**

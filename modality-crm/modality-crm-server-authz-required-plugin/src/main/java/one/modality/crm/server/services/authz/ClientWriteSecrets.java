@@ -176,8 +176,19 @@ final class ClientWriteSecrets {
         // What this does NOT close: a holder of SendDocumentLetter can still edit person_email and then
         // send. Only a letter without a bearer token in it ends that.
         denyColumn("document", "trigger_send_letter_id");
+        // Payments. A successful money_transfer row (successful defaults to true) makes the
+        // defer_compute_document_deposit trigger recompute the booking's paid amount from it, and the client
+        // chose the document, the amount and the method — so a member could mark their own booking paid, or
+        // flip somebody's pending online payment to successful. Found 2026-10-19.
+        //
+        // Closed outright because nothing legitimate writes it from a client: the React apps never write it
+        // through the generic API, and the payment service records payments server-side, where this list is
+        // never consulted (its writes appear in the write census only because they run on the caller's
+        // thread). The legacy JavaFX reception and registration payment screens do write it, and are refused
+        // from now on: confirmed 2026-10-19 that they are not used for payments.
+        denyTable("money_transfer");
         int columns = DENIED_COLUMNS.values().stream().mapToInt(Set::size).sum();
-        Console.log("🛡 Client writes may not touch people, payment configuration, sign-in links or invitation"
+        Console.log("🛡 Client writes may not touch people, payments, payment configuration, sign-in links or invitation"
                     + " authorship, a mail's delivery record, a booking's letter trigger, nor the account's"
                     + " sign-in, status or privilege"
                     + " columns (" + String.join(", ", DENIED_TABLES) + " entirely, plus " + columns
