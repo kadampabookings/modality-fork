@@ -13,6 +13,7 @@ import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 import one.modality.base.shared.domainmodel.formatters.PriceFormatter;
 import one.modality.base.shared.entities.*;
 import one.modality.base.shared.entities.db.DatabasePayment;
+import one.modality.crm.shared.services.authn.ModalityGuestPrincipal;
 import one.modality.crm.shared.services.authn.ModalityUserPrincipal;
 import one.modality.ecommerce.document.service.events.AbstractAttendancesEvent;
 import one.modality.ecommerce.document.service.events.AbstractDocumentEvent;
@@ -65,6 +66,17 @@ public final class HistoryRecorder {
                 history.setUsername(((SystemUserId) userId).getName());
             return Future.succeededFuture(histories);
         }
+        // A guest signed in by a cart or magic link (2026-10-19). Its principal carries ONLY an email, and fell to the
+        // claims arm below, whose username is null for a guest — so both actor columns stayed null and the row named
+        // nobody. The email is the guest's whole identity (it is what their grants are looked up by), so it is what is
+        // recorded. NOT the constant "Online guest": a constant cannot tell two guests apart, and a later check keyed on
+        // it would let every guest read every other guest's payments.
+        if (userId instanceof ModalityGuestPrincipal guest) {
+            String username = guestUsername(guest.getEmail());
+            for (History history : histories)
+                history.setUsername(username);
+            return Future.succeededFuture(histories);
+        }
         // Case 2) User not logged in or just through SSO
         return AuthenticationService.getUserClaims()
                 .compose(userClaims -> {
@@ -76,6 +88,25 @@ public final class HistoryRecorder {
                         history.setUsername("Online guest");
                     return Future.succeededFuture(histories);
                 });
+    }
+
+    /**
+     * The prefix that tells a guest's email in history.username from a KBS2 login or the constant "Online guest".
+     *
+     * <p><b>Anything reading history.username must know it holds several kinds of value</b>: a KBS2 login, a
+     * SystemUserId name, "guest:" + an email (a guest signed in by a cart or magic link, since 2026-10-19), and still
+     * the CONSTANT "Online guest" — a caller with no session at all, which is every such caller. A predicate keyed
+     * on that constant would treat every anonymous payer as the same person. History says who acted, not who owns.
+     */
+    static final String GUEST_USERNAME_PREFIX = "guest:";
+
+    /** history.username is varchar(64); a longer value would fail the insert and lose the history row altogether. */
+    static final int USERNAME_MAX_LENGTH = 64;
+
+    /** What a guest's history rows record: their email, prefixed, cut to the column's length. Pure. */
+    static String guestUsername(String email) {
+        String username = GUEST_USERNAME_PREFIX + (email == null ? "" : email);
+        return username.length() <= USERNAME_MAX_LENGTH ? username : username.substring(0, USERNAME_MAX_LENGTH);
     }
 
     public static Future<Void> completeDocumentHistoriesAfterSubmit(History[] histories, AbstractDocumentEvent... documentEvents) {
@@ -167,7 +198,11 @@ public final class HistoryRecorder {
             history.setComment(interpretedComment + " (" + PriceFormatter.formatWithoutCurrency(allocatedTransfer.getAmount()) + " for this booking)");
             return history;
         }, History[]::new);
-        return Future.succeededFuture(histories);
+        // Who paid, on every booking the payment is spread over — exactly as the single-payment branch above records it.
+        // This used to return the rows as they were: a split payment's history named nobody, whoever paid (1,405 of the
+        // 1,420 unattributed payment rows in production over 90 days, measured 2026-10-19). The read side's "did you make
+        // this payment?" check reads these very rows, so it refused the payer of every split payment.
+        return setUserOnHistories(histories, userId);
     }
 
 }
