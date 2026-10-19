@@ -47,7 +47,21 @@ public class ProtectedEntityWritesCheck {
 
     public static void main(String[] args) {
         System.out.println("entities the policy does not cover:");
-        check("an unprotected entity requires nothing", groupsFor("Document", "person").isEmpty());
+        check("an unprotected entity requires nothing", groupsFor("Event", "name").isEmpty());
+
+        System.out.println("a booking's own tables (V0135):");
+        check("a booking's personal details need EditBookingDetails alone",
+            requiresAlone(groupsFor("Document", "person_email"), "EditBookingDetails"));
+        check("a payer may be set by education programmes or by whoever edits the booking",
+            groupsFor("Document", "payer").stream().anyMatch(g -> Arrays.asList(g)
+                .containsAll(List.of("RunEducationProgramRegistration", "EditBookingDetails"))));
+        check("a field no screen writes generically needs ManageBookings, held by nobody but super admins",
+            requiresAlone(groupsFor("Document", "cancelled"), "ManageBookings"));
+        check("so the entity rule's any-of cannot let a payer grant cancel a booking",
+            requiresAlone(groupsFor("Document", "payer", "cancelled"), "ManageBookings"));
+        check("a line's room needs AllocateRooms", requiresAlone(groupsFor("DocumentLine", "resourceConfiguration"), "AllocateRooms"));
+        check("any other field of a line needs ManageBookings", requiresAlone(groupsFor("DocumentLine", "cancelled"), "ManageBookings"));
+        check("a recording's availability needs EditMediaAccess", requiresAlone(groupsFor("Attendance", "expirationDate"), "EditMediaAccess"));
         check("a near-miss on the textual pre-filter requires nothing", groupsFor("Mail", "letter").isEmpty());
 
         System.out.println("privilege-bearing entities:");

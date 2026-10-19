@@ -57,6 +57,29 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         EDIT_ORGANIZATION_RESIDENTS_EVENT = "EditOrganizationResidentsEvent";
 
     /**
+     * A booking's own tables, written by the back office through the generic API (2026-10-19, V0135). Only the
+     * fields its screens actually write are granted, each to the act that writes it; every OTHER field of these
+     * tables needs {@link #MANAGE_BOOKINGS}, which is granted to nobody, so it is a super administrator's.
+     *
+     * <p>Why the rest is closed rather than left to the entity's codes: the entity rule is any-of, so without
+     * this a holder of RunEducationProgramRegistration — needed only to set a payer — could write `cancelled`
+     * or a price on any booking of their centre. The back office never writes those fields generically: it
+     * confirms, cancels and reprices through the document service. A future screen that does gets a code then.
+     */
+    static final String EDIT_BOOKING_DETAILS = "EditBookingDetails",
+        ALLOCATE_ROOMS = "AllocateRooms",
+        EDIT_MEDIA_ACCESS = "EditMediaAccess",
+        RUN_EDUCATION_PROGRAM_REGISTRATION = "RunEducationProgramRegistration",
+        MANAGE_BOOKINGS = "ManageBookings";
+
+    /**
+     * The tables whose unlisted fields need {@link #MANAGE_BOOKINGS} — and whose SERVER writes skip this rule
+     * entirely. The document service writes them for every booking, line and attendance; a server write is
+     * allowed whatever the rule says, so judging one would only cost owner lookups on the busiest path there is.
+     */
+    static final java.util.Set<String> BOOKING_ENTITIES = java.util.Set.of("Document", "DocumentLine", "Attendance");
+
+    /**
      * The raw statements a client may still send: the transaction prefixes the legacy JavaFX/GWT clients put at the
      * head of a batch (Triggers.backOfficeTransaction / frontOfficeTransaction). Matched exactly, with no parameters.
      * The React apps send none — they ask for the server's preamble instead.
@@ -112,7 +135,12 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         // is retired rather than seeded — it covered all three and was held by nobody but super admins.
         Map.entry("Organization", new String[] { EDIT_ORGANIZATION_DETAILS, EDIT_ORGANIZATION_MEDIA,
                                                  EDIT_ORGANIZATION_RESIDENTS_EVENT }),
-        Map.entry("MoneyAccount", new String[] { "ManageMoneyAccounts" })
+        Map.entry("MoneyAccount", new String[] { "ManageMoneyAccounts" }),
+        // A booking's own tables (see EDIT_BOOKING_DETAILS). The entity rule is the backstop for a statement
+        // whose fields cannot be read; the field rules below and MANAGE_BOOKINGS for the rest do the real work.
+        Map.entry("Document",     new String[] { EDIT_BOOKING_DETAILS, RUN_EDUCATION_PROGRAM_REGISTRATION }),
+        Map.entry("DocumentLine", new String[] { ALLOCATE_ROOMS }),
+        Map.entry("Attendance",   new String[] { EDIT_MEDIA_ACCESS })
     );
 
     /**
@@ -164,7 +192,33 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         // The residents event, written from /residents rather than from the organisations page. It also
         // INSERTS the Event it points at, and Event is in no rule here, so this guards the pointer and
         // not the creation.
-        Map.entry("Organization.residentEvent", new String[] { EDIT_ORGANIZATION_RESIDENTS_EVENT })
+        Map.entry("Organization.residentEvent", new String[] { EDIT_ORGANIZATION_RESIDENTS_EVENT }),
+        // A booking's personal details as booked — the registration drawer's form, and a new booking's details.
+        Map.entry("Document.person_age", new String[] { EDIT_BOOKING_DETAILS }),
+        Map.entry("Document.person_cityName", new String[] { EDIT_BOOKING_DETAILS }),
+        Map.entry("Document.person_country", new String[] { EDIT_BOOKING_DETAILS }),
+        Map.entry("Document.person_email", new String[] { EDIT_BOOKING_DETAILS }),
+        Map.entry("Document.person_firstName", new String[] { EDIT_BOOKING_DETAILS }),
+        Map.entry("Document.person_lastName", new String[] { EDIT_BOOKING_DETAILS }),
+        Map.entry("Document.person_layName", new String[] { EDIT_BOOKING_DETAILS }),
+        Map.entry("Document.person_male", new String[] { EDIT_BOOKING_DETAILS }),
+        Map.entry("Document.person_nationality", new String[] { EDIT_BOOKING_DETAILS }),
+        Map.entry("Document.person_ordained", new String[] { EDIT_BOOKING_DETAILS }),
+        Map.entry("Document.person_organization", new String[] { EDIT_BOOKING_DETAILS }),
+        Map.entry("Document.person_passport", new String[] { EDIT_BOOKING_DETAILS }),
+        Map.entry("Document.person_phone", new String[] { EDIT_BOOKING_DETAILS }),
+        Map.entry("Document.person_postCode", new String[] { EDIT_BOOKING_DETAILS }),
+        Map.entry("Document.person_street", new String[] { EDIT_BOOKING_DETAILS }),
+        // Its comments. specialNeeds holds health and accessibility notes: special-category data.
+        Map.entry("Document.request",      new String[] { EDIT_BOOKING_DETAILS }),
+        Map.entry("Document.comment",      new String[] { EDIT_BOOKING_DETAILS }),
+        Map.entry("Document.specialNeeds", new String[] { EDIT_BOOKING_DETAILS }),
+        // Who pays: set by education programmes' registration, or by whoever edits the booking.
+        Map.entry("Document.payer", new String[] { RUN_EDUCATION_PROGRAM_REGISTRATION, EDIT_BOOKING_DETAILS }),
+        // Which room a line is in: the rooming tab, rooms setup and event room setup.
+        Map.entry("DocumentLine.resourceConfiguration", new String[] { ALLOCATE_ROOMS }),
+        // How long a booked recording stays watchable.
+        Map.entry("Attendance.expirationDate", new String[] { EDIT_MEDIA_ACCESS })
     );
 
     /** The languages EntityHasI18nFields carries; a bare language code IS a body field. */
@@ -404,6 +458,8 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         Object capturedState = ThreadLocalStateHolder.getThreadLocalState();
         Object userId = ThreadLocalStateHolder.getUserId();
         boolean clientOrigin = ThreadLocalStateHolder.isClientOrigin();
+        if (!clientOrigin && BOOKING_ENTITIES.contains(entityName))
+            return Future.succeededFuture(true); // see BOOKING_ENTITIES: allowed anyway, and the busiest path
         if (refusesWithoutIdentity(userId, clientOrigin)) {
             Console.log("🛡 REFUSED " + verb + " on " + entityName + " by " + userId
                         + " (no signed-in person behind this client write)");
@@ -489,6 +545,9 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
             String[] fieldCodes = REQUIRED_OPERATIONS_BY_FIELD.get(entityName + "." + field);
             if (fieldCodes != null)
                 groups.add(fieldCodes);
+            else if (BOOKING_ENTITIES.contains(entityName))
+                // A booking field no screen writes generically: a super administrator's (see MANAGE_BOOKINGS).
+                groups.add(new String[] { MANAGE_BOOKINGS });
             if ("Letter".equals(entityName)) {
                 if (isLetterContentField(field)) letterContent = true;
                 else letterProperties = true;

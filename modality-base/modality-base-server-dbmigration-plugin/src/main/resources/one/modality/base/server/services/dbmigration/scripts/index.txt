@@ -134,3 +134,4 @@ V0131__route_to_my_organization_operation.sql
 V0132__education_program_write_operations.sql
 V0133__access_event_type_scope.sql
 V0134__customer_write_operations.sql
+V0135__booking_write_operations.sql
