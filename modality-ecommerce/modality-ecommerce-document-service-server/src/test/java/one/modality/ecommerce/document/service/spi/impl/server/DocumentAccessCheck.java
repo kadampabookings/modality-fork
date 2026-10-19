@@ -108,6 +108,28 @@ public class DocumentAccessCheck {
         check("a member's parameter is the account", Integer.valueOf(4242).equals(MEMBER.parameter()));
         check("a guest's parameter is the email", "guest@example.org".equals(GUEST.parameter()));
 
+        // ── What a refusal says about itself ───────────────────────────────────────────────────
+        // Only readsNothing refuses, so the two cases below are the ONLY ones that reach a log line: a
+        // guest whose email does not match and a member whose account has no access get an empty result
+        // instead. Telling those two apart is the whole point — one is a visitor, the other is a bug.
+        check("no session at all says so",
+              "no session".equals(ANONYMOUS.describeCaller()));
+        DocumentAccess uninterpretable = DocumentAccess.of(false, null, null, "ModalityUserPrincipal");
+        check("a session yielding neither names the principal's type",
+              uninterpretable.describeCaller().contains("ModalityUserPrincipal")
+              && uninterpretable.describeCaller().contains("neither an account nor a guest email"));
+        check("and it is still refused, the description changing nothing",
+              uninterpretable.readsNothing());
+        // A type, never an id or an address: the refusal goes to the log.
+        // The wording of the PREFIX is operational, not cosmetic: CloudWatch filters and alarms match on
+        // it, and they live in the CLI rather than in this repo, so nothing else here would notice it
+        // changing. Appending detail after it is free; editing it is not.
+        check("the refusal still opens with the words the alarms match on",
+              "Authentication required to access this document".equals(ServerDocumentServiceProvider.REFUSAL));
+
+        check("the description carries no value, only a type name",
+              !uninterpretable.describeCaller().contains("@") && !ANONYMOUS.describeCaller().contains("@"));
+
         System.out.println(fail == 0 ? "\nALL " + pass + " PASS" : "\n" + fail + " FAILED");
         if (fail > 0)
             throw new AssertionError(fail + " document access checks failed");

@@ -53,6 +53,17 @@ import java.util.stream.Collectors;
  */
 public class ServerDocumentServiceProvider implements DocumentServiceProvider {
 
+    /**
+     * The refusal's opening words, which do not change.
+     *
+     * <p>Each site appends which way in it guards and what the caller looked like, so an occurrence in the
+     * log can be diagnosed instead of merely counted — three of them in nine days to 2026-10-19, with no
+     * way to tell an unauthenticated visitor from a session the server could not read. The PREFIX stays
+     * fixed because CloudWatch filters and alarms match on it, and a message that grows a detail should not
+     * silently stop being matched.
+     */
+    static final String REFUSAL = "Authentication required to access this document";
+
 
     /*------------------------------------------------------------------------------------------------------------------
     |                                                  LOAD                                                            |
@@ -96,7 +107,7 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
         // thread-locals and are gone after the first async hop.
         DocumentAccess access = DocumentAccess.ofCaller();
         if (access.readsNothing())
-            return Future.failedFuture("Authentication required to access this document");
+            return Future.failedFuture(REFUSAL + " (by person or account and event; " + access.describeCaller() + ")");
 
         // %extra% adds "or id=$3" inside the parentheses when a known docPk must be included
         // alongside the latest doc for this person/event (e.g. the booking confirmation flow).
@@ -251,7 +262,7 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
         EntityStoreQuery[] queries = buildBatchQueries(docPk);
         if (access != null && docPk != null && !access.readsAnything()) {
             if (access.readsNothing())
-                return Future.failedFuture("Authentication required to access this document");
+                return Future.failedFuture(REFUSAL + " (by booking id; " + access.describeCaller() + ")");
             // This query has one parameter, so the clause takes $2. Unlike the history selects, its
             // single " order by " makes the replace unambiguous.
             String docQuery = queries[0].getSelect()
@@ -345,7 +356,7 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
         // else in this service; read on this thread, before the compose below.
         DocumentAccess access = DocumentAccess.ofCaller();
         if (access.readsNothing())
-            return Future.failedFuture("Authentication required to access this document");
+            return Future.failedFuture(REFUSAL + " (change history; " + access.describeCaller() + ")");
         // Reached through the History row's own document, since History has no person of its own.
         // When loaded by docPk we don't need the event PK at all — execute directly.
         if (argument.documentPrimaryKey() != null) {

@@ -50,11 +50,14 @@ final class DocumentAccess {
     private final boolean unfiltered;
     private final Object accountId;
     private final String guestEmail;
+    /** The principal's type, or null when the thread carried none. Kept for the refusal; see {@link #describeCaller}. */
+    private final String principalType;
 
-    private DocumentAccess(boolean unfiltered, Object accountId, String guestEmail) {
+    private DocumentAccess(boolean unfiltered, Object accountId, String guestEmail, String principalType) {
         this.unfiltered = unfiltered;
         this.accountId = accountId;
         this.guestEmail = guestEmail;
+        this.principalType = principalType;
     }
 
     /** Reads the caller from the thread. Call synchronously, before any async step. */
@@ -64,12 +67,37 @@ final class DocumentAccess {
                           || userId instanceof SystemUserId;
         return new DocumentAccess(unfiltered,
             ServerDocumentServiceProvider.getUserAccountId(userId),
-            ServerDocumentServiceProvider.getGuestEmail(userId));
+            ServerDocumentServiceProvider.getGuestEmail(userId),
+            userId == null ? null : userId.getClass().getSimpleName());
     }
 
     /** For the checks: a caller of each kind, without a thread to read it from. */
     static DocumentAccess of(boolean unfiltered, Object accountId, String guestEmail) {
-        return new DocumentAccess(unfiltered, accountId, guestEmail);
+        return new DocumentAccess(unfiltered, accountId, guestEmail, null);
+    }
+
+    /** For the checks: a caller carrying a principal of the named type. */
+    static DocumentAccess of(boolean unfiltered, Object accountId, String guestEmail, String principalType) {
+        return new DocumentAccess(unfiltered, accountId, guestEmail, principalType);
+    }
+
+    /**
+     * Why a refused caller was refused, for the log line — and ONLY the two cases that reach it.
+     *
+     * <p>{@link #readsNothing} is the only state that refuses, so a guest whose email does not match and a
+     * member whose account has no access never arrive here: their rows are filtered out and they receive an
+     * empty result, not an error. What is left is a caller with no account and no guest email, and the two
+     * ways to be one are worth telling apart. No session at all is an ordinary unauthenticated request —
+     * someone opening a booking link while signed out. A session that exists but yields NEITHER is a
+     * session this service could not interpret, which is a bug rather than a visitor, and the principal's
+     * TYPE is what identifies which kind.
+     *
+     * <p>A type name, never an id or an address: a person id identifies a person, and the refusal goes to
+     * the log where this file keeps counts and names and no values.
+     */
+    String describeCaller() {
+        return principalType == null ? "no session"
+             : "a " + principalType + " carrying neither an account nor a guest email";
     }
 
     /** A verified back office, or the server acting on nobody's behalf, is not filtered. */
