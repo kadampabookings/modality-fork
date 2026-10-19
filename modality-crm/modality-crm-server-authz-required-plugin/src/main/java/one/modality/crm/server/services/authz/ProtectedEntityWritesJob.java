@@ -193,15 +193,24 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
     }
 
     /**
-     * OBSERVE FIRST. While this is false the decision is computed and logged but never acted on, so a
-     * deploy cannot lock anyone out of the screen they would need to fix a lockout — the failure mode
-     * that makes authorization administration the worst possible place to enforce something untested.
-     * Flip it once the log has been quiet on a real environment for long enough to believe it.
+     * OBSERVE FIRST — per entity. For an entity not listed here the decision is computed and logged but never
+     * acted on, so a deploy cannot lock anyone out of the screen they would need to fix a lockout — the failure
+     * mode that makes authorization administration the worst possible place to enforce something untested.
+     * Add an entity once its census has been quiet on a real environment for long enough to believe it.
      *
-     * <p>Not a config value yet, deliberately: a switch that can be flipped without a code review is
-     * one that can be flipped without anyone reading the log it depends on.
+     * <p>Per entity since 2026-10-19 (it was one switch for all): each entity's census runs on its own clock.
+     * Letters and pass templates have been observed since the context fix; the booking tables join later and
+     * must not hold them back, nor be flipped with them.
+     *
+     * <p>Not a config value, deliberately: a switch that can be flipped without a code review is one that can
+     * be flipped without anyone reading the log it depends on.
      */
-    private static final boolean ENFORCING = false;
+    static final java.util.Set<String> ENFORCED_ENTITIES = java.util.Set.of();
+
+    /** Whether this entity's rule refuses (true) or only observes (false). See {@link #ENFORCED_ENTITIES}. */
+    static boolean isEnforced(String entityName) {
+        return ENFORCED_ENTITIES.contains(entityName);
+    }
 
     @Override
     public void onInit() {
@@ -266,7 +275,9 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
             new GrantTableWritePolicy(), new UnscopedWritePolicy(), new MailWritePolicy(), new BackofficeOnlyWritePolicy()));
         Console.log("🛡 Write authorization active on " + REQUIRED_OPERATIONS.size() + " entities and "
                     + REQUIRED_OPERATIONS_BY_FIELD.size() + " fields"
-                    + (ENFORCING ? " — ENFORCING" : " — observing only, nothing is refused yet"));
+                    + (ENFORCED_ENTITIES.isEmpty() ? " — observing only, nothing is refused yet"
+                       : " — ENFORCING on " + String.join(", ", new java.util.TreeSet<>(ENFORCED_ENTITIES))
+                         + ", observing the rest"));
         Console.log("🛡 Client write inventory recording — shapes only, no values, nothing refused");
         Console.log("🛡 Client read inventory recording — shapes only, no values, nothing refused");
         // Said separately, and said even though the line above has just said "nothing is refused yet":
@@ -335,7 +346,7 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
 
     /**
      * Whether a write to a protected entity is refused for having nobody behind it — enforced whatever
-     * {@link #ENFORCING} says.
+     * {@link #ENFORCED_ENTITIES} says.
      *
      * <p>Found 2026-10-10: while this rule only observed, a client with no signed-in person could rewrite
      * letter content (emailed to members from the organisation), organisations and pass templates —
@@ -343,7 +354,7 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
      * 30 days, most likely back-office tabs whose session had lapsed; an anonymous connection to the
      * public front office is in exactly the same state.
      *
-     * <p>Why not flip {@link #ENFORCING}: the same 30 days show two SIGNED-IN members of staff whose roles
+     * <p>Why not enforce everywhere ({@link #ENFORCED_ENTITIES}): the same 30 days show two SIGNED-IN members of staff whose roles
      * open the pass designer and the letter editor without holding EditPassTemplate or
      * EditLetterContent. Enforcing would lock them out; this refuses only the caller who has no person at
      * all — anonymous, a guest, a support view ({@link GrantTableWritePolicy#callerPersonId}) — which no
@@ -411,7 +422,7 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
                 .map(authorized -> {
                     if (Boolean.TRUE.equals(authorized))
                         return true;
-                    boolean refusing = refusesOnFailedAuthorization(ENFORCING, clientOrigin);
+                    boolean refusing = refusesOnFailedAuthorization(isEnforced(entityName), clientOrigin);
                     // The principal is logged because this line exists to be acted on: knowing that SOMETHING
                     // was refused is not enough to tell whether a real administrator is about to be locked
                     // out. It is an account identity, not personal data about a data subject. So is where it
@@ -427,7 +438,7 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
             // A lookup that fails has not said where the row is, and so cannot have authorized it. The refusal
             // still answers to the switch: while observing, nothing is refused for it either.
             .recover(failure -> {
-                boolean refusing = refusesOnFailedAuthorization(ENFORCING, clientOrigin);
+                boolean refusing = refusesOnFailedAuthorization(isEnforced(entityName), clientOrigin);
                 // Its own wording, deliberately NOT ending in "(needs …)": this is a failed read, not a missing
                 // grant, and the production alarm filters match per message — a database blip that read like an
                 // authorization refusal would be triaged as somebody lacking a grant.
@@ -583,7 +594,23 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         // Defensive, not reached by clients: ClientWriteSecrets denies money_account to them outright, so this
         // entry is only ever consulted for server writes, which pass whatever it says. It is here so the
         // entity is placed correctly if that deny is ever narrowed.
-        "MoneyAccount", new String[] { "organization", "event" }
+        "MoneyAccount", new String[] { "organization", "event" },
+        // A booking: document.organization is NOT NULL, and event names the event it books (2026-10-19).
+        "Document", new String[] { "organization", "event" }
+    );
+
+    /**
+     * Entities owned THROUGH a parent row: entity -> { the field naming the parent, the parent's entity }. Such
+     * a row lives wherever its parent lives — a booking's line where its booking does, an attendance where its
+     * line does — so its context is the parent's, resolved row by row up to an entity in {@link #OWNER_FIELDS}.
+     *
+     * <p>Resolved by following the parent's id rather than by a dotted DQL path, so that a write MOVING a row to
+     * another parent (writing {@code document} on a line) is placed exactly as a letter moved to another event
+     * is: judged where it is and where it lands.
+     */
+    static final Map<String, String[]> OWNER_VIA = Map.of(
+        "DocumentLine", new String[] { "document", "Document" },
+        "Attendance",   new String[] { "documentLine", "DocumentLine" }
     );
 
     /** A row's owner as stored: ids, either of which may be null. */
@@ -596,6 +623,9 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
 
         /** The organization an event belongs to, or a future of null when there is no such event. */
         Future<Object> eventOrganization(Object eventId);
+
+        /** The id of the row's parent named by {@code parentField}, or a future of null when there is none. */
+        Future<Object> parentId(String entityName, String parentField, Object id);
     }
 
     /** The production lookup: two indexed reads by primary key, made as the server. */
@@ -618,6 +648,13 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
             return EntityStore.create(DataSourceModelService.getDefaultDataSourceModel())
                 .<Entity>executeQuery("select organization from Event where id=$1", eventId)
                 .map(rows -> rows.isEmpty() ? null : Entities.getPrimaryKey(rows.get(0).getForeignEntityId("organization")));
+        }
+
+        @Override
+        public Future<Object> parentId(String entityName, String parentField, Object id) {
+            return EntityStore.create(DataSourceModelService.getDefaultDataSourceModel())
+                .<Entity>executeQuery("select " + parentField + " from " + entityName + " where id=$1", id)
+                .map(rows -> rows.isEmpty() ? null : Entities.getPrimaryKey(rows.get(0).getForeignEntityId(parentField)));
         }
     };
 
@@ -656,6 +693,9 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         if ("Organization".equals(entityName))
             return Future.succeededFuture(List.of(request.targetId() == null ? NO_CONTEXT
                 : Map.of(ORGANIZATION_KEY, String.valueOf(request.targetId()))));
+        String[] via = OWNER_VIA.get(entityName);
+        if (via != null)
+            return parentContexts(request, via, lookup);
         String[] ownerFields = OWNER_FIELDS.get(entityName);
         if (ownerFields == null)
             return Future.succeededFuture(List.of(NO_CONTEXT));
@@ -675,12 +715,58 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
                     : ownerAfterWrite(request, ownerFields[1], current == null ? null : current.eventId());
                 parts.add(contextsOf(new Owner(organization, event), lookup));
             }
-            return Future.all(new ArrayList<>(parts)).map(all -> {
-                java.util.LinkedHashSet<Map<String, String>> contexts = new java.util.LinkedHashSet<>();
-                for (int i = 0; i < parts.size(); i++)
-                    contexts.addAll(all.<List<Map<String, String>>>resultAt(i));
-                return new ArrayList<>(contexts);
-            });
+            return union(parts);
+        });
+    }
+
+    /**
+     * The contexts of a write to an entity owned through a parent ({@link #OWNER_VIA}): where its stored parent
+     * lives, and — for an insert, or a write that sets the parent field — where the new parent lives. The same
+     * two questions {@link #authorizationContexts} asks of an entity's own owner fields, one hop up.
+     */
+    private static Future<List<Map<String, String>>> parentContexts(ProtectedEntityWriteRegistry.WriteRequest request,
+                                                                    String[] via, OwnerLookup lookup) {
+        String parentField = via[0], parentEntity = via[1];
+        boolean insert = request.verb() == ProtectedEntityWriteRegistry.WriteVerb.INSERT;
+        Future<Object> storedParent = insert || request.targetId() == null ? Future.succeededFuture(null)
+            : asServer(() -> lookup.parentId(request.entityName(), parentField, primaryKeyOf(request.targetId())));
+        return storedParent.compose(stored -> {
+            List<Future<List<Map<String, String>>>> parts = new ArrayList<>();
+            if (!insert)
+                parts.add(contextsOfRow(parentEntity, stored, lookup));
+            if (insert || request.writtenValues().containsKey(parentField))
+                parts.add(contextsOfRow(parentEntity, ownerAfterWrite(request, parentField, stored), lookup));
+            return union(parts);
+        });
+    }
+
+    /**
+     * The contexts a stored row lives in, given its entity and id: through its own owner fields, or through its
+     * parent's, hop by hop. Anything that cannot be named — no id, a same-batch reference, an unreadable value,
+     * a row that does not exist — has no context, as everywhere else.
+     */
+    private static Future<List<Map<String, String>>> contextsOfRow(String entityName, Object id, OwnerLookup lookup) {
+        String key = idOf(id);
+        if (key == null)
+            return Future.succeededFuture(List.of(NO_CONTEXT));
+        String[] via = OWNER_VIA.get(entityName);
+        if (via != null)
+            return asServer(() -> lookup.parentId(entityName, via[0], primaryKeyOf(key)))
+                .compose(parent -> contextsOfRow(via[1], parent, lookup));
+        String[] ownerFields = OWNER_FIELDS.get(entityName);
+        if (ownerFields == null)
+            return Future.succeededFuture(List.of(NO_CONTEXT));
+        return asServer(() -> lookup.rowOwner(entityName, ownerFields, primaryKeyOf(key)))
+            .compose(owner -> contextsOf(owner, lookup));
+    }
+
+    /** Every context any part asks for, each once, in order. */
+    private static Future<List<Map<String, String>>> union(List<Future<List<Map<String, String>>>> parts) {
+        return Future.all(new ArrayList<>(parts)).map(all -> {
+            java.util.LinkedHashSet<Map<String, String>> contexts = new java.util.LinkedHashSet<>();
+            for (int i = 0; i < parts.size(); i++)
+                contexts.addAll(all.<List<Map<String, String>>>resultAt(i));
+            return new ArrayList<>(contexts);
         });
     }
 
