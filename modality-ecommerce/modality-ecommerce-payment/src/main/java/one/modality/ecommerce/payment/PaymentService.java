@@ -32,6 +32,10 @@ public final class PaymentService {
         return getProvider().cancelPayment(argument);
     }
 
+    public static Future<ResumePaymentResult> resumePayment(ResumePaymentArgument argument) {
+        return getProvider().resumePayment(argument);
+    }
+
     // Internal server-side method only (no serialization support)
 
     public static Future<Map<String, String>> loadPaymentGatewayParameters(Object paymentId, boolean live) {

@@ -27,6 +27,7 @@ public final class InitiatePaymentResultSerialCodec extends SerialCodecBase<Init
     private static final String PAYPAL_IN_APP_ORDER_ID_KEY  = "paypalInAppOrderId";
     private static final String PAYPAL_IN_APP_CLIENT_ID_KEY = "paypalInAppClientId";
     private static final String PAYPAL_IN_APP_CURRENCY_KEY  = "paypalInAppCurrency";
+    private static final String RESUME_TOKEN_KEY            = "resumeToken";
 
     public InitiatePaymentResultSerialCodec() {
         super(InitiatePaymentResult.class, CODEC_ID);
@@ -48,6 +49,7 @@ public final class InitiatePaymentResultSerialCodec extends SerialCodecBase<Init
         encodeString( serial, PAYPAL_IN_APP_ORDER_ID_KEY,  arg.paypalInAppOrderId());
         encodeString( serial, PAYPAL_IN_APP_CLIENT_ID_KEY, arg.paypalInAppClientId());
         encodeString( serial, PAYPAL_IN_APP_CURRENCY_KEY,  arg.paypalInAppCurrency());
+        encodeString( serial, RESUME_TOKEN_KEY,            arg.resumeToken());
     }
 
     @Override
@@ -66,7 +68,8 @@ public final class InitiatePaymentResultSerialCodec extends SerialCodecBase<Init
             decodeString( serial, FALLBACK_REDIRECT_URL_KEY),
             decodeString( serial, PAYPAL_IN_APP_ORDER_ID_KEY),
             decodeString( serial, PAYPAL_IN_APP_CLIENT_ID_KEY),
-            decodeString( serial, PAYPAL_IN_APP_CURRENCY_KEY)
+            decodeString( serial, PAYPAL_IN_APP_CURRENCY_KEY),
+            decodeString( serial, RESUME_TOKEN_KEY)
         );
     }
 }

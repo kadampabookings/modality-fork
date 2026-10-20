@@ -15,6 +15,8 @@ public interface PaymentServiceProvider {
 
     Future<CancelPaymentResult> cancelPayment(CancelPaymentArgument argument);
 
+    Future<ResumePaymentResult> resumePayment(ResumePaymentArgument argument);
+
     // Internal server-side method only (no serialisation support)
 
     Future<Map<String, String>> loadPaymentGatewayParameters(Object paymentId, boolean live);

@@ -14,6 +14,13 @@ package one.modality.ecommerce.payment;
  * @param paypalInAppOrderId  PayPal order id for the same-origin in-app Buttons widget (null unless this is a PayPal in-app result)
  * @param paypalInAppClientId PayPal SDK client id (null unless this is a PayPal in-app result)
  * @param paypalInAppCurrency Currency code for the PayPal SDK URL (null unless this is a PayPal in-app result)
+ * @param resumeToken         Bearer token for the public resume-payment page, minted for THIS payment. The
+ *                            client keeps it and presents it when the gateway redirects the payer back; the
+ *                            payer's browser is what carries it, so whoever initiated the payment is who can
+ *                            read its confirmation — which is the right reading, since one payment in four is
+ *                            made by somebody who does not own the booking. Null when the server has no
+ *                            signing key, which the client must read as "no confirmation page", never as
+ *                            "no token needed".
  *
  * @author Bruno Salmon
  */
@@ -37,5 +44,6 @@ public record InitiatePaymentResult(
     // user click opens the PayPal popup. Null for any other flow.
     String paypalInAppOrderId,
     String paypalInAppClientId,
-    String paypalInAppCurrency
+    String paypalInAppCurrency,
+    String resumeToken
 ) { }

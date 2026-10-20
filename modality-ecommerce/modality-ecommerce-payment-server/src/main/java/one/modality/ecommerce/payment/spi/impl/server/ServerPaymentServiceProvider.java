@@ -220,7 +220,10 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
                                     gatewayResult.fallbackRedirectUrl(),
                                     gatewayResult.paypalInAppOrderId(),
                                     gatewayResult.paypalInAppClientId(),
-                                    gatewayResult.paypalInAppCurrency()
+                                    gatewayResult.paypalInAppCurrency(),
+                                    // Minted here and nowhere else: this is the first moment the payment has
+                                    // an id, and the only moment the caller is known to be the one making it.
+                                    ResumePaymentToken.mint(totalTransfer.getPrimaryKey())
                                 ));
                             });
                     });
@@ -687,5 +690,141 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
             .executeQuery("select amount,document.id from MoneyTransfer where parent=$1", moneyTransfer)
             .map(allocatedTransfers -> new DatabasePayment(moneyTransfer, allocatedTransfers.toArray(new MoneyTransfer[0])));
     }
+
+
+    /**
+     * What happened to one payment, for whoever made it.
+     *
+     * <p>This replaces two client DQL reads on a PUBLIC page that returned booker names, e-mail addresses and
+     * amounts keyed by a sequential MoneyTransfer id. A conjunct in the client's own statement could never be
+     * the boundary — the client decides whether to include it — so the query moved here, where the client
+     * names a payment and presents a token and chooses nothing else.
+     *
+     * <p>The token is the whole of the authorization and it is checked FIRST, before anything is read: a
+     * caller who fails it learns nothing, not even whether the payment exists. Same reply for a bad token, an
+     * expired one and an id that was never a payment.
+     *
+     * <p>A payment SPREAD over several bookings is a tree: the parent carries the status and the total and no
+     * document at all ({@code check_document} nulls it when {@code spread} is true), while one child per
+     * booking carries the allocation. Hence {@code id=$1 or parent=$1} throughout, and hence the status and
+     * amount come from the parent while the bookings come from the children.
+     */
+    @Override
+    public Future<ResumePaymentResult> resumePayment(ResumePaymentArgument argument) {
+        // Normalised as loadPaymentMethods does, so an id that arrives as the string "123" reaches the
+        // query as a number. The token check accepts it either way, and without this the uniform-refusal
+        // property stopped being literally true for that one case: it failed at the driver instead.
+        Object paymentPk = argument == null ? null : Numbers.toShortestNumber(argument.paymentPrimaryKey());
+        if (!ResumePaymentToken.isValidFor(argument == null ? null : argument.resumeToken(), paymentPk))
+            return Future.failedFuture(RESUME_PAYMENT_REFUSED);
+        EntityStore entityStore = EntityStore.create(DataSourceModelService.getDefaultDataSourceModel());
+        return entityStore.<MoneyTransfer>executeQuery(
+                "select pending,successful,amount,document.(id,event.id) from MoneyTransfer"
+                + " where id=$1 or parent=$1", paymentPk)
+            .compose(transfers -> {
+                if (transfers.isEmpty()) // the token verified, so this is a payment that has since gone
+                    return Future.failedFuture(RESUME_PAYMENT_REFUSED);
+                // Found by MATCHING the id, not by trusting a row order. For a spread payment this is the
+                // parent, the only row carrying the real status and the total the payer was charged; picking
+                // a child instead would report one allocation as the amount paid, and an `order by` that
+                // stopped being honoured would do it silently.
+                MoneyTransfer asked = null;
+                for (MoneyTransfer transfer : transfers)
+                    if (Numbers.identicalObjectsOrNumberValues(transfer.getPrimaryKey(), paymentPk))
+                        asked = transfer;
+                if (asked == null)
+                    return Future.failedFuture(RESUME_PAYMENT_REFUSED);
+                Object documentPk = null, eventPk = null;
+                for (MoneyTransfer transfer : transfers) {
+                    Document document = transfer.getDocument();
+                    if (document != null) { // a spread parent has none; its children do
+                        documentPk = document.getPrimaryKey();
+                        Event event = document.getEvent();
+                        eventPk = event == null ? null : event.getPrimaryKey();
+                        break;
+                    }
+                }
+                boolean pending = Booleans.isTrue(asked.isPending());
+                boolean successful = Booleans.isTrue(asked.isSuccessful());
+                int amount = Numbers.intValue(asked.getAmount());
+                final Object finalDocumentPk = documentPk, finalEventPk = eventPk;
+                return loadResumePaymentBookings(entityStore, paymentPk)
+                    .map(bookings -> new ResumePaymentResult(pending, successful, amount,
+                        finalDocumentPk, finalEventPk, bookings));
+            });
+    }
+
+    /**
+     * The bookings a payment covers, as the confirmation lists them.
+     *
+     * <p>Two queries rather than one: the attendance count per booking is a count over another table, and
+     * counting it in the same select would multiply the booking rows by their attendances. Read as the SERVER
+     * — the caller proved possession of this payment's token, not membership of these bookings' account, and
+     * one payment in four is made by somebody who owns neither.
+     */
+    private static Future<ResumePaymentBooking[]> loadResumePaymentBookings(EntityStore entityStore, Object paymentPk) {
+        return Future.all(
+                entityStore.<Document>executeQuery(
+                    "select ref,price_net,price_deposit,inPerson,person.(id,firstName,lastName,email),"
+                    + "person_firstName,person_lastName,person_email from Document d"
+                    + " where exists(select MoneyTransfer mt where mt.document=d and (mt.id=$1 or mt.parent=$1))"
+                    + " and !cancelled order by ref", paymentPk),
+                // BEST EFFORT, like the client code this replaced (which had .catch(() => [])): an
+                // attendance count is a line of detail, and failing the whole call for it would tell a
+                // payer their payment cannot be confirmed because a secondary read was shed under load.
+                entityStore.<Attendance>executeQuery(
+                    "select documentLine.document.id from Attendance where documentLine.!cancelled and"
+                    + " documentLine.document.id in (select mt.document from MoneyTransfer mt"
+                    + " where mt.id=$1 or mt.parent=$1)", paymentPk)
+                    .otherwise(EntityList.create("empty-attendances", entityStore))
+            ).map(composite -> {
+                EntityList<Document> documents = composite.resultAt(0);
+                EntityList<Attendance> attendances = composite.resultAt(1);
+                Map<Object, Integer> attendanceCounts = new HashMap<>();
+                for (Attendance attendance : attendances) {
+                    DocumentLine documentLine = attendance.getDocumentLine();
+                    Document document = documentLine == null ? null : documentLine.getDocument();
+                    Object key = document == null ? null : document.getPrimaryKey();
+                    if (key != null)
+                        attendanceCounts.merge(key, 1, Integer::sum);
+                }
+                return Arrays.map(documents.toArray(new Document[0]), document -> {
+                    Person person = document.getPerson();
+                    // The booking's own person_* columns are what the booker typed AT THE TIME, and the
+                    // person row is what it is now. The page has always preferred the live row and fallen
+                    // back, so that is preserved rather than quietly changed by moving the read here.
+                    // Read through getStringFieldValue: Document has no accessor for its denormalised
+                    // person_* columns, and this is the seam that reads them by name. NOT String.valueOf on
+                    // a generic getValue — that infers char[] and throws, which cost five days once.
+                    String firstName = person != null && person.getFirstName() != null
+                            ? person.getFirstName() : document.getStringFieldValue("person_firstName");
+                    String lastName = person != null && person.getLastName() != null
+                            ? person.getLastName() : document.getStringFieldValue("person_lastName");
+                    String email = person != null && person.getEmail() != null
+                            ? person.getEmail() : document.getStringFieldValue("person_email");
+                    String name = Strings.toSafeString(firstName) + " " + Strings.toSafeString(lastName);
+                    return new ResumePaymentBooking(
+                        document.getPrimaryKey(),
+                        person == null ? null : person.getPrimaryKey(),
+                        name.trim(),
+                        email,
+                        // NOT toSafeString: the page treats a missing ref as absent, and "" renders as an
+                        // empty ref instead. The client it replaced produced null here.
+                        document.getRef() == null ? null : String.valueOf(document.getRef()),
+                        Numbers.intValue(document.getPriceNet()),
+                        Numbers.intValue(document.getPriceDeposit()),
+                        attendanceCounts.getOrDefault(document.getPrimaryKey(), 0),
+                        document.isInPerson());
+                }, ResumePaymentBooking[]::new);
+            });
+    }
+
+    /**
+     * One reply for every way the check can fail, so the page cannot be used to learn which.
+     *
+     * <p>Not "payment not found" and not "invalid token": those two answers together are an oracle for which
+     * sequential ids are payments.
+     */
+    private static final String RESUME_PAYMENT_REFUSED = "Cannot resume this payment";
 
 }
