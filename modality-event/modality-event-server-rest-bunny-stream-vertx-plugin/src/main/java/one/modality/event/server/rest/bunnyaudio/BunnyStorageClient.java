@@ -326,6 +326,57 @@ public final class BunnyStorageClient {
         file.close().onFailure(err -> Console.log("[BUNNY-AUDIO] closing an uploaded file failed: " + err.getMessage()));
     }
 
+    /** What {@link #createFolder} did. */
+    public static final String FOLDER_EXISTED = "existing", FOLDER_CREATED = "created", FOLDER_WITH_PLACEHOLDER = "placeholder";
+
+    /**
+     * Makes the folder {@code path} exist in the zone — its parents too, when they are missing.
+     *
+     * <p>Bunny documents no call that creates an empty folder: a folder appears when a file is stored in it. So
+     * this first sends what its own panel is understood to send — an empty PUT to the folder's address, with the
+     * trailing slash — and then lists the parent to see whether a folder appeared. When none did, it stores an
+     * empty {@link AudioStorageNames#FOLDER_PLACEHOLDER} file in it, which the documented upload turns into a
+     * real folder. Should the empty PUT have left a zero-length FILE of the folder's name instead, that file is
+     * removed first.
+     *
+     * @return {@link #FOLDER_EXISTED}, {@link #FOLDER_CREATED} or {@link #FOLDER_WITH_PLACEHOLDER}
+     */
+    public static Future<String> createFolder(Zone zone, String path) {
+        int slash = path.lastIndexOf('/');
+        String parent = slash < 0 ? "" : path.substring(0, slash), name = path.substring(slash + 1);
+        return list(zone, parent).compose(before -> {
+            if (hasFolder(before, name))
+                return Future.succeededFuture(FOLDER_EXISTED);
+            boolean fileBefore = before.stream().anyMatch(e -> !e.directory() && e.name().equals(name));
+            return putEmpty(zone, path + "/")
+                .recover(err -> err instanceof StorageException s && BAD_API_KEY.equals(s.code) ? Future.failedFuture(err)
+                    : Future.succeededFuture()) // refused: the placeholder below makes the folder
+                .compose(v -> list(zone, parent))
+                .compose(after -> {
+                    if (hasFolder(after, name))
+                        return Future.succeededFuture(FOLDER_CREATED);
+                    boolean strayFile = !fileBefore && after.stream().anyMatch(e -> !e.directory() && e.name().equals(name) && e.length() == 0);
+                    return (strayFile ? delete(zone, path) : Future.<Void>succeededFuture())
+                        .compose(v -> putEmpty(zone, path + "/" + AudioStorageNames.FOLDER_PLACEHOLDER))
+                        .map(v -> FOLDER_WITH_PLACEHOLDER);
+                });
+        });
+    }
+
+    private static boolean hasFolder(List<Entry> entries, String name) {
+        return entries.stream().anyMatch(e -> e.directory() && e.name().equals(name));
+    }
+
+    /** An empty PUT at {@code path} (a file, or a folder when it ends with a slash). */
+    private static Future<Void> putEmpty(Zone zone, String path) {
+        return Fetch.fetch(zone.storageUrl(path), new FetchOptions().setMethod("PUT")
+                .setHeaders(headers(zone.password(), "application/octet-stream")).setBody(""))
+            .compose(response -> response.ok() ? Future.<Void>succeededFuture()
+                : refusedPassword(zone, response.status())
+                    ? Future.failedFuture(new StorageException(BAD_API_KEY, "storage zone refused its own password"))
+                    : Future.failedFuture(new StorageException(UNAVAILABLE, "empty PUT at " + path + " answered " + response.status())));
+    }
+
     /** Removes the file at {@code path}; one already gone counts as removed. */
     public static Future<Void> delete(Zone zone, String path) {
         return Fetch.fetch(zone.storageUrl(path), new FetchOptions().setMethod("DELETE").setHeaders(headers(zone.password(), null)))

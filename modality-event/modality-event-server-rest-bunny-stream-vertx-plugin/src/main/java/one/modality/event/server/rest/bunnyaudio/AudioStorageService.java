@@ -195,7 +195,8 @@ final class AudioStorageService {
             List<String> folders = new ArrayList<>();
             int files = 0;
             for (BunnyStorageClient.Entry entry : entries)
-                if (entry.directory()) folders.add(entry.name()); else files++;
+                if (entry.directory()) folders.add(entry.name());
+                else if (!entry.name().startsWith(".")) files++; // a folder's placeholder is not one of its files
             folders.sort(String.CASE_INSENSITIVE_ORDER);
             AstObject browse = AST.createObject();
             browse.set("path", folder);
@@ -241,6 +242,61 @@ final class AudioStorageService {
                 // the organisation as a whole: a grant scoped to this one event does not cover it.
                 return normalisedPattern == null ? write.get() : authorizer.authorize(scope.organizationId(), null, write);
             }));
+    }
+
+    // ─── Create folders ──────────────────────────────────────────────────────────────────────────────
+
+    /** More than any event's languages; a request asking for more is not one the screen sends. */
+    private static final int MAX_FOLDERS_AT_ONCE = 30;
+
+    /**
+     * Creates {@code folder} in the organisation's zone — or, when it holds {@code {lang}}, one folder per
+     * language of the event — so the folders exist before any recording is uploaded (for files put there
+     * through Bunny's own panel, say). A folder already there is left as it is. Replies
+     * {@code {"folders": [{"path", "outcome"}]}}, outcome one of {@code existing}, {@code created} and
+     * {@code placeholder} (see {@link BunnyStorageClient#createFolder}).
+     *
+     * <p>The folder is validated as the event's own folder is (relative, no {@code ..}, safe characters, only
+     * {@code {lang}}), and the caller must be able to reach {@code /medias} for the event's organisation.
+     */
+    static Future<String> createFolders(Object eventId, String folder, Authorizer authorizer) {
+        String normalised = folder == null ? null : AudioStorageNames.normaliseFolder(folder, false);
+        if (normalised == null)
+            return Future.failedFuture(INVALID_FOLDER);
+        return AudioEventScope.load(eventId).compose(scope -> scope == null ? RouteAccessGuard.<String>refused()
+            : authorizer.authorize(scope.organizationId(), scope.eventId(), () -> {
+                if (!scope.missingFields().isEmpty())
+                    return Future.failedFuture(NOT_CONFIGURED);
+                return scope.loadSlots().compose(slots -> {
+                    List<String> paths = AudioStorageNames.foldersToCreate(normalised,
+                        slots.values().stream().map(AudioEventScope.Slot::languageFolder).sorted().toList());
+                    if (paths.size() > MAX_FOLDERS_AT_ONCE)
+                        return Future.failedFuture(INVALID_FOLDER);
+                    AstArray created = AST.createArray();
+                    return scope.zone()
+                        .compose(zone -> createInTurn(zone, paths, 0, created))
+                        .map(v -> {
+                            Console.log("[BUNNY-AUDIO] folders for event " + scope.eventId() + ": " + AST.formatArray(created, "json"));
+                            AstObject json = AST.createObject();
+                            json.set("folders", created);
+                            return AST.formatObject(json, "json");
+                        });
+                });
+            }));
+    }
+
+    /** One folder after the other: siblings share a parent, whose listing tells whether each appeared. */
+    private static Future<Void> createInTurn(BunnyStorageClient.Zone zone, List<String> paths, int index, AstArray created) {
+        if (index >= paths.size())
+            return Future.succeededFuture();
+        String path = paths.get(index);
+        return BunnyStorageClient.createFolder(zone, path).compose(outcome -> {
+            AstObject entry = AST.createObject();
+            entry.set("path", path);
+            entry.set("outcome", outcome);
+            created.push(entry);
+            return createInTurn(zone, paths, index + 1, created);
+        });
     }
 
     // ─── Prepare uploads ─────────────────────────────────────────────────────────────────────────────
