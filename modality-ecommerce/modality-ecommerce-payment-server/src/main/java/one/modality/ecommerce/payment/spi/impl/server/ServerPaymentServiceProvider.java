@@ -232,7 +232,7 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
 
     private Future<Void> loadDatabasePaymentDocuments(DatabasePayment databasePayment) {
         return databasePayment.totalTransfer().getStore()
-            .executeQuery("select toMoneyAccount.(currency.code, gatewayCompany.name), document.(ref,person_name,person_firstName,person_lastName,person_email,person_phone,person_street,person_postCode,person_cityName,person_admin1Name,person_country.(name,iso_alpha2),person_countryName,forceLivePayment,event.(state,live,organization.country.iso_alpha2)) from MoneyTransfer where id=$1 or parent=$1", databasePayment.totalTransfer())
+            .executeQuery("select toMoneyAccount.(currency.code, gatewayCompany.name), document.(ref,person_name,person_firstName,person_lastName,person_email,person_phone,person_street,person_postCode,person_cityName,person_admin1Name,person_country.(name,iso_alpha2),person_countryName,forceLivePayment,event.(name,state,live,organization.country.iso_alpha2)) from MoneyTransfer where id=$1 or parent=$1", databasePayment.totalTransfer())
             .mapEmpty();
     }
 
