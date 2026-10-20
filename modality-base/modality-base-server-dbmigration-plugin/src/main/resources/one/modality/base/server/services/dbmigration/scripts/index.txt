@@ -136,3 +136,4 @@ V0133__access_event_type_scope.sql
 V0134__customer_write_operations.sql
 V0135__booking_write_operations.sql
 V0136__letter_venue_from_repeated_event.sql
+V0137__audio_bunny_folders.sql

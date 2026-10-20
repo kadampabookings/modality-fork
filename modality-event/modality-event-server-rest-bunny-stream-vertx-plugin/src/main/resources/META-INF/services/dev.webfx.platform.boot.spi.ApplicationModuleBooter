@@ -1,1 +1,2 @@
 one.modality.event.server.rest.bunnystream.BunnyStreamRestService
+one.modality.event.server.rest.bunnyaudio.BunnyAudioRestService
