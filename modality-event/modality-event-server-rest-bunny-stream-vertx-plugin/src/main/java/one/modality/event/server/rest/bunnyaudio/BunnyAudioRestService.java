@@ -70,15 +70,7 @@ public final class BunnyAudioRestService implements ApplicationModuleBooter {
         try {
             Path uploads = Path.of(System.getProperty("java.io.tmpdir"), "kbs-audio-uploads");
             Files.createDirectories(uploads);
-            Router router = VertxInstance.getHttpRouter();
-            router.post(UPLOAD_PATH)
-                .handler(BunnyAudioRestService::admit)
-                .handler(BodyHandler.create()
-                    .setBodyLimit(AudioStorageService.MAX_UPLOAD_BYTES + FORM_OVERHEAD_BYTES)
-                    .setHandleFileUploads(true)
-                    .setUploadsDirectory(uploads.toString())
-                    .setDeleteUploadedFilesOnEnd(true))
-                .handler(BunnyAudioRestService::handleUpload);
+            registerRoutes(VertxInstance.getHttpRouter(), uploads);
             Console.log("[BUNNY-AUDIO] REST route registered: " + UPLOAD_PATH + " (uploads in " + uploads + ")");
         } catch (Throwable t) {
             System.err.println("[BUNNY-AUDIO] bootModule FAILED: " + t);
@@ -86,6 +78,23 @@ public final class BunnyAudioRestService implements ApplicationModuleBooter {
             Console.error("[BUNNY-AUDIO] bootModule FAILED", t);
             throw new RuntimeException(t);
         }
+    }
+
+    /**
+     * The upload's two routes, in this order. The admission check is a route of its own, ahead of the one that
+     * reads the body: Vert.x refuses a BodyHandler placed after an ordinary handler on ONE route ("Cannot add
+     * [BODY] handler to route with [USER] handler"), and that refusal, thrown at boot, stops the server before
+     * it opens its port. {@link #admit} passes a request on with {@code next()}, to the body route.
+     */
+    static void registerRoutes(Router router, Path uploads) {
+        router.post(UPLOAD_PATH).handler(BunnyAudioRestService::admit);
+        router.post(UPLOAD_PATH)
+            .handler(BodyHandler.create()
+                .setBodyLimit(AudioStorageService.MAX_UPLOAD_BYTES + FORM_OVERHEAD_BYTES)
+                .setHandleFileUploads(true)
+                .setUploadsDirectory(uploads.toString())
+                .setDeleteUploadedFilesOnEnd(true))
+            .handler(BunnyAudioRestService::handleUpload);
     }
 
     /** Before the body: a plausible length and a live ticket, spent here, or the request goes no further. */
