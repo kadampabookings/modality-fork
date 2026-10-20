@@ -1,9 +1,8 @@
 package one.modality.ecommerce.payment.buscall.serial;
 
 import dev.webfx.platform.ast.AstObject;
-import dev.webfx.platform.ast.ReadOnlyAstArray;
 import dev.webfx.platform.ast.ReadOnlyAstObject;
-import dev.webfx.stack.com.serial.SerialCodecManager;
+import dev.webfx.platform.util.Arrays;
 import dev.webfx.stack.com.serial.spi.impl.SerialCodecBase;
 import one.modality.ecommerce.payment.ResumePaymentBooking;
 import one.modality.ecommerce.payment.ResumePaymentResult;
@@ -33,17 +32,28 @@ public final class ResumePaymentResultSerialCodec extends SerialCodecBase<Resume
         encodeInteger(serial, AMOUNT_KEY,               arg.amount());
         encodeObject( serial, DOCUMENT_PRIMARY_KEY_KEY, arg.documentPrimaryKey());
         encodeObject( serial, EVENT_PRIMARY_KEY_KEY,    arg.eventPrimaryKey());
-        ResumePaymentBooking[] bookings = arg.bookings();
-        if (bookings != null)
-            encodeObject(serial, BOOKINGS_KEY, SerialCodecManager.encodeJavaArrayToAstArray(bookings));
+        // encodeArray, NOT encodeObject: the two are not interchangeable, and getting it wrong cost a day.
+        // encodeObject sends an AstArray through the generic object encoder, which wraps it as
+        // {"$codec":"AstNode","v":[...]} — an OBJECT. decode() then asks getArray() for this key, the Vert.x
+        // AST factory casts the JsonObject it finds to AstArray, and throws. The reply crosses a decode hop
+        // inside the server (VertxBus.vertxToWebfxBody, when the bridge hands the reply back), so the server
+        // tripped over its own payload in an unwrapped handler: no reply was sent at all and every caller
+        // waited out its timeout. encodeArray writes a plain array, which is what decodeArray reads and what
+        // the TypeScript client expects.
+        encodeArray(  serial, BOOKINGS_KEY,             arg.bookings());
     }
 
     @Override
     public ResumePaymentResult decode(ReadOnlyAstObject serial) {
-        ReadOnlyAstArray array = serial.getArray(BOOKINGS_KEY);
-        ResumePaymentBooking[] bookings = array == null
-                ? new ResumePaymentBooking[0]
-                : SerialCodecManager.decodeAstArrayToJavaArray(array, ResumePaymentBooking.class);
+        // Decoded as Object[] and copied with an array GENERATOR, not with decodeArray(.., Class): that
+        // path builds the typed array reflectively, through an array constructor that has to be registered
+        // for the class. Where it is not — a check, a client, anything that has not called
+        // RArray.injectJavaArrayNewInstanceMethod — it warns "No array constructor found", falls back to
+        // new Object[], and the assignment below throws ClassCastException. The generator needs no registry
+        // and compiles for GWT too.
+        Object[] decoded = decodeObjectArray(serial, BOOKINGS_KEY);
+        ResumePaymentBooking[] bookings = decoded == null ? new ResumePaymentBooking[0]
+            : Arrays.map(decoded, element -> (ResumePaymentBooking) element, ResumePaymentBooking[]::new);
         return new ResumePaymentResult(
                 decodeBoolean(serial, PENDING_KEY),
                 decodeBoolean(serial, SUCCESSFUL_KEY),
