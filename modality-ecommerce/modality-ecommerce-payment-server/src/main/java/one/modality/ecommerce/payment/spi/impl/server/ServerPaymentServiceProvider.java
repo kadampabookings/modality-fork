@@ -719,8 +719,7 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
             return Future.failedFuture(RESUME_PAYMENT_REFUSED);
         EntityStore entityStore = EntityStore.create(DataSourceModelService.getDefaultDataSourceModel());
         return entityStore.<MoneyTransfer>executeQuery(
-                "select pending,successful,amount,document.(id,event.id) from MoneyTransfer"
-                + " where id=$1 or parent=$1", paymentPk)
+                RESUME_TRANSFERS_DQL, paymentPk)
             .compose(transfers -> {
                 if (transfers.isEmpty()) // the token verified, so this is a payment that has since gone
                     return Future.failedFuture(RESUME_PAYMENT_REFUSED);
@@ -766,19 +765,21 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
     private static Future<ResumePaymentBooking[]> loadResumePaymentBookings(EntityStore entityStore, Object paymentPk) {
         return Future.all(
                 entityStore.<Document>executeQuery(
-                    // No e-mail column read at all: the page no longer shows one, so this must not
-                    // fetch one — a public page should not carry personal data it does not display.
-                    "select ref,price_net,price_deposit,inPerson,person.(id,firstName,lastName),"
-                    + "person_firstName,person_lastName from Document d"
-                    + " where exists(select MoneyTransfer mt where mt.document=d and (mt.id=$1 or mt.parent=$1))"
-                    + " and !cancelled order by ref", paymentPk),
+                    RESUME_BOOKINGS_DQL, paymentPk),
                 // BEST EFFORT, like the client code this replaced (which had .catch(() => [])): an
                 // attendance count is a line of detail, and failing the whole call for it would tell a
                 // payer their payment cannot be confirmed because a secondary read was shed under load.
-                entityStore.<Attendance>executeQuery(
-                    "select documentLine.document.id from Attendance where documentLine.!cancelled and"
-                    + " documentLine.document.id in (select mt.document from MoneyTransfer mt"
-                    + " where mt.id=$1 or mt.parent=$1)", paymentPk)
+                // PARENTHESISED, and it has to be: `documentLine.!cancelled` does not parse — a negation
+                // inside a dot path is written `documentLine.(!cancelled ...)`. Removing the parentheses
+                // while tidying a duplicated conjunct inside them turned this into a parse error that
+                // failed the whole endpoint, on staging, for every payer (2026-10-20).
+                //
+                // Wrapped so that a SYNCHRONOUS throw becomes a failed future: executeQuery parses
+                // eagerly, so a malformed statement never reaches the `.otherwise` below — which is why
+                // the best-effort intent above did not save it either.
+                Future.succeededFuture()
+                    .compose(ignored -> entityStore.<Attendance>executeQuery(
+                        RESUME_ATTENDANCES_DQL, paymentPk))
                     .otherwise(EntityList.create("empty-attendances", entityStore))
             ).map(composite -> {
                 EntityList<Document> documents = composite.resultAt(0);
@@ -826,5 +827,31 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
      * sequential ids are payments.
      */
     private static final String RESUME_PAYMENT_REFUSED = "Cannot resume this payment";
+
+    /*
+     * The three statements the resume-payment endpoint runs, named so that ResumePaymentQueriesCheck can
+     * PARSE them against the real domain model. They were inline string literals, and nothing parsed them
+     * until a request arrived: `documentLine.!cancelled` reached staging and failed every payer with
+     * "Couldn't repair and continue parse" at column 68. A statement no test parses is a statement whose
+     * first parse is a user's.
+     */
+
+    /** The payment and its children. The parent carries the status; `check_document` leaves it no document. */
+    static final String RESUME_TRANSFERS_DQL =
+        "select pending,successful,amount,document.(id,event.id) from MoneyTransfer"
+        + " where id=$1 or parent=$1";
+
+    /** The bookings the payment covers. No e-mail column: the page does not show one. */
+    static final String RESUME_BOOKINGS_DQL =
+        "select ref,price_net,price_deposit,inPerson,person.(id,firstName,lastName),"
+        + "person_firstName,person_lastName from Document d"
+        + " where exists(select MoneyTransfer mt where mt.document=d and (mt.id=$1 or mt.parent=$1))"
+        + " and !cancelled order by ref";
+
+    /** Attendances per booking. The dot path is PARENTHESISED — `documentLine.!cancelled` does not parse. */
+    static final String RESUME_ATTENDANCES_DQL =
+        "select documentLine.document.id from Attendance where documentLine.(!cancelled"
+        + " and document.id in (select mt.document from MoneyTransfer mt"
+        + " where mt.id=$1 or mt.parent=$1))";
 
 }
