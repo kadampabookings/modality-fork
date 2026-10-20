@@ -760,7 +760,8 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
      * <p>Two queries rather than one: the attendance count per booking is a count over another table, and
      * counting it in the same select would multiply the booking rows by their attendances. Read as the SERVER
      * — the caller proved possession of this payment's token, not membership of these bookings' account, and
-     * one payment in four is made by somebody who owns neither.
+     * a payer who owns neither is an ordinary case rather than a suspicious one (the pay-cart link exists to
+     * be shared).
      */
     private static Future<ResumePaymentBooking[]> loadResumePaymentBookings(EntityStore entityStore, Object paymentPk) {
         return Future.all(

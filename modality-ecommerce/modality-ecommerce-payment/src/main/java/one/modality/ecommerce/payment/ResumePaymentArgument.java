@@ -9,10 +9,29 @@ package one.modality.ecommerce.payment;
  * @param resumeToken       the signed token minted for this payment when it was initiated, which is the whole
  *                          of the authorization: the resume page is PUBLIC (a gateway redirects the payer back
  *                          with no session) and the primary key above is sequential, so the id alone proves
- *                          nothing. The token went to whoever initiated the payment, which is the right
- *                          reading — one payment in four is made by somebody who does not own the booking
- *                          (measured on production, 2026-10-19: 2,505 of 9,564), so "does this booking belong
- *                          to you" would refuse a quarter of payers.
+ *                          nothing. The token went to whoever initiated the payment, and that is the right
+ *                          reading rather than "does this booking belong to you": a booker can send the
+ *                          pay-cart link to somebody else, so the payer need not own the booking, and an
+ *                          ownership test would refuse them.
+ *
+ *                          <p>HOW OFTEN that happens on THIS page is UNMEASURABLE from what the system
+ *                          records, and the reason is worth knowing before someone tries. The booking form
+ *                          never initiates a redirected payment: it initiates an EMBEDDED one and offers a
+ *                          fallback link to the gateway's hosted page. Clicking that link is a plain
+ *                          navigation — no second initiatePayment, no second history row — so the history
+ *                          comment says "(embedded form)", which was true when it was written and says
+ *                          nothing about the hop that followed. Stripe and Square then return straight to
+ *                          the React URL with no server hop, so nothing records it either. Over ALL payment
+ *                          initiations a payer who is not the booking's owner is roughly one in four
+ *                          (production, 90 days: 2,507 of 9,571), but that population is not this one.
+ *
+ *                          <p>Which is why the design rests on no ratio at all: one third-party payer
+ *                          refused is the failure, whatever the frequency, and this page exists to stop a
+ *                          payer paying twice.
+ *
+ *                          <p>That same fallback is why the token rides the TRANSFER and not the form type:
+ *                          the hosted-page hop reuses the payment created for the embedded attempt, so the
+ *                          token minted then is still the right one when the gateway redirects back.
  *
  *                          <p>Signed, NOT opaque: the payload base64url-decodes to the payment id, which
  *                          the holder already has from the URL. Nothing is hidden in it; what it carries
