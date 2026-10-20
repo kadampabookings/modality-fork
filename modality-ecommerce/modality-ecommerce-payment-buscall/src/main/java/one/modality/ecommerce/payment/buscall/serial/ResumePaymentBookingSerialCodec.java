@@ -15,7 +15,6 @@ public final class ResumePaymentBookingSerialCodec extends SerialCodecBase<Resum
     private static final String DOCUMENT_PRIMARY_KEY_KEY = "document";
     private static final String PERSON_PRIMARY_KEY_KEY   = "person";
     private static final String PERSON_NAME_KEY          = "personName";
-    private static final String PERSON_EMAIL_KEY         = "personEmail";
     private static final String DOCUMENT_REF_KEY         = "ref";
     private static final String PRICE_NET_KEY            = "priceNet";
     private static final String PRICE_DEPOSIT_KEY        = "priceDeposit";
@@ -31,7 +30,6 @@ public final class ResumePaymentBookingSerialCodec extends SerialCodecBase<Resum
         encodeObject( serial, DOCUMENT_PRIMARY_KEY_KEY, arg.documentPrimaryKey());
         encodeObject( serial, PERSON_PRIMARY_KEY_KEY,   arg.personPrimaryKey());
         encodeString( serial, PERSON_NAME_KEY,          arg.personName());
-        encodeString( serial, PERSON_EMAIL_KEY,         arg.personEmail());
         encodeString( serial, DOCUMENT_REF_KEY,         arg.documentRef());
         encodeInteger(serial, PRICE_NET_KEY,            arg.priceNet());
         encodeInteger(serial, PRICE_DEPOSIT_KEY,        arg.priceDeposit());
@@ -48,7 +46,6 @@ public final class ResumePaymentBookingSerialCodec extends SerialCodecBase<Resum
                 decodeObject( serial, DOCUMENT_PRIMARY_KEY_KEY),
                 decodeObject( serial, PERSON_PRIMARY_KEY_KEY),
                 decodeString( serial, PERSON_NAME_KEY),
-                decodeString( serial, PERSON_EMAIL_KEY),
                 decodeString( serial, DOCUMENT_REF_KEY),
                 decodeInteger(serial, PRICE_NET_KEY, 0),
                 decodeInteger(serial, PRICE_DEPOSIT_KEY, 0),

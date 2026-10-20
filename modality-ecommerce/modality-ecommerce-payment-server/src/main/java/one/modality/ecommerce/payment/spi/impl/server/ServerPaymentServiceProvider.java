@@ -766,8 +766,10 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
     private static Future<ResumePaymentBooking[]> loadResumePaymentBookings(EntityStore entityStore, Object paymentPk) {
         return Future.all(
                 entityStore.<Document>executeQuery(
-                    "select ref,price_net,price_deposit,inPerson,person.(id,firstName,lastName,email),"
-                    + "person_firstName,person_lastName,person_email from Document d"
+                    // No e-mail column read at all: the page no longer shows one, so this must not
+                    // fetch one — a public page should not carry personal data it does not display.
+                    "select ref,price_net,price_deposit,inPerson,person.(id,firstName,lastName),"
+                    + "person_firstName,person_lastName from Document d"
                     + " where exists(select MoneyTransfer mt where mt.document=d and (mt.id=$1 or mt.parent=$1))"
                     + " and !cancelled order by ref", paymentPk),
                 // BEST EFFORT, like the client code this replaced (which had .catch(() => [])): an
@@ -801,14 +803,11 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
                             ? person.getFirstName() : document.getStringFieldValue("person_firstName");
                     String lastName = person != null && person.getLastName() != null
                             ? person.getLastName() : document.getStringFieldValue("person_lastName");
-                    String email = person != null && person.getEmail() != null
-                            ? person.getEmail() : document.getStringFieldValue("person_email");
                     String name = Strings.toSafeString(firstName) + " " + Strings.toSafeString(lastName);
                     return new ResumePaymentBooking(
                         document.getPrimaryKey(),
                         person == null ? null : person.getPrimaryKey(),
                         name.trim(),
-                        email,
                         // NOT toSafeString: the page treats a missing ref as absent, and "" renders as an
                         // empty ref instead. The client it replaced produced null here.
                         document.getRef() == null ? null : String.valueOf(document.getRef()),
