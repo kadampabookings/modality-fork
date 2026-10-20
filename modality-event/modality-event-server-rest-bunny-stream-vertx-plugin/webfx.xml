@@ -14,6 +14,13 @@
 
     <providers>
         <provider interface="dev.webfx.platform.boot.spi.ApplicationModuleBooter">one.modality.event.server.rest.bunnystream.BunnyStreamRestService</provider>
+        <!-- Audio recordings uploaded from the back office to the organisation's Bunny storage zone: the upload
+             route, and the four bus endpoints that authorise it (RouteAccessGuard, /medias) and manage folders. -->
+        <provider interface="dev.webfx.platform.boot.spi.ApplicationModuleBooter">one.modality.event.server.rest.bunnyaudio.BunnyAudioRestService</provider>
+        <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.event.server.rest.bunnyaudio.DescribeAudioStorageEndpoint</provider>
+        <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.event.server.rest.bunnyaudio.SetAudioFolderEndpoint</provider>
+        <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.event.server.rest.bunnyaudio.PrepareAudioUploadsEndpoint</provider>
+        <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.event.server.rest.bunnyaudio.DeleteAudioRecordingEndpoint</provider>
     </providers>
 
 </project>
