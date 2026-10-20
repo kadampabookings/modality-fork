@@ -784,11 +784,16 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
             ).map(composite -> {
                 EntityList<Document> documents = composite.resultAt(0);
                 EntityList<Attendance> attendances = composite.resultAt(1);
-                Map<Object, Integer> attendanceCounts = new HashMap<>();
+                // Keyed by the id NORMALISED to a Long, on both sides. The two sides come from different
+                // result sets now — one is an entity's primary key, the other a raw aliased column — and
+                // nothing guarantees the wire hands both back as the same Java type. An Integer key and a
+                // Long lookup miss silently, and the page would show "0 classes" for a booking with seven.
+                Map<Long, Integer> attendanceCounts = new HashMap<>();
                 for (Attendance attendance : attendances) {
-                    DocumentLine documentLine = attendance.getDocumentLine();
-                    Document document = documentLine == null ? null : documentLine.getDocument();
-                    Object key = document == null ? null : document.getPrimaryKey();
+                    // From the ALIAS, not from attendance.getDocumentLine(): the aliased select emits the
+                    // foreign-key column and no entity graph, which is precisely what keeps the query from
+                    // loading Document's display fields. See RESUME_ATTENDANCES_DQL.
+                    Long key = Numbers.toLong(attendance.getFieldValue(ATTENDANCE_DOCUMENT_ALIAS));
                     if (key != null)
                         attendanceCounts.merge(key, 1, Integer::sum);
                 }
@@ -814,7 +819,7 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
                         document.getRef() == null ? null : String.valueOf(document.getRef()),
                         Numbers.intValue(document.getPriceNet()),
                         Numbers.intValue(document.getPriceDeposit()),
-                        attendanceCounts.getOrDefault(document.getPrimaryKey(), 0),
+                        attendanceCounts.getOrDefault(Numbers.toLong(document.getPrimaryKey()), 0),
                         document.isInPerson());
                 }, ResumePaymentBooking[]::new);
             });
@@ -848,10 +853,33 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
         + " where exists(select MoneyTransfer mt where mt.document=d and (mt.id=$1 or mt.parent=$1))"
         + " and !cancelled order by ref";
 
-    /** Attendances per booking. The dot path is PARENTHESISED — `documentLine.!cancelled` does not parse. */
+    /** The alias the document id arrives under, named once because the query and the reader must agree. */
+    static final String ATTENDANCE_DOCUMENT_ALIAS = "documentId";
+
+    /**
+     * Attendances per booking, as a bare id per row.
+     *
+     * <p>Two things here are load-bearing and neither is obvious.
+     *
+     * <p>The dot path in the WHERE is PARENTHESISED, because `documentLine.!cancelled` does not parse — a
+     * negation inside a dot path needs them, and removing them broke the endpoint for every payer.
+     *
+     * <p>The selected column is ALIASED, and that is what keeps this query small. Unaliased,
+     * `documentLine.document.id` compiles — on the server, which has the DQL runtime and so compiles with
+     * expressions off — into seventeen columns: the compiler treats the second hop as "load that entity" and
+     * adds Document's display fields, among them special_needs, comment and request. This endpoint is PUBLIC
+     * and needs one id per row, so it was reading members' accessibility and health notes out of the
+     * database to count them. With the alias the compiler prunes to the foreign-key column: two columns, and
+     * neither the document nor the multiple_booking join is emitted at all.
+     *
+     * <p>The cost of the alias is the entity graph: nothing populates `attendance.documentLine` any more, so
+     * the id is read from the alias (see {@link #ATTENDANCE_DOCUMENT_ALIAS}).
+     */
     static final String RESUME_ATTENDANCES_DQL =
-        "select documentLine.document.id from Attendance where documentLine.(!cancelled"
+        "select documentLine.document.id as " + ATTENDANCE_DOCUMENT_ALIAS + " from Attendance"
+        + " where documentLine.(!cancelled"
         + " and document.id in (select mt.document from MoneyTransfer mt"
         + " where mt.id=$1 or mt.parent=$1))";
+
 
 }
