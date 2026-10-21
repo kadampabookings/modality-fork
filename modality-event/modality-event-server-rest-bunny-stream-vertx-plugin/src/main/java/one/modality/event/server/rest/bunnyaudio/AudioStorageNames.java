@@ -7,6 +7,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Deque;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.regex.Matcher;
@@ -169,6 +170,26 @@ public final class AudioStorageNames {
     public static String folderForLanguage(String eventFolder, String languageFolder) {
         return eventFolder.replace(LANG_TOKEN, languageFolder);
     }
+
+    /**
+     * The folders to create for {@code folder}: itself, or — when it holds {@code {lang}} — one per language of
+     * the event, in the order given, each once. Empty when it holds {@code {lang}} and the event has no language.
+     */
+    public static List<String> foldersToCreate(String folder, Collection<String> languageFolders) {
+        if (!hasLanguageSubfolder(folder))
+            return List.of(folder);
+        LinkedHashSet<String> folders = new LinkedHashSet<>();
+        for (String languageFolder : languageFolders)
+            folders.add(folderForLanguage(folder, languageFolder));
+        return List.copyOf(folders);
+    }
+
+    /**
+     * The empty file that makes a folder exist when Bunny would not create an empty one. Its leading dot keeps
+     * it out of every name an upload can be given ({@link #cleanFileName} trims leading dots) and hides it in
+     * most listings.
+     */
+    public static final String FOLDER_PLACEHOLDER = ".keep";
 
     /**
      * The folder name of a recording language, as the zone already spells them: ISO 639-3 ({@code eng fra deu

@@ -29,6 +29,6 @@ module modality.event.server.rest.bunny.stream.vertx.plugin {
 
     // Provided services
     provides dev.webfx.platform.boot.spi.ApplicationModuleBooter with one.modality.event.server.rest.bunnystream.BunnyStreamRestService, one.modality.event.server.rest.bunnyaudio.BunnyAudioRestService;
-    provides dev.webfx.stack.com.bus.call.spi.BusCallEndpoint with one.modality.event.server.rest.bunnyaudio.DescribeAudioStorageEndpoint, one.modality.event.server.rest.bunnyaudio.SetAudioFolderEndpoint, one.modality.event.server.rest.bunnyaudio.PrepareAudioUploadsEndpoint, one.modality.event.server.rest.bunnyaudio.DeleteAudioRecordingEndpoint;
+    provides dev.webfx.stack.com.bus.call.spi.BusCallEndpoint with one.modality.event.server.rest.bunnyaudio.DescribeAudioStorageEndpoint, one.modality.event.server.rest.bunnyaudio.SetAudioFolderEndpoint, one.modality.event.server.rest.bunnyaudio.PrepareAudioUploadsEndpoint, one.modality.event.server.rest.bunnyaudio.DeleteAudioRecordingEndpoint, one.modality.event.server.rest.bunnyaudio.CreateAudioFoldersEndpoint;
 
 }

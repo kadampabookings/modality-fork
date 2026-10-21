@@ -163,6 +163,15 @@ public class AudioStorageNamesCheck {
         same("a key built here matches the key of its address", AudioStorageService.pathKey(mkmc),
             AudioStorageNames.zonePathKey(cdn + AudioStorageNames.encodePath(mkmc), hosts));
 
+        // --- which folders "create" makes ---
+        same("a plain folder is created as it is", List.of("mkmc-events/2027"),
+            AudioStorageNames.foldersToCreate("mkmc-events/2027", List.of("eng", "fra")));
+        same("{lang} becomes one folder per language, each once", List.of("ittp/2027/eng", "ittp/2027/fra", "ittp/2027/yue"),
+            AudioStorageNames.foldersToCreate("ittp/2027/{lang}", List.of("eng", "fra", "eng", "yue")));
+        same("{lang} with no language makes nothing", List.of(), AudioStorageNames.foldersToCreate("ittp/2027/{lang}", List.of()));
+        check("the placeholder can never be an upload's name",
+            !AudioStorageNames.cleanFileName(AudioStorageNames.FOLDER_PLACEHOLDER, "mp3").startsWith("."));
+
         // --- the bus argument for prepareAudioUploads ---
         List<AudioStorageService.ProposedFile> files = AudioStorageService.proposedFiles(
             new Object[] { 1857, 11, "a.mp3", 100, 12, "b.mp3", 200, 13, "dangling" });
