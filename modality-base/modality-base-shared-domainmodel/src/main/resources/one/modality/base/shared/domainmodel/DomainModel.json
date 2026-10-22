@@ -943,7 +943,8 @@
     "organization": "Organization",
     "recurringItem": "Item",
     "registrationMailAccount": "MailAccount",
-    "supportEmail": "string"
+    "supportEmail": "string",
+    "twoCarersForChildren": "boolean"
   },
   "Filter": {
     "id": 110,
