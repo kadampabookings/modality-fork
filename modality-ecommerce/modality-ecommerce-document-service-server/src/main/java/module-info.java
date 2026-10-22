@@ -5,6 +5,7 @@ module modality.ecommerce.document.service.server {
     // Direct dependencies modules
     requires modality.base.server.mail;
     requires modality.base.shared.entities;
+    requires modality.crm.server.authn.gateway.shared;
     requires modality.ecommerce.document.service;
     requires modality.ecommerce.document.service.buscall;
     requires modality.ecommerce.history.server;

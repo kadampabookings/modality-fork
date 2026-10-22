@@ -16,6 +16,7 @@ import dev.webfx.stack.orm.entity.EntityStore;
 import dev.webfx.stack.orm.entity.EntityStoreQuery;
 import dev.webfx.stack.orm.entity.UpdateStore;
 import dev.webfx.stack.session.state.RestrictedPrincipalRegistry;
+import dev.webfx.stack.session.state.StateAccessor;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 import one.modality.base.shared.entities.*;
 import one.modality.ecommerce.document.service.GuestBookingAccessService;
@@ -24,6 +25,7 @@ import java.util.ServiceLoader;
 import one.modality.base.shared.entities.triggers.Triggers;
 import one.modality.ecommerce.document.service.*;
 import one.modality.ecommerce.document.service.events.AbstractDocumentEvent;
+import one.modality.ecommerce.document.service.events.AbstractMoneyTransferEvent;
 import one.modality.ecommerce.document.service.events.book.*;
 import one.modality.ecommerce.document.service.events.registration.MarkDocumentAsArrivedEvent;
 import one.modality.ecommerce.document.service.events.registration.MarkDocumentAsCheckedOutEvent;
@@ -454,12 +456,68 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
         // queue. The access is built HERE, on the caller's thread: the principal and the verified audience are
         // thread-locals that are gone after the first async hop.
         DocumentAccess access = DocumentAccess.ofCaller();
+        // And WHERE a back-office submit may land (BackofficeSubmitScope, V0138): the caller's state and origin are
+        // captured here for the same reason as the access above.
+        Object callerState = ThreadLocalStateHolder.getThreadLocalState();
+        boolean backofficeClient = ThreadLocalStateHolder.isClientOrigin() && request.backoffice();
         return authorizeSubmit(request, access)
+            .compose(ignored -> backofficeClient ? authorizeBackofficeScope(request, callerState) : Future.succeededFuture())
             .compose(ignored -> validateMateLinks(request))
             // And the flag that decides a line's PRICE is judged here too, before the queue: a line may be
             // born a sharing place but never become one (refuseShareMateFlagAcquisition).
             .compose(ignored -> refuseShareMateFlagAcquisition(request))
-            .compose(ignored -> DocumentSubmitController.submitDocumentChanges(request));
+            // The service's own writes, run as the SERVER acting for the caller. Every check above was the client's;
+            // what follows is this service writing what it decided. Left on the caller's state, those writes were
+            // judged as the browser's whenever nothing above had gone async yet — a verified back-office submit,
+            // which needs no ownership read — so the census counted the document service's inserts as a client's
+            // (24,048 lines from one registration run, 2026-10-22), while the same writes from the front office,
+            // which reads first, passed as the server's. The caller's identity is kept for the audit trail.
+            .compose(ignored -> ThreadLocalStateHolder.runWithState(
+                StateAccessor.setUserId(StateAccessor.createEmptyState(), request.userId()),
+                () -> DocumentSubmitController.submitDocumentChanges(request)));
+    }
+
+    /**
+     * Refuses (once enforcing) a back-office submit landing where the caller does not hold SubmitBookings — see
+     * {@link BackofficeSubmitScope}. While observing, logs what it would refuse and lets it through. A failed read
+     * refuses while enforcing, like any rule that cannot answer.
+     */
+    private static Future<Void> authorizeBackofficeScope(DocumentSubmitRequest request, Object callerState) {
+        AbstractDocumentEvent[] events = request.argument().documentEvents();
+        // Every booking the submit creates, each where its own event says — not just the first event's booking.
+        // Read from the events after the replay (DocumentSubmitRequest.create), so a later event setting a field
+        // of the new booking is already applied.
+        List<BackofficeSubmitScope.Owner> newBookings = new ArrayList<>();
+        boolean paymentEvents = false;
+        for (AbstractDocumentEvent e : events) {
+            if (e instanceof AddDocumentEvent add) {
+                Document created = add.getDocument();
+                newBookings.add(new BackofficeSubmitScope.Owner(add.getEventPrimaryKey(),
+                    created == null ? null : Entities.getPrimaryKey(created.getOrganizationId())));
+            }
+            paymentEvents |= e instanceof AbstractMoneyTransferEvent;
+        }
+        Future<String> refusal;
+        try {
+            refusal = BackofficeSubmitScope.refusal(
+                DocumentSubmitAuthorization.existingTargets(events),
+                newBookings, paymentEvents,
+                BackofficeSubmitScope.databaseLookup(callerState));
+        } catch (RuntimeException e) {
+            refusal = Future.failedFuture(e);
+        }
+        return refusal
+            .recover(failure -> Future.succeededFuture("could not check the submit: " + failure.getMessage()))
+            .compose(reason -> {
+                if (reason == null)
+                    return Future.succeededFuture();
+                // The census line. The caller's principal and organization/event ids are identities, not personal data.
+                Console.log("🛡 " + (BackofficeSubmitScope.ENFORCING ? "REFUSED" : "WOULD REFUSE")
+                            + " a back-office booking submit by " + request.userId() + " — " + reason);
+                return BackofficeSubmitScope.ENFORCING
+                    ? Future.failedFuture(BackofficeSubmitScope.REFUSED)
+                    : Future.succeededFuture();
+            });
     }
 
     /**

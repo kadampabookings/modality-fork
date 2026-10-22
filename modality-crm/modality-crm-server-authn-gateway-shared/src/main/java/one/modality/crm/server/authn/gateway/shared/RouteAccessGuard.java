@@ -219,15 +219,29 @@ public final class RouteAccessGuard {
     public static <T> Future<T> whenCallerHoldsOperation(Object state, String operationCode,
                                                          Object organizationId, Object eventId,
                                                          Supplier<Future<T>> work) {
+        return callerHoldsOperation(state, operationCode, organizationId, eventId)
+            .compose(allowed -> Boolean.TRUE.equals(allowed) ? work.get() : refused());
+    }
+
+    /**
+     * The question {@link #whenCallerHoldsOperation} asks, answered rather than acted on: for a check that must
+     * log what it WOULD refuse while it is still observing, and so cannot let the guard refuse for it.
+     *
+     * <p>False for every caller the guards above refuse before looking (no established back-office session, a
+     * support view, a guest) — never a failure, so an observing caller cannot mistake a refusal for a fault.
+     *
+     * @param state the caller's state, captured on the caller's own thread before the first async step
+     */
+    public static Future<Boolean> callerHoldsOperation(Object state, String operationCode,
+                                                       Object organizationId, Object eventId) {
         Object personId = backOfficeCallerPersonId(state);
         if (personId == null)
-            return refused();
+            return Future.succeededFuture(false);
         EntityStore entityStore = EntityStore.create(DataSourceModelService.getDefaultDataSourceModel());
         return RoleOperationMembership.holdsThroughRoleFor(personId, operationCode, organizationId, eventId, entityStore)
             .compose(holds -> Boolean.TRUE.equals(holds)
                 ? Future.succeededFuture(true)
                 // A super administrator holds no operation row of their own, exactly as above
-                : SuperAdminMembership.isSuperAdminPerson(personId, entityStore))
-            .compose(allowed -> Boolean.TRUE.equals(allowed) ? work.get() : refused());
+                : SuperAdminMembership.isSuperAdminPerson(personId, entityStore));
     }
 }
