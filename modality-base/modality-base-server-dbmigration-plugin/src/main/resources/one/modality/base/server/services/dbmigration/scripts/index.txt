@@ -139,3 +139,4 @@ V0136__letter_venue_from_repeated_event.sql
 V0137__audio_bunny_folders.sql
 V0138__submit_bookings_operation.sql
 V0139__event_type_two_carers_for_children.sql
+V0140__document_line_room_on_its_site.sql
