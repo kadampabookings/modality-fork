@@ -12,6 +12,7 @@ import dev.webfx.stack.orm.datasourcemodel.service.DataSourceModelService;
 import dev.webfx.stack.orm.entity.*;
 import dev.webfx.stack.session.state.RestrictedPrincipalRegistry;
 import dev.webfx.stack.session.state.SystemUserId;
+import dev.webfx.stack.session.state.StateAccessor;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 import one.modality.base.shared.entities.*;
 import one.modality.base.shared.entities.db.DatabasePayment;
@@ -169,8 +170,15 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
         Future<InitiatePaymentResult> refusal = refuseIfReadOnlySession("initiate a payment");
         if (refusal != null)
             return refusal;
-        // Step 1: Inserting the payment in the database with its payment allocations
-        return insertPayment(argument.amount(), argument.paymentAllocations(), argument.preferredFormType(), argument.paymentMethod()) // insertPayment
+        // Step 1: Inserting the payment in the database with its payment allocations — as the SERVER acting for the
+        // caller. These rows are composed here (pending/successful are values no client picks), but on the caller's
+        // state they carried the bridge's clientOrigin stamp, so the write census listed them as client
+        // MoneyTransfer/History inserts — a client write money_transfer's deny forbids — with no refusal, because
+        // the deny guards only the generic submit endpoint (2026-10-22). The caller's identity is kept: the history
+        // rows name who paid (HistoryRecorder reads it from this state).
+        return ThreadLocalStateHolder.runWithState(
+                StateAccessor.setUserId(StateAccessor.createEmptyState(), ThreadLocalStateHolder.getUserId()),
+                () -> insertPayment(argument.amount(), argument.paymentAllocations(), argument.preferredFormType(), argument.paymentMethod()))
             .compose(databasePayment -> {
                 MoneyTransfer totalTransfer = databasePayment.totalTransfer();
                 // Step 2: Loading the primary document for the database payment
