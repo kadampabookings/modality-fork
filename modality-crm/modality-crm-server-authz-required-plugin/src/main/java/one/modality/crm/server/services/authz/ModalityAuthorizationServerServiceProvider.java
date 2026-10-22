@@ -109,7 +109,11 @@ public final class ModalityAuthorizationServerServiceProvider extends Authorizat
         // Capturing userId and runId from the thread local state holder (won't be present on later async callbacks)
         Object userId = ThreadLocalStateHolder.getUserId();
         String runId = ThreadLocalStateHolder.getRunId();
-        boolean backoffice = ThreadLocalStateHolder.isBackoffice();
+        // The verified audience where there is one (StateAccessor.isEffectivelyBackoffice). The push right after a
+        // login runs on a state rebuilt from the session, before the new token has come back, so it still reads the
+        // claim there — what it pushes is the UI's hints; every server-side check (isAuthorized) reads a verified
+        // audience, since a signed-in caller always presents a token.
+        boolean backoffice = ThreadLocalStateHolder.isEffectivelyBackoffice();
         return getOrComputeAuthorizations(userId, backoffice)
             .compose(pushObject -> pushAuthorizationsObject(pushObject, runId));
     }
