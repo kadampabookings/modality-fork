@@ -939,9 +939,12 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
                 // can. See SetPasswordAfterRecoveryCredentials.
                 SetPasswordAfterRecoveryCredentials updatePasswordCredentials =
                     new SetPasswordAfterRecoveryCredentials(update.newPassword());
+                // onComplete(promise), never promise.handle(future): handle() reads the result at once, and this
+                // future is still waiting on the database, so it failed every reset with a null cause — while the
+                // password gateway carried on and set the password anyway.
                 Promise<Void> promise = Promise.promise();
                 ThreadLocalStateHolder.runAsUser(open.target(),
-                    () -> promise.handle(AuthenticationService.updateCredentials(updatePasswordCredentials).mapEmpty())
+                    () -> AuthenticationService.updateCredentials(updatePasswordCredentials).<Void>mapEmpty().onComplete(promise)
                 );
                 // Spent only if the password was actually set: a refusal (a closed password, a weak one, the
                 // database) leaves the person free to try again within the same window.
