@@ -264,8 +264,19 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
      *
      * <p>Not a config value, deliberately: a switch that can be flipped without a code review is one that can
      * be flipped without anyone reading the log it depends on.
+     *
+     * <p><b>FrontendAccount, 2026-10-23, ahead of the rest.</b> Its only rule is the field rule on {@code backoffice}
+     * (ManageBackofficeAccess), so enforcing it refuses nothing but a client setting that flag without the operation:
+     * signup and a language change write other fields and need nothing. It could not wait for the general flip.
+     * The flag is the one thing a back-office login requires (the second factor is optional in production), and a
+     * verified back-office session is unrestricted in the document service — it loads any booking and submits to
+     * any, payments included, while BackofficeSubmitScope only observes. Nothing confines a client to its own
+     * account row (the person row rules went with denyTable("person"), and UnscopedWritePolicy only asks for a
+     * bound), so any caller able to submit DQL could set the flag on ANY account — its own being merely the easiest
+     * — then sign in to the back office and read or change every booking. The 3-day census (2026-10-20/22) logged no
+     * would-be refusal on it: the grant screen's writes come from holders of the operation.
      */
-    static final java.util.Set<String> ENFORCED_ENTITIES = java.util.Set.of();
+    static final java.util.Set<String> ENFORCED_ENTITIES = java.util.Set.of("FrontendAccount");
 
     /** Whether this entity's rule refuses (true) or only observes (false). See {@link #ENFORCED_ENTITIES}. */
     static boolean isEnforced(String entityName) {
