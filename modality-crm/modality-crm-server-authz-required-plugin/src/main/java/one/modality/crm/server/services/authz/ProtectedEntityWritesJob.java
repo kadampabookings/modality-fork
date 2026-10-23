@@ -10,6 +10,7 @@ import dev.webfx.stack.authz.server.spi.AuthorizationServerServiceProvider;
 import dev.webfx.stack.authz.server.spi.impl.AuthorizationServerServiceProviderBase;
 import dev.webfx.stack.db.query.ClientReadInspectionRegistry;
 import dev.webfx.stack.db.submit.ClientSubmitGuard;
+import dev.webfx.stack.db.submit.GeneratedKeyReference;
 import dev.webfx.stack.db.submit.ProtectedEntityWriteRegistry;
 import dev.webfx.stack.orm.datasourcemodel.service.DataSourceModelService;
 import dev.webfx.stack.orm.entity.Entities;
@@ -562,7 +563,30 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
             groups.add(new String[] { "EditLetterContent" });
         if (letterProperties)
             groups.add(new String[] { "EditLetterProperties" });
-        return groups;
+        return distinct(groups);
+    }
+
+    /**
+     * The same groups, each kept once, in the order they were first required.
+     *
+     * <p>Groups repeat because they are collected per FIELD: on a booking entity every field without a rule of
+     * its own requires {@link #MANAGE_BOOKINGS}, so a six-field insert asked for it six times. Repetition never
+     * changed the decision — every group must hold, and a group asked twice holds twice — but it cost a
+     * duplicate authorization call each time, and it reached the reader: production's census carried
+     * {@code (needs EditMediaAccess and ManageBookings and ManageBookings and ManageBookings and ManageBookings)}
+     * for one attendance, and thirteen terms for one document. That line is the only evidence of somebody being
+     * locked out, and after the flip it is also what the person refused is shown. A list that grows with the
+     * batch describes the batch; this one describes the row.
+     *
+     * <p>Order-sensitive on purpose: {@code {A, B}} and {@code {B, A}} are the same requirement, but the groups
+     * are written out literally in this file, so treating them as different costs nothing and keeps the
+     * comparison obvious. Equality is by content, not identity — the same array is rarely the same object.
+     */
+    private static java.util.List<String[]> distinct(java.util.List<String[]> groups) {
+        java.util.LinkedHashMap<java.util.List<String>, String[]> unique = new java.util.LinkedHashMap<>();
+        for (String[] group : groups)
+            unique.putIfAbsent(java.util.Arrays.asList(group), group);
+        return new ArrayList<>(unique.values());
     }
 
     /**
@@ -797,31 +821,86 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         return storedParent.compose(stored -> {
             List<Future<List<Map<String, String>>>> parts = new ArrayList<>();
             if (!insert)
-                parts.add(contextsOfRow(parentEntity, stored, lookup));
+                parts.add(contextsOfRow(parentEntity, stored, lookup, request, MAX_BATCH_HOPS));
             if (insert || request.writtenValues().containsKey(parentField))
-                parts.add(contextsOfRow(parentEntity, ownerAfterWrite(request, parentField, stored), lookup));
+                parts.add(contextsOfRow(parentEntity, ownerAfterWrite(request, parentField, stored), lookup,
+                    request, MAX_BATCH_HOPS));
             return union(parts);
         });
     }
 
     /**
-     * The contexts a stored row lives in, given its entity and id: through its own owner fields, or through its
-     * parent's, hop by hop. Anything that cannot be named — no id, a same-batch reference, an unreadable value,
-     * a row that does not exist — has no context, as everywhere else.
+     * How far a chain of same-batch references is followed. A booking needs two hops (an attendance to its line,
+     * the line to its document); the bound is what stops a batch that references itself in a circle, and the
+     * batch is the caller's to compose. Beyond it the row has no context, as an unresolvable one always has.
      */
-    private static Future<List<Map<String, String>>> contextsOfRow(String entityName, Object id, OwnerLookup lookup) {
+    private static final int MAX_BATCH_HOPS = 8;
+
+    /**
+     * The contexts a row lives in, given its entity and id: through its own owner fields, or through its
+     * parent's, hop by hop. Anything that cannot be named — no id, an unreadable value, a row that does not
+     * exist — has no context, as everywhere else.
+     *
+     * <p><b>A row this batch is creating is named, though not by an id.</b> It used to fall in with the
+     * unnameable, and that was the single largest hole in the census: a booking is written as one batch, so its
+     * line and attendances reference a document with no id yet and were judged in NO context, where no
+     * organization-scoped grant can answer. Production, 2026-10-23: 23,380 of 24,048 would-be refusals were
+     * exactly those rows — every line and attendance of 668 bookings — while the 668 documents beside them,
+     * carrying their own event, placed correctly. So a {@link GeneratedKeyReference} is now followed to the
+     * statement it names, and that statement's OWN written values place the row, recursively.
+     *
+     * <p>This widens no grant. The referenced statement is inspected the same way, it must insert the entity the
+     * reference is being read as, and the context it yields is the context its own fields name — a caller
+     * composing a batch cannot invent a context it could not have written directly into the parent row.
+     */
+    private static Future<List<Map<String, String>>> contextsOfRow(String entityName, Object id, OwnerLookup lookup,
+                                                                   ProtectedEntityWriteRegistry.WriteRequest batch,
+                                                                   int hopsLeft) {
+        if (id instanceof GeneratedKeyReference reference)
+            return contextsOfSameBatchRow(entityName, reference, lookup, batch, hopsLeft);
         String key = idOf(id);
         if (key == null)
             return Future.succeededFuture(List.of(NO_CONTEXT));
         String[] via = OWNER_VIA.get(entityName);
         if (via != null)
             return asServer(() -> lookup.parentId(entityName, via[0], primaryKeyOf(key)))
-                .compose(parent -> contextsOfRow(via[1], parent, lookup));
+                .compose(parent -> contextsOfRow(via[1], parent, lookup, batch, hopsLeft));
         String[] ownerFields = OWNER_FIELDS.get(entityName);
         if (ownerFields == null)
             return Future.succeededFuture(List.of(NO_CONTEXT));
         return asServer(() -> lookup.rowOwner(entityName, ownerFields, primaryKeyOf(key)))
             .compose(owner -> contextsOf(owner, lookup));
+    }
+
+    /**
+     * The contexts of a row another statement of this batch is creating, read from THAT statement's written
+     * values — the same two questions {@link #authorizationContexts} asks of a stored row, asked of a row that
+     * does not exist yet.
+     *
+     * <p>Four ways this yields no context, each of them the safe answer: the write was judged outside a batch
+     * (nothing to point at), the index names no inserting statement, the statement inserts a DIFFERENT entity
+     * from the one the reference is being read as (the caller composes the batch, so the target is theirs to
+     * choose and must be checked rather than assumed), or the chain is longer than {@link #MAX_BATCH_HOPS}.
+     */
+    private static Future<List<Map<String, String>>> contextsOfSameBatchRow(String entityName,
+                                                                            GeneratedKeyReference reference,
+                                                                            OwnerLookup lookup,
+                                                                            ProtectedEntityWriteRegistry.WriteRequest batch,
+                                                                            int hopsLeft) {
+        ProtectedEntityWriteRegistry.WriteRequest insert = batch == null ? null
+            : batch.batchWriteAt(reference.getStatementBatchIndex());
+        if (hopsLeft <= 0 || insert == null || !entityName.equals(insert.entityName()))
+            return Future.succeededFuture(List.of(NO_CONTEXT));
+        String[] via = OWNER_VIA.get(entityName);
+        if (via != null) // its parent is created here too, most likely: a line's document, an attendance's line
+            return contextsOfRow(via[1], insert.writtenValues().get(via[0]), lookup, batch, hopsLeft - 1);
+        String[] ownerFields = OWNER_FIELDS.get(entityName);
+        if (ownerFields == null)
+            return Future.succeededFuture(List.of(NO_CONTEXT));
+        // Exactly what an insert of this entity would be judged by on its own: contextsOf refuses to place an
+        // owner it cannot name, so an owner that is itself a reference or an expression still yields no context.
+        return contextsOf(new Owner(insert.writtenValues().get(ownerFields[0]),
+            ownerFields.length > 1 ? insert.writtenValues().get(ownerFields[1]) : null), lookup);
     }
 
     /** Every context any part asks for, each once, in order. */
