@@ -91,6 +91,40 @@ public class ResumePaymentTokenCheck {
         check("nothing is minted for a null payment", ResumePaymentToken.mint(null) == null);
         check("nor for a payment that is not a number", ResumePaymentToken.mint("not-a-number") == null);
 
+        // ── The logged reason: one per way of failing, and none for a valid token ──
+        // The caller never sees these, but the census reads them, and a reason that names the wrong cause is
+        // worse than none: it sends whoever reads the log after the wrong bug.
+        long now = System.currentTimeMillis();
+        check("reason: a valid token has none",
+              ResumePaymentToken.refusalFor(token, 101001, now) == null);
+        check("reason: no token is NO_TOKEN",
+              ResumePaymentToken.refusalFor(null, 101001, now) == ResumePaymentToken.Refusal.NO_TOKEN
+              && ResumePaymentToken.refusalFor("", 101001, now) == ResumePaymentToken.Refusal.NO_TOKEN);
+        check("reason: a non-numeric payment is NO_PAYMENT",
+              ResumePaymentToken.refusalFor(token, "not-a-number", now) == ResumePaymentToken.Refusal.NO_PAYMENT);
+        check("reason: a token for another payment is OTHER_PAYMENT",
+              ResumePaymentToken.refusalFor(token, 101002, now) == ResumePaymentToken.Refusal.OTHER_PAYMENT);
+        check("reason: another kind of signed token is FOREIGN",
+              ResumePaymentToken.refusalFor(foreignToken, 101001, now) == ResumePaymentToken.Refusal.FOREIGN);
+        check("reason: a tampered token is FORGED",
+              ResumePaymentToken.refusalFor(token + "x", 101001, now) == ResumePaymentToken.Refusal.FORGED);
+        // Verified at a time past the lifetime rather than by minting an old token, which tests the same branch
+        // without depending on how mint computes its deadline.
+        long dayAndAMinuteLater = now + 24 * 60 * 60 * 1000L + 60_000;
+        check("reason: our own token past its deadline is EXPIRED",
+              ResumePaymentToken.refusalFor(token, 101001, dayAndAMinuteLater) == ResumePaymentToken.Refusal.EXPIRED);
+        // THE distinction the census needs, so asserted both ways: an expired-looking token we did NOT sign is a
+        // forgery, not a stale tab. Signed under a key this server no longer holds, then presented after expiry.
+        SignedToken.setKeys(List.of("a-different-key-also-at-least-32-bytes-long".getBytes()));
+        String otherKeyToken = ResumePaymentToken.mint(101001);
+        SignedToken.setKeys(List.of(KEY));
+        check("reason: a token signed with another key is FORGED even when expired",
+              ResumePaymentToken.refusalFor(otherKeyToken, 101001, dayAndAMinuteLater) == ResumePaymentToken.Refusal.FORGED);
+        SignedToken.setKeys(Collections.emptyList());
+        check("reason: no signing key is NO_KEY",
+              ResumePaymentToken.refusalFor(token, 101001, now) == ResumePaymentToken.Refusal.NO_KEY);
+        SignedToken.setKeys(List.of(KEY));
+
         System.out.println(fail == 0 ? "\nALL " + pass + " PASS" : "\n" + fail + " FAILED");
         if (fail > 0)
             throw new AssertionError(fail + " resume payment token checks failed");

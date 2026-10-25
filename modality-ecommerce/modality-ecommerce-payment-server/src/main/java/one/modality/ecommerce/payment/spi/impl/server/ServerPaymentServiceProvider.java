@@ -723,14 +723,16 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
         // query as a number. The token check accepts it either way, and without this the uniform-refusal
         // property stopped being literally true for that one case: it failed at the driver instead.
         Object paymentPk = argument == null ? null : Numbers.toShortestNumber(argument.paymentPrimaryKey());
-        if (!ResumePaymentToken.isValidFor(argument == null ? null : argument.resumeToken(), paymentPk))
-            return Future.failedFuture(RESUME_PAYMENT_REFUSED);
+        ResumePaymentToken.Refusal tokenRefusal = ResumePaymentToken.refusalFor(
+            argument == null ? null : argument.resumeToken(), paymentPk, System.currentTimeMillis());
+        if (tokenRefusal != null)
+            return refuseResumePayment(paymentPk, tokenRefusal.name());
         EntityStore entityStore = EntityStore.create(DataSourceModelService.getDefaultDataSourceModel());
         return entityStore.<MoneyTransfer>executeQuery(
                 RESUME_TRANSFERS_DQL, paymentPk)
             .compose(transfers -> {
                 if (transfers.isEmpty()) // the token verified, so this is a payment that has since gone
-                    return Future.failedFuture(RESUME_PAYMENT_REFUSED);
+                    return refuseResumePayment(paymentPk, "PAYMENT_GONE");
                 // Found by MATCHING the id, not by trusting a row order. For a spread payment this is the
                 // parent, the only row carrying the real status and the total the payer was charged; picking
                 // a child instead would report one allocation as the amount paid, and an `order by` that
@@ -739,8 +741,11 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
                 for (MoneyTransfer transfer : transfers)
                     if (Numbers.identicalObjectsOrNumberValues(transfer.getPrimaryKey(), paymentPk))
                         asked = transfer;
+                // Rows came back, so a row matched `id=$1`, yet none compared equal to the id: OUR bug (an id
+                // comparison across Java number types), never the caller's. Named so it cannot hide among the
+                // refusals that are working as designed.
                 if (asked == null)
-                    return Future.failedFuture(RESUME_PAYMENT_REFUSED);
+                    return refuseResumePayment(paymentPk, "ID_MISMATCH");
                 Object documentPk = null, eventPk = null;
                 for (MoneyTransfer transfer : transfers) {
                     Document document = transfer.getDocument();
@@ -840,6 +845,22 @@ public final class ServerPaymentServiceProvider implements PaymentServiceProvide
      * sequential ids are payments.
      */
     private static final String RESUME_PAYMENT_REFUSED = "Cannot resume this payment";
+
+    /**
+     * Refuses uniformly, and says in the SERVER LOG which check failed.
+     *
+     * <p>The reply stays {@link #RESUME_PAYMENT_REFUSED} whatever the reason. The log line is what lets a refusal
+     * census tell a payer turned away from a stale tab or a probe — every branch used to look identical there.
+     *
+     * <p>Only the payment id and the reason are logged, never the token: a logged token would be a bearer
+     * credential sitting in CloudWatch for its lifetime. The id is logged NORMALISED to a number, because it
+     * arrives from the caller and a raw string could carry a newline that forges further log lines.
+     */
+    private static <T> Future<T> refuseResumePayment(Object paymentPk, String reason) {
+        Long id = Numbers.toLong(paymentPk);
+        Console.log("[resume-payment] refused payment=" + (id == null ? "?" : id) + " reason=" + reason);
+        return Future.failedFuture(RESUME_PAYMENT_REFUSED);
+    }
 
     /*
      * The three statements the resume-payment endpoint runs, named so that ResumePaymentQueriesCheck can

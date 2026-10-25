@@ -87,25 +87,65 @@ final class ResumePaymentToken {
         return payload == null ? null : SignedToken.mint(payload, System.currentTimeMillis() + LIFETIME_MILLIS);
     }
 
+    /** Whether this token was minted for this payment and has not expired. See {@link #refusalFor}. */
+    static boolean isValidFor(String token, Object paymentPrimaryKey) {
+        return refusalFor(token, paymentPrimaryKey, System.currentTimeMillis()) == null;
+    }
+
     /**
-     * Whether this token was minted for this payment and has not expired.
+     * Why a token would be refused for this payment — FOR THE SERVER LOG ONLY.
+     *
+     * <p>The caller always gets the one uniform refusal; telling it which of these it hit would turn the page into
+     * an oracle for which sequential ids are payments. But the log needs them: the prod census of 2026-10-25
+     * counted 147 refusals in two days and could not say whether they were stale tabs, probes, or real payers
+     * turned away, because every branch produced the same line.
+     */
+    enum Refusal {
+        /** The client presented no token at all — it cannot come from our page, which only calls with one. */
+        NO_TOKEN,
+        /** The payment id is missing or not a number. */
+        NO_PAYMENT,
+        /** This server has no signing key, so it can verify nothing. A configuration fault, not a caller's. */
+        NO_KEY,
+        /** We signed it, for some payment, and its deadline has passed: a payer back after the lifetime. */
+        EXPIRED,
+        /** We signed it as a resume token, for a DIFFERENT payment. */
+        OTHER_PAYMENT,
+        /** We signed it, but not as a resume token — another kind of signed token presented here. */
+        FOREIGN,
+        /** Not signed by us under any current key: tampered, made up, or signed by a key since retired. */
+        FORGED
+    }
+
+    /**
+     * Null when the token is valid for this payment, otherwise the reason it is not.
      *
      * <p><b>Fails CLOSED when there is no signing key.</b> An unconfigured server cannot verify, and a verifier
      * that cannot verify must refuse — the alternative is a page that silently stops checking, which is the
      * failure mode that would never be noticed.
+     *
+     * @param nowMillis the current time, passed in so expiry is testable without waiting for it
      */
-    static boolean isValidFor(String token, Object paymentPrimaryKey) {
-        if (token == null || paymentPrimaryKey == null)
-            return false;
+    static Refusal refusalFor(String token, Object paymentPrimaryKey, long nowMillis) {
+        if (token == null || token.isEmpty())
+            return Refusal.NO_TOKEN;
+        String expected = payloadFor(paymentPrimaryKey);
+        if (expected == null)
+            return Refusal.NO_PAYMENT;
         if (!SignedToken.isConfigured()) {
             Console.log("⚠️ No session token signing key: refusing every resume-payment token rather than"
                         + " skipping the check (webfx.stack.session.token)");
-            return false;
+            return Refusal.NO_KEY;
         }
-        String expected = payloadFor(paymentPrimaryKey);
-        String payload = expected == null ? null : SignedToken.verify(token, System.currentTimeMillis());
+        String payload = SignedToken.verify(token, nowMillis);
+        if (payload == null)
+            // Expired is told apart from forged by SignedToken itself, which checks the signature first, so
+            // EXPIRED can only be reported for a token this server really did sign.
+            return SignedToken.isAuthenticButExpired(token, nowMillis) ? Refusal.EXPIRED : Refusal.FORGED;
         // Compared to the payload we would have minted, so a valid token for payment A is not a valid token
         // for payment B — the signature alone only says "we issued this", never "we issued it for this".
-        return payload != null && payload.equals(expected);
+        if (payload.equals(expected))
+            return null;
+        return payload.startsWith(PAYLOAD_PREFIX) ? Refusal.OTHER_PAYMENT : Refusal.FOREIGN;
     }
 }
