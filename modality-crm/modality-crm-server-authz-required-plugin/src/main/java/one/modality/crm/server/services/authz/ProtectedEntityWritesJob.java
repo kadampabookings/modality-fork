@@ -275,8 +275,13 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
      * bound), so any caller able to submit DQL could set the flag on ANY account — its own being merely the easiest
      * — then sign in to the back office and read or change every booking. The 3-day census (2026-10-20/22) logged no
      * would-be refusal on it: the grant screen's writes come from holders of the operation.
+     *
+     * <p><b>Letter and PassTemplate, 2026-10-26.</b> Observed since the context fix (2026-10-18); the 8-day census
+     * to 2026-10-25 logged no would-be refusal on either, while letters were being written. Their back-office
+     * gates still read {@code hasPermission(...) || true}: removing that comes after this, never before, or the
+     * buttons would vanish for everyone (see REQUIRED_OPERATIONS).
      */
-    static final java.util.Set<String> ENFORCED_ENTITIES = java.util.Set.of("FrontendAccount");
+    static final java.util.Set<String> ENFORCED_ENTITIES = java.util.Set.of("FrontendAccount", "Letter", "PassTemplate");
 
     /** Whether this entity's rule refuses (true) or only observes (false). See {@link #ENFORCED_ENTITIES}. */
     static boolean isEnforced(String entityName) {
