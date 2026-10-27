@@ -141,3 +141,4 @@ V0138__submit_bookings_operation.sql
 V0139__event_type_two_carers_for_children.sql
 V0140__document_line_room_on_its_site.sql
 V0141__whole_room_line_is_a_room_booking.sql
+V0142__resource_bed_setup.sql

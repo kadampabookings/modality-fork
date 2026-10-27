@@ -1896,6 +1896,8 @@
     "lastCleaningDate": "Temporal.PlainDateTime",
     "lastInspectionDate": "Temporal.PlainDateTime",
     "name": "string",
+    "setupBeds": "integer",
+    "setupDate": "Temporal.PlainDateTime",
     "site": "Site",
     "siteItemFamily": "SiteItemFamily",
     "siteItemFamilyCode": "string",
