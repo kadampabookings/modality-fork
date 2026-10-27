@@ -778,6 +778,7 @@
     "description": "string",
     "earlyBird": "boolean",
     "endDate": "Temporal.PlainDate",
+    "externalAudio": "boolean",
     "externalLink": "string",
     "facebook_conversionPixelId": "string",
     "feesBottomLabel": "Label",
