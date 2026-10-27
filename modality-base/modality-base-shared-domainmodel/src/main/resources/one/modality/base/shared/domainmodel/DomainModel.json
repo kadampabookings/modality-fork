@@ -1192,12 +1192,13 @@
     "icon": {
       "expr": "image('images/16/label.png')"
     },
+    "it": "string",
     "livestreamMessage": "boolean",
     "organization": "Organization",
     "pt": "string",
     "ref": "string",
     "text": {
-      "expr": "?lang='de' ? de : ?lang='el' ? el : ?lang='en' ? en : ?lang='es' ? es : ?lang='fr' ? fr : ?lang='pt' ? pt : ?lang='zhs' ? zhs : ?lang='zht' ? zht : ?lang='vi' ? vi : en"
+      "expr": "?lang='de' ? de : ?lang='el' ? el : ?lang='en' ? en : ?lang='es' ? es : ?lang='fr' ? fr : ?lang='pt' ? pt : ?lang='zhs' ? zhs : ?lang='zht' ? zht : ?lang='vi' ? vi : ?lang='it' ? it : en"
     },
     "vi": "string",
     "zhs": "string",
