@@ -168,6 +168,9 @@ public class BackofficeSubmitScopeCheck {
             && scope.contains("where id in $1\", (Object) keysOf(documentIds))"));
         check("the census line is distinct from the front-office one",
             provider.contains("\" a back-office booking submit by \""));
+        check("the rule ships ENFORCING (since 2026-10-28, after a clean census)", BackofficeSubmitScope.ENFORCING);
+        check("and a refusal fails the submit while enforcing",
+            provider.contains("? Future.failedFuture(BackofficeSubmitScope.REFUSED)"));
 
         String migration = readSource("modality-fork/modality-base/modality-base-server-dbmigration-plugin/src/main/resources/"
                                       + "one/modality/base/server/services/dbmigration/scripts/V0138__submit_bookings_operation.sql");

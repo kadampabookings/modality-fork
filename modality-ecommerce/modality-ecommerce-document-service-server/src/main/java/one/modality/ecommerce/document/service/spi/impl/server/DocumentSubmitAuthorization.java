@@ -43,9 +43,10 @@ import java.util.Set;
  *       organization.)</li>
  * </ol>
  *
- * <p><b>Observing first</b>, like every rule in this arc: until {@link #ENFORCING} is flipped, a submit that would
- * be refused is logged and let through, so a front-office flow the allowlist missed shows in the census instead of
- * breaking bookings.
+ * <p><b>Observed first</b>, like every rule in this arc: from 2026-10-19 a submit that would be refused was logged
+ * and let through, so a front-office flow the allowlist missed would show in the census instead of breaking
+ * bookings. None did — the production census from the 22 Oct deploy to 28 Oct logged no such submit — and it is
+ * enforced from 2026-10-28.
  *
  * @author Claude Code
  */
@@ -54,8 +55,8 @@ final class DocumentSubmitAuthorization {
     private DocumentSubmitAuthorization() {
     }
 
-    /** False while observing. Flip after a clean census — and add a log filter for {@link #REFUSED} the same day. */
-    static final boolean ENFORCING = false;
+    /** On since 2026-10-28, after a clean census; false would only log ("WOULD REFUSE"). */
+    static final boolean ENFORCING = true;
 
     /** Told to the caller when refusing; deliberately says nothing about which booking or event was at fault. */
     static final String REFUSED = "[NotAuthorizedError] This booking change is not allowed";

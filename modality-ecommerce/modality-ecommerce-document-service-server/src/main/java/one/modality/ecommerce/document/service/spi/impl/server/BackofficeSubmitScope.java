@@ -35,15 +35,16 @@ import java.util.function.Function;
  * <p><b>Payment events are refused outright</b>, not placed: no back-office screen sends one, and they name a
  * payment by id alone, so one could move or delete another centre's payment or record a "successful" one.
  *
- * <p>Observing first ({@link #ENFORCING} false): the census line is {@code "WOULD REFUSE a back-office booking
- * submit"}. Super administrators pass, as through every RouteAccessGuard check.
+ * <p>Observed first (the census line was {@code "WOULD REFUSE a back-office booking submit"}), enforced from
+ * 2026-10-28 after the production census from the 22 Oct deploy logged none. Super administrators pass, as through
+ * every RouteAccessGuard check.
  *
  * @author Claude Code
  */
 final class BackofficeSubmitScope {
 
-    /** Off until a clean census; then on, with a CloudWatch filter for its REFUSED line the same day. */
-    static final boolean ENFORCING = false;
+    /** On since 2026-10-28, after a clean census; false would only log ("WOULD REFUSE"). */
+    static final boolean ENFORCING = true;
 
     static final String SUBMIT_BOOKINGS = "SubmitBookings";
 

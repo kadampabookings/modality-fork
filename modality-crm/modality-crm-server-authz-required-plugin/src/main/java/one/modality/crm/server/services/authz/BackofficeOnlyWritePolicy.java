@@ -35,16 +35,17 @@ import java.util.Set;
  * That is item C of the write-authorization plan — ownership and organization scope — and it can be built on the
  * write rule's authorizationContexts. This closes members and anonymous callers, which is the larger door.
  *
- * <p><b>Observing first.</b> Row rules are enforced the moment they deploy, unlike the per-entity rule, so one
- * written wrong refuses real work at once. Until {@link #ENFORCING} is flipped this only logs what it would refuse,
- * so the census can show that the back office always arrives with its token.
+ * <p><b>Observed first, enforced from 2026-10-28.</b> Row rules are enforced the moment they deploy, unlike the
+ * per-entity rule, so one written wrong refuses real work at once. It shipped observing on 2026-10-19; the
+ * production census from the 22 Oct deploy to 28 Oct logged no write it would have refused, so the back office
+ * arrives with its token. Its REFUSED line needs a CloudWatch filter of its own.
  *
  * @author Claude Code
  */
 final class BackofficeOnlyWritePolicy implements ClientSubmitGuard.WritePolicy {
 
-    /** False while observing. Flip after a clean census — and add a log filter for {@link #REFUSED} the same day. */
-    static final boolean ENFORCING = false;
+    /** On since 2026-10-28, after a clean census; false would only log ("WOULD REFUSE"). */
+    static final boolean ENFORCING = true;
 
     /** The booking's own tables. Entity names, as the write request carries them. */
     static final Set<String> BOOKING_ENTITIES = Set.of("Document", "DocumentLine", "Attendance");

@@ -106,7 +106,7 @@ public class DocumentSubmitAuthorizationCheck {
             backoffice(List.of("PriceDocumentLineEvent", "ConfirmDocumentEvent"), targets(List.of("200"), List.of("210"), List.of())) == null);
 
         System.out.println("\nAs shipped:");
-        check("the rule ships observing — it logs WOULD REFUSE and lets the submit through", !DocumentSubmitAuthorization.ENFORCING);
+        check("the rule ships ENFORCING (since 2026-10-28, after a clean census)", DocumentSubmitAuthorization.ENFORCING);
         check("the refusal told the caller names neither booking nor event",
             !DocumentSubmitAuthorization.REFUSED.matches(".*\\d.*") && !DocumentSubmitAuthorization.REFUSED.contains("Event"));
         // Asserted on the call (its own javadoc names the class, so an absence test would be fooled). A reformat
@@ -114,6 +114,8 @@ public class DocumentSubmitAuthorizationCheck {
         String provider = Files.readString(Path.of("src/main/java/one/modality/ecommerce/document/service/spi/impl/server/ServerDocumentServiceProvider.java"));
         check("submitDocumentChanges asks it before anything is queued",
             provider.contains("return authorizeSubmit(request, access)"));
+        check("and a refusal fails the submit while enforcing",
+            provider.contains("? Future.failedFuture(DocumentSubmitAuthorization.REFUSED)"));
 
         System.out.println(pass + " passed, " + fail + " failed");
         if (fail > 0)
