@@ -280,8 +280,19 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
      * to 2026-10-25 logged no would-be refusal on either, while letters were being written. Their back-office
      * gates still read {@code hasPermission(...) || true}: removing that comes after this, never before, or the
      * buttons would vanish for everyone (see REQUIRED_OPERATIONS).
+     *
+     * <p><b>Document, DocumentLine, Attendance and Organization, 2026-10-29.</b> The CENTRE layer of the booking
+     * tables: BackofficeOnlyWritePolicy (enforced 2026-10-28) decides that only a verified back office writes them,
+     * and this decides which back-office user may write which booking — the right for the field, in the booking's
+     * own organization and event. Without it a member of staff at one centre could change another centre's booking
+     * details, rooms or recording access, or its organisation record, by direct writes. The censuses to 2026-10-28
+     * (7 days) and 2026-10-29 logged no would-be refusal on any of the four; every back-office write to them was
+     * checked against the field rules on 2026-10-29 (personal details, comments, payer, room, recording expiry, the
+     * three organisation groups). Server writes, the document service's included, are never refused here.
+     * MoneyAccount stays observing: clients are denied money_account outright, so there is nothing to enforce.
      */
-    static final java.util.Set<String> ENFORCED_ENTITIES = java.util.Set.of("FrontendAccount", "Letter", "PassTemplate");
+    static final java.util.Set<String> ENFORCED_ENTITIES = java.util.Set.of("FrontendAccount", "Letter", "PassTemplate",
+        "Document", "DocumentLine", "Attendance", "Organization");
 
     /** Whether this entity's rule refuses (true) or only observes (false). See {@link #ENFORCED_ENTITIES}. */
     static boolean isEnforced(String entityName) {
