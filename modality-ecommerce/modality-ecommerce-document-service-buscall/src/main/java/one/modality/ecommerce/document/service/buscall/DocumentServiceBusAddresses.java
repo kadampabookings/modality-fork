@@ -30,4 +30,7 @@ public interface DocumentServiceBusAddresses {
     String RESOLVE_MATE_INVITE_ADDRESS = "modality/service/document/resolveMateInvite";
 
     String DESCRIBE_MATE_INVITE_ROOM_ADDRESS = "modality/service/document/describeMateInviteRoom";
+
+    /** Mirrored in the React client's BUS_ADDRESSES.VERIFY_MONEY_TRANSFERS. */
+    String VERIFY_MONEY_TRANSFERS_ADDRESS = "modality/service/document/verifyMoneyTransfers";
 }

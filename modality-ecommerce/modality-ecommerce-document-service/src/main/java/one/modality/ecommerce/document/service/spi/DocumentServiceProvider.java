@@ -42,4 +42,10 @@ public interface DocumentServiceProvider {
      */
     Future<String> describeMateInviteRoom(String token, Object eventId);
 
+    /**
+     * Ticks payments verified, or takes the tick back, as the back office's Finance pages ask — see
+     * {@code DocumentService.verifyMoneyTransfers}. Answers a JSON object of counts; never names anyone.
+     */
+    Future<String> verifyMoneyTransfers(Object organizationId, Object[] transferIds, boolean verified);
+
 }

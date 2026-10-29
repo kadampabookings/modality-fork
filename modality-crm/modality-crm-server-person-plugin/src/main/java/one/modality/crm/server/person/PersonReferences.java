@@ -46,6 +46,9 @@ final class PersonReferences {
         m.put("history", "user_person_id");
         m.put("error", "user_person_id");
         m.put("recipient", "person_id"); // ON DELETE SET NULL — forgetting this one erases it silently
+        // V0149: who ticked a payment verified. ON DELETE SET NULL too, and a trail like history's: it follows
+        // the surviving identity. (The frozen `verifier` text beside it names the person and does not move.)
+        m.put("money_transfer", "verifier_person_id");
         // Who somebody is to an account, and who cares for them.
         m.put("person.accountPerson", "account_person_id");
         m.put("person.carer1", "carer1_id");

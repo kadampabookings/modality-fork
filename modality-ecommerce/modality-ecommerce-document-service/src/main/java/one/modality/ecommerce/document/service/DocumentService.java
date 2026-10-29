@@ -93,6 +93,27 @@ public final class DocumentService {
         return getProvider().describeMateInviteRoom(token, eventId);
     }
 
+    /**
+     * Ticks payments verified — or takes the tick back — for the back office's Finance › Payments and
+     * Statements pages, and says what happened to each one, as a small JSON object:
+     * {@code {"changed":n,"unchanged":n,"mismatch":n,"frozen":n,"ineligible":n,"notFound":n}}.
+     *
+     * <p>The server decides everything but the ids and the direction. It requires the {@code VerifyPayments}
+     * operation over the WHOLE organisation, reads which of the ids belong to it, and writes only those it
+     * may: never a split payment's child or a contra row, never a payout whose amount is not the one
+     * expected, and never an untick that would reach an event already reconciled. Who ticked, and when, is
+     * stamped by the database from the session — the browser does not send a verifier.
+     *
+     * <p>An id of another organisation answers {@code notFound}, exactly as a missing one does.
+     *
+     * @param organizationId the organisation the payments are verified for, as selected in the back office
+     * @param transferIds    1 to 1,000 {@code money_transfer} ids
+     * @param verified       true to tick, false to take the tick back
+     */
+    public static Future<String> verifyMoneyTransfers(Object organizationId, Object[] transferIds, boolean verified) {
+        return getProvider().verifyMoneyTransfers(organizationId, transferIds, verified);
+    }
+
     // Additional top-level utility methods to load a document (not directly implemented by the provider and not directly serialized)
 
     public static Future<DocumentAggregate> loadDocument(Object event, Object userPerson) {

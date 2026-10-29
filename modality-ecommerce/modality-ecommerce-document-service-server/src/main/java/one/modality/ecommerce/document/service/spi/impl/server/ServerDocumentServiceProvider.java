@@ -1132,6 +1132,18 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
         });
     }
 
+    /*------------------------------------------------------------------------------------------------------------------
+    |                                           PAYMENT VERIFICATION                                                   |
+    ------------------------------------------------------------------------------------------------------------------*/
+
+    @Override
+    public Future<String> verifyMoneyTransfers(Object organizationId, Object[] transferIds, boolean verified) {
+        // Read HERE, on the caller's thread: the principal and the verified audience are thread-locals, gone
+        // after the first async hop — and the grant has to be asked of the caller, the write made in their name.
+        Object callerState = ThreadLocalStateHolder.getThreadLocalState();
+        return MoneyTransferVerification.verify(callerState, organizationId, transferIds, verified);
+    }
+
     /**
      * Refuses, as SOLD_OUT, a new front-office sharing place when no bed is free for it (room-mate plan
      * §1c, step 6). Returns the sold-out result to send back, or null to go ahead.

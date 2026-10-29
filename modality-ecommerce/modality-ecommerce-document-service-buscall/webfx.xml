@@ -18,6 +18,7 @@
         <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.ecommerce.document.service.buscall.RevokeMateInvitationsDocumentMethodEndpoint</provider>
         <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.ecommerce.document.service.buscall.ResolveMateInviteDocumentMethodEndpoint</provider>
         <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.ecommerce.document.service.buscall.DescribeMateInviteRoomDocumentMethodEndpoint</provider>
+        <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.ecommerce.document.service.buscall.VerifyMoneyTransfersDocumentMethodEndpoint</provider>
         <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.ecommerce.document.service.buscall.LeaveEventQueueDocumentMethodEndpoint</provider>
         <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.ecommerce.document.service.buscall.LoadDocumentMethodEndpoint</provider>
         <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.ecommerce.document.service.buscall.LoadDocumentsMethodEndpoint</provider>

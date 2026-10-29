@@ -5,6 +5,7 @@ one.modality.ecommerce.document.service.buscall.ListMateInvitationsDocumentMetho
 one.modality.ecommerce.document.service.buscall.RevokeMateInvitationsDocumentMethodEndpoint
 one.modality.ecommerce.document.service.buscall.ResolveMateInviteDocumentMethodEndpoint
 one.modality.ecommerce.document.service.buscall.DescribeMateInviteRoomDocumentMethodEndpoint
+one.modality.ecommerce.document.service.buscall.VerifyMoneyTransfersDocumentMethodEndpoint
 one.modality.ecommerce.document.service.buscall.LeaveEventQueueDocumentMethodEndpoint
 one.modality.ecommerce.document.service.buscall.LoadDocumentMethodEndpoint
 one.modality.ecommerce.document.service.buscall.LoadDocumentsMethodEndpoint

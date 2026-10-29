@@ -75,4 +75,12 @@ public class RemoteDocumentServiceProvider implements DocumentServiceProvider {
         return BusCallService.call(DocumentServiceBusAddresses.DESCRIBE_MATE_INVITE_ROOM_ADDRESS,
             new Object[] { token, eventId });
     }
+
+    @Override
+    public Future<String> verifyMoneyTransfers(Object organizationId, Object[] transferIds, boolean verified) {
+        // Three values over a single-argument bus call, in the shape the React client sends too:
+        // [organizationId, [transferId, …], verified]. The endpoint unpacks and checks them.
+        return BusCallService.call(DocumentServiceBusAddresses.VERIFY_MONEY_TRANSFERS_ADDRESS,
+            new Object[] { organizationId, transferIds, verified });
+    }
 }

@@ -50,6 +50,10 @@ public class PersonMergeCheck {
         check("the account link follows the survivor", writesTable(statements, "person"));
         // recipient.person_id is ON DELETE SET NULL: forgetting it erases silently rather than refusing.
         check("mail recipients follow the survivor", writesTable(statements, "recipient"));
+        // V0149's money_transfer.verifier_person_id is ON DELETE SET NULL as well. Unlisted, the catalogue check
+        // refuses every merge from the day the column exists.
+        check("a payment's verifier follows the survivor",
+            statements.stream().anyMatch(s -> s.contains("money_transfer") && s.contains("verifier_person_id")));
         // No foreign key at all, so neither the catalogue check nor the delete would object: the row
         // would just be left naming a person who no longer exists, and the merge would report success.
         check("the share-mate's link to the room owner follows the survivor",
