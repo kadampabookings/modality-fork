@@ -1,1 +1,4 @@
 one.modality.event.server.lifecycle.DuplicateEventEndpoint
+one.modality.event.server.lifecycle.StartEventErasureEndpoint
+one.modality.event.server.lifecycle.EventErasureRunEndpoint
+one.modality.event.server.lifecycle.EventErasureRunsEndpoint

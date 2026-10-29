@@ -5,7 +5,12 @@
          sends: the client cannot run copy_event_scheduled_items() itself (ClientSubmitGuard refuses raw
          statements of client origin), and the new event row and its programme have to land in ONE
          transaction or a failed copy leaves an empty event behind. It keeps the modality/service/event
-         address it will carry into a wider event lifecycle service later. -->
+         address it will carry into a wider event lifecycle service later.
+
+         Removing a past event's guest data (erase_past_event(), V0077) from the Event Lifecycle page, for super
+         administrators only: a background job on a DEDICATED Vert.x Postgres connection - the function needs an
+         explicit REPEATABLE READ transaction held for minutes, which no pooled data path can host - with its runs
+         recorded in event_erasure_run (V0146). Commit ships disabled (declare@modality.event.server.erasure). -->
 
     <exported-packages>
         <source-packages/>
@@ -13,8 +18,15 @@
 
     <dependencies>
         <used-by-source-modules/>
+        <source-module>io-vertx-core</source-module>
+        <source-module>io-vertx-sql-client</source-module>
+        <source-module>io-vertx-sql-client-pg</source-module>
         <source-module>modality-crm-server-authn-gateway-shared</source-module>
+        <source-module>modality-crm-shared-authn</source-module>
+        <source-module>webfx-platform-conf</source-module>
+        <source-module>webfx-platform-util-vertx</source-module>
         <source-module>webfx-stack-com-bus-call</source-module>
+        <source-module>webfx-stack-db-datasource</source-module>
         <source-module>webfx-stack-db-query</source-module>
         <source-module>webfx-stack-db-submit</source-module>
         <source-module>webfx-stack-orm-datasourcemodel</source-module>
@@ -23,6 +35,30 @@
 
     <providers>
         <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.event.server.lifecycle.DuplicateEventEndpoint</provider>
+        <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.event.server.lifecycle.StartEventErasureEndpoint</provider>
+        <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.event.server.lifecycle.EventErasureRunEndpoint</provider>
+        <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.event.server.lifecycle.EventErasureRunsEndpoint</provider>
     </providers>
+
+    <maven-pom-manual>
+        <!-- Versions for the Vert.x SQL clients this module opens its dedicated connection with. Modality's parent
+             (webfx-parent) manages vertx-core but not these two - webfx-stack-parent does, and Modality does not
+             inherit from it - so without this the generated (version-less) dependencies do not resolve. The same
+             ${vertx.version} as webfx-stack-db-querysubmit-vertx, whose pool this connection mirrors. -->
+        <dependencyManagement>
+            <dependencies>
+                <dependency>
+                    <groupId>io.vertx</groupId>
+                    <artifactId>vertx-pg-client</artifactId>
+                    <version>${vertx.version}</version>
+                </dependency>
+                <dependency>
+                    <groupId>io.vertx</groupId>
+                    <artifactId>vertx-sql-client</artifactId>
+                    <version>${vertx.version}</version>
+                </dependency>
+            </dependencies>
+        </dependencyManagement>
+    </maven-pom-manual>
 
 </project>
