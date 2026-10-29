@@ -10,6 +10,7 @@ import one.modality.base.shared.entities.DocumentLine;
 import one.modality.ecommerce.document.service.SubmitDocumentChangesArgument;
 import one.modality.ecommerce.document.service.events.AbstractDocumentEvent;
 import one.modality.ecommerce.document.service.events.AbstractDocumentLineEvent;
+import one.modality.ecommerce.document.service.events.registration.documentline.PriceDocumentLineEvent;
 
 /**
  * @author Bruno Salmon
@@ -46,6 +47,9 @@ record DocumentSubmitRequest(
             if (documentLine == null && e instanceof AbstractDocumentLineEvent) {
                 documentLine = ((AbstractDocumentLineEvent) e).getDocumentLine();
             }
+            // A custom price sets the flag the database prices it by — from a verified back office only (CustomPriceRule).
+            if (e instanceof PriceDocumentLineEvent price && CustomPriceRule.setsCustomFlag(backoffice, price.getPrice_custom()))
+                price.getDocumentLine().setFieldValue("price_isCustom", true);
         }
 
         if (document == null && documentLine != null)

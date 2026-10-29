@@ -230,7 +230,7 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
             // 0 - Loading document
             new EntityStoreQuery("select creationDate,event,person,ref,inPerson,earlyBird,person_lang,person_firstName,person_lastName,person_email,person_age,person_facilityFee,request,person_carer1Name, person_carer1Document, person_carer2Name, person_carer2Document, arrived, checkedOut from Document where id=$1 order by id", docPk),
             // 1 - Loading document lines
-            new EntityStoreQuery("select document,site,item,price_net,price_minDeposit,price_custom,price_discount" +
+            new EntityStoreQuery("select document,site,item,price_net,price_minDeposit,price_custom,price_isCustom,price_discount" +
                                  ",share_owner,share_owner_quantity,share_owner_mate1Name,share_owner_mate2Name,share_owner_mate3Name,share_owner_mate4Name,share_owner_mate5Name,share_owner_mate6Name,share_owner_mate7Name" +
                                  ",share_mate,share_mate_ownerName,share_mate_ownerDocumentLine,share_mate_ownerPerson" +
                                  ",resourceConfiguration,pool,reserved,allocate,breakfastIncluded,cancelled,read" +
@@ -301,7 +301,10 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
                     List<AbstractDocumentEvent> documentEvents = allDocumentEvents.get(documentLine.getDocument());
                     if (documentEvents == null) return; // document was filtered by access control
                     documentEvents.add(new AddDocumentLineEvent(documentLine, documentLine.isAllocate()));
-                    documentEvents.add(new PriceDocumentLineEvent(documentLine));
+                    // The custom price only when it applies (CustomPriceRule): the event carries no flag of its own.
+                    documentEvents.add(new PriceDocumentLineEvent(documentLine, documentLine.getPriceNet(), documentLine.getPriceMinDeposit(),
+                        CustomPriceRule.loadedPriceCustom(documentLine.getBooleanFieldValue("price_isCustom"), documentLine.getPriceCustom()),
+                        documentLine.getPriceDiscount()));
                     // Rebuild the cancelled state so the client knows which lines are cancelled (e.g.
                     // in-person options cancelled when a booking switched to online). Without this the
                     // client treats them as active and recomputes them to £0; with it, the loaded

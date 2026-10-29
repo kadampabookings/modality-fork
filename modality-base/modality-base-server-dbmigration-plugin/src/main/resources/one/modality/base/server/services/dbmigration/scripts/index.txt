@@ -147,3 +147,4 @@ V0144__label_italian.sql
 V0145__closed_family_refuses_bookings.sql
 V0146__event_erasure_run.sql
 V0147__event_state_guards.sql
+V0148__event_reconciliation.sql

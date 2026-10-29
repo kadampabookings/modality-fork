@@ -21,6 +21,7 @@ public enum KnownItemFamily {
     DAY_VISITOR_FEE("dayfee", 5, null),
     DISCOVERY("survey", 22, null),
     TOUR("tour", 19, null),
+    UNRECONCILED("unrec", 18, null), // hidden from booking summaries (V0148)
     UNKNOWN(null, -1, null);
 
     private final String code;
@@ -60,6 +61,7 @@ public enum KnownItemFamily {
                 case "cerem" : return CEREMONY;
                 case "exam" : return EXAM;
                 case "dayfee" : return DAY_VISITOR_FEE;
+                case "unrec" : return UNRECONCILED;
             }
         }
         return UNKNOWN;
