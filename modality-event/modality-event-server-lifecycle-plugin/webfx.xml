@@ -10,7 +10,11 @@
          Removing a past event's guest data (erase_past_event(), V0077) from the Event Lifecycle page, for super
          administrators only: a background job on a DEDICATED Vert.x Postgres connection - the function needs an
          explicit REPEATABLE READ transaction held for minutes, which no pooled data path can host - with its runs
-         recorded in event_erasure_run (V0146). Commit ships disabled (declare@modality.event.server.erasure). -->
+         recorded in event_erasure_run (V0146). Commit ships disabled (declare@modality.event.server.erasure).
+
+         Putting an event's bookings on hold, closing and reopening them for Registration > Event status, behind the
+         ManageEventBookings operation (V0151) scoped to the event's own organisation and event, as a compare-and-set
+         the server makes; and the dates each of an organisation's events had its data removed, for the same page. -->
 
     <exported-packages>
         <source-packages/>
@@ -38,6 +42,8 @@
         <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.event.server.lifecycle.StartEventErasureEndpoint</provider>
         <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.event.server.lifecycle.EventErasureRunEndpoint</provider>
         <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.event.server.lifecycle.EventErasureRunsEndpoint</provider>
+        <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.event.server.lifecycle.SetEventBookingStateEndpoint</provider>
+        <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.event.server.lifecycle.EventRemovalDatesEndpoint</provider>
     </providers>
 
     <maven-pom-manual>

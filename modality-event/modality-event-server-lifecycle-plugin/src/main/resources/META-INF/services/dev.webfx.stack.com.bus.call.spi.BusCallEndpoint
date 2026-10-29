@@ -2,3 +2,5 @@ one.modality.event.server.lifecycle.DuplicateEventEndpoint
 one.modality.event.server.lifecycle.StartEventErasureEndpoint
 one.modality.event.server.lifecycle.EventErasureRunEndpoint
 one.modality.event.server.lifecycle.EventErasureRunsEndpoint
+one.modality.event.server.lifecycle.SetEventBookingStateEndpoint
+one.modality.event.server.lifecycle.EventRemovalDatesEndpoint

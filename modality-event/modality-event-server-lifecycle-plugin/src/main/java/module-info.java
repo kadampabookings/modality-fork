@@ -24,6 +24,6 @@ module modality.event.server.lifecycle.plugin {
     exports one.modality.event.server.lifecycle;
 
     // Provided services
-    provides dev.webfx.stack.com.bus.call.spi.BusCallEndpoint with one.modality.event.server.lifecycle.DuplicateEventEndpoint, one.modality.event.server.lifecycle.StartEventErasureEndpoint, one.modality.event.server.lifecycle.EventErasureRunEndpoint, one.modality.event.server.lifecycle.EventErasureRunsEndpoint;
+    provides dev.webfx.stack.com.bus.call.spi.BusCallEndpoint with one.modality.event.server.lifecycle.DuplicateEventEndpoint, one.modality.event.server.lifecycle.StartEventErasureEndpoint, one.modality.event.server.lifecycle.EventErasureRunEndpoint, one.modality.event.server.lifecycle.EventErasureRunsEndpoint, one.modality.event.server.lifecycle.SetEventBookingStateEndpoint, one.modality.event.server.lifecycle.EventRemovalDatesEndpoint;
 
 }

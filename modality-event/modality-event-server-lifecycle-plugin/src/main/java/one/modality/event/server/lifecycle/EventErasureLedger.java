@@ -117,6 +117,97 @@ final class EventErasureLedger {
         + "        order by c.id desc limit 1) c on true"
         + " order by l.event_id";
 
+    /**
+     * {@link #RUNS_SQL}'s {@code changedSince} probe, for an event and a commit's start named by other columns: any
+     * history row of the event's bookings dated after the commit STARTED, other than the commit's own
+     * 'gdpr-retention' markers. Written out character for character as RUNS_SQL has it — which RUNS_SQL is left
+     * untouched by — so the two reads answer the same question; EventRemovalDatesCheck fails the day they differ.
+     *
+     * @param eventId          the column holding the event id (a constant, never input)
+     * @param commitStartedAt  the column holding the commit's {@code started_at} (a constant, never input)
+     */
+    static String changedSinceProbe(String eventId, String commitStartedAt) {
+        return "exists (select 1 from history h join document d on d.id = h.document_id"
+               + "        where d.event_id = " + eventId + " and h.date > " + commitStartedAt
+               + "        and h.username is distinct from 'gdpr-retention')";
+    }
+
+    /**
+     * For Registration › Event status ({@link EventRemovalDatesEndpoint}): per event of one organisation ({@code $1})
+     * that has a SUCCEEDED commit, its last one (the highest id, as in {@link #RUNS_SQL}'s lateral):
+     * <ol>
+     *   <li>the event id;</li>
+     *   <li>the date that commit finished, as a Europe/London calendar date — the zone the runner judges the retention
+     *       line in (EventErasureRunner.BUSINESS_ZONE), and the one the lifecycle page's {@code removedOnOf} uses. A
+     *       succeeded commit always has a {@code finished_at} (V0146's {@code event_erasure_run_finished_chk});</li>
+     *   <li>{@code changedSince}: {@link #changedSinceProbe}, the test RUNS_SQL serves as {@code lastCommit.changedSince}
+     *       — so a page outside the super administrators' can still tell an event whose bookings changed after the
+     *       removal (due again) from one that is done.</li>
+     * </ol>
+     *
+     * <p>Nothing else: no person id, no error text, no grid — the audience is wider than the super administrators the
+     * other reads serve. Joined to {@code event} for the organisation, so an event deleted outright (the ledger has no
+     * foreign key, on purpose) drops out: it is not on the page either.
+     *
+     * <p>Cost, as RUNS_SQL's: the last commit is picked first (DISTINCT ON over the organisation's commits), and the
+     * probe then runs once per event, outside it, stopping at the first changed row.
+     */
+    static final String REMOVAL_DATES_SQL =
+        "select c.event_id, to_char(c.finished_at at time zone 'Europe/London', 'YYYY-MM-DD'), "
+        + changedSinceProbe("c.event_id", "c.started_at")
+        + " from (select distinct on (r.event_id) r.id, r.event_id, r.started_at, r.finished_at"
+        + "        from event_erasure_run r join event e on e.id = r.event_id"
+        + "        where e.organization_id = $1 and r.mode = 'commit' and r.status = 'succeeded'"
+        + "        order by r.event_id, r.id desc) c"
+        + " order by c.event_id";
+
+    /** What the caller reads when the removal dates cannot be served: the database's words stay in the log. */
+    static final String REMOVAL_DATES_FAILED = "[EventRemovalDatesError] Removal dates could not be read";
+
+    /** What a removal date must look like to be served; anything else is a row skipped, never text passed on. */
+    private static final java.util.regex.Pattern ISO_DATE = java.util.regex.Pattern.compile("\\d{4}-\\d{2}-\\d{2}");
+
+    /** RemovalDatesJson for one organisation — see {@link EventRemovalDatesEndpoint}. Called once the caller is allowed. */
+    static Future<String> removalDatesJson(Integer organizationId) {
+        Future<QueryResult> rows;
+        try {
+            rows = EventErasureRunner.query(REMOVAL_DATES_SQL, organizationId);
+        } catch (RuntimeException e) {
+            rows = Future.failedFuture(e);
+        }
+        return removalDatesReply(rows);
+    }
+
+    /** The reply for the rows a removal-dates read answered — or, when it failed, {@link #REMOVAL_DATES_FAILED}. */
+    static Future<String> removalDatesReply(Future<QueryResult> rows) {
+        return rows.map(EventErasureLedger::removalDatesJson)
+            .recover(cause -> {
+                Console.log(LOG_PREFIX + "Reading removal dates failed: " + (cause == null ? null : cause.getMessage()));
+                return Future.failedFuture(REMOVAL_DATES_FAILED);
+            });
+    }
+
+    /** {@code {"retentionMonths":n,"removals":[{"eventId":n,"removedOn":"YYYY-MM-DD","changedSince":bool}]}}. */
+    static String removalDatesJson(QueryResult r) {
+        List<String> removals = new ArrayList<>();
+        for (int row = 0; r != null && row < r.getRowCount(); row++) {
+            Number eventId = number(r.getValue(row, 0));
+            String removedOn = text(r.getValue(row, 1));
+            Object changedSince = r.getValue(row, 2);
+            if (eventId == null || removedOn == null || !ISO_DATE.matcher(removedOn).matches())
+                continue;
+            removals.add(new EventErasureJson.ObjectWriter()
+                .number("eventId", eventId)
+                .string("removedOn", removedOn)
+                .bool("changedSince", Boolean.TRUE.equals(changedSince))
+                .toJson());
+        }
+        return new EventErasureJson.ObjectWriter()
+            .number("retentionMonths", EventErasureConfig.RETENTION_MONTHS)
+            .raw("removals", EventErasureJson.array(removals))
+            .toJson();
+    }
+
     /** RunJson for one run, or {@code EventErasureNotFoundError} when there is no such run. */
     static Future<String> runJson(Integer runId) {
         if (runId == null)
