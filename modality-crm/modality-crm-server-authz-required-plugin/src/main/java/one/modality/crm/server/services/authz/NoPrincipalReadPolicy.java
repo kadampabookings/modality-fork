@@ -60,6 +60,19 @@ final class NoPrincipalReadPolicy implements ProtectedEntityReadRegistry.ReadPol
     /**
      * False until the census of the line below is clean. See the class javadoc: a compile-time constant
      * rather than configuration, so that turning it on is a change somebody reviews.
+     *
+     * <p><b>Two things must be true before this becomes true</b>, and the second is the one that gets
+     * forgotten:
+     *
+     * <ol>
+     * <li>Query 7 of {@code scripts/check-prod-logs-read-aspect.sh} is empty over a week — the arm was
+     *     built to hold a closed door shut, so anything in it means a client lookup came back.</li>
+     * <li><b>A production metric filter matches the ENFORCING wording, which this one does not.</b> The
+     *     observing line says {@code WOULD REFUSE READ} and the enforcing line says {@code REFUSED READ};
+     *     the existing {@code kbs3-wg-*} filters were all written for {@code Refused a client write} and
+     *     match neither. Until a filter exists, the first person locked out is found when they complain.
+     *     The write side had to learn this the same way: a new refusal message needs its own filter.</li>
+     * </ol>
      */
     static final boolean ENFORCING = false;
 
