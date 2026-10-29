@@ -1539,7 +1539,9 @@
       "expr": "successful ? amount : 0"
     },
     "verified": "boolean",
+    "verifiedDate": "Temporal.PlainDateTime",
     "verifier": "string",
+    "verifierPerson": "Person",
     "wireless": "boolean"
   },
   "MultipleBooking": {
