@@ -9,6 +9,7 @@ import dev.webfx.stack.authz.server.AuthorizationServerService;
 import dev.webfx.stack.authz.server.spi.AuthorizationServerServiceProvider;
 import dev.webfx.stack.authz.server.spi.impl.AuthorizationServerServiceProviderBase;
 import dev.webfx.stack.db.query.ClientReadInspectionRegistry;
+import dev.webfx.stack.db.query.ProtectedEntityReadRegistry;
 import dev.webfx.stack.db.submit.ClientSubmitGuard;
 import dev.webfx.stack.db.submit.GeneratedKeyReference;
 import dev.webfx.stack.db.submit.ProtectedEntityWriteRegistry;
@@ -327,6 +328,12 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         // the principal — on the endpoint thread, which is the only place the principal is still there.
         // Registered here for the same reason as the two above.
         ModalityCallerParameterResolver.register();
+        // And the first arm of the read plan's step 3, the first thing on the read side that refuses rather
+        // than counts: a client caller with no USABLE principal — anonymous, or signed out, which is twice as
+        // many callers — may not select FROM Person or FrontendAccount. Root entity only, because anonymous
+        // callers legitimately reach person through a join on resume-payment. Observing until its own line
+        // says the set is empty; see NoPrincipalReadPolicy.
+        ProtectedEntityReadRegistry.registerReadPolicy(new NoPrincipalReadPolicy());
         // And the write half of that: the account columns no client may set, enforced now rather than observed —
         // see ClientWriteSecrets for why the observe-only switch below does not apply to them.
         ClientWriteSecrets.declare();
