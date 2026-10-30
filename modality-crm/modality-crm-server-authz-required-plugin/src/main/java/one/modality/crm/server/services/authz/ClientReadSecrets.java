@@ -57,22 +57,47 @@ final class ClientReadSecrets {
         // bus. Equality against a bound parameter is what presenting a link does, and it is all that is left.
         ClientReadDenyList.denyColumnExceptEqualityMatch("volunteering_date_proposal", "action_token");
         ClientReadDenyList.denyColumnExceptEqualityMatch("volunteering_application", "arrival_confirmation_token");
-        // PAUSED 2026-09-24 — and WATCHED instead, so that restoring it can be a measurement:
-        //   ClientReadDenyList.denyColumnExceptEqualityMatch("invitation", "token");
-        ClientReadDenyList.observeColumnExceptEqualityMatch("invitation", "token");
+        // RESTORED 2026-10-30, after 36 days paused.
         //
-        // It refused real invitees. The client stopped selecting this column and that change is live, but a
-        // cached front-office bundle still sends the old statement, and an emailed invitation link is a FIRST
-        // page load — where the service worker serves the cached shell before it updates. Four refusals in the
-        // ten hours after the deploy, each one somebody told their invitation was invalid.
+        // The watch it replaces is DELETED, not left beside it. The note here used to say the deny
+        // "SUPERSEDES the watch, so the observe line above does not have to be removed in the same change,
+        // and leaving it is not a trap". That is false and it is the expensive kind of false: declaring both
+        // throws IllegalStateException("A column already denied to clients cannot also be merely observed")
+        // out of declare(), which runs at boot — so following that advice would have aborted the server on
+        // deploy rather than printing a warning. Caught by scripts/checks/client-read-guard, which is the
+        // only reason it is a sentence here instead of an outage.
+        ClientReadDenyList.denyColumnExceptEqualityMatch("invitation", "token");
         //
-        // The sequencing was wrong, not the rule: a server rule that refuses what a cached client still sends
-        // has to wait for the bundles to age out, not merely for the client change to ship. The two tokens
-        // above stay declared because nothing has been observed sending their old shape, and they are the
-        // pair that still AUTHORISE an action — reading one lets somebody confirm or cancel a volunteer's
-        // arrival, where an invitation token no longer accepts anything (ApproveInvitationEndpoint requires
-        // the caller to BE the invitee). So the week of exposure reopened here is disclosure of pending
-        // invitations, not account takeover.
+        // WHY IT WAS PAUSED, AND WHY THAT REASON WAS WRONG — worth the lines, because the wrong reason cost
+        // five weeks and a production deploy that did nothing.
+        //
+        // It refused real invitees: four in the ten hours after it shipped, each one somebody told their
+        // invitation was invalid. The diagnosis written here was that the client had stopped selecting the
+        // column and only CACHED bundles still sent the old statement, so the cure was to wait for them to
+        // age out. On that theory kbs3-react/API_VERSION was bumped 2→3 on 2026-10-25 to banner stale
+        // clients into updating. It changed nothing: 5, 11 and 2 reads on the three days after, against a
+        // mean of 8.1 before.
+        //
+        // The client had never stopped. use-invitations-data.ts selected `token` on every load of /members,
+        // matching the logged statement character for character — a live screen, no cache involved. It was
+        // mapped onto InvitationRow and read by NOTHING: the email sender had already been migrated and
+        // composes the approve/decline links server-side. Removing the field broke seven object literals,
+        // every one a test fixture and no production code, which is the proof it was dead.
+        //
+        // Removed in kbs3-react ad85747c9, deployed 2026-10-28 evening. CAPABILITY-READ went to zero on the
+        // 29th and stayed there — the first clean 24 hours since the watch began, against 5-11 a day for the
+        // whole week before. That is what this restore rests on, and it is a different fact from the one the
+        // original note was waiting for.
+        //
+        // The lesson, since it generalises: "a cached client still sends it" and "the current client still
+        // sends it" look identical in a log, and only one of them heals by waiting. Check what the deployed
+        // source selects before blaming a cache.
+        //
+        // The two tokens above stay declared because nothing has been observed sending their old shape, and
+        // they are the pair that still AUTHORISE an action — reading one lets somebody confirm or cancel a
+        // volunteer's arrival, where an invitation token no longer accepts anything (ApproveInvitationEndpoint
+        // requires the caller to BE the invitee). So the five weeks of exposure reopened here were disclosure
+        // of pending invitations, not account takeover.
         //
         // REVIEW FROM 2026-10-08, and restore on evidence rather than on the date. The refusal used to be the
         // only detector, so pausing removed it; the watch above restores the signal without refusing anybody.
@@ -86,8 +111,8 @@ final class ClientReadSecrets {
         //     (filter @message like /client read shape/); zero of those means the instrument, not the traffic.
         //   - CAPABILITY-UNREADABLE lines. Those are "the walk met a construct it cannot read", not a read —
         //     but they are also statements nobody has confirmed are safe, so read them before concluding.
-        // The deny may simply be declared when the time comes: it SUPERSEDES the watch, so the observe line
-        // above does not have to be removed in the same change, and leaving it is not a trap.
+        // The deny is declared INSTEAD of the watch, never beside it: declaring both throws at boot. (This
+        // paragraph said the opposite until 2026-10-30, when the check refused the pair.)
         //
         // Faster than waiting: bump kbs3-react/API_VERSION, which banners stale clients into updating instead of
         // waiting for them to drift. That is the lever, and it is why this is a review date and not a deadline.
