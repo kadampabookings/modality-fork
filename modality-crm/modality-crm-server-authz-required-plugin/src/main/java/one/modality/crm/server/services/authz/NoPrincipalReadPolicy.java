@@ -25,10 +25,13 @@ import java.util.Set;
  * lower(email)=$1} straight to the generic query endpoint, where there is no rate limit either. Closing the
  * path an app uses says nothing about the protocol.
  *
- * <p>Measured on production over seven days (2026-10-19): every anonymous ROOT {@code Person} read was one
- * of two shapes, and both are the lookups that session deleted. So this arm enforces an already-empty set.
- * <b>That is the point, not a disappointment</b> — it closes a future regression rather than current
- * traffic, and what it stands between is a re-added client lookup and a live oracle.
+ * <p><b>The set is NOT empty, and the first census said it was only because it measured half of it.</b>
+ * The 2026-10-19 reading covered ANONYMOUS callers, where both shapes were the lookups that session
+ * deleted. The signed-out half — the larger one, see below — is live traffic. A back-office session that
+ * idles out with the customers list open re-runs it on the operator's next keystroke, and until this
+ * flipped the server answered with fifty people's names, emails, phones, passports and dates of birth,
+ * twenty milliseconds after ruling that same caller {@code LOGOUT_USER_ID}. So this arm closes a
+ * disclosure that is happening, not a regression that might.
  *
  * <h3>Two things that would each have made it wrong</h3>
  *
@@ -45,36 +48,42 @@ import java.util.Set;
  * {@code userId == null} would have missed twice as many callers as it caught. The condition is "no USABLE
  * principal", which is exactly what {@link LogoutUserId#isLogoutUserIdOrNull} answers.
  *
- * <h3>Observed, not enforced</h3>
+ * <h3>Enforcing, and what was measured before it was</h3>
  *
- * <p>{@link #ENFORCING} is a compile-time constant and stays false until a census of its own line says the
- * set really is empty. A switch that can be flipped without a code review is one that can be flipped without
- * anyone reading the log it depends on. An injected or refused read changes results silently — a screen that
- * showed rows shows none — and it is reported as a data bug rather than as a control working, so the line
- * below has to exist before the refusal does.
+ * <p>{@link #ENFORCING} is a compile-time constant rather than configuration, so that turning it on is a
+ * change somebody reviews — and the observing line existed first, because a refused read changes results
+ * silently and gets reported as a data bug rather than as a control working.
+ *
+ * <p>The fear that kept it off was that refusing would break the page. It does not. The same scenario was
+ * run twice against a local server with session lifetimes scaled: observing, the statement executed in
+ * 621ms and returned fifty rows; enforcing, it never reached the database. The operator saw the sign-in
+ * page in BOTH runs, because the redirect is driven by the identity verdict and not by the query — so
+ * refusing costs the user nothing and saves the rows. The refusal removes the disclosure and nothing else.
  *
  * @author Claude Code
  */
 final class NoPrincipalReadPolicy implements ProtectedEntityReadRegistry.ReadPolicy {
 
     /**
-     * False until the census of the line below is clean. See the class javadoc: a compile-time constant
-     * rather than configuration, so that turning it on is a change somebody reviews.
+     * True since 2026-10-30. See the class javadoc for what was measured first.
      *
-     * <p><b>Two things must be true before this becomes true</b>, and the second is the one that gets
-     * forgotten:
+     * <p><b>The precondition this used to carry was wrong, and is recorded here because the mistake is
+     * the instructive part.</b> It demanded that query 7 of
+     * {@code scripts/check-prod-logs-read-aspect.sh} be empty for a week, reasoning that the arm "was
+     * built to hold a closed door shut, so anything in it means a client lookup came back". The seven
+     * entries that turned up were not a lookup coming back: they were staff whose sessions had ended with
+     * a page still open. That set will never empty, because it is not a bug upstream waiting to be fixed
+     * — it is what happens when a session ends. Waiting for zero meant waiting for ever with the door open.
      *
-     * <ol>
-     * <li>Query 7 of {@code scripts/check-prod-logs-read-aspect.sh} is empty over a week — the arm was
-     *     built to hold a closed door shut, so anything in it means a client lookup came back.</li>
-     * <li><b>A production metric filter matches the ENFORCING wording, which this one does not.</b> The
-     *     observing line says {@code WOULD REFUSE READ} and the enforcing line says {@code REFUSED READ};
-     *     the existing {@code kbs3-wg-*} filters were all written for {@code Refused a client write} and
-     *     match neither. Until a filter exists, the first person locked out is found when they complain.
-     *     The write side had to learn this the same way: a new refusal message needs its own filter.</li>
-     * </ol>
+     * <p><b>The other precondition stands, and is independent: a production metric filter must match the
+     * ENFORCING wording.</b> The observing line says {@code WOULD REFUSE READ} and this one says
+     * {@code REFUSED READ}; the {@code kbs3-wg-*} filters were all written for
+     * {@code Refused a client write} and match neither. Its purpose has changed, though — nobody is locked
+     * out by this, they get the sign-in page — so the filter is for knowing how often a session ends with
+     * a page open, not for catching breakage. The write side learned the same lesson the hard way: a new
+     * refusal message needs its own filter.
      */
-    static final boolean ENFORCING = false;
+    static final boolean ENFORCING = true;
 
     /**
      * The roots a caller who is nobody may not select from. Says nothing about the schema to the client.
