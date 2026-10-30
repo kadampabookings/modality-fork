@@ -51,6 +51,10 @@ final class ClientReadSecrets {
         ClientReadDenyList.denyColumn("smtp_account", "password");
         ClientReadDenyList.denyColumn("push_subscription", "auth_key");
         ClientReadDenyList.denyColumn("push_subscription", "p256dh_key");
+        // DENIED 2026-10-30, 29 days after it was ready — see the note below for what it waited on and why
+        // that wait was already over. A flat deny, NOT an equality exception: nothing looks an organisation
+        // up BY its API key, and a testable secret is a per-character oracle.
+        ClientReadDenyList.denyColumn("organization", "bunny_api_key");
         // Capability tokens: a client may look a row up BY one and may not read one. Each is a link somebody was
         // emailed, and the way a capability like this is defeated is not by guessing a token but by asking for
         // all of them - `select token from Invitation` returned every live one to anybody who could reach the
@@ -116,21 +120,25 @@ final class ClientReadSecrets {
         //
         // Faster than waiting: bump kbs3-react/API_VERSION, which banners stale clients into updating instead of
         // waiting for them to drift. That is the lever, and it is why this is a review date and not a deadline.
-        // NOT yet denied — no longer because a current screen needs it, only because old ones still ask:
-        //   organization.bunny_api_key — READY TO DENY FROM 2026-10-01, waiting only on stale bundles.
+        // DENIED 2026-10-30:
+        //   organization.bunny_api_key — ready since 2026-10-01, denied today.
         //       The back-office Organizations page loaded the real key for every organisation (three live keys
         //       in prod, 2026-09-24) purely to choose between a masked placeholder and an empty one. V0111 adds
         //       `bunny_api_key_set`, a generated column that answers that question without the key, and the page
-        //       now reads it. The reason to hold the deny is the reason invitation.token had to be paused: the
-        //       back office is a PWA with registerType 'autoUpdate', so a cached shell keeps asking for the old
-        //       field until it updates, and a deny would break the page for whoever holds that bundle.
-        //       An equality rule would NOT have worked here: nothing looks an organisation up BY its API key,
-        //       and a testable secret is a per-character oracle. Once denied, add a line to the Console.log below.
-        //       When denying, bump kbs3-react/API_VERSION in the same change: that is the lever built for exactly
-        //       this, and it turns "wait for bundles to age out" into a banner telling stale clients to update.
-        //       NOT bumped now — nothing is broken yet (an old bundle asking for bunnyApiKey still works, the
-        //       column is still served), and API_VERSION is one root file read by BOTH apps, so bumping it early
-        //       would nag every front-office user for a back-office change. It becomes true at the deny, not here.
+        //       reads it: organization-columns.ts selects bunnyApiKeySet, and the edit dialog derives
+        //       hasStoredApiKey from that boolean. The secret no longer reaches the browser at all.
+        //       What it waited on was stale bundles — the back office is a PWA with registerType 'autoUpdate',
+        //       so a cached shell keeps asking for the old field until it updates, and a deny breaks the page
+        //       for whoever holds that bundle. This note said to bump kbs3-react/API_VERSION in the same change
+        //       as the deny, as the lever for exactly that. The bump already happened: 2→3 on 2026-10-25, for
+        //       the invitation.token theory, where it turned out to be the wrong lever because that column was
+        //       being read by the LIVE client. API_VERSION is one root file read by BOTH apps, so back-office
+        //       bundles have been bannered into updating since then. The prerequisite was satisfied early and
+        //       by accident, which is worth saying plainly rather than letting the dates look deliberate.
+        //       NOT measured first, unlike invitation.token, and the reason is a gap: ClientReadDenyList has no
+        //       plain observeColumn — only the equality-exception variant built for capability tokens — so a
+        //       flat-denied column has no instrument and there was no zero to wait for. If this breaks a screen,
+        //       that gap is the thing to close before the next flat deny.
         //       NOTE the deny closes the KBS3 path only, because KBS2 runs its own server and bus and this list
         //       cannot refuse anything there. KBS2's DbExplorerActivity used to list bunnyApiKey in its
         //       Organization node-fields; that has been removed, so the KBS2 side closes with its next backend
@@ -138,8 +146,7 @@ final class ClientReadSecrets {
         //       gateway_parameter and magic_link columns denied above: that screen reads those today.
         //   (the three capability tokens that used to be listed here are now declared above: they did not need
         //       an endpoint after all, only a rule saying they may be tested and not read.)
-        Console.log("🛡 Client queries may not touch the sign-in, credential and key columns (2 tables, 6 columns),"
-                    + " and may test but not read 2 capability tokens"
-                    + " (invitation.token paused, WATCHED — see CAPABILITY-READ in the read inventory)");
+        Console.log("🛡 Client queries may not touch the sign-in, credential and key columns (2 tables, 7 columns),"
+                    + " and may test but not read 3 capability tokens (none paused)");
     }
 }
