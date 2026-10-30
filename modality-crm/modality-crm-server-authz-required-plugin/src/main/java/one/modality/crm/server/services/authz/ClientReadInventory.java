@@ -287,6 +287,31 @@ final class ClientReadInventory implements ClientReadInspectionRegistry.ReadInsp
                       + " (#" + n + ") by " + callerClass() + ": " + maskedStatement);
     }
 
+    /**
+     * A client read a column that is about to be denied FLAT — an API key, not a capability token.
+     *
+     * <p>Same instrument, same reason, different question. The capability line asks "is anyone still READING a
+     * token they may legitimately test"; this one asks "is anyone reading this at all", because for a secret
+     * with no client use there is no legitimate shape and every appearance counts.
+     *
+     * <p>It exists because {@code organization.bunny_api_key} was denied on 2026-10-30 with no evidence
+     * whatsoever — the list could deny a column flat or say nothing about it, so the only way to learn whether
+     * a client still read it was to deny it and wait to be told. Every occurrence is logged, with the running
+     * total in the line, for the reason written on the capability watch above: a throttle that manufactures the
+     * all-clear it is consulted for is worse than no instrument.
+     */
+    @Override
+    public void onObservedColumnRead(String maskedStatement, String[] columns) {
+        long n = observedReads.incrementAndGet();
+        if (n > MAX_CAPABILITY_LINES && !ClientWriteInventory.isPowerOfTen(n))
+            return;
+        logger.accept("🛡 OBSERVED-READ " + String.join(",", columns == null ? new String[0] : columns)
+                      + " (#" + n + ") by " + callerClass() + ": " + maskedStatement);
+    }
+
+    /** Occurrences of a flat-watched column, counted apart from the capability watch. */
+    private final AtomicLong observedReads = new AtomicLong();
+
     /** Occurrences, not shapes: the watch is counting how OFTEN, not how many ways. */
     private final AtomicLong capabilityReads = new AtomicLong();
 
