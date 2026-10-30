@@ -15,14 +15,17 @@ import java.util.Set;
  *
  * <p>The world is faked: organization 1 owns event 10, organization 2 owns event 20. Booking 100 (line 110,
  * attendance 120) is at event 10; booking 200 (line 210, attendance 220) is at event 20; booking 300 has no owner.
- * The caller holds SubmitBookings at organization 1 / event 10 and nowhere else. Everything else is the production
- * decision.
+ * The caller holds SubmitBookings at organization 1 / event 10 and nowhere else, and EditBookingPrices there too
+ * while {@link #pricesGranted} says so. Everything else is the production decision.
  *
  * <p>No test framework: runs from main() and exits non-zero on failure, following DocumentSubmitAuthorizationCheck.
  */
 public class BackofficeSubmitScopeCheck {
 
     static int pass = 0, fail = 0;
+
+    /** Whether the fake caller holds EditBookingPrices where it holds SubmitBookings. */
+    static boolean pricesGranted = true;
 
     static void check(String what, boolean ok) {
         if (ok) { pass++; System.out.println("  ok   " + what); }
@@ -49,8 +52,11 @@ public class BackofficeSubmitScopeCheck {
         @Override public Future<Object> eventOrganization(Object eventId) {
             return Future.succeededFuture(EVENT_ORGANIZATION.get(String.valueOf(eventId)));
         }
-        @Override public Future<Boolean> holds(BackofficeSubmitScope.Place place) {
-            return Future.succeededFuture("1".equals(place.organizationId()) && "10".equals(place.eventId()));
+        @Override public Future<Boolean> holds(String operationCode, BackofficeSubmitScope.Place place) {
+            boolean here = "1".equals(place.organizationId()) && "10".equals(place.eventId());
+            boolean granted = BackofficeSubmitScope.SUBMIT_BOOKINGS.equals(operationCode)
+                              || BackofficeSubmitScope.EDIT_BOOKING_PRICES.equals(operationCode) && pricesGranted;
+            return Future.succeededFuture(here && granted);
         }
     };
 
@@ -82,6 +88,13 @@ public class BackofficeSubmitScopeCheck {
 
     static String refusal(DocumentSubmitAuthorization.Targets targets, List<BackofficeSubmitScope.Owner> newBookings, boolean payments) {
         Future<String> answer = BackofficeSubmitScope.refusal(targets, newBookings, payments, LOOKUP);
+        if (!answer.isComplete())
+            return "<did not complete>";
+        return answer.failed() ? "<failed: " + answer.cause() + ">" : answer.result();
+    }
+
+    static String priceRefusal(DocumentSubmitAuthorization.Targets targets, List<BackofficeSubmitScope.Owner> newBookings) {
+        Future<String> answer = BackofficeSubmitScope.priceRefusal(targets, newBookings, LOOKUP);
         if (!answer.isComplete())
             return "<did not complete>";
         return answer.failed() ? "<failed: " + answer.cause() + ">" : answer.result();
@@ -144,6 +157,29 @@ public class BackofficeSubmitScopeCheck {
         check("a booking with an event but no organization is placed by its event",
             allowed(targets(ids("500"), ids(), ids()), false, null, null));
 
+        // --- prices are a right of their own (V0152) ---
+        check("a line's price is a price change",
+            BackofficeSubmitScope.changesPrices(List.of("AddDocumentLineEvent", "PriceDocumentLineEvent")));
+        check("so is moving a deposit from cancelled bookings",
+            BackofficeSubmitScope.changesPrices(List.of("GetBackCancelledMultipleBookingsDepositEvent")));
+        check("the facility fee is not: a member applies its rate themselves",
+            !BackofficeSubmitScope.changesPrices(List.of("ApplyFacilityFeeEvent")));
+        check("nor is an everyday change",
+            !BackofficeSubmitScope.changesPrices(List.of("AddDocumentLineEvent", "AllocateDocumentLineEvent", "CancelDocumentEvent")));
+        check("a price change where the caller holds EditBookingPrices passes",
+            priceRefusal(targets(ids("100"), ids(), ids()), List.of()) == null);
+        check("a free room on a new booking at that event passes",
+            priceRefusal(NONE, List.of(new BackofficeSubmitScope.Owner("10", 1))) == null);
+        pricesGranted = false;
+        String noPrices = priceRefusal(targets(ids(), ids("110"), ids()), List.of());
+        check("without it, a price set on one's own booking line is refused, and says where: " + noPrices,
+            noPrices != null && noPrices.contains("no EditBookingPrices in organization 1 event 10"));
+        check("SubmitBookings alone still lets the rest of the submit through",
+            allowed(targets(ids("100"), ids(), ids()), false, null, null));
+        pricesGranted = true;
+        check("holding EditBookingPrices does not reach another centre's booking",
+            priceRefusal(targets(ids("200"), ids(), ids()), List.of()) != null);
+
         // --- the wiring ---
         String provider = readSource("modality-fork/modality-ecommerce/modality-ecommerce-document-service-server/src/main/java/"
                                      + "one/modality/ecommerce/document/service/spi/impl/server/ServerDocumentServiceProvider.java");
@@ -171,6 +207,12 @@ public class BackofficeSubmitScopeCheck {
         check("the rule ships ENFORCING (since 2026-10-28, after a clean census)", BackofficeSubmitScope.ENFORCING);
         check("and a refusal fails the submit while enforcing",
             provider.contains("? Future.failedFuture(BackofficeSubmitScope.REFUSED)"));
+        check("a submit carrying a price event is also asked for EditBookingPrices",
+            provider.contains("boolean priceEvents = BackofficeSubmitScope.changesPrices(DocumentSubmitAuthorization.eventKinds(events));")
+            && provider.contains("priceEvents ? authorizeBackofficePrices(request, events, newBookings, callerState)"));
+        check("the price census line is its own", provider.contains("\" a booking price change by \""));
+        check("the price rule ships OBSERVING, behind its own switch", !BackofficeSubmitScope.PRICES_ENFORCING
+            && provider.contains("return BackofficeSubmitScope.PRICES_ENFORCING"));
 
         String migration = readSource("modality-fork/modality-base/modality-base-server-dbmigration-plugin/src/main/resources/"
                                       + "one/modality/base/server/services/dbmigration/scripts/V0138__submit_bookings_operation.sql");
@@ -180,6 +222,12 @@ public class BackofficeSubmitScopeCheck {
         String index = readSource("modality-fork/modality-base/modality-base-server-dbmigration-plugin/src/main/resources/"
                                   + "one/modality/base/server/services/dbmigration/scripts/index.txt");
         check("V0138 is indexed", index.contains("V0138__submit_bookings_operation.sql"));
+        String prices = readSource("modality-fork/modality-base/modality-base-server-dbmigration-plugin/src/main/resources/"
+                                   + "one/modality/base/server/services/dbmigration/scripts/V0152__edit_booking_prices_operation.sql");
+        check("V0152 seeds EditBookingPrices", prices.contains("SELECT 'EditBookingPrices',"));
+        check("and grants it to every role holding SubmitBookings, directly or through a group",
+            prices.contains("WHERE holder.operation_code = 'SubmitBookings'"));
+        check("V0152 is indexed", index.contains("V0152__edit_booking_prices_operation.sql"));
 
         System.out.println(pass + " passed, " + fail + " failed");
         if (fail > 0)

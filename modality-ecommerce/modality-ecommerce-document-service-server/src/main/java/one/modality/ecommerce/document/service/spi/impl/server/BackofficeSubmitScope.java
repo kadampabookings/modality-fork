@@ -39,6 +39,11 @@ import java.util.function.Function;
  * 2026-10-28 after the production census from the 22 Oct deploy logged none. Super administrators pass, as through
  * every RouteAccessGuard check.
  *
+ * <p><b>Prices are a right of their own</b> ({@link #EDIT_BOOKING_PRICES}, V0152): a submit that sets a line's price
+ * or moves a deposit between bookings needs it as well, in the same places. SubmitBookings let anyone able to change
+ * a booking also make it free or give it any price; the agreed model (2026-10-23) separates money from the everyday
+ * right. Its own switch, {@link #PRICES_ENFORCING}: it observes first while SubmitBookings stays enforced.
+ *
  * @author Claude Code
  */
 final class BackofficeSubmitScope {
@@ -47,6 +52,20 @@ final class BackofficeSubmitScope {
     static final boolean ENFORCING = true;
 
     static final String SUBMIT_BOOKINGS = "SubmitBookings";
+
+    /** Setting a booking's prices (V0152) — required on top of {@link #SUBMIT_BOOKINGS} by {@link #PRICE_EVENTS}. */
+    static final String EDIT_BOOKING_PRICES = "EditBookingPrices";
+
+    /** False while it observes (the census line is {@code "WOULD REFUSE a booking price change"}). */
+    static final boolean PRICES_ENFORCING = false;
+
+    /**
+     * The events that set money on a booking rather than a choice priced by the event's rates — simple class names,
+     * matched exactly, like {@link DocumentSubmitAuthorization#FRONT_OFFICE_EVENTS}. A price, a discount or a minimum
+     * deposit on a line; and a deposit moved from cancelled bookings onto this one. NOT ApplyFacilityFeeEvent: it
+     * applies the event's facility-fee rate, a choice the front office offers members themselves.
+     */
+    static final Set<String> PRICE_EVENTS = Set.of("PriceDocumentLineEvent", "GetBackCancelledMultipleBookingsDepositEvent");
 
     /** What a refused caller is told: that it was refused, and no more. */
     static final String REFUSED = "[BookingSubmitScopeError] This operation is not available to you";
@@ -71,8 +90,8 @@ final class BackofficeSubmitScope {
         /** The organization an event belongs to, or null when there is no such event. */
         Future<Object> eventOrganization(Object eventId);
 
-        /** Whether the caller holds SubmitBookings at this place (super administrators always do). */
-        Future<Boolean> holds(Place place);
+        /** Whether the caller holds this operation at this place (super administrators always do). */
+        Future<Boolean> holds(String operationCode, Place place);
     }
 
     /** A booking's owner as stored or as written: either id may be null; with neither it cannot be placed. */
@@ -93,6 +112,28 @@ final class BackofficeSubmitScope {
         // name the payment by id alone). Refused outright rather than placed.
         if (paymentEvents)
             return Future.succeededFuture("carries a payment change (payments are made through the payment service)");
+        return missingAt(SUBMIT_BOOKINGS, targets, newBookings, lookup);
+    }
+
+    /**
+     * Why this submit's price changes would be refused, or null when the caller may make them — asked only of a
+     * submit carrying {@link #PRICE_EVENTS}, in the same places as {@link #refusal}.
+     */
+    static Future<String> priceRefusal(DocumentSubmitAuthorization.Targets targets, List<Owner> newBookings, Lookup lookup) {
+        return missingAt(EDIT_BOOKING_PRICES, targets, newBookings, lookup);
+    }
+
+    /** Whether any of these event kinds sets money on a booking (see {@link #PRICE_EVENTS}). Pure. */
+    static boolean changesPrices(List<String> eventKinds) {
+        for (String kind : eventKinds)
+            if (PRICE_EVENTS.contains(kind))
+                return true;
+        return false;
+    }
+
+    /** Where the submit lands without the caller holding {@code operationCode}, as a reason, or null. */
+    private static Future<String> missingAt(String operationCode, DocumentSubmitAuthorization.Targets targets,
+                                            List<Owner> newBookings, Lookup lookup) {
         return existingOwners(targets, lookup).compose(existing -> {
             if (existing == null)
                 return Future.succeededFuture("names a booking, line or attendance that could not be placed");
@@ -115,13 +156,13 @@ final class BackofficeSubmitScope {
                 List<Place> ordered = new ArrayList<>(places);
                 List<Future<Boolean>> answers = new ArrayList<>();
                 for (Place place : ordered)
-                    answers.add(lookup.holds(place));
+                    answers.add(lookup.holds(operationCode, place));
                 return Future.all(new ArrayList<>(answers)).map(held -> {
                     List<String> missing = new ArrayList<>();
                     for (int i = 0; i < ordered.size(); i++)
                         if (!Boolean.TRUE.equals(held.resultAt(i)))
                             missing.add(describe(ordered.get(i)));
-                    return missing.isEmpty() ? null : "no " + SUBMIT_BOOKINGS + " in " + String.join("; ", missing);
+                    return missing.isEmpty() ? null : "no " + operationCode + " in " + String.join("; ", missing);
                 });
             });
         });
@@ -251,8 +292,8 @@ final class BackofficeSubmitScope {
             }
 
             @Override
-            public Future<Boolean> holds(Place place) {
-                return RouteAccessGuard.callerHoldsOperation(callerState, SUBMIT_BOOKINGS,
+            public Future<Boolean> holds(String operationCode, Place place) {
+                return RouteAccessGuard.callerHoldsOperation(callerState, operationCode,
                     primaryKeyOf(place.organizationId()), primaryKeyOf(place.eventId()));
             }
         };

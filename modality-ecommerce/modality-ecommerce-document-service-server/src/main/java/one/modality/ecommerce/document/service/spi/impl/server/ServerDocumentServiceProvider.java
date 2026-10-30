@@ -500,6 +500,7 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
             }
             paymentEvents |= e instanceof AbstractMoneyTransferEvent;
         }
+        boolean priceEvents = BackofficeSubmitScope.changesPrices(DocumentSubmitAuthorization.eventKinds(events));
         Future<String> refusal;
         try {
             refusal = BackofficeSubmitScope.refusal(
@@ -518,6 +519,38 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
                 Console.log("🛡 " + (BackofficeSubmitScope.ENFORCING ? "REFUSED" : "WOULD REFUSE")
                             + " a back-office booking submit by " + request.userId() + " — " + reason);
                 return BackofficeSubmitScope.ENFORCING
+                    ? Future.failedFuture(BackofficeSubmitScope.REFUSED)
+                    : Future.<Void>succeededFuture();
+            })
+            // Then prices (V0152), asked only of a submit that sets one, in the same places: its own switch and its own
+            // census line, so it can observe while the submit scope above enforces.
+            .compose(ignored -> priceEvents ? authorizeBackofficePrices(request, events, newBookings, callerState)
+                : Future.succeededFuture());
+    }
+
+    /**
+     * Refuses (once enforcing) a back-office submit that sets a booking's price where the caller does not hold
+     * EditBookingPrices — see {@link BackofficeSubmitScope#PRICE_EVENTS}. While observing, logs what it would refuse
+     * and lets it through. A failed read refuses while enforcing, like any rule that cannot answer.
+     */
+    private static Future<Void> authorizeBackofficePrices(DocumentSubmitRequest request, AbstractDocumentEvent[] events,
+                                                          List<BackofficeSubmitScope.Owner> newBookings, Object callerState) {
+        Future<String> refusal;
+        try {
+            refusal = BackofficeSubmitScope.priceRefusal(DocumentSubmitAuthorization.existingTargets(events), newBookings,
+                BackofficeSubmitScope.databaseLookup(callerState));
+        } catch (RuntimeException e) {
+            refusal = Future.failedFuture(e);
+        }
+        return refusal
+            .recover(failure -> Future.succeededFuture("could not check the price change: " + failure.getMessage()))
+            .compose(reason -> {
+                if (reason == null)
+                    return Future.succeededFuture();
+                // The census line, distinct from the submit scope's so each has its own filter and its own switch.
+                Console.log("🛡 " + (BackofficeSubmitScope.PRICES_ENFORCING ? "REFUSED" : "WOULD REFUSE")
+                            + " a booking price change by " + request.userId() + " — " + reason);
+                return BackofficeSubmitScope.PRICES_ENFORCING
                     ? Future.failedFuture(BackofficeSubmitScope.REFUSED)
                     : Future.succeededFuture();
             });
