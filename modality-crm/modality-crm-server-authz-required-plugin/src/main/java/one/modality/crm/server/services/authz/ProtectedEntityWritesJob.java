@@ -290,10 +290,17 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
      * (7 days) and 2026-10-29 logged no would-be refusal on any of the four; every back-office write to them was
      * checked against the field rules on 2026-10-29 (personal details, comments, payer, room, recording expiry, the
      * three organisation groups). Server writes, the document service's included, are never refused here.
-     * MoneyAccount stays observing: clients are denied money_account outright, so there is nothing to enforce.
+     *
+     * <p><b>MoneyAccount, 2026-10-30, the last one.</b> No behaviour changes today: ClientWriteSecrets denies
+     * money_account to every client outright, and the deny list is consulted before this rule, so no client write
+     * reaches it — which is also why the 30-day census to 2026-10-30 logged no would-be refusal on it, and why that
+     * zero is not evidence about any user. It is enforced so that the entity is not the one exception left observing:
+     * if that deny is ever narrowed (a screen for money accounts), the writes it lets through meet ManageMoneyAccounts
+     * in the account's own organization and event (OWNER_FIELDS), refused, instead of an observe-only rule nobody is
+     * watching any more. Narrowing the deny then needs its own census of who holds ManageMoneyAccounts where.
      */
     static final java.util.Set<String> ENFORCED_ENTITIES = java.util.Set.of("FrontendAccount", "Letter", "PassTemplate",
-        "Document", "DocumentLine", "Attendance", "Organization");
+        "Document", "DocumentLine", "Attendance", "Organization", "MoneyAccount");
 
     /** Whether this entity's rule refuses (true) or only observes (false). See {@link #ENFORCED_ENTITIES}. */
     static boolean isEnforced(String entityName) {
@@ -715,7 +722,8 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         "PassTemplate", new String[] { "organization" },
         // Defensive, not reached by clients: ClientWriteSecrets denies money_account to them outright, so this
         // entry is only ever consulted for server writes, which pass whatever it says. It is here so the
-        // entity is placed correctly if that deny is ever narrowed.
+        // entity is placed correctly if that deny is ever narrowed — and enforced since 2026-10-30, so a write
+        // placed here is refused, not only logged.
         "MoneyAccount", new String[] { "organization", "event" },
         // A booking: document.organization is NOT NULL, and event names the event it books (2026-10-19).
         "Document", new String[] { "organization", "event" }
