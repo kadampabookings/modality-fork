@@ -338,8 +338,8 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         // And the first arm of the read plan's step 3, the first thing on the read side that refuses rather
         // than counts: a client caller with no USABLE principal — anonymous, or signed out, which is twice as
         // many callers — may not select FROM Person or FrontendAccount. Root entity only, because anonymous
-        // callers legitimately reach person through a join on resume-payment. Observing until its own line
-        // says the set is empty; see NoPrincipalReadPolicy.
+        // callers legitimately reach person through a join on resume-payment. ENFORCING since 2026-10-30:
+        // the precondition that kept it observing was falsified rather than met — see NoPrincipalReadPolicy.
         ProtectedEntityReadRegistry.registerReadPolicy(new NoPrincipalReadPolicy());
         // And the write half of that: the account columns no client may set, enforced now rather than observed —
         // see ClientWriteSecrets for why the observe-only switch below does not apply to them.
@@ -388,6 +388,15 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         Console.log("🛡 Client write row rules ENFORCING — grant tables, unbounded writes, mail"
                     + " (person is closed outright by the deny list, not by a row rule); booking tables back-office only — "
                     + (BackofficeOnlyWritePolicy.ENFORCING ? "ENFORCING" : "observing only"));
+        // The read side says its own state for the same reason the three lines above say theirs, and it
+        // did not on the day it started refusing: the only way to tell whether production was running the
+        // enforcing build was to notice that the SAME jar had added MoneyAccount to the first line. That
+        // worked by luck of two commits riding together. Without a line here, a census of zero refusals
+        // reads identically whether the arm refused nothing or was never deployed — and a quiet security
+        // control is indistinguishable from an absent one, which is the failure mode worth a log line.
+        Console.log("🛡 Client read rules — a caller with no signed-in principal may not select from "
+                    + String.join(", ", new java.util.TreeSet<>(NoPrincipalReadPolicy.CLOSED_ROOTS))
+                    + (NoPrincipalReadPolicy.ENFORCING ? " — ENFORCING" : " — observing only, nothing is refused yet"));
     }
 
     /**
