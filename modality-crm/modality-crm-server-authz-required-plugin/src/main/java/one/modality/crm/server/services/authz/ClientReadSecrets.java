@@ -135,10 +135,16 @@ final class ClientReadSecrets {
         //       being read by the LIVE client. API_VERSION is one root file read by BOTH apps, so back-office
         //       bundles have been bannered into updating since then. The prerequisite was satisfied early and
         //       by accident, which is worth saying plainly rather than letting the dates look deliberate.
-        //       NOT measured first, unlike invitation.token, and the reason is a gap: ClientReadDenyList has no
-        //       plain observeColumn — only the equality-exception variant built for capability tokens — so a
-        //       flat-denied column has no instrument and there was no zero to wait for. If this breaks a screen,
-        //       that gap is the thing to close before the next flat deny.
+        //       NOT measured first, unlike invitation.token, because a flat-denied column had no instrument:
+        //       there was only the equality-exception watch built for capability tokens, so there was no zero
+        //       to wait for. ClientReadDenyList.observeColumn closed that gap the same morning (webfx-stack
+        //       7a882eda, 11:10, in this very deploy) — too late for this column and not retroactively, since
+        //       a denied column cannot also be watched: observeColumn throws on one, deliberately, because a
+        //       watch beside an enforced rule reports reads that never happened. So bunny_api_key stays the one
+        //       flat deny that shipped blind, and the NEXT one watches first. Whether this one broke a screen
+        //       is still answerable from the logs: a flat-deny refusal carries DENIED_REFUSAL and is listed in
+        //       section 2 of scripts/check-prod-logs-read-aspect.sh, which is why that section must never
+        //       exclude that reason.
         //       NOTE the deny closes the KBS3 path only, because KBS2 runs its own server and bus and this list
         //       cannot refuse anything there. KBS2's DbExplorerActivity used to list bunnyApiKey in its
         //       Organization node-fields; that has been removed, so the KBS2 side closes with its next backend
