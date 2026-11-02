@@ -55,12 +55,12 @@ public class ProtectedEntityWritesCheck {
         check("a payer may be set by education programmes or by whoever edits the booking",
             groupsFor("Document", "payer").stream().anyMatch(g -> Arrays.asList(g)
                 .containsAll(List.of("RunEducationProgramRegistration", "EditBookingDetails"))));
-        check("a field no screen writes generically needs ManageBookings, held by nobody but super admins",
-            requiresAlone(groupsFor("Document", "cancelled"), "ManageBookings"));
+        check("a field no screen writes generically needs ServerBookingWrite, held by nobody (the server skips the rule, super admins pass it)",
+            requiresAlone(groupsFor("Document", "cancelled"), "ServerBookingWrite"));
         check("so the entity rule's any-of cannot let a payer grant cancel a booking",
-            requiresAlone(groupsFor("Document", "payer", "cancelled"), "ManageBookings"));
+            requiresAlone(groupsFor("Document", "payer", "cancelled"), "ServerBookingWrite"));
         check("a line's room needs AllocateRooms", requiresAlone(groupsFor("DocumentLine", "resourceConfiguration"), "AllocateRooms"));
-        check("any other field of a line needs ManageBookings", requiresAlone(groupsFor("DocumentLine", "cancelled"), "ManageBookings"));
+        check("any other field of a line needs ServerBookingWrite", requiresAlone(groupsFor("DocumentLine", "cancelled"), "ServerBookingWrite"));
         check("a recording's availability needs EditMediaAccess", requiresAlone(groupsFor("Attendance", "expirationDate"), "EditMediaAccess"));
         check("a near-miss on the textual pre-filter requires nothing", groupsFor("Mail", "letter").isEmpty());
 

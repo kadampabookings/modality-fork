@@ -61,7 +61,10 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
     /**
      * A booking's own tables, written by the back office through the generic API (2026-10-19, V0135). Only the
      * fields its screens actually write are granted, each to the act that writes it; every OTHER field of these
-     * tables needs {@link #MANAGE_BOOKINGS}, which is granted to nobody, so it is a super administrator's.
+     * tables needs {@link #SERVER_BOOKING_WRITE}, which is no operation row and granted to nobody: the server's own
+     * writes skip this rule and super administrators pass every check, so in practice only the document service
+     * writes those fields. Named for that on 2026-11-02 — it was "ManageBookings", which read like a right an
+     * administrator could grant, and V0151's ManageEventBookings sits right beside it in the role editor.
      *
      * <p>Why the rest is closed rather than left to the entity's codes: the entity rule is any-of, so without
      * this a holder of RunEducationProgramRegistration — needed only to set a payer — could write `cancelled`
@@ -72,10 +75,10 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         ALLOCATE_ROOMS = "AllocateRooms",
         EDIT_MEDIA_ACCESS = "EditMediaAccess",
         RUN_EDUCATION_PROGRAM_REGISTRATION = "RunEducationProgramRegistration",
-        MANAGE_BOOKINGS = "ManageBookings";
+        SERVER_BOOKING_WRITE = "ServerBookingWrite";
 
     /**
-     * The tables whose unlisted fields need {@link #MANAGE_BOOKINGS} — and whose SERVER writes skip this rule
+     * The tables whose unlisted fields need {@link #SERVER_BOOKING_WRITE} — and whose SERVER writes skip this rule
      * entirely. The document service writes them for every booking, line and attendance; a server write is
      * allowed whatever the rule says, so judging one would only cost owner lookups on the busiest path there is.
      */
@@ -139,7 +142,7 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
                                                  EDIT_ORGANIZATION_RESIDENTS_EVENT }),
         Map.entry("MoneyAccount", new String[] { "ManageMoneyAccounts" }),
         // A booking's own tables (see EDIT_BOOKING_DETAILS). The entity rule is the backstop for a statement
-        // whose fields cannot be read; the field rules below and MANAGE_BOOKINGS for the rest do the real work.
+        // whose fields cannot be read; the field rules below and SERVER_BOOKING_WRITE for the rest do the real work.
         Map.entry("Document",     new String[] { EDIT_BOOKING_DETAILS, RUN_EDUCATION_PROGRAM_REGISTRATION,
                                                  "ManageEducationProgramRegistrants" }),
         Map.entry("DocumentLine", new String[] { ALLOCATE_ROOMS }),
@@ -602,8 +605,8 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
             if (fieldCodes != null)
                 groups.add(fieldCodes);
             else if (BOOKING_ENTITIES.contains(entityName))
-                // A booking field no screen writes generically: a super administrator's (see MANAGE_BOOKINGS).
-                groups.add(new String[] { MANAGE_BOOKINGS });
+                // A booking field no screen writes generically: the server's (see SERVER_BOOKING_WRITE).
+                groups.add(new String[] { SERVER_BOOKING_WRITE });
             if ("Letter".equals(entityName)) {
                 if (isLetterContentField(field)) letterContent = true;
                 else letterProperties = true;
@@ -620,11 +623,11 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
      * The same groups, each kept once, in the order they were first required.
      *
      * <p>Groups repeat because they are collected per FIELD: on a booking entity every field without a rule of
-     * its own requires {@link #MANAGE_BOOKINGS}, so a six-field insert asked for it six times. Repetition never
+     * its own requires {@link #SERVER_BOOKING_WRITE}, so a six-field insert asked for it six times. Repetition never
      * changed the decision — every group must hold, and a group asked twice holds twice — but it cost a
      * duplicate authorization call each time, and it reached the reader: production's census carried
      * {@code (needs EditMediaAccess and ManageBookings and ManageBookings and ManageBookings and ManageBookings)}
-     * for one attendance, and thirteen terms for one document. That line is the only evidence of somebody being
+     * (the placeholder's name then) for one attendance, and thirteen terms for one document. That line is the only evidence of somebody being
      * locked out, and after the flip it is also what the person refused is shown. A list that grows with the
      * batch describes the batch; this one describes the row.
      *
