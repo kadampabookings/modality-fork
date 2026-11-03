@@ -441,7 +441,7 @@ final class EventErasureRunner {
      * comment plans VERIFY_FULL against the RDS CA, and when it lands this copy must follow, or the one connection
      * that erases data would stay on trust-all. A shared factory would need a webfx-stack change; not done here.
      */
-    private static io.vertx.core.Future<PgConnection> connect() {
+    static io.vertx.core.Future<PgConnection> connect() {
         // The default data source model's id (getDefaultDataSourceModel().getDataSourceId() is the same "MDS")
         LocalDataSource dataSource = LocalDataSourceService.getLocalDataSource(DataSourceModelService.getDefaultDataSourceId());
         if (dataSource == null)
@@ -724,12 +724,12 @@ final class EventErasureRunner {
         return rows.size() == 0 ? null : rows.iterator().next().getString(0);
     }
 
-    private static String sqlStateOf(Throwable cause) {
+    static String sqlStateOf(Throwable cause) {
         return cause instanceof DatabaseException db ? db.getSqlState() : cause == null ? null : cause.getClass().getSimpleName();
     }
 
     /** SQLSTATE and the database's primary message — never its DETAIL, which can quote a row's values. */
-    private static String errorText(Throwable cause) {
+    static String errorText(Throwable cause) {
         if (cause instanceof PgException pg)
             return pg.getSqlState() + " " + pg.getErrorMessage();
         if (cause instanceof DatabaseException db)
@@ -737,7 +737,7 @@ final class EventErasureRunner {
         return cause == null ? null : cause.getClass().getSimpleName() + ": " + cause.getMessage();
     }
 
-    private static String truncate(String text) {
+    static String truncate(String text) {
         return text == null || text.length() <= MAX_ERROR_LENGTH ? text : text.substring(0, MAX_ERROR_LENGTH - 1) + "…";
     }
 }

@@ -152,3 +152,4 @@ V0149__payment_verification.sql
 V0150__income_route.sql
 V0151__manage_event_bookings_operation.sql
 V0152__edit_booking_prices_operation.sql
+V0153__anonymise_person.sql

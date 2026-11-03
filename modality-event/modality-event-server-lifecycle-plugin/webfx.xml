@@ -14,7 +14,11 @@
 
          Putting an event's bookings on hold, closing and reopening them for Registration > Event status, behind the
          ManageEventBookings operation (V0151) scoped to the event's own organisation and event, as a compare-and-set
-         the server makes; and the dates each of an organisation's events had its data removed, for the same page. -->
+         the server makes; and the dates each of an organisation's events had its data removed, for the same page.
+
+         Anonymising ONE customer at their request (GDPR erasure, anonymise_person(), V0153), from Customers, for super
+         administrators only: here rather than in the person plugin because it needs the same dedicated connection and
+         the same super-administrator gate as the event removal, with its runs recorded in person_erasure_run. -->
 
     <exported-packages>
         <source-packages/>
@@ -44,6 +48,8 @@
         <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.event.server.lifecycle.EventErasureRunsEndpoint</provider>
         <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.event.server.lifecycle.SetEventBookingStateEndpoint</provider>
         <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.event.server.lifecycle.EventRemovalDatesEndpoint</provider>
+        <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.event.server.lifecycle.PreviewPersonAnonymisationEndpoint</provider>
+        <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.event.server.lifecycle.CommitPersonAnonymisationEndpoint</provider>
     </providers>
 
     <maven-pom-manual>

@@ -4,3 +4,5 @@ one.modality.event.server.lifecycle.EventErasureRunEndpoint
 one.modality.event.server.lifecycle.EventErasureRunsEndpoint
 one.modality.event.server.lifecycle.SetEventBookingStateEndpoint
 one.modality.event.server.lifecycle.EventRemovalDatesEndpoint
+one.modality.event.server.lifecycle.PreviewPersonAnonymisationEndpoint
+one.modality.event.server.lifecycle.CommitPersonAnonymisationEndpoint
