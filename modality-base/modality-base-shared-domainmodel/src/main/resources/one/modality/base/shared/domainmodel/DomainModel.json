@@ -1931,7 +1931,8 @@
     "online": "boolean",
     "pool": "Pool",
     "resource": "Resource",
-    "startDate": "Temporal.PlainDate"
+    "startDate": "Temporal.PlainDate",
+    "unavailable": "boolean"
   },
   "ScheduledBoundary": {
     "id": 144,
