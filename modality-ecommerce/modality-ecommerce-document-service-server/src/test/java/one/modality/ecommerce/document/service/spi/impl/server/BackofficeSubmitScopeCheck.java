@@ -211,8 +211,10 @@ public class BackofficeSubmitScopeCheck {
             provider.contains("boolean priceEvents = BackofficeSubmitScope.changesPrices(DocumentSubmitAuthorization.eventKinds(events));")
             && provider.contains("priceEvents ? authorizeBackofficePrices(request, events, newBookings, callerState)"));
         check("the price census line is its own", provider.contains("\" a booking price change by \""));
-        check("the price rule ships OBSERVING, behind its own switch", !BackofficeSubmitScope.PRICES_ENFORCING
+        check("the price rule ships ENFORCING (since 2026-11-06), behind its own switch", BackofficeSubmitScope.PRICES_ENFORCING
             && provider.contains("return BackofficeSubmitScope.PRICES_ENFORCING"));
+        check("and a price refusal fails the submit while enforcing",
+            provider.contains("return BackofficeSubmitScope.PRICES_ENFORCING\n                    ? Future.failedFuture(BackofficeSubmitScope.REFUSED)"));
 
         String migration = readSource("modality-fork/modality-base/modality-base-server-dbmigration-plugin/src/main/resources/"
                                       + "one/modality/base/server/services/dbmigration/scripts/V0138__submit_bookings_operation.sql");

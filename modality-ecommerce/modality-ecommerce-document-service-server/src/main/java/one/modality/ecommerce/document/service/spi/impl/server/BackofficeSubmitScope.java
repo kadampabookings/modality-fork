@@ -42,7 +42,7 @@ import java.util.function.Function;
  * <p><b>Prices are a right of their own</b> ({@link #EDIT_BOOKING_PRICES}, V0152): a submit that sets a line's price
  * or moves a deposit between bookings needs it as well, in the same places. SubmitBookings let anyone able to change
  * a booking also make it free or give it any price; the agreed model (2026-10-23) separates money from the everyday
- * right. Its own switch, {@link #PRICES_ENFORCING}: it observes first while SubmitBookings stays enforced.
+ * right. Its own switch, {@link #PRICES_ENFORCING}: it observed first (from 2026-10-30), and enforces since 2026-11-06.
  *
  * @author Claude Code
  */
@@ -56,8 +56,12 @@ final class BackofficeSubmitScope {
     /** Setting a booking's prices (V0152) — required on top of {@link #SUBMIT_BOOKINGS} by {@link #PRICE_EVENTS}. */
     static final String EDIT_BOOKING_PRICES = "EditBookingPrices";
 
-    /** False while it observes (the census line is {@code "WOULD REFUSE a booking price change"}). */
-    static final boolean PRICES_ENFORCING = false;
+    /**
+     * On since 2026-11-06. It observed from the 2026-10-30 deploy; the 8-day census to 2026-11-05 logged no would-be
+     * refusal, so every back-office price change in that time came from a holder of the right. While enforcing, a
+     * price change that cannot be checked is refused too. The refusal line is {@code "REFUSED a booking price change"}.
+     */
+    static final boolean PRICES_ENFORCING = true;
 
     /**
      * The events that set money on a booking rather than a choice priced by the event's rates — simple class names,
