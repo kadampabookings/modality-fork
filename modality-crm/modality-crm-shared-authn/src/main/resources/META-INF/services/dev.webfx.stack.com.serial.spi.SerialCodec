@@ -35,3 +35,9 @@ one.modality.crm.shared.services.authn.serial.ResetSecondFactorCredentialsSerial
 one.modality.crm.shared.services.authn.serial.RevokeApprovedPasskeyCredentialsSerialCodec
 one.modality.crm.shared.services.authn.serial.LookupSecondFactorsCredentialsSerialCodec
 one.modality.crm.shared.services.authn.serial.ListAccountPasskeysCredentialsSerialCodec
+one.modality.crm.shared.services.authn.serial.SecondFactorStatusCredentialsSerialCodec
+one.modality.crm.shared.services.authn.serial.ProveExistingFactorCredentialsSerialCodec
+one.modality.crm.shared.services.authn.serial.ListSignInApprovalsCredentialsSerialCodec
+one.modality.crm.shared.services.authn.serial.DecideSignInApprovalCredentialsSerialCodec
+one.modality.crm.shared.services.authn.serial.SecondFactorCoverageCredentialsSerialCodec
+one.modality.crm.shared.services.authn.serial.OpenEnrolmentWindowCredentialsSerialCodec
