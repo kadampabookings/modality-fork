@@ -33,6 +33,8 @@ import one.modality.crm.server.authn.gateway.shared.MagicLinkService;
 import one.modality.crm.server.authn.gateway.shared.PasswordClosedNotice;
 import one.modality.crm.server.authn.gateway.shared.RecoveryWindow;
 import one.modality.crm.server.authn.gateway.shared.RoleOperationMembership;
+import one.modality.crm.server.authn.gateway.shared.SecondFactorAccess;
+import one.modality.crm.server.authn.gateway.shared.SecondFactorPolicy;
 import one.modality.crm.server.authn.gateway.shared.SetPasswordAfterRecoveryCredentials;
 import one.modality.crm.server.authn.gateway.shared.SuperAdminMembership;
 import one.modality.crm.shared.services.authn.AuthenticateWithBackOfficeViewCredentials;
@@ -322,8 +324,9 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
                         // 4) Pushing the userId to the magic link client which is identified by runId = usageRunId.
                         // Pushing the userId will cause a login, and subsequently a push of the authorizations.
                         return guestBookingsAttached
-                            .compose(ignoredAttach -> AuthenticatedState.createFor(userId, backofficeSession,
-                                SessionAudience.ofBackofficeFlag(backofficeSession), SessionMethod.of(method)))
+                            .compose(ignoredAttach -> audienceFor(userId, backofficeSession))
+                            .compose(audience -> AuthenticatedState.createFor(userId, backofficeSession,
+                                audience, SessionMethod.of(method)))
                             .compose(authenticatedState -> PushServerService.pushState(authenticatedState, usageRunId))
                             .compose(ignored -> { // indicates that the magic link client acknowledged this login push
                                 // 5) For LOGIN links: mark as used (single-use) and push userId to the original
@@ -375,9 +378,9 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
                                                             + " it has not reported which app it is (runId=" + requesterRunId + ")");
                                             } else {
                                                 boolean requesterIsBackoffice = requesterBackoffice;
-                                                AuthenticatedState.createFor(userId, requesterIsBackoffice,
-                                                        SessionAudience.ofBackofficeFlag(requesterIsBackoffice),
-                                                        SessionMethod.of(method))
+                                                audienceFor(userId, requesterIsBackoffice)
+                                                    .compose(audience -> AuthenticatedState.createFor(userId, requesterIsBackoffice,
+                                                        audience, SessionMethod.of(method)))
                                                     .compose(authenticatedState -> PushServerService.pushState(authenticatedState, requesterRunId));
                                             }
                                         }
@@ -385,6 +388,37 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
                             });
                     });
             });
+    }
+
+    /**
+     * The audience of a session an emailed link or code opens. The mailbox is never a second factor, so for an account
+     * that must present one in the back office — it holds an approved factor while the policy asks for factors, or
+     * setup-first is in force — a back-office redemption opens a RECOVERY-ONLY session: the back-office tier, the
+     * FRONT-OFFICE audience. Every back-office guard refuses it; what it can still do is what the person came for when
+     * they forgot their password: choose a new one inside the RecoveryWindow (or, with no approved factor yet, set one
+     * up — stored PENDING, since a mailbox proves nothing an approver could skip). They then sign in with the new
+     * password and their factor. See SecondFactorAccess and the forgotten-password table in
+     * docs/security/backoffice-second-factor.md.
+     *
+     * <p>Front-office redemptions, guests, and back-office accounts while the policy is off are unchanged. A database
+     * error answers FRONT_OFFICE — the restrictive side, which costs a re-sign-in rather than a one-factor session.
+     */
+    private static Future<SessionAudience> audienceFor(Object userId, boolean backofficeSession) {
+        SecondFactorPolicy policy = SecondFactorPolicy.get();
+        if (!backofficeSession || !(userId instanceof ModalityUserPrincipal principal) || !policy.asksForFactor(true))
+            return Future.succeededFuture(SessionAudience.ofBackofficeFlag(backofficeSession));
+        if (policy.isSetupFirst())
+            return Future.succeededFuture(recoveryOnly(principal));
+        return SecondFactorAccess.approvedFactorCount(principal.getUserAccountId())
+            .map(count -> count != null && count > 0 ? recoveryOnly(principal) : SessionAudience.BACK_OFFICE)
+            .otherwise(e -> recoveryOnly(principal));
+    }
+
+    private static SessionAudience recoveryOnly(ModalityUserPrincipal principal) {
+        // Person id only — this line says that a back-office redemption was narrowed, not whose mailbox it was
+        Console.log("🔗 Emailed sign-in for person " + principal.getUserPersonId()
+                    + " opened a recovery-only session (front-office audience): the back office needs the second factor");
+        return SessionAudience.FRONT_OFFICE;
     }
 
     // ======================================== SUPPORT VIEW ========================================
@@ -417,6 +451,14 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
         // traceable to a person who authenticated as themselves, not to a chain of borrowed views.
         if (agentPrincipal.isSupportView())
             return Future.failedFuture("[%s] A support view cannot open another support view".formatted(ModalityAuthenticationI18nKeys.SupportViewNotPermittedError));
+        // Only from a session opened FOR the back office ($aud=bo): a pass carries the agent's standing to somebody
+        // else's account, so a setup-only or recovery-only session (a password or a mailbox, no second factor) must
+        // not be able to mint one — a back-office view pass would otherwise open the real back office on a password.
+        if (!Boolean.TRUE.equals(StateAccessor.getVerifiedBackoffice(ThreadLocalStateHolder.getThreadLocalState()))) {
+            Console.log("🔗 support view pass refused: person " + agentPrincipal.getUserPersonId()
+                        + " is on a session that was not opened for the back office");
+            return Future.failedFuture("[%s] Only a back-office session can open a support view".formatted(ModalityAuthenticationI18nKeys.SupportViewNotPermittedError));
+        }
 
         Object targetPersonId = normaliseId(credentials.targetPersonId());
         if (targetPersonId == null)
@@ -722,6 +764,14 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
         // here, since the borrowed session's target could itself be a super admin.
         if (agentPrincipal.isSupportView())
             return Future.failedFuture("[%s] A support view cannot open another support view".formatted(ModalityAuthenticationI18nKeys.SupportViewNotPermittedError));
+        // Only from a session opened FOR the back office ($aud=bo): a pass carries the agent's standing to somebody
+        // else's account, so a setup-only or recovery-only session (a password or a mailbox, no second factor) must
+        // not be able to mint one — a back-office view pass would otherwise open the real back office on a password.
+        if (!Boolean.TRUE.equals(StateAccessor.getVerifiedBackoffice(ThreadLocalStateHolder.getThreadLocalState()))) {
+            Console.log("🔗 back-office view pass refused: person " + agentPrincipal.getUserPersonId()
+                        + " is on a session that was not opened for the back office");
+            return Future.failedFuture("[%s] Only a back-office session can open a back-office view".formatted(ModalityAuthenticationI18nKeys.SupportViewNotPermittedError));
+        }
 
         Object targetPersonId = normaliseId(credentials.targetPersonId());
         if (targetPersonId == null)

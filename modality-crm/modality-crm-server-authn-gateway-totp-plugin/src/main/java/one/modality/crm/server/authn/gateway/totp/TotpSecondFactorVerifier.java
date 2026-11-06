@@ -3,6 +3,7 @@ package one.modality.crm.server.authn.gateway.totp;
 import dev.webfx.platform.async.Future;
 import dev.webfx.platform.console.Console;
 import one.modality.crm.server.authn.gateway.shared.SecondFactorMethod;
+import one.modality.crm.server.authn.gateway.shared.SecondFactorPolicy;
 import one.modality.crm.server.authn.gateway.shared.SecondFactorVerifier;
 
 /**
@@ -59,7 +60,10 @@ public final class TotpSecondFactorVerifier implements SecondFactorVerifier {
                                 + " rather than downgrading it to password-only. Set TOTP_ENCRYPTION_KEY.");
                     return true;
                 }
-                return row.isConfirmed();
+                // Confirmed AND past the approval gate: a first authenticator app waiting for a super administrator
+                // is not yet a factor, so its owner keeps signing in as before (or holds a setup-only session under
+                // `required`) instead of being asked for a code the gate has not let count.
+                return row.isConfirmed() && SecondFactorPolicy.get().factorOpensBackoffice(row.status());
             })
             .otherwise(e -> {
                 Console.log(LOG_PREFIX + "🛑 Enrolment lookup failed for account " + normalisedAccountId

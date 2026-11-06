@@ -26,26 +26,39 @@ import dev.webfx.stack.session.token.AuthenticatedState;
 import one.modality.base.shared.entities.FrontendAccount;
 import one.modality.base.shared.entities.Person;
 import one.modality.crm.server.authn.gateway.shared.AccountSignInRestrictionStore;
+import one.modality.crm.server.authn.gateway.shared.CredentialChangeProof;
+import one.modality.crm.server.authn.gateway.shared.FactorApprovalNotice;
+import one.modality.crm.server.authn.gateway.shared.FactorRequest;
 import one.modality.crm.server.authn.gateway.shared.PendingSecondFactor;
 import one.modality.crm.server.authn.gateway.shared.PendingSecondFactorStore;
+import one.modality.crm.server.authn.gateway.shared.SecondFactorAccess;
+import one.modality.crm.server.authn.gateway.shared.SecondFactorAccess.ApproverStanding;
 import one.modality.crm.server.authn.gateway.shared.SecondFactorAttemptLimiter;
 import one.modality.crm.server.authn.gateway.shared.SecondFactorMethod;
+import one.modality.crm.server.authn.gateway.shared.SecondFactorPolicy;
 import one.modality.crm.server.authn.gateway.shared.SuperAdminMembership;
 import one.modality.crm.shared.services.authn.AuthenticateWithTotpBackupCodeCredentials;
 import one.modality.crm.shared.services.authn.AuthenticateWithTotpCredentials;
 import one.modality.crm.shared.services.authn.CancelSecondFactorCredentials;
 import one.modality.crm.shared.services.authn.ConfirmTotpEnrolmentCredentials;
+import one.modality.crm.shared.services.authn.DecideSignInApprovalCredentials;
 import one.modality.crm.shared.services.authn.ListSecondFactorsCredentials;
+import one.modality.crm.shared.services.authn.ListSignInApprovalsCredentials;
 import one.modality.crm.shared.services.authn.LookupSecondFactorsCredentials;
 import one.modality.crm.shared.services.authn.ModalityAuthenticationI18nKeys;
 import one.modality.crm.shared.services.authn.ModalityUserPrincipal;
+import one.modality.crm.shared.services.authn.OpenEnrolmentWindowCredentials;
+import one.modality.crm.shared.services.authn.ProveExistingFactorCredentials;
 import one.modality.crm.shared.services.authn.RegenerateTotpBackupCodesCredentials;
 import one.modality.crm.shared.services.authn.RemoveTotpCredentials;
 import one.modality.crm.shared.services.authn.ResetSecondFactorCredentials;
+import one.modality.crm.shared.services.authn.SecondFactorCoverageCredentials;
+import one.modality.crm.shared.services.authn.SecondFactorStatusCredentials;
 import one.modality.crm.shared.services.authn.StartTotpEnrolmentCredentials;
 
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
+import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -123,6 +136,7 @@ public final class ModalityTotpAuthenticationGateway implements ServerAuthentica
 
     private final DataSourceModel dataSourceModel;
     private final TotpCredentialStore credentialStore = new TotpCredentialStore();
+    private final SignInApprovals signInApprovals = new SignInApprovals(credentialStore);
 
     public ModalityTotpAuthenticationGateway() {
         this(DataSourceModelService.getDefaultDataSourceModel());
@@ -140,6 +154,15 @@ public final class ModalityTotpAuthenticationGateway implements ServerAuthentica
     @Override
     public void boot() {
         ConfigLoader.onConfigLoaded(CONFIG_PATH, TotpKeys::initFromConfig);
+        SecondFactorPolicy.onLoaded(policy -> {
+            // The request context (IP, place, browser) is kept 90 days at most — cleared at every boot as well as at
+            // every decision, so it ages out even where nobody decides anything (staging, local)
+            signInApprovals.clearOldContext();
+            // Setup first: once `required` is in force, no back-office session may stand on fewer factors than the
+            // rules now demand — see SignInApprovals.sweepUnprovenBackofficeSessions
+            if (policy.isSetupFirst())
+                signInApprovals.sweepUnprovenBackofficeSessions();
+        });
     }
 
     // ===== authenticate path (the second step of a login whose password already passed) ==========
@@ -230,8 +253,8 @@ public final class ModalityTotpAuthenticationGateway implements ServerAuthentica
             return codeFailure();
         }
         return credentialStore.findByAccount(accountId).compose(row -> {
-            if (row == null || !row.isConfirmed()) {
-                Console.log(LOG_PREFIX + "Code refused for account " + accountId + ": no confirmed TOTP factor");
+            if (row == null || !row.isConfirmed() || !SecondFactorPolicy.get().factorOpensBackoffice(row.status())) {
+                Console.log(LOG_PREFIX + "Code refused for account " + accountId + ": no confirmed, approved TOTP factor");
                 return failedAttempt(accountId);
             }
             byte[] secret = cipher.decrypt(row.secretEnc(), accountId);
@@ -255,7 +278,7 @@ public final class ModalityTotpAuthenticationGateway implements ServerAuthentica
                     Console.log(LOG_PREFIX + "Replayed step refused on TOTP row " + row.id());
                     return failedAttempt(accountId);
                 }
-                return completeLogin(runId, entry, accountId);
+                return completeLogin(runId, entry, accountId, true);
             });
         });
     }
@@ -275,7 +298,7 @@ public final class ModalityTotpAuthenticationGateway implements ServerAuthentica
             // code and the login is refused. That is the fail-closed direction and it costs one of
             // ten codes; the alternative — minting on a login the store no longer holds — is a
             // session nothing released.
-            return completeLogin(runId, entry, accountId)
+            return completeLogin(runId, entry, accountId, false)
                 // The identity has been pushed by this point, so the login has HAPPENED. A failure
                 // of the count below must not turn it into a reported failure — the caller would
                 // show a sign-in error to somebody who is signed in. Unknown drops the field.
@@ -315,8 +338,9 @@ public final class ModalityTotpAuthenticationGateway implements ServerAuthentica
      * @param verified  the pending login {@code recordAttempt} handed back and whose factor has just
      *                  been proved
      * @param accountId {@code verified}'s account, normalised — what the verification ran against
+     * @param withDevice {@code true} for a code from the app, {@code false} for a backup code — only the first proves a device
      */
-    private Future<Void> completeLogin(String runId, PendingSecondFactor verified, Object accountId) {
+    private Future<Void> completeLogin(String runId, PendingSecondFactor verified, Object accountId, boolean withDevice) {
         PendingSecondFactor released = PendingSecondFactorStore.getInstance().consumeAfterSuccess(runId);
         if (released == null) {
             // Nothing left to mint FOR: another request already completed this login, the user
@@ -335,6 +359,11 @@ public final class ModalityTotpAuthenticationGateway implements ServerAuthentica
             return codeFailure();
         }
         SecondFactorAttemptLimiter.clear(accountId);
+        // Password plus an approved code from the app: for five minutes this tab may add another device without waiting
+        // for a super administrator (CredentialChangeProof). NOT after a backup code: the sheet is the recovery path of a
+        // LOST device, the same reason the step-up refuses it — a device added after one goes to the approval queue.
+        if (withDevice)
+            CredentialChangeProof.noteStrongFactorProved(runId, accountId);
         // The session tier comes from the flag the PASSWORD step captured and stored in the entry:
         // by now the thread-local has been restored by the database round trips above, so reading it
         // here would answer "front office" for every login (the webauthn gateway's note).
@@ -366,7 +395,13 @@ public final class ModalityTotpAuthenticationGateway implements ServerAuthentica
                || updateCredentialsArgument instanceof RemoveTotpCredentials
                || updateCredentialsArgument instanceof RegenerateTotpBackupCodesCredentials
                || updateCredentialsArgument instanceof ResetSecondFactorCredentials
-               || updateCredentialsArgument instanceof LookupSecondFactorsCredentials;
+               || updateCredentialsArgument instanceof LookupSecondFactorsCredentials
+               || updateCredentialsArgument instanceof SecondFactorStatusCredentials
+               || updateCredentialsArgument instanceof ProveExistingFactorCredentials
+               || updateCredentialsArgument instanceof ListSignInApprovalsCredentials
+               || updateCredentialsArgument instanceof DecideSignInApprovalCredentials
+               || updateCredentialsArgument instanceof SecondFactorCoverageCredentials
+               || updateCredentialsArgument instanceof OpenEnrolmentWindowCredentials;
     }
 
     @Override
@@ -383,7 +418,12 @@ public final class ModalityTotpAuthenticationGateway implements ServerAuthentica
             return enrolmentFailure();
         Object accountId = TotpCredentialStore.normaliseId(principal.getUserAccountId());
         if (updateCredentialsArgument instanceof StartTotpEnrolmentCredentials cred)
-            return startEnrolment(principal, accountId, cred.label());
+            return startEnrolment(principal, accountId, cred);
+        // The caller's own standing (setup screen, recovery screen); read on this thread — see SignInApprovals
+        if (updateCredentialsArgument instanceof SecondFactorStatusCredentials)
+            return signInApprovals.statusJson(accountId);
+        if (updateCredentialsArgument instanceof ProveExistingFactorCredentials cred)
+            return proveExistingFactor(accountId, cred.code());
         if (updateCredentialsArgument instanceof ConfirmTotpEnrolmentCredentials cred)
             return confirmEnrolment(accountId, cred.code());
         if (updateCredentialsArgument instanceof ListSecondFactorsCredentials)
@@ -397,13 +437,30 @@ public final class ModalityTotpAuthenticationGateway implements ServerAuthentica
         // used for anything, so a caller who is not one cannot tell the two apart by how long the
         // refusal took, nor which one they sent.
         if (updateCredentialsArgument instanceof ResetSecondFactorCredentials cred)
-            return requireSuperAdmin(principal).compose(ignored ->
-                resetSecondFactor(principal, accountId, cred.accountId(), cred.what(), cred.note()));
+            return requireSuperAdmin(principal).compose(standing -> standing != ApproverStanding.USED_FACTOR
+                ? notPermittedWithoutFactor()
+                : resetSecondFactor(principal, accountId, cred.accountId(), cred.what(), cred.note()));
         if (updateCredentialsArgument instanceof LookupSecondFactorsCredentials cred)
             return requireSuperAdmin(principal).compose(ignored ->
                 lookupSecondFactors(principal, cred.email()));
+        // The approval queue for BOTH factors, the dashboard's coverage card and the 48-hour enrolment window — the
+        // same super-administrator fence as above, on every call
+        if (updateCredentialsArgument instanceof ListSignInApprovalsCredentials)
+            return requireSuperAdmin(principal).compose(ignored -> signInApprovals.listJson(accountId));
+        // Deciding is open to a BOOTSTRAP session only for a super administrator's own-kind request (SignInApprovals
+        // checks the target): the two-person rule must not rest on a super administrator's password
+        if (updateCredentialsArgument instanceof DecideSignInApprovalCredentials cred)
+            return requireSuperAdmin(principal)
+                .compose(standing -> signInApprovals.decide(principal, accountId, standing,
+                    cred.kind(), cred.id(), Boolean.TRUE.equals(cred.approve()), Boolean.TRUE.equals(cred.lockAccount())));
+        if (updateCredentialsArgument instanceof SecondFactorCoverageCredentials)
+            return requireSuperAdmin(principal).compose(ignored -> signInApprovals.coverageJson());
+        if (updateCredentialsArgument instanceof OpenEnrolmentWindowCredentials cred)
+            return requireSuperAdmin(principal).compose(standing -> standing != ApproverStanding.USED_FACTOR
+                ? notPermittedWithoutFactor()
+                : signInApprovals.openWindow(principal, accountId, cred.accountId(), cred.note()));
         // Unreachable while acceptsUpdateCredentialsArgument and this chain list the same types —
-        // this arm is what keeps a future eighth type from becoming a ClassCastException
+        // this arm is what keeps a future type from becoming a ClassCastException
         return enrolmentFailure();
     }
 
@@ -412,27 +469,50 @@ public final class ModalityTotpAuthenticationGateway implements ServerAuthentica
      * text. Unconfirmed is the whole point: a mistyped secret must fail at the next step, not at
      * the owner's next login.
      */
-    private Future<?> startEnrolment(ModalityUserPrincipal principal, Object accountId, String label) {
+    private Future<?> startEnrolment(ModalityUserPrincipal principal, Object accountId, StartTotpEnrolmentCredentials credentials) {
         TotpSecretCipher cipher = TotpKeys.cipher();
         if (cipher == null) {
             Console.log(LOG_PREFIX + "🛑 Enrolment refused for account " + accountId + ": no encryption key configured");
             return enrolmentFailure();
         }
+        String label = credentials.label();
         // Captured before the async hop, like every other gateway does
         boolean isBackoffice = ThreadLocalStateHolder.isBackoffice();
+        // The approval rule and the approver's context (FactorRequest), read on this thread
+        FactorRequest.Captured captured = FactorRequest.capture(accountId);
+        // No authenticator app until the session proves it may add one — the passkey's rule, which this path lacked
+        // until V0155: the current password, a password or passkey sign-in minutes old, or a recovery window. A
+        // session alone (a laptop left open) must not plant a factor of its own. Its refusal passes through unchanged
+        // so the client can ask for the password and retry. Started here, on the caller's thread.
+        Future<Void> proved = CredentialChangeProof.require(credentials.currentPassword(), dataSourceModel);
+        // ...and, under setup-first, only while this account may still set up (SecondFactorAccess.mayEnrolNow) — also
+        // read on this thread
+        Future<Boolean> mayEnrol = SecondFactorAccess.mayEnrolNow(accountId);
         // Independent reads (both key on ids already at hand) — run them together. The person query
         // carries the same fences as getUserClaims: the session's person must still exist on that
         // account, and the account must still be allowed on this app.
-        return Future.all(
+        return proved.compose(ignoredProof -> mayEnrol).compose(may -> {
+            if (!Boolean.TRUE.equals(may)) {
+                Console.log(LOG_PREFIX + "Enrolment refused for account " + accountId + ": the setup deadline has passed"
+                            + " and no window is open");
+                return Future.failedFuture("[%s] This account needs a super administrator to reopen setup".formatted(
+                    ModalityAuthenticationI18nKeys.AuthnSecondFactorNotEnrolledError));
+            }
+            return Future.succeededFuture();
+        }).compose(ignoredMay -> Future.all(
             EntityStore.create(dataSourceModel)
                 .<Person>executeQuery("select frontendAccount.username from Person where id=$1 and frontendAccount.(id=$2 and !disabled and ($3=false or backoffice))",
                     principal.getUserPersonId(), accountId, isBackoffice),
-            credentialStore.findByAccount(accountId)
-        ).compose(compositeFuture -> {
+            credentialStore.findByAccount(accountId),
+            FactorRequest.resolve(captured, credentials.deviceInfo())
+        )).compose(compositeFuture -> {
             List<Person> persons = compositeFuture.resultAt(0);
             TotpCredentialStore.TotpRow existing = compositeFuture.resultAt(1);
+            FactorRequest.Resolved request = compositeFuture.resultAt(2);
             if (persons.size() != 1)
                 return enrolmentFailure();
+            // A confirmed row blocks, a REJECTED one included: the rejection stays on record until a super administrator
+            // resets it (see TotpCredentialStore.DELETE_UNCONFIRMED_SQL)
             if (existing != null && existing.isConfirmed()) {
                 // One TOTP per account. Replacing a confirmed factor goes through remove — which
                 // asks for a fresh code — so a stolen session cannot quietly swap the factor out.
@@ -449,7 +529,7 @@ public final class ModalityTotpAuthenticationGateway implements ServerAuthentica
             // wiping the array here would be theatre. What matters is that it is encrypted at rest
             // and that nothing on this path logs it.
             String base32Secret = Totp.base32Encode(secret);
-            return credentialStore.insertUnconfirmed(accountId, secretEnc, cipher.keyId(), sanitizeLabel(label))
+            return credentialStore.insertUnconfirmed(accountId, secretEnc, cipher.keyId(), sanitizeLabel(label), request)
                 .map(ignored -> {
                     AstObject response = AST.createObject();
                     response.set("otpauthUri", otpauthUri(username, base32Secret));
@@ -472,6 +552,8 @@ public final class ModalityTotpAuthenticationGateway implements ServerAuthentica
      * either. A failed enrolment must therefore fail BEFORE the confirm, never after it.
      */
     private Future<?> confirmEnrolment(Object accountId, String code) {
+        // Where the confirmation came from, for the super administrators' notice — read on this thread
+        FactorRequest.Captured captured = FactorRequest.capture(accountId);
         TotpSecretCipher cipher = TotpKeys.cipher();
         if (cipher == null) {
             Console.log(LOG_PREFIX + "🛑 Confirmation refused for account " + accountId + ": no encryption key configured");
@@ -486,7 +568,14 @@ public final class ModalityTotpAuthenticationGateway implements ServerAuthentica
                 return credentialStore.confirm(row.id(), accountId).compose(confirmed -> {
                     if (!Boolean.TRUE.equals(confirmed))
                         return enrolmentFailure();
-                    Console.log(LOG_PREFIX + "TOTP row " + row.id() + " confirmed for account " + accountId);
+                    Console.log(LOG_PREFIX + "TOTP row " + row.id() + " confirmed for account " + accountId
+                                + " (" + row.status() + ")");
+                    // Confirmed is when it becomes a request: tell the super administrators if it waits for them, and
+                    // its owner either way. The context was stored with the row at the start of the setup.
+                    FactorRequest.resolve(captured, null).onSuccess(context ->
+                        FactorApprovalNotice.factorAdded(accountId, FactorApprovalNotice.KIND_TOTP, row.label(), null,
+                            new FactorRequest.Resolved(row.status(), null, context.ip(), context.location(),
+                                row.requestUserAgent(), context.signInMethod())));
                     List<String> codes = BackupCodes.generate();
                     return credentialStore.insertGeneration(accountId, codes)
                         .map(generation -> codes)
@@ -525,6 +614,8 @@ public final class ModalityTotpAuthenticationGateway implements ServerAuthentica
                                 if (totp != null)
                                     response.setObject("totp", totp);
                                 response.set("backupCodesLeft", shownCodes.size());
+                                // The factor's approval state, so the client says "waiting for approval" or "ready"
+                                response.set("status", row.status());
                                 return Json.formatObject(response);
                             }));
                 });
@@ -566,6 +657,12 @@ public final class ModalityTotpAuthenticationGateway implements ServerAuthentica
             // that a client acting on a stale listing is told no instead of removing something else.
             if (row == null || requestedId == null || requestedId != row.id())
                 return enrolmentFailure();
+            // A REJECTED app stays on record, as a rejected passkey does: its owner removing it (with a code from the very
+            // app that was refused) would reopen the re-queue loop. A super administrator's reset clears it.
+            if ("REJECTED".equals(row.status())) {
+                Console.log(LOG_PREFIX + "Removal refused for account " + accountId + ": the TOTP row was rejected");
+                return enrolmentFailure();
+            }
             return verifyFreshCode(row, accountId, cipher, code).compose(verified -> {
                 if (!Boolean.TRUE.equals(verified))
                     return enrolmentFailure();
@@ -634,10 +731,51 @@ public final class ModalityTotpAuthenticationGateway implements ServerAuthentica
         return credentialStore.recordUse(row.id(), step);
     }
 
+    /**
+     * A current code from the caller's APPROVED authenticator app, given on purpose: for five minutes this tab may add
+     * another device without a super administrator (CredentialChangeProof). Consumes the code's step, like every fresh
+     * code here. Backup codes are not accepted — they are the recovery sheet, not a device the person holds.
+     */
+    private Future<?> proveExistingFactor(Object accountId, String code) {
+        // Read on this thread, before the first async step
+        String runId = ThreadLocalStateHolder.getRunId();
+        boolean openedForBackoffice = Boolean.TRUE.equals(
+            StateAccessor.getVerifiedBackoffice(ThreadLocalStateHolder.getThreadLocalState()));
+        TotpSecretCipher cipher = TotpKeys.cipher();
+        if (cipher == null || runId == null)
+            return codeFailure();
+        // Only on a session opened FOR the back office — which, for an account holding an approved factor, has already
+        // presented it. A front-office, setup-only or recovery-only session (a password or a mailbox, no factor) must
+        // not be able to turn a guessed code into an auto-approved device.
+        if (!openedForBackoffice)
+            return codeFailure();
+        // And under the LOGIN's per-account budget: a correct guess here is worth as much as one at the login (an
+        // approved device), so guessing here must cost the same — five failures lock the account's codes for fifteen
+        // minutes, across this step-up and the login together.
+        if (SecondFactorAttemptLimiter.isLockedOut(accountId))
+            return attemptsExceededFailure();
+        return credentialStore.findByAccount(accountId).compose(row -> {
+            if (row == null || !row.isConfirmed() || !TotpCredentialStore.STATUS_APPROVED.equals(row.status()))
+                return codeFailure();
+            return verifyFreshCode(row, accountId, cipher, code).compose(verified -> {
+                if (!Boolean.TRUE.equals(verified))
+                    return failedAttempt(accountId);
+                CredentialChangeProof.noteStrongFactorProved(runId, accountId);
+                Instant until = CredentialChangeProof.strongFactorProofExpiry(runId, accountId);
+                AstObject response = AST.createObject();
+                // Always present: the client reads its absence as a failed call (the proof was just noted, so a null
+                // here could only be a clock edge — five minutes from now is then the truth to within a second)
+                response.set("provedUntil", (until != null ? until
+                    : Instant.now().plus(CredentialChangeProof.RECENT_PASSWORD_SIGN_IN)).toString());
+                return Future.succeededFuture(Json.formatObject(response));
+            });
+        });
+    }
+
     // ===== super-administrator lookup and reset ==================================================
 
     /** Fails with the enrolment key unless the principal's person is a super administrator. */
-    private Future<Void> requireSuperAdmin(ModalityUserPrincipal principal) {
+    private Future<ApproverStanding> requireSuperAdmin(ModalityUserPrincipal principal) {
         // Opened FOR the back office, as the token says — not as this message claims. Everything behind
         // this decides something about somebody else's account or reveals a posture meant to be silent,
         // and the `backoffice` flag can say `fo` at login (skipping the account check, the brisk tier and
@@ -658,6 +796,9 @@ public final class ModalityTotpAuthenticationGateway implements ServerAuthentica
                         + principal.getUserPersonId() + " is on a session that was not opened for the back office");
             return enrolmentFailure();
         }
+        // ...and the session must have presented a second factor — the rule shared with the passkey gateway
+        // (SecondFactorAccess.ApproverStanding). Read on this thread.
+        String sessionFamilyId = StateAccessor.getSessionFamilyId(ThreadLocalStateHolder.getThreadLocalState());
         return SuperAdminMembership.isSuperAdmin(principal, dataSourceModel)
             .compose(isSuperAdmin -> {
                 if (!Boolean.TRUE.equals(isSuperAdmin)) {
@@ -666,8 +807,25 @@ public final class ModalityTotpAuthenticationGateway implements ServerAuthentica
                                 + principal.getUserPersonId() + " is not a super administrator");
                     return enrolmentFailure();
                 }
-                return Future.succeededFuture();
+                return SecondFactorAccess.approverStanding(sessionFamilyId);
+            })
+            .compose(standing -> {
+                if (standing == ApproverStanding.REFUSED) {
+                    Console.log(LOG_PREFIX + "Super-administrator second-factor operation refused: person "
+                                + principal.getUserPersonId() + " is on a session that presented no second factor");
+                    return notPermittedWithoutFactor();
+                }
+                if (standing == ApproverStanding.BOOTSTRAP)
+                    Console.log(LOG_PREFIX + "⚠️ Bootstrap: person " + principal.getUserPersonId()
+                                + " acts on a password session because no super administrator holds an approved factor yet");
+                return Future.succeededFuture(standing);
             });
+    }
+
+    /** The refusal a super administrator on a session without a second factor gets — a key the client can explain. */
+    private static <T> Future<T> notPermittedWithoutFactor() {
+        return Future.failedFuture("[%s] Sign in with your passkey or authenticator app to do this".formatted(
+            ModalityAuthenticationI18nKeys.AuthnPasskeyAdminNotPermittedError));
     }
 
     /**
@@ -765,7 +923,9 @@ public final class ModalityTotpAuthenticationGateway implements ServerAuthentica
             // And whether they disabled the whole account after a theft (V0101) — a different rescue, and the
             // reason the two are told apart at all: this owner is expected back within the hour, an account an
             // administrator disabled is not
-            AccountSignInRestrictionStore.readAccountClosed(accountId)
+            AccountSignInRestrictionStore.readAccountClosed(accountId),
+            // Whether setup is reopened for it (V0155) — the rescue for an account the `required` deadline locked out
+            SecondFactorAccess.openEnrolmentWindowUntil(accountId)
         ).map(compositeFuture -> {
             TotpCredentialStore.TotpRow row = compositeFuture.resultAt(0);
             Integer backupCodesLeft = compositeFuture.resultAt(1);
@@ -783,6 +943,9 @@ public final class ModalityTotpAuthenticationGateway implements ServerAuthentica
             response.set("backupCodesLeft", backupCodesLeft == null ? 0 : backupCodesLeft);
             response.set("passwordClosed", Boolean.TRUE.equals(passwordClosed));
             response.set("accountClosed", Boolean.TRUE.equals(accountClosed));
+            Instant windowUntil = compositeFuture.resultAt(4);
+            if (windowUntil != null)
+                response.set("windowUntil", windowUntil.toString());
             return Json.formatObject(response);
         });
     }
@@ -916,6 +1079,8 @@ public final class ModalityTotpAuthenticationGateway implements ServerAuthentica
             totp.set("confirmedAt", row.confirmedAt().toString());
         if (row.lastUsedAt() != null)
             totp.set("lastUsedAt", row.lastUsedAt().toString());
+        if (row.status() != null)
+            totp.set("status", row.status());
         return totp;
     }
 

@@ -48,11 +48,15 @@ import dev.webfx.stack.session.token.SessionFamilyStoreRegistry;
 import one.modality.base.shared.entities.FrontendAccount;
 import one.modality.base.shared.entities.Person;
 import one.modality.crm.server.authn.gateway.shared.CredentialChangeProof;
+import one.modality.crm.server.authn.gateway.shared.FactorApprovalNotice;
+import one.modality.crm.server.authn.gateway.shared.FactorRequest;
 import one.modality.crm.server.authn.gateway.shared.LoginPersonResolver;
 import one.modality.crm.server.authn.gateway.shared.PendingSecondFactor;
 import one.modality.crm.server.authn.gateway.shared.PendingSecondFactorStore;
+import one.modality.crm.server.authn.gateway.shared.SecondFactorAccess;
 import one.modality.crm.server.authn.gateway.shared.SecondFactorAttemptLimiter;
 import one.modality.crm.server.authn.gateway.shared.SecondFactorMethod;
+import one.modality.crm.server.authn.gateway.shared.SecondFactorPolicy;
 import one.modality.crm.server.authn.gateway.shared.SuperAdminMembership;
 import one.modality.crm.shared.services.authn.ApprovePasskeyCredentials;
 import one.modality.crm.shared.services.authn.AuthenticateWithPasskeyCredentials;
@@ -214,6 +218,7 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
     public void boot() {
         ConfigLoader.onConfigLoaded(CONFIG_PATH, loadedConfig -> {
             config = WebAuthnConfig.fromConfig(loadedConfig);
+            SecondFactorPolicy.noteApprovalRequiredElsewhere(config.isOwnApprovalSwitchOn());
             if (config.isConfigured()) {
                 Console.log(LOG_PREFIX + "Passkey gateway enabled (rpId=" + config.getRpId()
                             + ", " + config.getFrontofficeOriginCount() + " front-office + "
@@ -437,6 +442,10 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
                         // never reaches this proof.
                         if (pendingSecondFactor == null)
                             CredentialChangeProof.notePasskeyProved(runId, row.accountId());
+                        // Either way an approved passkey was just asserted (the gate above refused any other), so a
+                        // device added from this tab in the next five minutes is approved without a super
+                        // administrator — the "prove an existing device" rule (CredentialChangeProof).
+                        CredentialChangeProof.noteStrongFactorProved(runId, row.accountId());
                         if (pendingSecondFactor != null)
                             // This assertion is the second step of a password login: it completes
                             // that one rather than opening one of its own.
@@ -690,14 +699,16 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
             return raiseSecurityAlarm(principal);
         if (updateCredentialsArgument instanceof ListPendingPasskeysCredentials)
             return requireSuperAdmin(principal).compose(ignored -> listPendingPasskeysJson(principal));
-        if (updateCredentialsArgument instanceof ApprovePasskeyCredentials cred)
-            return requireSuperAdmin(principal).compose(ignored ->
-                decidePasskey(principal, cred.passkeyId(), WebAuthnCredentialStore.STATUS_APPROVED));
-        if (updateCredentialsArgument instanceof RejectPasskeyCredentials cred)
-            return requireSuperAdmin(principal).compose(ignored ->
-                decidePasskey(principal, cred.passkeyId(), WebAuthnCredentialStore.STATUS_REJECTED));
+        // The passkey-only approve/reject of before the Sign-in approvals queue are RETIRED: a decision now goes through
+        // DecideSignInApprovalCredentials (TOTP gateway), which applies the approver rule and ends the sessions a first
+        // approval must end. Left reachable, these would be the way round both.
+        if (updateCredentialsArgument instanceof ApprovePasskeyCredentials || updateCredentialsArgument instanceof RejectPasskeyCredentials) {
+            Console.log(LOG_PREFIX + "Retired passkey approve/reject call refused (person " + principal.getUserPersonId()
+                        + ") — decisions go through the Sign-in approvals queue");
+            return adminNotPermittedFailure();
+        }
         if (updateCredentialsArgument instanceof RevokeApprovedPasskeyCredentials cred)
-            return requireSuperAdmin(principal).compose(ignored ->
+            return requireSuperAdminWithFactor(principal).compose(ignored ->
                 revokePasskey(principal, cred.passkeyId(), cred.note()));
         if (updateCredentialsArgument instanceof ListAccountPasskeysCredentials cred)
             return requireSuperAdmin(principal).compose(ignored ->
@@ -721,7 +732,14 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
         // finalise only completes a ceremony this start opened, for this account. Started here, on the
         // caller's thread, because it reads the caller from it; its refusal passes through unchanged so the
         // client can tell a wrong password from a failed ceremony. See CredentialChangeProof.
-        Future<Void> proved = CredentialChangeProof.require(credentials.currentPassword(), dataSourceModel);
+        // ...and, under setup-first, only while this account may still set up (SecondFactorAccess.mayEnrolNow).
+        // Both started here, on the caller's thread, because both read the caller from it.
+        Future<Boolean> mayEnrol = SecondFactorAccess.mayEnrolNow(accountId);
+        Future<Void> proved = CredentialChangeProof.require(credentials.currentPassword(), dataSourceModel)
+            .compose(ignoredProof -> mayEnrol)
+            .compose(may -> Boolean.TRUE.equals(may) ? Future.<Void>succeededFuture()
+                : Future.failedFuture("[%s] This account needs a super administrator to reopen setup".formatted(
+                    ModalityAuthenticationI18nKeys.AuthnSecondFactorNotEnrolledError)));
         // The two reads are independent (both key on ids already at hand) — run them in parallel.
         // The person query carries the same fences as getUserClaims: the session's person must
         // still exist on that account.
@@ -805,6 +823,8 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
         WebAuthnConfig cfg = config;
         if (runId == null)
             return registrationFailure();
+        // The approval rule and the approver's context, read on the caller's thread before any async step
+        FactorRequest.Captured captured = FactorRequest.capture(accountIdOf(principal));
         WebAuthnChallengeStore.Pending pending = challengeStore.consume(runId + REGISTRATION_PURPOSE);
         // The pending ceremony must exist AND have been started by this same account — a challenge
         // minted for one session can never finalise onto another's account
@@ -850,20 +870,54 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
         long signCount = registrationData.getAttestationObject().getAuthenticatorData().getSignCount();
         String aaguid = String.valueOf(attested.getAaguid());
         Object accountId = accountIdOf(principal);
-        // The initial status is decided here, from the approval switch as it stands when THIS row
-        // is enrolled: PENDING for the super-administrator queue while the gate is on, APPROVED
-        // otherwise. Turning the switch on later gates new enrolments, not rows already APPROVED.
-        String status = cfg.isBackofficeApprovalRequired()
-            ? WebAuthnCredentialStore.STATUS_PENDING : WebAuthnCredentialStore.STATUS_APPROVED;
-        return credentialStore.insert(accountId, credentialIdB64, publicKeyCoseB64, signCount,
-                pending.userHandleB64(), sanitizeTransports(credentials.transports()), aaguid, sanitizeLabel(credentials.label()), status)
-            .recover(e -> {
-                // Most likely the unique credential_id index (credential already registered) —
-                // same generic answer either way, details go to the log only
-                Console.log(LOG_PREFIX + "Credential insert failed: " + e.getMessage());
-                return registrationFailure();
+        // The initial status is decided by the rule both factors share (FactorRequest): PENDING for the
+        // super-administrator queue while the gate is on — unless this tab proved an approved factor minutes ago, the
+        // "add another device" case — APPROVED otherwise. Turning the switch on later gates new enrolments, not rows
+        // already APPROVED.
+        String label = sanitizeLabel(credentials.label());
+        return credentialStore.findByAccount(accountId)
+            .compose(existing -> {
+                // At most MAX_PENDING_PASSKEYS waiting per account: each pending request mails every super administrator,
+                // and a scripted authenticator makes registrations free — a setup-only session must not flood the queue
+                long waiting = existing.stream().filter(c -> WebAuthnCredentialStore.STATUS_PENDING.equals(c.status())).count();
+                if (waiting >= MAX_PENDING_PASSKEYS) {
+                    Console.log(LOG_PREFIX + "Registration refused for account " + accountId + ": " + waiting + " passkeys already waiting for approval");
+                    return registrationFailure();
+                }
+                // A second opinion on the approval switch: this gateway's own key reads the same variable as the
+                // policy, and if the two disagree, approval is required
+                return FactorRequest.resolve(captured, credentials.deviceInfo());
             })
-            .compose(ignored -> listPasskeysJson(accountId));
+            .compose(request -> credentialStore.insert(accountId, credentialIdB64, publicKeyCoseB64, signCount,
+                    pending.userHandleB64(), sanitizeTransports(credentials.transports()), aaguid, label, request)
+                .recover(e -> {
+                    // Most likely the unique credential_id index (credential already registered) —
+                    // same generic answer either way, details go to the log only
+                    Console.log(LOG_PREFIX + "Credential insert failed: " + e.getMessage());
+                    return registrationFailure();
+                })
+                .compose(ignored -> {
+                    // Tells the super administrators (a pending request) and always the owner (a tripwire)
+                    FactorApprovalNotice.factorAdded(accountId, FactorApprovalNotice.KIND_PASSKEY, label, aaguid, request);
+                    return listPasskeysJson(accountId);
+                })
+                // The new row's status at the top of the reply, so the client says "waiting for approval" or "ready"
+                .map(json -> withStatus(json, request.status())));
+    }
+
+    /** How many passkeys of one account may wait for a super administrator at once. */
+    private static final int MAX_PENDING_PASSKEYS = 3;
+
+    /**
+     * Adds {@code "status"} to the top of a JSON object reply. Spliced as text because the status is one of three
+     * constants (never caller input) and the parsed AST is read-only.
+     */
+    private static String withStatus(String json, String status) {
+        String trimmed = json == null ? "" : json.trim();
+        if (!trimmed.startsWith("{"))
+            return json;
+        String rest = trimmed.substring(1).trim();
+        return "{\"status\":\"" + status + "\"" + (rest.startsWith("}") ? "" : ",") + rest;
     }
 
     /**
@@ -977,7 +1031,7 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
     // ===== super-administrator approval queue ====================================================
 
     /** Fails with the admin-not-permitted key unless the principal's person is a super administrator. */
-    private Future<Void> requireSuperAdmin(ModalityUserPrincipal principal) {
+    private Future<SecondFactorAccess.ApproverStanding> requireSuperAdmin(ModalityUserPrincipal principal) {
         // Opened FOR the back office, as the token says — not as this message claims. Everything behind
         // this decides something about somebody else's account or reveals a posture meant to be silent,
         // and the `backoffice` flag can say `fo` at login (skipping the account check, the brisk tier and
@@ -998,6 +1052,9 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
                         + principal.getUserPersonId() + " is on a session that was not opened for the back office");
             return adminNotPermittedFailure();
         }
+        // ...and the session must have presented a second factor (SecondFactorAccess.ApproverStanding): the same rule
+        // the TOTP gateway applies, so no passkey endpoint is the way round it. Read on this thread.
+        String sessionFamilyId = StateAccessor.getSessionFamilyId(ThreadLocalStateHolder.getThreadLocalState());
         return SuperAdminMembership.isSuperAdmin(principal, dataSourceModel)
             .compose(isSuperAdmin -> {
                 if (!Boolean.TRUE.equals(isSuperAdmin)) {
@@ -1006,8 +1063,22 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
                                 + principal.getUserPersonId() + " is not a super administrator");
                     return adminNotPermittedFailure();
                 }
-                return Future.succeededFuture();
+                return SecondFactorAccess.approverStanding(sessionFamilyId);
+            })
+            .compose(standing -> {
+                if (standing == SecondFactorAccess.ApproverStanding.REFUSED) {
+                    Console.log(LOG_PREFIX + "Super-administrator passkey operation refused: person "
+                                + principal.getUserPersonId() + " is on a session that presented no second factor");
+                    return adminNotPermittedFailure();
+                }
+                return Future.succeededFuture(standing);
             });
+    }
+
+    /** As {@link #requireSuperAdmin}, for an operation that CHANGES somebody's factors: no bootstrap exception. */
+    private Future<SecondFactorAccess.ApproverStanding> requireSuperAdminWithFactor(ModalityUserPrincipal principal) {
+        return requireSuperAdmin(principal).compose(standing -> standing == SecondFactorAccess.ApproverStanding.USED_FACTOR
+            ? Future.succeededFuture(standing) : adminNotPermittedFailure());
     }
 
     /**
@@ -1080,25 +1151,8 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
     }
 
     /**
-     * Records the approver's decision; a row that is no longer pending — or that belongs to the
-     * approver's own account — yields the generic management error.
-     */
-    private Future<?> decidePasskey(ModalityUserPrincipal approver, Object passkeyIdArg, String newStatus) {
-        Long passkeyId = Numbers.toLong(passkeyIdArg);
-        if (passkeyId == null)
-            return managementFailure();
-        return credentialStore.decidePending(passkeyId, newStatus, Numbers.toLong(approver.getUserPersonId()), accountIdOf(approver))
-            .compose(decided -> {
-                if (!Boolean.TRUE.equals(decided))
-                    return managementFailure();
-                Console.log(LOG_PREFIX + "Passkey row " + passkeyId + " " + newStatus + " by person " + approver.getUserPersonId());
-                return Future.succeededFuture();
-            });
-    }
-
-    /**
      * Withdraws a passkey: the decision revisited, which approval alone left no way to do. Same
-     * guards as {@link #decidePasskey} — super administrator re-checked on this call, never the
+     * guards as the Sign-in approvals decision — super administrator re-checked on this call, never the
      * approver's own account — and the same generic management error for a row that does not exist,
      * is theirs, or is already REJECTED and so has nothing left to withdraw.
      *
@@ -1273,7 +1327,7 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
             return managementFailure();
         if (Objects.equals(rescuedAccountId, accountIdOf(principal)))
             return managementFailure();
-        return requireSuperAdmin(principal)
+        return requireSuperAdminWithFactor(principal)
             .compose(ignored -> AccountSignInRestrictionStore.enableAccountByAdministrator(rescuedAccountId, principal.getUserPersonId(), note))
             .onSuccess(rescued -> {
                 if (Boolean.TRUE.equals(rescued))

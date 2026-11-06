@@ -14,5 +14,5 @@ package one.modality.crm.shared.services.authn;
  *
  * @author Claude Code
  */
-public record FinalisePasskeyRegistrationCredentials(String attestationObject, String clientDataJSON, String transports, String label) {
+public record FinalisePasskeyRegistrationCredentials(String attestationObject, String clientDataJSON, String transports, String label, String deviceInfo) {
 }

@@ -40,6 +40,7 @@ import one.modality.crm.server.authn.gateway.shared.PendingSecondFactorStore;
 import one.modality.crm.server.authn.gateway.shared.SecondFactorMarker;
 import dev.webfx.stack.session.token.SessionAudience;
 import dev.webfx.stack.session.token.SessionMethod;
+import one.modality.crm.server.authn.gateway.shared.SecondFactorAccess;
 import one.modality.crm.server.authn.gateway.shared.SecondFactorPolicy;
 import one.modality.crm.server.authn.gateway.shared.SecondFactorVerifiers;
 import one.modality.crm.shared.services.authn.ModalityAuthenticationI18nKeys;
@@ -365,8 +366,16 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
                 }
                 List<String> methods = enrolment.methods();
                 if (methods.isEmpty()) {
-                    if (SecondFactorPolicy.get().isRequiredNow())
-                        return Future.failedFuture("[%s] This account has no second factor for the back office".formatted(ModalityAuthenticationI18nKeys.AuthnSecondFactorNotEnrolledError));
+                    // Setup first (`required`): no approved factor means a SETUP-ONLY session — front-office audience,
+                    // so the back office refuses it everywhere while its owner adds a device (SecondFactorAccess).
+                    // Before the deadline always; after it only inside a window a super administrator reopened.
+                    if (SecondFactorPolicy.get().isSetupFirst())
+                        return SecondFactorAccess.maySetUpWithoutFactor(accountId).compose(may -> {
+                            if (!Boolean.TRUE.equals(may))
+                                return Future.failedFuture("[%s] This account has no second factor for the back office".formatted(ModalityAuthenticationI18nKeys.AuthnSecondFactorNotEnrolledError));
+                            Console.log(LOG_PREFIX + "Setup-only session for account " + accountId + " (no approved second factor)");
+                            return mintSetupOnly(principal, runId);
+                        });
                     return mintAndPush(principal, isBackofficeAuthentication, runId);
                 }
                 return holdForSecondFactor(personId, accountId, isBackofficeAuthentication, runId, methods);
@@ -379,6 +388,19 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
         // and is minted by whichever gateway completes it, naming both.
         return AuthenticatedState.createFor(principal, isBackofficeAuthentication,
                 SessionAudience.ofBackofficeFlag(isBackofficeAuthentication),
+                SessionMethod.of(SessionMethod.PASSWORD))
+            .compose(authenticatedState -> PushServerService.pushState(authenticatedState, runId))
+            .map(ignored -> null);
+    }
+
+    /**
+     * A back-office password login of an account that must still set up its first factor: the BACK-OFFICE tier (the
+     * brisk lifetime) but the FRONT-OFFICE audience, so every back-office guard refuses it and the only things it can
+     * do there are the caller's own setup calls. See {@link SecondFactorAccess}.
+     */
+    private Future<Object> mintSetupOnly(ModalityUserPrincipal principal, String runId) {
+        return AuthenticatedState.createFor(principal, true,
+                SessionAudience.FRONT_OFFICE,
                 SessionMethod.of(SessionMethod.PASSWORD))
             .compose(authenticatedState -> PushServerService.pushState(authenticatedState, runId))
             .map(ignored -> null);

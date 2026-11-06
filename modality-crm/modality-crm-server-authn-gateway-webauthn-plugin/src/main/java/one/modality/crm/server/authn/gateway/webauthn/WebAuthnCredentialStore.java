@@ -9,6 +9,7 @@ import dev.webfx.stack.db.submit.SubmitArgument;
 import dev.webfx.stack.db.submit.SubmitResult;
 import dev.webfx.stack.db.submit.SubmitService;
 import dev.webfx.stack.orm.datasourcemodel.service.DataSourceModelService;
+import one.modality.crm.server.authn.gateway.shared.FactorRequest;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -133,8 +134,9 @@ final class WebAuthnCredentialStore {
     // is off — so the database default never silently decides it
     private static final String INSERT_SQL =
         "INSERT INTO webauthn_credential" +
-        " (frontend_account_id, credential_id, public_key_cose, sign_count, user_handle, transports, aaguid, label, status)" +
-        " VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)";
+        " (frontend_account_id, credential_id, public_key_cose, sign_count, user_handle, transports, aaguid, label, status," +
+        "  approval_kind, request_ip, request_location, request_user_agent, request_sign_in_method)" +
+        " VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::text::inet, $12, $13, $14)";
 
     // GREATEST keeps the stored counter monotonic even under the warn-and-accept regression policy
     private static final String UPDATE_USAGE_SQL =
@@ -159,7 +161,8 @@ final class WebAuthnCredentialStore {
     // would list (a live back-office account): approving a member's passkey by id would hand
     // them a pre-approved credential the day they are granted back-office access.
     private static final String DECIDE_PENDING_SQL =
-        "UPDATE webauthn_credential SET status = $1, decided_by_person_id = $2, decided_at = now()" +
+        "UPDATE webauthn_credential SET status = $1, decided_by_person_id = $2, decided_at = now()," +
+        " approval_kind = CASE WHEN $1::varchar = 'APPROVED' THEN 'PERSON' END" +
         " WHERE id = $3 AND status = $4 AND frontend_account_id <> $5" +
         " AND EXISTS (SELECT 1 FROM frontend_account a WHERE a.id = webauthn_credential.frontend_account_id" +
         "             AND a.backoffice = true AND a.disabled IS NOT TRUE)" +
@@ -252,11 +255,17 @@ final class WebAuthnCredentialStore {
             });
     }
 
-    /** Stores a new credential with the initial {@code status} the gateway decided (one of the STATUS_ constants). */
+    /**
+     * Stores a new credential with the status and approver context of the one rule both factors share
+     * ({@link FactorRequest}): PENDING for the approval queue, APPROVED with how (PROVED, GATE_OFF) otherwise.
+     */
     Future<?> insert(Object accountId, String credentialIdB64, String publicKeyCoseB64, long signCount,
-                     String userHandleB64, String transports, String aaguid, String label, String status) {
+                     String userHandleB64, String transports, String aaguid, String label,
+                     FactorRequest.Resolved request) {
         return executeRawSubmit(INSERT_SQL,
-            accountId, credentialIdB64, publicKeyCoseB64, signCount, userHandleB64, transports, aaguid, label, status);
+            accountId, credentialIdB64, publicKeyCoseB64, signCount, userHandleB64, transports, aaguid, label,
+            request.status(), request.approvalKind(), request.ip(), request.location(), request.userAgent(),
+            request.signInMethod());
     }
 
     /** Fire-and-forget usage stamp after a successful assertion; a failure must not fail the login. */

@@ -3,6 +3,7 @@ package one.modality.crm.server.authn.gateway.webauthn;
 import com.webauthn4j.data.client.Origin;
 import dev.webfx.platform.conf.Config;
 import dev.webfx.platform.substitution.Substitutor;
+import one.modality.crm.server.authn.gateway.shared.SecondFactorPolicy;
 
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -158,8 +159,17 @@ final class WebAuthnConfig {
      * Whether a passkey must be approved by a super administrator before it opens the back office
      * ({@code backofficeApproval = on}). Off in phase 1: a new passkey is stored APPROVED, and a
      * PENDING one is as usable as an APPROVED one. REJECTED is refused whatever the switch says.
+     *
+     * <p>Read as the OR of this key and the second-factor policy's {@code factorApproval} (the same variable): if the
+     * two ever disagree — a config file that did not ship — approval is required everywhere, the restrictive reading,
+     * and the passkey and TOTP paths cannot answer differently.
      */
     boolean isBackofficeApprovalRequired() {
+        return backofficeApprovalRequired || SecondFactorPolicy.get().isFactorApprovalRequired();
+    }
+
+    /** This key alone — what the policy is told, so its own reading is the OR as well. */
+    boolean isOwnApprovalSwitchOn() {
         return backofficeApprovalRequired;
     }
 }

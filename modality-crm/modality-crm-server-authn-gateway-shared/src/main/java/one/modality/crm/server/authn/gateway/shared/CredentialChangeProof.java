@@ -76,6 +76,14 @@ public final class CredentialChangeProof {
     /** Tabs that proved a passkey at sign-in, by run id — the same shape and lifetime as the password proofs. */
     private static final Map<String, PasswordProved> RECENT_PASSKEY_PROOFS = new ConcurrentHashMap<>();
 
+    /**
+     * Tabs that proved an APPROVED second factor at sign-in or as a step-up, by run id: a passkey sign-in, a password
+     * completed by a passkey or a TOTP code, or a fresh TOTP code given on purpose. The same shape and lifetime as the
+     * two maps above, and read for one decision only: whether a device added now may be approved without a person.
+     * A recovery window never lands here — it proves the mailbox, which is exactly what the approval does not trust.
+     */
+    private static final Map<String, PasswordProved> RECENT_STRONG_PROOFS = new ConcurrentHashMap<>();
+
     private CredentialChangeProof() {}
 
     /**
@@ -93,6 +101,29 @@ public final class CredentialChangeProof {
      */
     public static void notePasskeyProved(String runId, Object accountId) {
         noteProof(RECENT_PASSKEY_PROOFS, runId, accountId);
+    }
+
+    /**
+     * Records that the tab {@code runId} has just proved an approved second factor of {@code accountId} — called where a
+     * sign-in completes with {@code pk}, {@code pwd,pk} or {@code pwd,totp}, and by the TOTP gateway's step-up.
+     */
+    public static void noteStrongFactorProved(String runId, Object accountId) {
+        noteProof(RECENT_STRONG_PROOFS, runId, accountId);
+    }
+
+    /**
+     * Whether the tab {@code runId} proved an approved second factor of {@code accountId} within
+     * {@link #RECENT_PASSWORD_SIGN_IN} — the test that lets a device added now be approved without a super
+     * administrator. Pure memory: a redeploy forgets it, and the device then simply goes to the approval queue.
+     */
+    public static boolean strongFactorProvedRecently(String runId, Object accountId) {
+        return provedRecently(RECENT_STRONG_PROOFS, runId, accountId);
+    }
+
+    /** When the strong proof of this tab lapses, or null when there is none — what a step-up tells its client. */
+    public static Instant strongFactorProofExpiry(String runId, Object accountId) {
+        PasswordProved proof = runId == null ? null : RECENT_STRONG_PROOFS.get(runId);
+        return proof != null && strongFactorProvedRecently(runId, accountId) ? proof.at().plus(RECENT_PASSWORD_SIGN_IN) : null;
     }
 
     private static void noteProof(Map<String, PasswordProved> proofs, String runId, Object accountId) {

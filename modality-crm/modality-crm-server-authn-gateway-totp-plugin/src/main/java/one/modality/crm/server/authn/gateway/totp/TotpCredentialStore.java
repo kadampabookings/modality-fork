@@ -11,6 +11,7 @@ import dev.webfx.stack.db.submit.SubmitService;
 import dev.webfx.stack.orm.datasourcemodel.service.DataSourceModelService;
 import dev.webfx.stack.session.token.RevokedFamilies;
 import dev.webfx.stack.session.token.SessionFamilyStore;
+import one.modality.crm.server.authn.gateway.shared.FactorRequest;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -47,7 +48,7 @@ import java.util.Locale;
  */
 final class TotpCredentialStore {
 
-    /** Self-service enrolment, kept for the future approval gate — V0091's CHECK allows the rest. */
+    /** A factor that opens the back office; with the approval switch off, PENDING does too (V0155). */
     static final String STATUS_APPROVED = "APPROVED";
 
     /** The reason written on every session the reset ends; matched by the revoke statement below. */
@@ -60,7 +61,7 @@ final class TotpCredentialStore {
 
     /** One TOTP factor as the gateway needs it; {@code secretEnc} is still sealed. */
     record TotpRow(long id, String secretEnc, String keyId, String status, String label,
-                   Object createdAt, Object confirmedAt, Object lastUsedAt, long lastUsedStep) {
+                   Object createdAt, Object confirmedAt, Object lastUsedAt, long lastUsedStep, String requestUserAgent) {
         /** A factor is a factor only once a first correct code has proved the phone holds it. */
         boolean isConfirmed() {
             return confirmedAt != null;
@@ -75,18 +76,23 @@ final class TotpCredentialStore {
 
     // SELECT column positions, in SELECT order (raw SQL ⇒ read by position)
     private static final String SELECT_BY_ACCOUNT_SQL =
-        "SELECT id, secret_enc, key_id, status, label, created_at, confirmed_at, last_used_at, last_used_step" +
-        " FROM totp_credential WHERE frontend_account_id = $1";
+        "SELECT id, secret_enc, key_id, status, label, created_at, confirmed_at, last_used_at, last_used_step," +
+        " request_user_agent FROM totp_credential WHERE frontend_account_id = $1";
     private static final int T_ID = 0, T_SECRET = 1, T_KEY_ID = 2, T_STATUS = 3, T_LABEL = 4,
-        T_CREATED_AT = 5, T_CONFIRMED_AT = 6, T_LAST_USED_AT = 7, T_LAST_USED_STEP = 8;
+        T_CREATED_AT = 5, T_CONFIRMED_AT = 6, T_LAST_USED_AT = 7, T_LAST_USED_STEP = 8, T_USER_AGENT = 9;
 
     // frontend_account_id is UNIQUE, so a new enrolment can only land once the previous attempt is
     // gone. Only an UNCONFIRMED row is cleared: a confirmed factor is removed through the deliberate
     // remove-with-a-fresh-code path, never as a side effect of somebody starting an enrolment.
+    // A REJECTED factor is NOT cleared here: the rejection is a decision on record (as for passkeys), and clearing it
+    // at the next start would let its owner re-queue at will, mailing every super administrator each time. A super
+    // administrator's reset removes it; until then the account can still add a passkey.
     private static final String DELETE_UNCONFIRMED_SQL =
         "DELETE FROM totp_credential WHERE frontend_account_id = $1 AND confirmed_at IS NULL";
     private static final String INSERT_UNCONFIRMED_SQL =
-        "INSERT INTO totp_credential (frontend_account_id, secret_enc, key_id, status, label) VALUES ($1, $2, $3, $4, $5)";
+        "INSERT INTO totp_credential (frontend_account_id, secret_enc, key_id, status, label," +
+        " approval_kind, request_ip, request_location, request_user_agent, request_sign_in_method)" +
+        " VALUES ($1, $2, $3, $4, $5, $6, $7::text::inet, $8, $9, $10)";
 
     private static final String CONFIRM_SQL =
         "UPDATE totp_credential SET confirmed_at = now() WHERE id = $1 AND frontend_account_id = $2" +
@@ -120,14 +126,21 @@ final class TotpCredentialStore {
                     result.getValue(0, T_CREATED_AT),
                     result.getValue(0, T_CONFIRMED_AT),
                     result.getValue(0, T_LAST_USED_AT),
-                    longValue(result.getValue(0, T_LAST_USED_STEP)));
+                    longValue(result.getValue(0, T_LAST_USED_STEP)),
+                    stringValue(result.getValue(0, T_USER_AGENT)));
             });
     }
 
-    /** Stores a freshly minted, still unconfirmed secret, replacing any unconfirmed attempt. */
-    Future<Void> insertUnconfirmed(Object accountId, String secretEnc, String keyId, String label) {
+    /**
+     * Stores a freshly minted, still unconfirmed secret, replacing any unconfirmed or rejected attempt. Its status and
+     * the approver's context come from the rule both factors share ({@code FactorRequest}): PENDING when an account's
+     * first device must wait for a super administrator, APPROVED otherwise.
+     */
+    Future<Void> insertUnconfirmed(Object accountId, String secretEnc, String keyId, String label,
+                                   FactorRequest.Resolved request) {
         return executeRawSubmit(DELETE_UNCONFIRMED_SQL, accountId)
-            .compose(ignored -> executeRawSubmit(INSERT_UNCONFIRMED_SQL, accountId, secretEnc, keyId, STATUS_APPROVED, label))
+            .compose(ignored -> executeRawSubmit(INSERT_UNCONFIRMED_SQL, accountId, secretEnc, keyId, request.status(), label,
+                request.approvalKind(), request.ip(), request.location(), request.userAgent(), request.signInMethod()))
             .mapEmpty();
     }
 
@@ -361,15 +374,15 @@ final class TotpCredentialStore {
                                         row.codeHash().getBytes(StandardCharsets.UTF_8));
     }
 
-    // ===== raw SQL plumbing (WebAuthnCredentialStore pattern) ====================================
+    // ===== raw SQL plumbing (WebAuthnCredentialStore pattern) — SignInApprovals uses it too =====
 
-    private Future<QueryResult> executeRawQuery(String sql, Object[] parameters) {
+    static Future<QueryResult> executeRawQuery(String sql, Object... parameters) {
         // language = null ⇒ raw SQL (no DQL compilation); sendMetadata = false — we read by position
         return QueryService.executeQuery(new QueryArgument(
             null, DataSourceModelService.getDefaultDataSourceId(), null, null, sql, parameters, null, false, false));
     }
 
-    private Future<SubmitResult> executeRawSubmit(String sql, Object... parameters) {
+    static Future<SubmitResult> executeRawSubmit(String sql, Object... parameters) {
         return SubmitService.executeSubmit(SubmitArgument.builder()
             .setDataSourceId(DataSourceModelService.getDefaultDataSourceId())
             .setStatement(sql) // no setLanguage ⇒ raw SQL, native $n placeholders
@@ -391,7 +404,7 @@ final class TotpCredentialStore {
     }
 
     /** Whether a " returning " statement actually returned a row — the real affected-row signal. */
-    private static boolean returnedARow(SubmitResult submitResult) {
+    static boolean returnedARow(SubmitResult submitResult) {
         Object[] generatedKeys = submitResult.getGeneratedKeys();
         return generatedKeys != null && generatedKeys.length > 0;
     }

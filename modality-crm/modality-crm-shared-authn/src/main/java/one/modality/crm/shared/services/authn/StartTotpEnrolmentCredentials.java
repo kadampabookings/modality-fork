@@ -17,5 +17,5 @@ package one.modality.crm.shared.services.authn;
  *
  * @author Claude Code
  */
-public record StartTotpEnrolmentCredentials(String label) {
+public record StartTotpEnrolmentCredentials(String label, String currentPassword, String deviceInfo) {
 }

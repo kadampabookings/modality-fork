@@ -15,6 +15,8 @@ public final class FinalisePasskeyRegistrationCredentialsSerialCodec extends Ser
     private static final String CLIENT_DATA_JSON_KEY = "clientDataJSON";
     private static final String TRANSPORTS_KEY = "transports";
     private static final String LABEL_KEY = "label";
+    // What the browser says it is — shown to an approver as "reported by the browser", never trusted
+    private static final String DEVICE_INFO_KEY = "deviceInfo";
 
     public FinalisePasskeyRegistrationCredentialsSerialCodec() {
         super(FinalisePasskeyRegistrationCredentials.class, CODEC_ID);
@@ -26,6 +28,7 @@ public final class FinalisePasskeyRegistrationCredentialsSerialCodec extends Ser
         encodeString(serial, CLIENT_DATA_JSON_KEY, arg.clientDataJSON());
         encodeString(serial, TRANSPORTS_KEY, arg.transports());
         encodeString(serial, LABEL_KEY, arg.label());
+        encodeString(serial, DEVICE_INFO_KEY, arg.deviceInfo());
     }
 
     @Override
@@ -34,7 +37,8 @@ public final class FinalisePasskeyRegistrationCredentialsSerialCodec extends Ser
             decodeString(serial, ATTESTATION_OBJECT_KEY),
             decodeString(serial, CLIENT_DATA_JSON_KEY),
             decodeString(serial, TRANSPORTS_KEY),
-            decodeString(serial, LABEL_KEY)
+            decodeString(serial, LABEL_KEY),
+            decodeString(serial, DEVICE_INFO_KEY)
         );
     }
 }

@@ -3,11 +3,15 @@ package one.modality.crm.server.authn.gateway.shared;
 import dev.webfx.platform.conf.Config;
 import dev.webfx.platform.conf.ConfigLoader;
 import dev.webfx.platform.console.Console;
+import dev.webfx.platform.scheduler.Scheduler;
 import dev.webfx.platform.substitution.Substitutor;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 
 /**
  * Whether a back-office login must answer for a second factor, from configuration
@@ -60,15 +64,24 @@ public final class SecondFactorPolicy {
     private enum Mode {OFF, OPTIONAL, REQUIRED}
 
     // Written once per config load, read by every back-office login — volatile is the contract
-    private static volatile SecondFactorPolicy current = new SecondFactorPolicy(Mode.OFF, null);
+    private static volatile SecondFactorPolicy current = new SecondFactorPolicy(Mode.OFF, null, false);
     private static final AtomicBoolean BOOTED = new AtomicBoolean();
+    private static final AtomicBoolean LOADED = new AtomicBoolean();
+    // Run after each config load, with the new policy — how the TOTP gateway learns that setup-first is in force and
+    // runs its boot-time session sweep (it holds the session-revocation plumbing this module does not depend on)
+    private static final List<Consumer<SecondFactorPolicy>> LOAD_LISTENERS = new CopyOnWriteArrayList<>();
 
     private final Mode mode;
     private final LocalDate requiredFrom; // null unless `required` was given a parsable date
+    // The first-factor approval switch, read here as well as by the passkey gateway's own config so that the TOTP
+    // gateway, the status call and the approval queue all answer from one place. Same variable, same rule: only
+    // "on" turns it on, so a typo lands on the behaviour that was already shipping.
+    private final boolean factorApprovalRequired;
 
-    private SecondFactorPolicy(Mode mode, LocalDate requiredFrom) {
+    private SecondFactorPolicy(Mode mode, LocalDate requiredFrom, boolean factorApprovalRequired) {
         this.mode = mode;
         this.requiredFrom = requiredFrom;
+        this.factorApprovalRequired = factorApprovalRequired;
     }
 
     /**
@@ -81,36 +94,66 @@ public final class SecondFactorPolicy {
         ConfigLoader.onConfigLoaded(CONFIG_PATH, loadedConfig -> {
             SecondFactorPolicy policy = fromConfig(loadedConfig);
             current = policy;
+            LOADED.set(true);
             Console.log(LOG_PREFIX + "Back-office second factor: " + policy.describe());
             if (policy.mode == Mode.REQUIRED && policy.requiredFrom == null)
                 // Loud: `required` was asked for and is NOT being enforced. Said once, at boot,
                 // because the alternative is discovering it the day the deadline was meant to bite.
                 Console.log(LOG_PREFIX + "⚠️ BACKOFFICE_SECOND_FACTOR=required but BACKOFFICE_SECOND_FACTOR_REQUIRED_FROM is unset or not an ISO date (e.g. 2026-11-01) — behaving as optional");
+            Console.log(LOG_PREFIX + "First-factor approval: " + (policy.factorApprovalRequired
+                ? "on — an account's first passkey or authenticator app waits for a super administrator"
+                : "off — every new passkey or authenticator app is usable at once"));
             if (!policy.isOff())
                 logWhatIsNotEnforcedYet();
+            IpLocator.init(resolvedOrNull(loadedConfig == null ? null : loadedConfig.getString("ipLocationDatabase")));
+            for (Consumer<SecondFactorPolicy> listener : LOAD_LISTENERS)
+                notifyLater(listener, policy);
         });
     }
 
     /**
-     * What a non-{@code off} policy does NOT do yet, said out loud at every boot that turns it on.
+     * Calls {@code listener} with the policy after every config load (the boot one included) — and at once when the
+     * config is already loaded: a plugin that boots after this one registers too late to see the boot load otherwise
+     * (which is how the setup-first session sweep first failed to run).
+     */
+    public static void onLoaded(Consumer<SecondFactorPolicy> listener) {
+        LOAD_LISTENERS.add(listener);
+        if (LOADED.get())
+            notifyLater(listener, current);
+    }
+
+    /**
+     * Listeners do database work (the session sweep, the context clearing), and the config loads while the server is
+     * still booting — before the data source is up. Run synchronously there, the first such call stalled the boot for
+     * good. So every listener runs off the boot path, once the server has had time to finish starting, and a failure is
+     * logged rather than thrown into whoever loaded the config.
+     */
+    private static void notifyLater(Consumer<SecondFactorPolicy> listener, SecondFactorPolicy policy) {
+        Scheduler.scheduleDelay(LISTENER_DELAY_MILLIS, () -> {
+            try {
+                listener.accept(policy);
+            } catch (RuntimeException e) {
+                Console.log(LOG_PREFIX + "⚠️ A second-factor policy listener failed: " + e.getMessage());
+            }
+        });
+    }
+
+    private static final long LISTENER_DELAY_MILLIS = 15_000;
+
+    /**
+     * Where a non-{@code off} policy is enforced and what it does NOT cover, said out loud at every boot that turns it
+     * on — because a green deploy otherwise reads as a working control.
      *
-     * <p>Here because a green deploy of a policy that reads {@code optional} or {@code required}
-     * invites exactly one reading — "the back office now needs two factors" — and that is not what
-     * this build does. It enforces at ONE mint site, and the ways round it are not exotic: they are
-     * the login link people already use. Saying so in the log costs six lines at boot and is the
-     * difference between a known phase and a believed control.
+     * <p>Since setup-first (2026-11): the password login asks for the factor; a magic link or emailed code for an
+     * account that must present one opens a RECOVERY-ONLY session (front-office audience, so every back-office guard
+     * refuses it); under {@code required} an account with no approved factor holds a setup-only session
+     * (RouteAccessGuard). View passes follow the agent's own session.
      */
     private static void logWhatIsNotEnforcedYet() {
-        Console.log(LOG_PREFIX + "⚠️ PARTIAL ENFORCEMENT — this build asks for a factor at ONE mint site: the"
-                    + " username/password gateway. It does NOT cover:");
-        Console.log(LOG_PREFIX + "⚠️   • magic-link logins — the login link, the emailed verification code, the"
-                    + " support view and the back-office view still open a back-office session with no factor;");
-        Console.log(LOG_PREFIX + "⚠️   • the guest cart login, same;");
-        Console.log(LOG_PREFIX + "⚠️   • a FRONT-OFFICE login of the same account: nothing stops that session's"
-                    + " messages reaching the back office, because sessions carry no audience ($aud) yet.");
-        Console.log(LOG_PREFIX + "⚠️ Those close with the audience binding — milestone M1 of"
-                    + " docs/security/backoffice-second-factor-totp-design.md. Until then this policy RAISES the"
-                    + " cost of a cracked back-office password; it does not fence the back office.");
+        Console.log(LOG_PREFIX + "Enforced at: the password login, the emailed link/code (recovery-only for an account that"
+                    + " must present a factor), and — under `required` — RouteAccessGuard (setup-only sessions).");
+        Console.log(LOG_PREFIX + "⚠️ Not covered: the legacy GWT back office cannot answer the second-factor step and is"
+                    + " refused once an account holds a factor.");
     }
 
     /** The policy in force. Never null: before the configuration loads, and without it, that is {@code off}. */
@@ -120,11 +163,12 @@ public final class SecondFactorPolicy {
 
     private static SecondFactorPolicy fromConfig(Config config) {
         if (config == null)
-            return new SecondFactorPolicy(Mode.OFF, null);
+            return new SecondFactorPolicy(Mode.OFF, null, false);
         Mode mode = parseMode(resolvedOrNull(config.getString("backofficePolicy")));
         // Only meaningful for `required`; parsed only there so a stale date cannot be read as a live one
         LocalDate requiredFrom = mode == Mode.REQUIRED ? parseDate(resolvedOrNull(config.getString("requiredFrom"))) : null;
-        return new SecondFactorPolicy(mode, requiredFrom);
+        boolean factorApprovalRequired = "on".equalsIgnoreCase(resolvedOrNull(config.getString("factorApproval")));
+        return new SecondFactorPolicy(mode, requiredFrom, factorApprovalRequired);
     }
 
     private static Mode parseMode(String value) {
@@ -164,6 +208,56 @@ public final class SecondFactorPolicy {
      */
     public boolean isRequiredNow() {
         return mode == Mode.REQUIRED && requiredFrom != null && !LocalDate.now().isBefore(requiredFrom);
+    }
+
+    /**
+     * Whether setup-first is in force: `required` with a valid date, from the deploy that set it — NOT from the date.
+     * From that moment an account with no approved factor holds a setup-only back-office session (it may set up a
+     * device and nothing else); the date is when even that stops, unless a super administrator opened a window.
+     */
+    public boolean isSetupFirst() {
+        return mode == Mode.REQUIRED && requiredFrom != null;
+    }
+
+    /** Whether an account's first factor waits for a super administrator ({@code WEBAUTHN_BACKOFFICE_APPROVAL=on}). */
+    public boolean isFactorApprovalRequired() {
+        return factorApprovalRequired || approvalRequiredElsewhere;
+    }
+
+    // The passkey gateway's own reading of the same variable (webauthn.backofficeApproval): OR-ed in, so that if the two
+    // config keys ever disagree, approval is required on every path — TOTP enrolment and verification included
+    private static volatile boolean approvalRequiredElsewhere;
+
+    /** Called by the passkey gateway on each config load with its own approval key. */
+    public static void noteApprovalRequiredElsewhere(boolean required) {
+        if (required && !current.factorApprovalRequired)
+            Console.log(LOG_PREFIX + "🛑 webauthn.backofficeApproval is on but secondfactor.factorApproval is not"
+                        + " (is src-root.json current?) — treating approval as REQUIRED everywhere");
+        approvalRequiredElsewhere = required;
+    }
+
+    /**
+     * Whether a factor in this approval {@code status} opens the back office — the rule the passkey store applies to
+     * its own rows ({@code WebAuthnCredentialStore.opensBackofficeLogin}), stated once more here for the TOTP rows and
+     * for the setup-only test, so the three cannot disagree: REJECTED never; with approval on, APPROVED only; with it
+     * off, anything but REJECTED (a PENDING row from a time the switch was on keeps working, as passkeys do).
+     */
+    public boolean factorOpensBackoffice(String status) {
+        if ("REJECTED".equals(status))
+            return false;
+        return !factorApprovalRequired || "APPROVED".equals(status);
+    }
+
+    /** The configured deadline, or null — only set for `required`. */
+    public LocalDate getRequiredFrom() {
+        return requiredFrom;
+    }
+
+    /** off | optional | required, as the status call reports it (`required` without a valid date reads optional). */
+    public String modeName() {
+        if (mode == Mode.REQUIRED)
+            return requiredFrom == null ? "optional" : "required";
+        return mode == Mode.OPTIONAL ? "optional" : "off";
     }
 
     /**
