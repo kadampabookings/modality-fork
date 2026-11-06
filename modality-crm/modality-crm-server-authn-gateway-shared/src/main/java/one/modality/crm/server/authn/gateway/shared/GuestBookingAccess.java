@@ -98,32 +98,58 @@ public final class GuestBookingAccess {
     public record CartBooking(String email, boolean personHasAccount, boolean hasPayer) {
     }
 
+    /** The address a cart's guest link is for, or the reason it must not carry one — exactly one is set. */
+    public record GuestLinkDecision(String email, GuestLinkRefusal refusal) {
+    }
+
     /**
-     * The address a cart's guest link is for, or null when the cart must not carry one. Cancelled bookings count:
+     * The address a cart's guest link is for, or why the cart must not carry one. Cancelled bookings count:
      * the page still has to show a cancelled booking to the right person, and never to anyone else.
+     *
+     * <p>The reason is returned rather than merely computed because both ends of this need it: the log, where
+     * one message for every outcome made an ordinary refusal read as a fault, and the cart page, which
+     * otherwise has to guess what to tell the visitor. {@link GuestLinkRefusal} holds the measurements and
+     * what a reason may disclose.
      */
-    public static String guestEmailOf(List<CartBooking> bookings) {
+    public static GuestLinkDecision decideGuestLink(List<CartBooking> bookings) {
         if (bookings == null || bookings.isEmpty())
-            return null;
+            return refused(GuestLinkRefusal.NO_BOOKINGS);
         String email = null;
         for (CartBooking booking : bookings) {
             if (booking.personHasAccount() || booking.hasPayer())
-                return null;
+                return refused(GuestLinkRefusal.ACCOUNT_REQUIRED);
             String bookingEmail = booking.email() == null ? null : booking.email().trim();
             if (bookingEmail == null || bookingEmail.isEmpty())
-                return null;
+                return refused(GuestLinkRefusal.NO_BOOKING_EMAIL);
             if (email == null)
                 email = bookingEmail;
             else if (!email.equalsIgnoreCase(bookingEmail))
-                return null;
+                return refused(GuestLinkRefusal.MIXED_BOOKING_EMAILS);
         }
-        return email.length() <= MAX_EMAIL_LENGTH ? email : null;
+        return email.length() <= MAX_EMAIL_LENGTH ? new GuestLinkDecision(email, null)
+            : refused(GuestLinkRefusal.EMAIL_TOO_LONG);
+    }
+
+    private static GuestLinkDecision refused(GuestLinkRefusal refusal) {
+        return new GuestLinkDecision(null, refusal);
+    }
+
+    /**
+     * The address alone, for the callers that only mint: the same rule as {@link #decideGuestLink}, which is
+     * where it lives — two copies of it would be two rules about who may open somebody's booking.
+     */
+    public static String guestEmailOf(List<CartBooking> bookings) {
+        return decideGuestLink(bookings).email();
     }
 
     // ── Keeping a cart's link in line with its bookings ─────────────────────────────────────────────────────────
 
-    /** A cart's current link (null when it has none) and the address its bookings call for (null for none). */
-    private record CartState(MagicLink link, String guestEmail, String cartUuid, String lang) {
+    /** A cart's current link (null when it has none) and what its bookings call for. */
+    private record CartState(MagicLink link, GuestLinkDecision decision, String cartUuid, String lang) {
+        /** The address the bookings call for, or null when they call for no link at all. */
+        String guestEmail() {
+            return decision.email();
+        }
     }
 
     private static Future<CartState> loadCartState(Object cartPk, DataSourceModel dataSourceModel) {
@@ -142,7 +168,7 @@ public final class GuestBookingAccess {
                         document.getPayerId() != null));
                 }
                 Document first = Collections.first(documents);
-                return new CartState(cart == null ? null : cart.getMagicLink(), guestEmailOf(bookings),
+                return new CartState(cart == null ? null : cart.getMagicLink(), decideGuestLink(bookings),
                     cart == null ? null : cart.getUuid(), first == null ? null : first.getPersonLang());
             });
     }
@@ -182,6 +208,10 @@ public final class GuestBookingAccess {
         });
     }
 
+    /** What a click may redeem: a link, or the reason there is none — exactly one is set. */
+    public record LinkToRedeem(MagicLink link, GuestLinkRefusal refusal) {
+    }
+
     /**
      * The link a click on the cart's page may redeem, judged against the cart's bookings as they are NOW: its own link
      * when that is for the address they carry; a new one when it has none — every back-office booking made before
@@ -193,15 +223,18 @@ public final class GuestBookingAccess {
      * <p>An EXPIRED link for the right address is returned as it is, for the caller's validation to refuse. Re-minting
      * on a click would make the cart id alone a key for good; an expired link comes back only through the recovery
      * mail, which goes to the booking's own mailbox.
+     *
+     * <p>A refusal comes back with its reason rather than as a bare null: see {@link GuestLinkRefusal} for why both
+     * the log and the page need to tell these apart.
      */
-    public static Future<MagicLink> linkToRedeem(Object cartPk, DataSourceModel dataSourceModel) {
+    public static Future<LinkToRedeem> linkToRedeem(Object cartPk, DataSourceModel dataSourceModel) {
         return loadCartState(cartPk, dataSourceModel).compose(state -> {
             String email = state.guestEmail();
             if (email == null)
-                return Future.succeededFuture(null);
+                return Future.succeededFuture(new LinkToRedeem(null, state.decision().refusal()));
             if (state.link() != null && email.equalsIgnoreCase(state.link().getEmail()))
-                return Future.succeededFuture(state.link());
-            return mintAndAttach(cartPk, state, dataSourceModel);
+                return Future.succeededFuture(new LinkToRedeem(state.link(), null));
+            return mintAndAttach(cartPk, state, dataSourceModel).map(link -> new LinkToRedeem(link, null));
         });
     }
 

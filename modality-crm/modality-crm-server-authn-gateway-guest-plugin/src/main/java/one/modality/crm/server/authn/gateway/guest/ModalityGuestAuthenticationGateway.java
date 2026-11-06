@@ -21,6 +21,7 @@ import one.modality.base.shared.entities.Cart;
 import one.modality.base.shared.entities.MagicLink;
 import one.modality.crm.server.authn.gateway.shared.AccountSignInRestrictionStore;
 import one.modality.crm.server.authn.gateway.shared.GuestBookingAccess;
+import one.modality.crm.server.authn.gateway.shared.GuestLinkRefusal;
 import one.modality.base.server.mail.LocalizedMailTemplate;
 import one.modality.crm.server.authn.gateway.shared.MagicLinkService;
 import one.modality.crm.server.authn.gateway.shared.PasswordClosedNotice;
@@ -137,6 +138,12 @@ public final class ModalityGuestAuthenticationGateway implements ServerAuthentic
      * GuestBookingAccess.linkToRedeem), and a cart that never had one gets it here — which is
      * what makes the letters already sent for back-office bookings work. An expired link is NOT
      * replaced here; the recovery mail does that.
+     * <p>
+     * A refusal comes back with its reason ({@link GuestLinkRefusal}), which the front office reads
+     * from the bracketed key to choose what to tell the visitor. Most of these are not faults: the
+     * great majority are a booker who has an account and is meant to sign in. They are still logged
+     * at ERROR, because BusCallService logs every failed endpoint and that level is not ours to pick
+     * from here — but the message now says WHICH refusal, so the log can be read without a database.
      */
     private Future<String> authenticateWithCart(String cartUuid) {
         String usageRunId = ThreadLocalStateHolder.getRunId();
@@ -149,10 +156,11 @@ public final class ModalityGuestAuthenticationGateway implements ServerAuthentic
             .compose(carts -> {
                 Cart cart = Collections.first(carts);
                 if (cart == null)
-                    return Future.failedFuture("Cart not found");
-                return GuestBookingAccess.linkToRedeem(cart.getPrimaryKey(), dataSourceModel).compose(magicLink -> {
+                    return Future.failedFuture(GuestLinkRefusal.UNKNOWN_CART.failureMessage(null));
+                return GuestBookingAccess.linkToRedeem(cart.getPrimaryKey(), dataSourceModel).compose(toRedeem -> {
+                    MagicLink magicLink = toRedeem.link();
                     if (magicLink == null)
-                        return Future.failedFuture("No magic link associated with cart #" + cart.getPrimaryKey());
+                        return Future.failedFuture(toRedeem.refusal().failureMessage(cart.getPrimaryKey()));
                     // Validate via the shared service (handles BOOKING_ACCESS expiry rules)
                     // Refuses an address whose account has its password closed (V0096), as for every link it validates
                     return MagicLinkService.loadMagicLinkFromTokenOrVerificationCode(

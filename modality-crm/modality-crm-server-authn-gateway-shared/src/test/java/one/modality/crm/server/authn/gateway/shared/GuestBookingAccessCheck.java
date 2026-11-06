@@ -80,6 +80,45 @@ public class GuestBookingAccessCheck {
         check("one that does not fit gets none, rather than a failed insert",
             GuestBookingAccess.guestEmailOf(List.of(guest("a" + longest))) == null);
 
+        // --- and WHICH refusal, which is what the log and the cart page both read ---
+        // One message for every outcome is what made this unreadable: an ordinary "they have an account, they
+        // sign in" was indistinguishable from a guest who is genuinely stuck, in the log and in the browser.
+        check("an eligible cart is refused for no reason at all",
+            GuestBookingAccess.decideGuestLink(List.of(guest("ann@example.org"))).refusal() == null);
+        check("an account holder's cart says so",
+            GuestBookingAccess.decideGuestLink(List.of(new GuestBookingAccess.CartBooking("ann@example.org", true, false)))
+                .refusal() == GuestLinkRefusal.ACCOUNT_REQUIRED);
+        check("a payer's cart gives the same answer: both mean 'sign in', and no cart has a payer without an account",
+            GuestBookingAccess.decideGuestLink(List.of(new GuestBookingAccess.CartBooking("ann@example.org", false, true)))
+                .refusal() == GuestLinkRefusal.ACCOUNT_REQUIRED);
+        check("a booking with no address says THAT, and not 'sign in' - the person may have no account to sign into",
+            GuestBookingAccess.decideGuestLink(List.of(guest("  "))).refusal() == GuestLinkRefusal.NO_BOOKING_EMAIL
+            && GuestBookingAccess.decideGuestLink(List.of(guest(null))).refusal() == GuestLinkRefusal.NO_BOOKING_EMAIL);
+        check("two addresses in one cart say so",
+            GuestBookingAccess.decideGuestLink(List.of(guest("ann@example.org"), guest("bob@example.org")))
+                .refusal() == GuestLinkRefusal.MIXED_BOOKING_EMAILS);
+        check("an address that does not fit says so",
+            GuestBookingAccess.decideGuestLink(List.of(guest("a" + longest))).refusal() == GuestLinkRefusal.EMAIL_TOO_LONG);
+        check("an empty cart says so",
+            GuestBookingAccess.decideGuestLink(List.of()).refusal() == GuestLinkRefusal.NO_BOOKINGS
+            && GuestBookingAccess.decideGuestLink(null).refusal() == GuestLinkRefusal.NO_BOOKINGS);
+        check("a refusal never comes with an address, and an address never with a refusal",
+            GuestBookingAccess.decideGuestLink(List.of(guest("  "))).email() == null
+            && "ann@example.org".equals(GuestBookingAccess.decideGuestLink(List.of(guest("ann@example.org"))).email()));
+
+        // The key is the whole contract with the front office (hasServerErrorKey matches "[key]"), so two
+        // values sharing one would silently merge two screens - exactly the fault being fixed here.
+        java.util.Set<String> keys = new java.util.HashSet<>();
+        boolean keysDistinctAndBracketed = true;
+        for (GuestLinkRefusal refusal : GuestLinkRefusal.values()) {
+            keysDistinctAndBracketed &= keys.add(refusal.getErrorKey())
+                                        && refusal.failureMessage(42).startsWith("[" + refusal.getErrorKey() + "] ");
+        }
+        check("every refusal has its own key, and leads with it in brackets", keysDistinctAndBracketed);
+        check("the message names the cart by its internal id, never by the uuid that opens it",
+            GuestLinkRefusal.ACCOUNT_REQUIRED.failureMessage(42).contains("cart #42")
+            && !GuestLinkRefusal.UNKNOWN_CART.failureMessage(null).contains("#"));
+
         // --- the recovery mail's buttons ---
         String buttons = GuestBookingAccess.cartButtonsHtml("https://kadampabookings.org", List.of("3f2c", "9a1b"));
         check("each button is a whole url on the given origin",
@@ -110,6 +149,9 @@ public class GuestBookingAccessCheck {
         check("the cart page's sign-in was found", !cartSignIn.isEmpty());
         check("every click is judged against the cart's bookings now, not just the link it happens to carry",
             cartSignIn.contains("GuestBookingAccess.linkToRedeem(") && !cartSignIn.contains("getMagicLink()"));
+        check("a refusal is reported with its reason, not as one message for all of them",
+            cartSignIn.contains("toRedeem.refusal().failureMessage(")
+            && cartSignIn.contains("GuestLinkRefusal.UNKNOWN_CART.failureMessage("));
 
         String documentServer = readSource(DOCUMENT_SERVER + "ServerDocumentServiceProvider.java");
         String submit = between(documentServer, "private static Future<SubmitDocumentChangesResult> submitDocumentChangesAfterChecks(",
