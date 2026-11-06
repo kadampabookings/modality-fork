@@ -109,6 +109,24 @@ public final class SecondFactorAccess {
         return new Object[]{"APPROVED", approvalOn ? "APPROVED" : "PENDING"};
     }
 
+    /** Whether a factor in {@code status} opens the back office — APPROVED, or PENDING too while approval is off. */
+    public static boolean opensBackoffice(String status) {
+        Object[] statuses = approvedStatuses();
+        return statuses[0].equals(status) || statuses[1].equals(status);
+    }
+
+    /**
+     * Whether the CALLER's session was opened for the back office ({@code $aud=bo}); read it on the caller's thread,
+     * before any asynchronous step. What it buys: removing a factor asks for no code, so only such a session may remove
+     * one that opens the back office. A {@code bo} session of an account holding that factor has necessarily presented
+     * it, whereas a front-office login, a setup-only or a recovery-only session (all {@code fo}) proves the password or
+     * the mailbox at most — and stripping the factor from one would turn either into the whole back office while the
+     * policy is {@code optional}.
+     */
+    public static boolean callerOpenedForBackoffice() {
+        return Boolean.TRUE.equals(StateAccessor.getVerifiedBackoffice(ThreadLocalStateHolder.getThreadLocalState()));
+    }
+
     /** The account's approved factors, passkeys and authenticator app together. A database error fails the future. */
     public static Future<Integer> approvedFactorCount(Object accountId) {
         Object[] statuses = approvedStatuses();

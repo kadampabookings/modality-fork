@@ -429,7 +429,7 @@ public final class ModalityTotpAuthenticationGateway implements ServerAuthentica
         if (updateCredentialsArgument instanceof ListSecondFactorsCredentials)
             return listSecondFactorsJson(accountId);
         if (updateCredentialsArgument instanceof RemoveTotpCredentials cred)
-            return removeTotp(accountId, cred.totpId(), cred.code());
+            return removeTotp(accountId, cred.totpId());
         if (updateCredentialsArgument instanceof RegenerateTotpBackupCodesCredentials cred)
             return regenerateBackupCodes(accountId, cred.code());
         // Re-checked as a super administrator on EVERY call, never trusted from the client's grant
@@ -514,8 +514,8 @@ public final class ModalityTotpAuthenticationGateway implements ServerAuthentica
             // A confirmed row blocks, a REJECTED one included: the rejection stays on record until a super administrator
             // resets it (see TotpCredentialStore.DELETE_UNCONFIRMED_SQL)
             if (existing != null && existing.isConfirmed()) {
-                // One TOTP per account. Replacing a confirmed factor goes through remove — which
-                // asks for a fresh code — so a stolen session cannot quietly swap the factor out.
+                // One TOTP per account: replacing a confirmed factor goes through remove first, and
+                // the new one then needs the password like any device (and, as a first factor, approval).
                 Console.log(LOG_PREFIX + "Enrolment refused for account " + accountId + ": a confirmed factor already exists");
                 return enrolmentFailure();
             }
@@ -642,16 +642,18 @@ public final class ModalityTotpAuthenticationGateway implements ServerAuthentica
         });
     }
 
-    /** Removes the factor and its codes — behind a fresh code, so a stolen session alone cannot. */
-    private Future<?> removeTotp(Object accountId, Object totpIdArgument, String code) {
+    /**
+     * Removes the account's app, as easily as a passkey is removed: no code. Asking for one guarded nothing that matters
+     * any more — whoever removes a factor gains no way in (a new device needs the password, and under approval a super
+     * administrator), and under `required` the account drops back to setup-only — while it locked out the very people
+     * who most need to remove an app: whoever lost the phone, or abandoned a setup and never had a code.
+     *
+     * <p>Code-free only from a back-office session (SecondFactorAccess.callerOpenedForBackoffice), for an app that opens
+     * the back office; one that does not (unfinished, or pending under approval) may go from any of the owner's sessions.
+     */
+    private Future<?> removeTotp(Object accountId, Object totpIdArgument) {
         Long requestedId = Numbers.toLong(totpIdArgument);
-        TotpSecretCipher cipher = TotpKeys.cipher();
-        if (cipher == null) {
-            // Without the key no fresh code can be verified, so removal is a super-administrator
-            // reset until the key is back. Said out loud for the operator, generic for the caller.
-            Console.log(LOG_PREFIX + "🛑 Removal refused for account " + accountId + ": no encryption key configured");
-            return enrolmentFailure();
-        }
+        boolean fromBackoffice = SecondFactorAccess.callerOpenedForBackoffice(); // the caller's thread
         return credentialStore.findByAccount(accountId).compose(row -> {
             // The id from the wire never selects the row — the account does. It is checked only so
             // that a client acting on a stale listing is told no instead of removing something else.
@@ -663,18 +665,18 @@ public final class ModalityTotpAuthenticationGateway implements ServerAuthentica
                 Console.log(LOG_PREFIX + "Removal refused for account " + accountId + ": the TOTP row was rejected");
                 return enrolmentFailure();
             }
-            return verifyFreshCode(row, accountId, cipher, code).compose(verified -> {
-                if (!Boolean.TRUE.equals(verified))
-                    return enrolmentFailure();
-                return credentialStore.deleteOwned(accountId)
-                    // The codes go with the factor: a sheet that outlived its TOTP would be a
-                    // password-plus-paper login nobody remembers enabling.
-                    .compose(deleted -> credentialStore.deleteAllFor(accountId))
-                    .compose(ignored -> {
-                        Console.log(LOG_PREFIX + "TOTP row " + row.id() + " removed by its owner (account " + accountId + ")");
-                        return listSecondFactorsJson(accountId);
-                    });
-            });
+            if (!fromBackoffice && row.isConfirmed() && SecondFactorAccess.opensBackoffice(row.status())) {
+                Console.log(LOG_PREFIX + "Removal refused for account " + accountId + ": not a back-office session");
+                return enrolmentFailure();
+            }
+            return credentialStore.deleteOwned(accountId)
+                // The codes go with the factor: a sheet that outlived its TOTP would be a
+                // password-plus-paper login nobody remembers enabling.
+                .compose(deleted -> credentialStore.deleteAllFor(accountId))
+                .compose(ignored -> {
+                    Console.log(LOG_PREFIX + "TOTP row " + row.id() + " removed by its owner (account " + accountId + ")");
+                    return listSecondFactorsJson(accountId);
+                });
         });
     }
 

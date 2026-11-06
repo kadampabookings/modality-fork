@@ -1192,12 +1192,29 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
         if (passkeyId == null)
             return managementFailure();
         Object accountId = accountIdOf(principal);
+        // A passkey that opens the back office may go only from a back-office session, which presented a factor: from a
+        // front-office, setup-only or recovery-only one (password or mailbox at most) it would strip the factor
+        // and leave the password alone at the back office's door — see SecondFactorAccess.callerOpenedForBackoffice
+        boolean fromBackoffice = SecondFactorAccess.callerOpenedForBackoffice(); // the caller's thread
         // Ownership is in the DELETE's WHERE clause; a valid id belonging to another account
         // matches zero rows and gets the same generic error as a nonexistent one — as does a
         // REJECTED row, which stays on record (the owner's UI offers no remove for it)
-        return refuseRemovingLastWayIn(accountId, passkeyId)
+        return (fromBackoffice ? Future.<Void>succeededFuture() : refuseRemovingFromOutsideBackoffice(accountId, passkeyId))
+            .compose(ignored -> refuseRemovingLastWayIn(accountId, passkeyId))
             .compose(ignored -> credentialStore.deleteOwned(passkeyId, accountId))
             .compose(deleted -> Boolean.TRUE.equals(deleted) ? Future.succeededFuture() : managementFailure());
+    }
+
+    /** Refuses removing, from outside a back-office session, a passkey of the account that opens the back office. */
+    private Future<Void> refuseRemovingFromOutsideBackoffice(Object accountId, long passkeyId) {
+        return credentialStore.findByAccount(accountId).compose(passkeys -> {
+            boolean opensBackoffice = passkeys.stream()
+                .anyMatch(p -> p.id() == passkeyId && SecondFactorAccess.opensBackoffice(p.status()));
+            if (!opensBackoffice)
+                return Future.succeededFuture();
+            Console.log(LOG_PREFIX + "Passkey removal refused for account " + accountId + ": not a back-office session");
+            return managementFailure();
+        });
     }
 
     /**
