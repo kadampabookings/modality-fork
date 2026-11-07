@@ -12,8 +12,12 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 
 /**
- * What the account may do in the back office under "setup first" — the two facts every gateway needs and must read
- * the same way: how many APPROVED second factors it holds, and whether a super administrator has reopened setup for it.
+ * What the account may do in the back office under "setup first" — the facts every gateway needs and must read the same
+ * way: how many APPROVED second factors it holds, and which sessions may change them.
+ *
+ * <p>An account with no approved factor gets a setup-only session at every password sign-in, the deadline included
+ * (David, 2026-11-07): refusing it left a super administrator with no device locked out. The 48-hour enrolment window
+ * that used to reopen setup after the deadline therefore no longer gates anything; its rows stay as an audit.
  *
  * <h3>Why a session without an approved factor is a FRONT-OFFICE session</h3>
  *
@@ -139,35 +143,6 @@ public final class SecondFactorAccess {
         return RawSql.query(OPEN_WINDOW_SQL, normaliseId(accountId))
             .map(result -> result.getRowCount() == 1 ? instantOf(result.getValue(0, 0)) : null)
             .otherwise(e -> null);
-    }
-
-    /**
-     * Whether a password sign-in of an account with NO approved factor may still get its setup-only session: always
-     * before the deadline, after it only inside a window a super administrator opened.
-     */
-    public static Future<Boolean> maySetUpWithoutFactor(Object accountId) {
-        if (!SecondFactorPolicy.get().isRequiredNow())
-            return Future.succeededFuture(true);
-        return openEnrolmentWindowUntil(accountId).map(until -> until != null);
-    }
-
-    /**
-     * Whether the caller may add a device NOW. On a back-office session, always (it has presented its factor, or the
-     * policy does not ask for one). On a narrowed (front-office-audience) session under setup-first, an account with no
-     * approved factor may only while it could still get its setup-only session — before the deadline, or inside a
-     * window a super administrator opened. That is checked here, at every enrolment, and not only at sign-in: a
-     * setup-only session minted inside a window outlives it, and an emailed sign-in opens a recovery window that
-     * CredentialChangeProof accepts as proof. Outside it the device would still need an approver, but it would mail
-     * them for an account the deadline has closed. MUST be called on the caller's thread.
-     */
-    public static Future<Boolean> mayEnrolNow(Object accountId) {
-        boolean openedForBackoffice = Boolean.TRUE.equals(
-            StateAccessor.getVerifiedBackoffice(ThreadLocalStateHolder.getThreadLocalState()));
-        if (openedForBackoffice || !SecondFactorPolicy.get().isSetupFirst())
-            return Future.succeededFuture(true);
-        return approvedFactorCount(accountId)
-            .compose(count -> count != null && count > 0 ? Future.succeededFuture(true) : maySetUpWithoutFactor(accountId))
-            .otherwise(e -> false);
     }
 
     static Instant instantOf(Object value) {

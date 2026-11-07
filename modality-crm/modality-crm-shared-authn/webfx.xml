@@ -55,6 +55,12 @@
         <provider interface="dev.webfx.stack.com.serial.spi.SerialCodec">one.modality.crm.shared.services.authn.serial.DecideSignInApprovalCredentialsSerialCodec</provider>
         <provider interface="dev.webfx.stack.com.serial.spi.SerialCodec">one.modality.crm.shared.services.authn.serial.SecondFactorCoverageCredentialsSerialCodec</provider>
         <provider interface="dev.webfx.stack.com.serial.spi.SerialCodec">one.modality.crm.shared.services.authn.serial.OpenEnrolmentWindowCredentialsSerialCodec</provider>
+        <provider interface="dev.webfx.stack.com.serial.spi.SerialCodec">one.modality.crm.shared.services.authn.serial.ListSignInRosterCredentialsSerialCodec</provider>
+        <provider interface="dev.webfx.stack.com.serial.spi.SerialCodec">one.modality.crm.shared.services.authn.serial.ListLiveSessionsCredentialsSerialCodec</provider>
+        <provider interface="dev.webfx.stack.com.serial.spi.SerialCodec">one.modality.crm.shared.services.authn.serial.EndSessionsCredentialsSerialCodec</provider>
+        <provider interface="dev.webfx.stack.com.serial.spi.SerialCodec">one.modality.crm.shared.services.authn.serial.BlockAccountCredentialsSerialCodec</provider>
+        <provider interface="dev.webfx.stack.com.serial.spi.SerialCodec">one.modality.crm.shared.services.authn.serial.UnblockAccountCredentialsSerialCodec</provider>
+        <provider interface="dev.webfx.stack.com.serial.spi.SerialCodec">one.modality.crm.shared.services.authn.serial.ListSecurityEventsCredentialsSerialCodec</provider>
     </providers>
     <java-ui-api package="one.modality.crm.shared.services.authn" prefix="ModalityAuthentication">
         <i18n/>

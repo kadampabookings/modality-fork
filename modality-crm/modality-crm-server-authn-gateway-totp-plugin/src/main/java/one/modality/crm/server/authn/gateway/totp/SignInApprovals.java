@@ -25,7 +25,7 @@ import one.modality.crm.shared.services.authn.ModalityUserPrincipal;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -477,8 +477,8 @@ final class SignInApprovals {
         AstObject reply = AST.createObject();
         reply.set("mode", policy.modeName());
         LocalDate requiredFrom = policy.isSetupFirst() ? policy.getRequiredFrom() : null;
-        if (requiredFrom != null) // the server's midnight, as an instant (the policy evaluates the date in server time)
-            reply.set("requiredFrom", requiredFrom.atStartOfDay(ZoneId.systemDefault()).toInstant().toString());
+        if (requiredFrom != null) // a DAY, sent as its UTC midnight so a client in any zone reads the same date back (in UTC)
+            reply.set("requiredFrom", requiredFrom.atStartOfDay(ZoneOffset.UTC).toInstant().toString());
         reply.set("requiredNow", policy.isRequiredNow());
         return reply;
     }

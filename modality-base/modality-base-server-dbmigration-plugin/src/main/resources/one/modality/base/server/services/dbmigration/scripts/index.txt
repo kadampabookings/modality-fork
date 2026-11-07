@@ -155,3 +155,4 @@ V0152__edit_booking_prices_operation.sql
 V0153__anonymise_person.sql
 V0154__resource_configuration_unavailable.sql
 V0155__second_factor_approval_context.sql
+V0156__sign_in_security_board.sql

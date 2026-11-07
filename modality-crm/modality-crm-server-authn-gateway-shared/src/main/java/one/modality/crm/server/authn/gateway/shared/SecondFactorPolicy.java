@@ -27,9 +27,11 @@ import java.util.function.Consumer;
  *     in the boot log, not on a surprise.</li>
  * <li>{@code optional} — an account with a confirmed factor is asked for it on every back-office
  *     login; an account without one is not.</li>
- * <li>{@code required} — additionally, an account with no confirmed factor is refused, from
- *     {@code requiredFrom} onwards. Before that date {@code required} behaves as {@code optional}
- *     and the client shows the deadline.</li>
+ * <li>{@code required} (with a valid {@code requiredFrom}) — "setup first", from the deploy that sets it: an account
+ *     with no approved factor gets a setup-only session and reaches nothing else of the back office until its first
+ *     device is approved, which a super administrator must do ({@link #isFactorApprovalRequired}). Nobody is refused
+ *     (David, 2026-11-07); {@code requiredFrom} is the date by which staff should have a device, after which an account
+ *     without one counts as overdue. Without a valid date {@code required} behaves as {@code optional}.</li>
  * </ul>
  *
  * <p><b>What "asked for" and "refused" mean in THIS build, which is less than the words suggest.</b>
@@ -102,6 +104,8 @@ public final class SecondFactorPolicy {
                 Console.log(LOG_PREFIX + "⚠️ BACKOFFICE_SECOND_FACTOR=required but BACKOFFICE_SECOND_FACTOR_REQUIRED_FROM is unset or not an ISO date (e.g. 2026-11-01) — behaving as optional");
             Console.log(LOG_PREFIX + "First-factor approval: " + (policy.factorApprovalRequired
                 ? "on — an account's first passkey or authenticator app waits for a super administrator"
+                : policy.isSetupFirst()
+                ? "on (forced by required) — an account's first passkey or authenticator app waits for a super administrator"
                 : "off — every new passkey or authenticator app is usable at once"));
             if (!policy.isOff())
                 logWhatIsNotEnforcedYet();
@@ -201,10 +205,10 @@ public final class SecondFactorPolicy {
     }
 
     /**
-     * Whether an account with NO confirmed factor must now be refused the back office: {@code required}
-     * with a parsable date that has arrived. A {@code required} policy with no usable date behaves as
-     * {@code optional} — refusing everyone because a date was mistyped is not a safety property.
-     * Evaluated in the server's own time zone; the grace date is a day, not an instant.
+     * Whether the set-up-by date has arrived: {@code required} with a parsable date on or before today. Since
+     * 2026-11-07 nobody is refused for it; an account still without a device then counts as OVERDUE (the super
+     * administrators' Needs-attention line, the coverage). Evaluated in the server's own time zone; the date is a day,
+     * not an instant.
      */
     public boolean isRequiredNow() {
         return mode == Mode.REQUIRED && requiredFrom != null && !LocalDate.now().isBefore(requiredFrom);
@@ -213,15 +217,19 @@ public final class SecondFactorPolicy {
     /**
      * Whether setup-first is in force: `required` with a valid date, from the deploy that set it — NOT from the date.
      * From that moment an account with no approved factor holds a setup-only back-office session (it may set up a
-     * device and nothing else); the date is when even that stops, unless a super administrator opened a window.
+     * device and nothing else), at every sign-in — the date never stops it (2026-11-07); it only marks who is overdue.
      */
     public boolean isSetupFirst() {
         return mode == Mode.REQUIRED && requiredFrom != null;
     }
 
-    /** Whether an account's first factor waits for a super administrator ({@code WEBAUTHN_BACKOFFICE_APPROVAL=on}). */
+    /**
+     * Whether an account's first factor waits for a super administrator: {@code WEBAUTHN_BACKOFFICE_APPROVAL=on}, or
+     * setup-first. Under {@code required} an account without a device always gets the setup screen (no deadline refusal
+     * since 2026-11-07), so a password alone could otherwise add its own device and be in.
+     */
     public boolean isFactorApprovalRequired() {
-        return factorApprovalRequired || approvalRequiredElsewhere;
+        return factorApprovalRequired || approvalRequiredElsewhere || isSetupFirst();
     }
 
     // The passkey gateway's own reading of the same variable (webauthn.backofficeApproval): OR-ed in, so that if the two
@@ -245,7 +253,7 @@ public final class SecondFactorPolicy {
     public boolean factorOpensBackoffice(String status) {
         if ("REJECTED".equals(status))
             return false;
-        return !factorApprovalRequired || "APPROVED".equals(status);
+        return !isFactorApprovalRequired() || "APPROVED".equals(status);
     }
 
     /** The configured deadline, or null — only set for `required`. */
@@ -278,9 +286,8 @@ public final class SecondFactorPolicy {
             case REQUIRED:
                 if (requiredFrom == null)
                     return "required WITHOUT a valid date — behaving as optional";
-                return isRequiredNow()
-                       ? "required since " + requiredFrom + " — a back-office login with no confirmed factor is refused"
-                       : "required from " + requiredFrom + " — behaving as optional until then";
+                return "required — an account without an approved device gets the setup screen only (set up by "
+                       + requiredFrom + (isRequiredNow() ? ", passed: those accounts are overdue)" : ")");
             default:
                 return "off — the password alone opens the back office (enrolment stays available)";
         }

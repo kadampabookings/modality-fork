@@ -732,14 +732,9 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
         // finalise only completes a ceremony this start opened, for this account. Started here, on the
         // caller's thread, because it reads the caller from it; its refusal passes through unchanged so the
         // client can tell a wrong password from a failed ceremony. See CredentialChangeProof.
-        // ...and, under setup-first, only while this account may still set up (SecondFactorAccess.mayEnrolNow).
-        // Both started here, on the caller's thread, because both read the caller from it.
-        Future<Boolean> mayEnrol = SecondFactorAccess.mayEnrolNow(accountId);
-        Future<Void> proved = CredentialChangeProof.require(credentials.currentPassword(), dataSourceModel)
-            .compose(ignoredProof -> mayEnrol)
-            .compose(may -> Boolean.TRUE.equals(may) ? Future.<Void>succeededFuture()
-                : Future.failedFuture("[%s] This account needs a super administrator to reopen setup".formatted(
-                    ModalityAuthenticationI18nKeys.AuthnSecondFactorNotEnrolledError)));
+        // No deadline check: under setup-first an account without a device may always add one (David, 2026-11-07) —
+        // as a first factor it waits for a super administrator, whom `required` makes mandatory.
+        Future<Void> proved = CredentialChangeProof.require(credentials.currentPassword(), dataSourceModel);
         // The two reads are independent (both key on ids already at hand) — run them in parallel.
         // The person query carries the same fences as getUserClaims: the session's person must
         // still exist on that account.

@@ -41,3 +41,9 @@ one.modality.crm.shared.services.authn.serial.ListSignInApprovalsCredentialsSeri
 one.modality.crm.shared.services.authn.serial.DecideSignInApprovalCredentialsSerialCodec
 one.modality.crm.shared.services.authn.serial.SecondFactorCoverageCredentialsSerialCodec
 one.modality.crm.shared.services.authn.serial.OpenEnrolmentWindowCredentialsSerialCodec
+one.modality.crm.shared.services.authn.serial.ListSignInRosterCredentialsSerialCodec
+one.modality.crm.shared.services.authn.serial.ListLiveSessionsCredentialsSerialCodec
+one.modality.crm.shared.services.authn.serial.EndSessionsCredentialsSerialCodec
+one.modality.crm.shared.services.authn.serial.BlockAccountCredentialsSerialCodec
+one.modality.crm.shared.services.authn.serial.UnblockAccountCredentialsSerialCodec
+one.modality.crm.shared.services.authn.serial.ListSecurityEventsCredentialsSerialCodec

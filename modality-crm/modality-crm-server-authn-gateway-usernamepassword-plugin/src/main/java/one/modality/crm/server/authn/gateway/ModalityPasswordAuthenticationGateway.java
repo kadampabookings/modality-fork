@@ -344,8 +344,8 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
      * <li>a confirmed factor — hold the proven login in {@link PendingSecondFactorStore} and return the
      *     marker. If the store is full the login fails with the ordinary credentials error rather than
      *     minting: refusing a login is recoverable, minting a one-factor back-office session is not.</li>
-     * <li>no confirmed factor — refused under {@code required}, minted otherwise. Naming the
-     *     requirement discloses nothing here: the caller has already proved the password.</li>
+     * <li>no confirmed factor — a setup-only session under {@code required} (never refused, 2026-11-07), minted
+     *     otherwise.</li>
      * </ul>
      */
     private Future<Object> mintOrAskForSecondFactor(ModalityUserPrincipal principal, Object personId, Object accountId,
@@ -368,14 +368,14 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
                 if (methods.isEmpty()) {
                     // Setup first (`required`): no approved factor means a SETUP-ONLY session — front-office audience,
                     // so the back office refuses it everywhere while its owner adds a device (SecondFactorAccess).
-                    // Before the deadline always; after it only inside a window a super administrator reopened.
-                    if (SecondFactorPolicy.get().isSetupFirst())
-                        return SecondFactorAccess.maySetUpWithoutFactor(accountId).compose(may -> {
-                            if (!Boolean.TRUE.equals(may))
-                                return Future.failedFuture("[%s] This account has no second factor for the back office".formatted(ModalityAuthenticationI18nKeys.AuthnSecondFactorNotEnrolledError));
-                            Console.log(LOG_PREFIX + "Setup-only session for account " + accountId + " (no approved second factor)");
-                            return mintSetupOnly(principal, runId);
-                        });
+                    // Always, the deadline included (David, 2026-11-07): refusing left a super administrator with no
+                    // device locked out, and nobody can set one up for someone else. What keeps a password alone from
+                    // being enough is that the first device waits for a super administrator, which `required` forces
+                    // on (SecondFactorPolicy.isFactorApprovalRequired). The date only marks who is overdue.
+                    if (SecondFactorPolicy.get().isSetupFirst()) {
+                        Console.log(LOG_PREFIX + "Setup-only session for account " + accountId + " (no approved second factor)");
+                        return mintSetupOnly(principal, runId);
+                    }
                     return mintAndPush(principal, isBackofficeAuthentication, runId);
                 }
                 return holdForSecondFactor(personId, accountId, isBackofficeAuthentication, runId, methods);

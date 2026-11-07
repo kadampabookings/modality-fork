@@ -60,6 +60,9 @@ public final class AccountSignInRestrictionStore {
     /** The whole account is closed: the owner reported the device they were signed in on as stolen (V0101). */
     public static final String ACCOUNT_METHOD = "account";
 
+    /** The whole account is closed: a super administrator blocked it on purpose (V0156). */
+    public static final String BLOCKED_METHOD = "blocked";
+
     /**
      * Whether this account's password is closed.
      *
@@ -215,10 +218,50 @@ public final class AccountSignInRestrictionStore {
         "  where frontend_account_id = $1 and method = $2 and lifted_at is null returning id" +
         "), enabled as (" +
         "  update frontend_account set disabled = false" +
-        "  where id = $1 and exists (select 1 from lifted) returning id" +
+        "  where id = $1 and exists (select 1 from lifted)" +
+        // Not while a super administrator's block still holds it closed (V0156): two reasons, two lifts
+        "    and not exists (select 1 from account_sign_in_restriction b where b.frontend_account_id = $1" +
+        "                    and b.method = '" + BLOCKED_METHOD + "' and b.lifted_at is null) returning id" +
         "), audited as (" +
         "  insert into second_factor_reset (frontend_account_id, what, reset_by_person_id, note)" +
         "  select $1, 'ACCOUNT', $3, $4 where exists (select 1 from lifted) returning id" +
+        ") select id from lifted";
+
+    /**
+     * A super administrator's block (V0156): closes a back-office account on purpose, and records who and why. Unlike
+     * the panic button it leaves the passkeys alone — nothing says a device was lost — so an unblock gives back exactly
+     * what was there. Staff only, enforced here as in {@link #DISABLE_ACCOUNT_SQL}. Sessions are ended by the caller.
+     */
+    private static final String BLOCK_ACCOUNT_SQL =
+        "with target as (" +
+        // Not an account disabled for some other reason (by hand, with no row): a block's lift re-enables, and must
+        // never re-open what something else closed. A theft-closed one may be blocked on top (its row guards the lift)
+        "  select id from frontend_account a where id = $1 and backoffice and (disabled is not true or exists (" +
+        "    select 1 from account_sign_in_restriction t where t.frontend_account_id = a.id" +
+        "    and t.method = '" + ACCOUNT_METHOD + "' and t.lifted_at is null))" +
+        "), restricted as (" +
+        "  insert into account_sign_in_restriction (frontend_account_id, method, created_by_person_id, note)" +
+        "  select t.id, $2, $3, $4 from target t on conflict do nothing returning id" +
+        "), disabled as (" +
+        "  update frontend_account set disabled = true where id in (select id from target) returning id" +
+        ") select id from disabled";
+
+    /**
+     * Lifts a super administrator's block, audited as {@code UNBLOCK} with the approver's note. Re-enables the account
+     * only where this lift matched and no theft report (method {@code account}) still holds it closed.
+     */
+    private static final String UNBLOCK_ACCOUNT_SQL =
+        "with lifted as (" +
+        "  update account_sign_in_restriction set lifted_at = now(), lifted_by_person_id = $3" +
+        "  where frontend_account_id = $1 and method = $2 and lifted_at is null returning id" +
+        "), enabled as (" +
+        "  update frontend_account set disabled = false" +
+        "  where id = $1 and exists (select 1 from lifted)" +
+        "    and not exists (select 1 from account_sign_in_restriction t where t.frontend_account_id = $1" +
+        "                    and t.method = '" + ACCOUNT_METHOD + "' and t.lifted_at is null) returning id" +
+        "), audited as (" +
+        "  insert into second_factor_reset (frontend_account_id, what, reset_by_person_id, note)" +
+        "  select $1, 'UNBLOCK', $3, $4 where exists (select 1 from lifted) returning id" +
         ") select id from lifted";
 
     private AccountSignInRestrictionStore() {}
@@ -361,6 +404,36 @@ public final class AccountSignInRestrictionStore {
         return executeRawSubmit(RESCUE_ACCOUNT_SQL, normaliseId(frontendAccountId), ACCOUNT_METHOD,
                                 normaliseId(liftedByPersonId), note)
             .map(AccountSignInRestrictionStore::returnedARow);
+    }
+
+    /**
+     * Blocks a back-office account on a super administrator's decision. The caller ends the sessions afterwards.
+     *
+     * @return whether the account is now disabled (false: not a back-office account, or no such account)
+     */
+    public static Future<Boolean> blockAccount(Object frontendAccountId, Object blockedByPersonId, String note) {
+        return executeRawSubmit(BLOCK_ACCOUNT_SQL, normaliseId(frontendAccountId), BLOCKED_METHOD,
+                                normaliseId(blockedByPersonId), note)
+            .map(AccountSignInRestrictionStore::returnedARow)
+            .onSuccess(blocked -> {
+                if (Boolean.TRUE.equals(blocked)) // the account id, never the address (a log is outside erasure's reach)
+                    Console.log("🛡 Account " + frontendAccountId + " blocked by super administrator person " + blockedByPersonId);
+            });
+    }
+
+    /**
+     * Lifts a super administrator's block, and records it.
+     *
+     * @return whether a block was actually lifted — false when there was none in force
+     */
+    public static Future<Boolean> unblockAccount(Object frontendAccountId, Object liftedByPersonId, String note) {
+        return executeRawSubmit(UNBLOCK_ACCOUNT_SQL, normaliseId(frontendAccountId), BLOCKED_METHOD,
+                                normaliseId(liftedByPersonId), note)
+            .map(AccountSignInRestrictionStore::returnedARow)
+            .onSuccess(lifted -> {
+                if (Boolean.TRUE.equals(lifted))
+                    Console.log("🛡 Account " + frontendAccountId + " unblocked by super administrator person " + liftedByPersonId);
+            });
     }
 
     /**

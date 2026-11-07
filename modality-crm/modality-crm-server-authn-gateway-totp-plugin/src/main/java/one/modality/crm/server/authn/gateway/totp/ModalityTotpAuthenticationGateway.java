@@ -48,6 +48,12 @@ import one.modality.crm.shared.services.authn.LookupSecondFactorsCredentials;
 import one.modality.crm.shared.services.authn.ModalityAuthenticationI18nKeys;
 import one.modality.crm.shared.services.authn.ModalityUserPrincipal;
 import one.modality.crm.shared.services.authn.OpenEnrolmentWindowCredentials;
+import one.modality.crm.shared.services.authn.BlockAccountCredentials;
+import one.modality.crm.shared.services.authn.EndSessionsCredentials;
+import one.modality.crm.shared.services.authn.ListLiveSessionsCredentials;
+import one.modality.crm.shared.services.authn.ListSecurityEventsCredentials;
+import one.modality.crm.shared.services.authn.ListSignInRosterCredentials;
+import one.modality.crm.shared.services.authn.UnblockAccountCredentials;
 import one.modality.crm.shared.services.authn.ProveExistingFactorCredentials;
 import one.modality.crm.shared.services.authn.RegenerateTotpBackupCodesCredentials;
 import one.modality.crm.shared.services.authn.RemoveTotpCredentials;
@@ -137,6 +143,7 @@ public final class ModalityTotpAuthenticationGateway implements ServerAuthentica
     private final DataSourceModel dataSourceModel;
     private final TotpCredentialStore credentialStore = new TotpCredentialStore();
     private final SignInApprovals signInApprovals = new SignInApprovals(credentialStore);
+    private final SignInSecurityBoard securityBoard = new SignInSecurityBoard(signInApprovals);
 
     public ModalityTotpAuthenticationGateway() {
         this(DataSourceModelService.getDefaultDataSourceModel());
@@ -401,7 +408,18 @@ public final class ModalityTotpAuthenticationGateway implements ServerAuthentica
                || updateCredentialsArgument instanceof ListSignInApprovalsCredentials
                || updateCredentialsArgument instanceof DecideSignInApprovalCredentials
                || updateCredentialsArgument instanceof SecondFactorCoverageCredentials
-               || updateCredentialsArgument instanceof OpenEnrolmentWindowCredentials;
+               || updateCredentialsArgument instanceof OpenEnrolmentWindowCredentials
+               || isSignInSecurityOperation(updateCredentialsArgument);
+    }
+
+    /** The super administrators' Sign-in security page (SignInSecurityBoard): its reads and its two controls. */
+    private static boolean isSignInSecurityOperation(Object updateCredentialsArgument) {
+        return updateCredentialsArgument instanceof ListSignInRosterCredentials
+               || updateCredentialsArgument instanceof ListLiveSessionsCredentials
+               || updateCredentialsArgument instanceof ListSecurityEventsCredentials
+               || updateCredentialsArgument instanceof EndSessionsCredentials
+               || updateCredentialsArgument instanceof BlockAccountCredentials
+               || updateCredentialsArgument instanceof UnblockAccountCredentials;
     }
 
     @Override
@@ -459,6 +477,30 @@ public final class ModalityTotpAuthenticationGateway implements ServerAuthentica
             return requireSuperAdmin(principal).compose(standing -> standing != ApproverStanding.USED_FACTOR
                 ? notPermittedWithoutFactor()
                 : signInApprovals.openWindow(principal, accountId, cred.accountId(), cred.note()));
+        // The Sign-in security page: reads behind the same super-administrator fence, writes behind a session that
+        // presented a second factor as well (the reset's rule) — signing someone out or blocking them is a decision
+        // about somebody else's access, never to rest on a password
+        if (updateCredentialsArgument instanceof ListSignInRosterCredentials)
+            return requireSuperAdmin(principal).compose(ignored -> securityBoard.rosterJson());
+        if (updateCredentialsArgument instanceof ListLiveSessionsCredentials) {
+            // Read here, on the caller's thread: the listing marks the caller's own session
+            String ownFamilyId = StateAccessor.getSessionFamilyId(ThreadLocalStateHolder.getThreadLocalState());
+            return requireSuperAdmin(principal).compose(ignored -> securityBoard.liveSessionsJson(ownFamilyId));
+        }
+        if (updateCredentialsArgument instanceof ListSecurityEventsCredentials)
+            return requireSuperAdmin(principal).compose(ignored -> securityBoard.eventsJson());
+        if (updateCredentialsArgument instanceof EndSessionsCredentials cred)
+            return requireSuperAdmin(principal).compose(standing -> standing != ApproverStanding.USED_FACTOR
+                ? notPermittedWithoutFactor()
+                : securityBoard.endSessions(principal, accountId, cred.accountId(), cred.sessionId(), cred.note()));
+        if (updateCredentialsArgument instanceof BlockAccountCredentials cred)
+            return requireSuperAdmin(principal).compose(standing -> standing != ApproverStanding.USED_FACTOR
+                ? notPermittedWithoutFactor()
+                : securityBoard.block(principal, accountId, cred.accountId(), cred.note()));
+        if (updateCredentialsArgument instanceof UnblockAccountCredentials cred)
+            return requireSuperAdmin(principal).compose(standing -> standing != ApproverStanding.USED_FACTOR
+                ? notPermittedWithoutFactor()
+                : securityBoard.unblock(principal, accountId, cred.accountId(), cred.note()));
         // Unreachable while acceptsUpdateCredentialsArgument and this chain list the same types —
         // this arm is what keeps a future type from becoming a ClassCastException
         return enrolmentFailure();
@@ -485,21 +527,12 @@ public final class ModalityTotpAuthenticationGateway implements ServerAuthentica
         // session alone (a laptop left open) must not plant a factor of its own. Its refusal passes through unchanged
         // so the client can ask for the password and retry. Started here, on the caller's thread.
         Future<Void> proved = CredentialChangeProof.require(credentials.currentPassword(), dataSourceModel);
-        // ...and, under setup-first, only while this account may still set up (SecondFactorAccess.mayEnrolNow) — also
-        // read on this thread
-        Future<Boolean> mayEnrol = SecondFactorAccess.mayEnrolNow(accountId);
+        // No deadline check: under setup-first an account without a device may always add one (David, 2026-11-07) —
+        // as a first factor it waits for a super administrator, whom `required` makes mandatory.
         // Independent reads (both key on ids already at hand) — run them together. The person query
         // carries the same fences as getUserClaims: the session's person must still exist on that
         // account, and the account must still be allowed on this app.
-        return proved.compose(ignoredProof -> mayEnrol).compose(may -> {
-            if (!Boolean.TRUE.equals(may)) {
-                Console.log(LOG_PREFIX + "Enrolment refused for account " + accountId + ": the setup deadline has passed"
-                            + " and no window is open");
-                return Future.failedFuture("[%s] This account needs a super administrator to reopen setup".formatted(
-                    ModalityAuthenticationI18nKeys.AuthnSecondFactorNotEnrolledError));
-            }
-            return Future.succeededFuture();
-        }).compose(ignoredMay -> Future.all(
+        return proved.compose(ignoredProof -> Future.all(
             EntityStore.create(dataSourceModel)
                 .<Person>executeQuery("select frontendAccount.username from Person where id=$1 and frontendAccount.(id=$2 and !disabled and ($3=false or backoffice))",
                     principal.getUserPersonId(), accountId, isBackoffice),
