@@ -1055,6 +1055,7 @@
     "accepted": "boolean",
     "aliasFirstName": "string",
     "aliasLastName": "string",
+    "answerSeenDate": "Temporal.Instant",
     "createdAliasPerson": "Person",
     "creationDate": "Temporal.Instant",
     "invitee": "Person",

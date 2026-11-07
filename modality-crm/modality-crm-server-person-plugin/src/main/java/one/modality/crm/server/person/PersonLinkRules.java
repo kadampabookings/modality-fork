@@ -361,7 +361,7 @@ final class PersonLinkRules {
             RELINK_MANAGER_VIEW_SQL, CREATE_MANAGER_VIEW_SQL, USE_INVITATION_SQL, REVOKE_LINK_SQL);
     }
 
-    private static SubmitArgument statement(String sql, Object... parameters) {
+    static SubmitArgument statement(String sql, Object... parameters) {
         return new SubmitArgumentBuilder()
             .setDataSourceId(DataSourceModelService.getDefaultDataSourceId())
             .setStatement(sql) // a constant; only the parameters below come from anywhere else
@@ -383,7 +383,7 @@ final class PersonLinkRules {
         return left != null && left.equals(right);
     }
 
-    private static long countAt(QueryResult result) {
+    static long countAt(QueryResult result) {
         if (result == null || result.getRowCount() == 0)
             return 0;
         Object value = result.getValue(0, 0);

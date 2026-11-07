@@ -142,6 +142,15 @@ public class PersonLinkCheck {
         // without the deny its rules are bypassable by not calling it. Neither is safe alone.
         check("ClaimMembersEndpoint IS registered", services.contains("ClaimMembersEndpoint"));
 
+        // --- closing an invitation without a link (V0157) ---
+        // Declining and cancelling were client writes nobody checked the party of. The table closes to
+        // clients and three endpoints replace them; as with the claim, the deny and the endpoints are safe
+        // together and not apart — with the deny alone, members could no longer decline or cancel.
+        check("invitation is CLOSED to clients", secrets.contains("denyTable(\"invitation\")"));
+        check("DeclineInvitationEndpoint IS registered", services.contains("DeclineInvitationEndpoint"));
+        check("CancelInvitationEndpoint IS registered", services.contains("CancelInvitationEndpoint"));
+        check("SeeInvitationAnswerEndpoint IS registered", services.contains("SeeInvitationAnswerEndpoint"));
+
         System.out.println(pass + " passed, " + fail + " failed");
         if (fail > 0)
             System.exit(1);

@@ -131,15 +131,22 @@ final class ClientWriteSecrets {
         // is the point rather than a side effect. Invitations are created by
         // modality/service/person/createInvitation, which takes the inviter from the session.
         //
-        // `pending` and `accepted` are deliberately NOT denied: declining still happens client-side, and
-        // setting them establishes no link on its own.
-        //
         // Checked against both apps before being listed, as the account columns were: the React front
         // office creates invitations through the endpoint, and the React back office writes none. The
         // legacy JavaFX front office DOES still insert them (InvitationLinkService), and would be
         // refused — but only the back-office GWT app is built and deployed, so nothing live reaches it.
         for (String column : new String[] { "token", "inviter_id", "invitee_id" })
             denyColumn("invitation", column);
+        // ...and now the whole table (V0157). `pending` and `accepted` were left open while declining was a
+        // client write, on the grounds that closing an invitation establishes no link. True, but nothing
+        // asked whose invitation it was: any member could close anybody's by id. Once a decline is SHOWN
+        // to the inviter ("Kiran declined on 7 Nov"), a forged one is a false statement about a real
+        // person. Declining, cancelling and the inviter's "seen" mark are endpoints now
+        // (InvitationAnswerRules), each checking the caller is the right party, and the React front
+        // office writes invitations nowhere else — so the table closes: no update, no delete, no insert.
+        // The column rules above stay, for the reason recorded with them, and so a reopened table would
+        // still not reopen authorship.
+        denyTable("invitation");
         // A mail's delivery record, and the sign-in link a mail can be pointed at.
         //
         // `transmitted` is what stops a mail being sent twice, so a client able to clear it can make the
@@ -200,7 +207,7 @@ final class ClientWriteSecrets {
      * actually declared. It used to be fixed text, and went stale the day the payment tables were
      * added: a line operators read to learn what is closed must not be able to disagree with the list.
      * Same names as ClientWriteDenyList's on purpose — PersonLinkCheck reads this file for
-     * denyTable("person") and denyColumn("invitation".
+     * denyTable("person"), denyColumn("invitation" and denyTable("invitation").
      */
     private static final Set<String> DENIED_TABLES = new LinkedHashSet<>();
     private static final Map<String, Set<String>> DENIED_COLUMNS = new LinkedHashMap<>();
