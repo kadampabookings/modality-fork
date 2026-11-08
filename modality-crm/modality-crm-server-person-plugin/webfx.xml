@@ -35,6 +35,7 @@
         <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.crm.server.person.DeclineInvitationEndpoint</provider>
         <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.crm.server.person.CancelInvitationEndpoint</provider>
         <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.crm.server.person.SeeInvitationAnswerEndpoint</provider>
+        <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.crm.server.person.AcceptDeclinedInvitationEndpoint</provider>
         <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.crm.server.person.UpdatePersonDetailsEndpoint</provider>
         <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.crm.server.person.AddMemberEndpoint</provider>
         <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.crm.server.person.CreateAccountOwnerEndpoint</provider>

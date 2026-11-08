@@ -93,7 +93,8 @@ final class PersonLinkRules {
         "select i.inviter_id, i.invitee_id, i.inviter_payer, i.pending, i.accepted," +
         "       inviter.frontend_account_id, invitee.frontend_account_id, lower(invitee.email)," +
         "       i.alias_first_name, i.alias_last_name, inviter.first_name, inviter.last_name," +
-        "       (i.creation_date < now() - interval '7 days') as expired" +
+        "       (i.creation_date < now() - interval '7 days') as expired," +
+        "       (i.usage_date is not null) as answered" +
         " from invitation i" +
         " join person inviter on inviter.id = i.inviter_id" +
         " join person invitee on invitee.id = i.invitee_id" +
@@ -169,6 +170,17 @@ final class PersonLinkRules {
         "update invitation set pending = false, accepted = true, usage_date = now()" +
         " where id = $1 and pending = true";
 
+    /**
+     * Accepting after all, an invitation the caller declined (V0157 dates a decline; a cancellation is
+     * undated and is not reopened). Every condition of "a decline by this caller" is repeated here, so a
+     * state that changed since the read — the inviter's own answer, a second click — matches nothing.
+     *
+     * <p>{@code answer_seen_date} is cleared: the inviter saw a decline, and the acceptance is news to them.
+     */
+    private static final String ACCEPT_DECLINED_SQL =
+        "update invitation set accepted = true, usage_date = now(), answer_seen_date = null" +
+        " where id = $1 and invitee_id = $2 and pending = false and accepted = false and usage_date is not null";
+
     /** Whether the link this approval was for is now there. */
     private static final String LINK_PRESENT_SQL =
         "select count(*) from person where frontend_account_id = $2 and account_person_id = $1" +
@@ -211,6 +223,30 @@ final class PersonLinkRules {
      */
     static Future<Boolean> approveInvitation(Object rawInvitationId, Object callerPersonId, Object callerAccountId,
                                              Object subject, Object body, Object callerUserId) {
+        return approve(rawInvitationId, callerPersonId, callerAccountId, subject, body, callerUserId, false);
+    }
+
+    /**
+     * Accepts, after all, an invitation the caller declined — the same link, the same checks, from the other
+     * starting state.
+     *
+     * <p><b>Not a way round the email link.</b> {@link #approveInvitation} still refuses anything that is not
+     * pending, so a link mailed with the invitation cannot bring a declined one back; this is a separate
+     * address the members page calls, and the session is the proof, as for approval.
+     *
+     * <p>The seven-day limit applies unchanged, counted from the invitation's creation. It is what protects
+     * the INVITER: "please manage my bookings", accepted months after it was declined, would open their
+     * bookings on a consent they gave long ago. Past it, the person asks for a new request.
+     */
+    static Future<Boolean> acceptDeclinedInvitation(Object rawInvitationId, Object callerPersonId,
+                                                    Object callerAccountId, Object subject, Object body,
+                                                    Object callerUserId) {
+        return approve(rawInvitationId, callerPersonId, callerAccountId, subject, body, callerUserId, true);
+    }
+
+    private static Future<Boolean> approve(Object rawInvitationId, Object callerPersonId, Object callerAccountId,
+                                           Object subject, Object body, Object callerUserId,
+                                           boolean afterDecline) {
         Object invitationId = Numbers.toLong(rawInvitationId);
         if (invitationId == null)
             return MemberSessionGuard.refused();
@@ -226,6 +262,8 @@ final class PersonLinkRules {
                 Object inviteeId = result.getValue(0, 1);
                 boolean inviterPays = isTrue(result.getValue(0, 2));
                 boolean pending = isTrue(result.getValue(0, 3));
+                boolean accepted = isTrue(result.getValue(0, 4));
+                boolean answered = isTrue(result.getValue(0, 13));
                 Object inviterAccountId = result.getValue(0, 5);
                 Object inviteeEmail = result.getValue(0, 7);
                 // THE PROOF: the caller is the person this was sent to. Not "knows its token", which is
@@ -233,15 +271,21 @@ final class PersonLinkRules {
                 // which approved the link with nobody signed in at all.
                 if (!sameId(inviteeId, callerPersonId))
                     return refusal(INVITATION_NOT_YOURS_KEY);
-                if (!pending)
+                // Approval takes only a pending invitation; acceptance after all only a decline (closed,
+                // not accepted, dated). A cancelled one is neither — the inviter withdrew it.
+                boolean rightState = afterDecline ? !pending && !accepted && answered : pending;
+                if (!rightState)
                     return refusal(INVITATION_ALREADY_USED_KEY);
                 if (isTrue(result.getValue(0, 12)))
                     return refusal(INVITATION_EXPIRED_KEY);
+                SubmitArgument spend = afterDecline
+                    ? statement(ACCEPT_DECLINED_SQL, invitationId, callerPersonId)
+                    : statement(USE_INVITATION_SQL, invitationId);
                 Future<Boolean> approved = inviterPays
                     ? approveValidationRequest(invitationId, callerPersonId, inviterAccountId, inviteeEmail,
-                        result.getValue(0, 8), result.getValue(0, 9), callerUserId)
+                        result.getValue(0, 8), result.getValue(0, 9), spend, callerUserId)
                     : approveManagerInvitation(invitationId, inviterId, callerAccountId,
-                        result.getValue(0, 10), result.getValue(0, 11), callerUserId);
+                        result.getValue(0, 10), result.getValue(0, 11), spend, callerUserId);
                 // "Your request was approved" goes to the INVITER, and the operation already knows who
                 // that is — it read the row to decide the caller was allowed to approve it. Nothing
                 // about the recipient comes from the caller. Only on success: a link that was not
@@ -260,7 +304,7 @@ final class PersonLinkRules {
     private static Future<Boolean> approveValidationRequest(Object invitationId, Object callerPersonId,
                                                             Object inviterAccountId, Object inviteeEmail,
                                                             Object aliasFirstName, Object aliasLastName,
-                                                            Object callerUserId) {
+                                                            SubmitArgument spend, Object callerUserId) {
         if (inviterAccountId == null) // an inviter with no account has no member row to link
             return refusal(LINK_NOT_ESTABLISHED_KEY);
         // A member with no address of their own cannot be identified by one. Both guards below key on
@@ -274,17 +318,18 @@ final class PersonLinkRules {
         batch.add(statement(RELINK_BY_LINK_SQL, callerPersonId, inviterAccountId));
         batch.add(statement(CREATE_LINKED_MEMBER_SQL, callerPersonId, inviterAccountId, inviteeEmail,
             aliasFirstName, aliasLastName));
-        return runAndConfirmLink(batch, invitationId, callerPersonId, inviterAccountId, callerUserId);
+        return runAndConfirmLink(batch, invitationId, callerPersonId, inviterAccountId, spend, callerUserId);
     }
 
     /** The inviter asked the caller to manage their bookings: the caller's account gains their row. */
     private static Future<Boolean> approveManagerInvitation(Object invitationId, Object inviterId,
                                                             Object callerAccountId, Object inviterFirstName,
-                                                            Object inviterLastName, Object callerUserId) {
+                                                            Object inviterLastName, SubmitArgument spend,
+                                                            Object callerUserId) {
         List<SubmitArgument> batch = new ArrayList<>();
         batch.add(statement(RELINK_MANAGER_VIEW_SQL, inviterId, callerAccountId));
         batch.add(statement(CREATE_MANAGER_VIEW_SQL, inviterId, callerAccountId, inviterFirstName, inviterLastName));
-        return runAndConfirmLink(batch, invitationId, inviterId, callerAccountId, callerUserId);
+        return runAndConfirmLink(batch, invitationId, inviterId, callerAccountId, spend, callerUserId);
     }
 
     /**
@@ -303,7 +348,8 @@ final class PersonLinkRules {
      * recover from.
      */
     private static Future<Boolean> runAndConfirmLink(List<SubmitArgument> batch, Object invitationId,
-                                                     Object linkedPersonId, Object accountId, Object callerUserId) {
+                                                     Object linkedPersonId, Object accountId,
+                                                     SubmitArgument spend, Object callerUserId) {
         return ServerWrite.asServerActingFor(callerUserId,
                 () -> SubmitService.executeSubmitBatch(new Batch<>(batch.toArray(new SubmitArgument[0]))))
             .compose(ignored -> ServerWrite.asServer(() -> QueryService.executeQuery(new QueryArgumentBuilder()
@@ -314,12 +360,11 @@ final class PersonLinkRules {
             .compose(after -> {
                 if (countAt(after) == 0) {
                     Console.log("🔗 Invitation " + invitationId + " approved but no link resulted for person "
-                                + linkedPersonId + " in account " + accountId + " — left pending, so it can be retried");
+                                + linkedPersonId + " in account " + accountId + " — left as it was, so it can be retried");
                     return refusal(LINK_NOT_ESTABLISHED_KEY);
                 }
                 return ServerWrite.asServerActingFor(callerUserId,
-                        () -> SubmitService.executeSubmitBatch(new Batch<>(new SubmitArgument[] {
-                            statement(USE_INVITATION_SQL, invitationId) })))
+                        () -> SubmitService.executeSubmitBatch(new Batch<>(new SubmitArgument[] { spend })))
                     .map(ignored -> true);
             });
     }
@@ -358,7 +403,8 @@ final class PersonLinkRules {
      */
     static List<String> writeStatements() {
         return List.of(LINK_EXISTING_MEMBER_SQL, RELINK_BY_LINK_SQL, CREATE_LINKED_MEMBER_SQL,
-            RELINK_MANAGER_VIEW_SQL, CREATE_MANAGER_VIEW_SQL, USE_INVITATION_SQL, REVOKE_LINK_SQL);
+            RELINK_MANAGER_VIEW_SQL, CREATE_MANAGER_VIEW_SQL, USE_INVITATION_SQL, ACCEPT_DECLINED_SQL,
+            REVOKE_LINK_SQL);
     }
 
     static SubmitArgument statement(String sql, Object... parameters) {

@@ -49,6 +49,19 @@ public class PersonLinkCheck {
         check("the invitation is marked used", use.contains("pending = false") && use.contains("accepted = true"));
         check("only a pending invitation can be spent", use.contains("and pending = true"));
 
+        // --- accepting after all: only the invitee's own dated decline, and the inviter is told again ---
+        String acceptDeclined = writes.stream().filter(s -> s.startsWith("update invitation")
+            && s.contains("pending = false and accepted = false")).findFirst().orElse("");
+        check("there is an accept-after-decline write", !acceptDeclined.isEmpty());
+        check("only the invitee accepts after all", acceptDeclined.contains("invitee_id = $2")
+            && !acceptDeclined.contains("inviter_id"));
+        check("only a DATED decline is reopened, never a cancellation",
+            acceptDeclined.contains("usage_date is not null"));
+        check("never a pending invitation (that is approval's)", !acceptDeclined.contains("pending = true"));
+        check("the acceptance is news to the inviter (seen date cleared)",
+            acceptDeclined.contains("answer_seen_date = null"));
+        check("accepting after all names one row", acceptDeclined.contains("where id = $1"));
+
         // --- linking an existing member cannot steal one already linked elsewhere ---
         String link = writes.stream().filter(s -> s.startsWith("update person set account_person_id")).findFirst().orElse("");
         check("linking skips a row linked to somebody else",
@@ -150,6 +163,7 @@ public class PersonLinkCheck {
         check("DeclineInvitationEndpoint IS registered", services.contains("DeclineInvitationEndpoint"));
         check("CancelInvitationEndpoint IS registered", services.contains("CancelInvitationEndpoint"));
         check("SeeInvitationAnswerEndpoint IS registered", services.contains("SeeInvitationAnswerEndpoint"));
+        check("AcceptDeclinedInvitationEndpoint IS registered", services.contains("AcceptDeclinedInvitationEndpoint"));
 
         System.out.println(pass + " passed, " + fail + " failed");
         if (fail > 0)
