@@ -51,6 +51,8 @@ final class InvitationRules {
     /** An alias longer than the column, which is a caller sending something unusable. */
     static final String ALIAS_TOO_LONG_KEY = "InvitationAliasTooLongError";
     static final String NOT_CREATED_KEY = "InvitationNotCreatedError";
+    /** No account signs in with that address. Says no more than emailHasAccount does, at the same rate. */
+    static final String NO_ACCOUNT_KEY = "InvitationNoAccountError";
 
     /**
      * 32 bytes, URL-safe and unpadded, so it survives being pasted into a link.
@@ -59,6 +61,18 @@ final class InvitationRules {
      * one per call is the reliable way to make token generation slow enough to notice.
      */
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+
+    /**
+     * The person an account is, found by the address it signs in with — the same test as
+     * emailHasAccount ({@code frontend_account.username}). Several owner rows can share an account; the
+     * one whose own address is the sign-in address is preferred, then the oldest.
+     */
+    private static final String ACCOUNT_HOLDER_SQL =
+        "select p.id, p.frontend_account_id from person p" +
+        " join frontend_account fa on fa.id = p.frontend_account_id" +
+        " where fa.corporation_id = 1 and lower(fa.username) = lower($1)" +
+        "   and p.owner = true and p.removed = false" +
+        " order by (lower(p.email) = lower(fa.username)) desc nulls last, p.id limit 1";
 
     private static final String INVITEE_SQL =
         "select count(*) from person where id = $1 and removed = false";
@@ -129,6 +143,39 @@ final class InvitationRules {
             });
     }
 
+    /**
+     * Creates an invitation to whoever signs in with {@code email}, without telling the caller who that is.
+     *
+     * <p>The screens used to find the account holder themselves — a client read of {@code person} by
+     * sign-in address that answered with their id and full name, for any address any member typed
+     * (tester, 2026-11-09). Resolving it here, the caller learns only what emailHasAccount already says:
+     * whether such an account exists. The name the booker knows them by is theirs to type, as the alias.
+     *
+     * @param callerAccountId the caller's own account, from the principal: inviting an address of one's
+     *                        own account is inviting oneself
+     */
+    static Future<Object> createInvitationByEmail(String email, boolean inviterPays,
+                                                   Object aliasFirstName, Object aliasLastName,
+                                                   Object subject, Object body,
+                                                   Object callerPersonId, Object callerAccountId,
+                                                   Object callerUserId) {
+        return ServerWrite.asServer(() -> QueryService.executeQuery(new QueryArgumentBuilder()
+                .setDataSourceId(DataSourceModelService.getDefaultDataSourceId())
+                .setStatement(ACCOUNT_HOLDER_SQL)
+                .setParameters(email)
+                .build()))
+            .compose(holder -> {
+                if (holder == null || holder.getRowCount() == 0)
+                    return refusal(NO_ACCOUNT_KEY);
+                Object inviteeId = holder.getValue(0, 0);
+                Object inviteeAccountId = holder.getValue(0, 1);
+                if (PersonLinkRules.sameId(inviteeAccountId, callerAccountId))
+                    return refusal(CANNOT_INVITE_YOURSELF_KEY);
+                return createInvitation(inviteeId, inviterPays, aliasFirstName, aliasLastName, subject, body,
+                    callerPersonId, callerUserId);
+            });
+    }
+
     private static Future<String> createAndReadBackToken(Object inviteeId, boolean inviterPays,
                                                          Object aliasFirstName, Object aliasLastName,
                                                          Object callerPersonId, Object callerUserId) {
@@ -160,6 +207,11 @@ final class InvitationRules {
                 String pendingToken = rawToken == null ? null : String.valueOf(rawToken);
                 return pendingToken == null ? refusal(NOT_CREATED_KEY) : Future.succeededFuture(pendingToken);
             });
+    }
+
+    /** The statement that finds an account holder by address, for a check to read without a database. */
+    static String accountHolderStatement() {
+        return ACCOUNT_HOLDER_SQL;
     }
 
     /** The statement that creates one, for a check to read without a database. */

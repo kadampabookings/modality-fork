@@ -67,6 +67,12 @@ public class PersonLinkCheck {
         check("linking skips a row linked to somebody else",
             link.contains("account_person_id is null or account_person_id = $1"));
         check("linking never touches an owner", link.contains("owner = false"));
+        // A booker adding someone by address knows only their sign-in address (2026-11-09); some account
+        // holders' own email differs. Either must find the row, or approval adds a twin.
+        check("linking matches the member row on either address", link.contains("lower(email) in ($3, $4)"));
+        String create = writes.stream().filter(s -> s.startsWith("insert into person (first_name, last_name, frontend_account_id, account_person_id, owner)")
+            && s.contains("$5, $2, $1")).findFirst().orElse("");
+        check("and creating one is skipped when either address already has a row", create.contains("lower(email) in ($3, $6)"));
         check("linking never touches a removed row", link.contains("removed = false"));
 
         // Both directions must be able to re-link after a withdrawal, or "ask again" works one way only.

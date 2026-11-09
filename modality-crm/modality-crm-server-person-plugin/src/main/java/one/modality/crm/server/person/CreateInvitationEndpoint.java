@@ -1,9 +1,11 @@
 package one.modality.crm.server.person;
 
+import dev.webfx.platform.async.Future;
 import dev.webfx.platform.util.Arrays;
 import dev.webfx.stack.com.bus.call.spi.AsyncFunctionBusCallEndpoint;
 import dev.webfx.stack.session.state.StateAccessor;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
+import one.modality.crm.server.authn.gateway.shared.CallerRateLimit;
 
 /**
  * Creates an invitation from the caller, and returns the token its email will carry.
@@ -18,7 +20,10 @@ import dev.webfx.stack.session.state.ThreadLocalStateHolder;
  * wrong shape even where the generator is sound: the capability an email carries should not be picked by
  * the code that will later present it. Returned once, because the inviter's email needs it.
  *
- * <p>Argument: {@code [inviteePersonId, inviterPays, aliasFirstName, aliasLastName]}. {@code inviterPays}
+ * <p>Argument: {@code [invitee, inviterPays, aliasFirstName, aliasLastName, subject, body]}, where
+ * {@code invitee} is a person id (a person the caller already lists) or a sign-in address. By address the
+ * server finds the account holder and the caller learns nothing about them — not their id, not their
+ * name: see {@link InvitationRules#createInvitationByEmail}. {@code inviterPays}
  * true means "let me book for you", false means "please manage my bookings"; they link opposite ways, and
  * the invitation is where that direction is recorded.
  *
@@ -50,6 +55,22 @@ public final class CreateInvitationEndpoint extends AsyncFunctionBusCallEndpoint
             Object subject = Arrays.length(a) > 4 ? a[4] : null;
             Object body = Arrays.length(a) > 5 ? a[5] : null;
             Object callerUserId = StateAccessor.getUserId(ThreadLocalStateHolder.getThreadLocalState());
+            if (inviteeId instanceof String text) {
+                String email = EmailHasAccountEndpoint.emailOf(new Object[] { text });
+                if (email == null)
+                    return MemberSessionGuard.refused();
+                // By address this answers "is there an account?" — the question emailHasAccount answers,
+                // so it is held to the same limit. The address stamp is read on the caller's thread (it is
+                // gone after the first async step); the limit is spent only once the caller is known to
+                // be a verified member, so anonymous calls cannot use up anyone's budget.
+                String clientAddress = ThreadLocalStateHolder.getClientAddress();
+                return MemberSessionGuard.whenCallerIsVerifiedMember((personId, accountId) ->
+                    !CallerRateLimit.EMAIL_LOOKUP.tryAcquire(clientAddress)
+                        ? Future.failedFuture("[" + EmailHasAccountEndpoint.RATE_LIMITED_KEY
+                                              + "] Too many address checks, please try again later")
+                        : InvitationRules.createInvitationByEmail(email, inviterPays, aliasFirstName, aliasLastName,
+                            subject, body, personId, accountId, callerUserId));
+            }
             return MemberSessionGuard.whenCallerIsVerifiedMember((personId, accountId) ->
                 InvitationRules.createInvitation(inviteeId, inviterPays, aliasFirstName, aliasLastName,
                     subject, body, personId, callerUserId));

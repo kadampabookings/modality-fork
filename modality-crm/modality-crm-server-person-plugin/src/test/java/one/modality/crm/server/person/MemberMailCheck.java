@@ -22,7 +22,7 @@ public class MemberMailCheck {
         else { fail++; System.out.println("  FAIL " + what); }
     }
 
-    private static final String BASE = "modality-fork/modality-crm/modality-crm-server-person-plugin/"
+    static final String BASE = "modality-fork/modality-crm/modality-crm-server-person-plugin/"
                                        + "src/main/java/one/modality/crm/server/person/";
 
     private static int countOf(String text, String needle) {
@@ -48,6 +48,14 @@ public class MemberMailCheck {
             !resolved.contains("{{APPROVE_LINK}}") && !resolved.contains("{{DECLINE_LINK}}"));
         check("the account link needs no token",
             MemberMail.resolveLinks("{{ACCOUNT_LINK}}", "https://x.org", null).equals("https://x.org/members"));
+        // An "accepted" email's button opens the tab the email names (tester, 2026-11-09).
+        check("the account link can open a My profile tab",
+            MemberMail.resolveLinks("{{ACCOUNT_LINK}}", "https://x.org", null, MemberMail.PEOPLE_WHO_BOOK_FOR_ME_PATH)
+                .equals("https://x.org/user-profile/people-who-book-for-me"));
+        String approveSource = AccountOwnerCheck.between(
+            AccountOwnerCheck.readSource(BASE + "PersonLinkRules.java"), "private static Future<Boolean> approve(", "\n    }");
+        check("the approved email picks the tab from the invitation's direction",
+            approveSource.contains("inviterPays ? MemberMail.PEOPLE_I_BOOK_FOR_PATH : MemberMail.PEOPLE_WHO_BOOK_FOR_ME_PATH"));
         check("with no token, an approve link degrades to the account page rather than a broken url",
             MemberMail.resolveLinks("{{APPROVE_LINK}}", "https://x.org", null).equals("https://x.org/members"));
 
@@ -58,7 +66,9 @@ public class MemberMailCheck {
         // it refuses to support, and an earlier version of this assertion failed on that prose. Three
         // checks in this package have now been written that way and two of them shipped green for the
         // wrong reason; assert on the code, never on the file.
-        String resolveBody = AccountOwnerCheck.between(source, "static String resolveLinks", "\n    }");
+        // The overload that substitutes (the shorter one only delegates to it with the default page).
+        String resolveBody = AccountOwnerCheck.between(source,
+            "static String resolveLinks(String body, String baseUrl, String token, String accountPath)", "\n    }");
         check("resolveLinks was found", !resolveBody.isEmpty());
         check("its substitutions are the three whole links and nothing else",
             countOf(resolveBody, ".replace(") == 3);

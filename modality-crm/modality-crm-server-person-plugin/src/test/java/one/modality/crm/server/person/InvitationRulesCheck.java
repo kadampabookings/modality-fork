@@ -59,6 +59,20 @@ public class InvitationRulesCheck {
         // --- asking twice is the same request with two live tokens, so it is refused ---
         check("creation is guarded against a second pending request",
             create.contains("where not exists") && create.contains("and pending = true"));
+        // By address (tester, 2026-11-09): the server finds the account holder; the caller learns nothing
+        // about them beyond what emailHasAccount says, and at the same rate.
+        String holder = InvitationRules.accountHolderStatement();
+        check("an address is resolved by the sign-in address, not a member's own email",
+            holder.contains("lower(fa.username) = lower($1)"));
+        check("only an account's own owner row, never a removed one",
+            holder.contains("p.owner = true") && holder.contains("p.removed = false"));
+        String endpoint = AccountOwnerCheck.readSource(MemberMailCheck.BASE + "CreateInvitationEndpoint.java");
+        String byAddress = AccountOwnerCheck.between(endpoint, "if (inviteeId instanceof String text)", "\n            }");
+        check("inviting by address is rate-limited like emailHasAccount",
+            byAddress.contains("CallerRateLimit.EMAIL_LOOKUP.tryAcquire("));
+        check("and passes the caller's account, so their own address is refused",
+            byAddress.contains("createInvitationByEmail(email, inviterPays, aliasFirstName, aliasLastName,")
+            && byAddress.contains("personId, accountId, callerUserId"));
         check("the guard keys on the pair AND the direction",
             create.contains("inviter_id = $1") && create.contains("invitee_id = $2")
                 && create.contains("inviter_payer = $3"));

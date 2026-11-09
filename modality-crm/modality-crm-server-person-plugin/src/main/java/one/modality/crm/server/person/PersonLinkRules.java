@@ -94,10 +94,11 @@ final class PersonLinkRules {
         "       inviter.frontend_account_id, invitee.frontend_account_id, lower(invitee.email)," +
         "       i.alias_first_name, i.alias_last_name, inviter.first_name, inviter.last_name," +
         "       (i.creation_date < now() - interval '7 days') as expired," +
-        "       (i.usage_date is not null) as answered" +
+        "       (i.usage_date is not null) as answered, lower(invitee_account.username)" +
         " from invitation i" +
         " join person inviter on inviter.id = i.inviter_id" +
         " join person invitee on invitee.id = i.invitee_id" +
+        " left join frontend_account invitee_account on invitee_account.id = invitee.frontend_account_id" +
         " where i.id = $1";
 
     /**
@@ -110,7 +111,7 @@ final class PersonLinkRules {
      */
     private static final String LINK_EXISTING_MEMBER_SQL =
         "update person set account_person_id = $1, account_person_revoked_date = null" +
-        " where frontend_account_id = $2 and lower(email) = $3" +
+        " where frontend_account_id = $2 and lower(email) in ($3, $4)" +
         "   and owner = false and removed = false" +
         "   and (account_person_id is null or account_person_id = $1)";
 
@@ -140,7 +141,7 @@ final class PersonLinkRules {
         " where not exists (select 1 from person where frontend_account_id = $2" +
         "                   and account_person_id = $1 and removed = false)" +
         "   and not exists (select 1 from person where frontend_account_id = $2" +
-        "                   and lower(email) = $3 and owner = false and removed = false)";
+        "                   and lower(email) in ($3, $6) and owner = false and removed = false)";
 
     /**
      * The manager's view of the person who invited them.
@@ -266,6 +267,10 @@ final class PersonLinkRules {
                 boolean answered = isTrue(result.getValue(0, 13));
                 Object inviterAccountId = result.getValue(0, 5);
                 Object inviteeEmail = result.getValue(0, 7);
+                // The address they sign in with. A booker adding someone by address now knows only
+                // this one (their name and own email stay private), and the two differ for some
+                // account holders: the member row is matched on either, or approval would add a twin.
+                Object inviteeSignInAddress = result.getValue(0, 14);
                 // THE PROOF: the caller is the person this was sent to. Not "knows its token", which is
                 // what the email-link page relied on — a string anybody holding the mail can read, and
                 // which approved the link with nobody signed in at all.
@@ -283,6 +288,7 @@ final class PersonLinkRules {
                     : statement(USE_INVITATION_SQL, invitationId);
                 Future<Boolean> approved = inviterPays
                     ? approveValidationRequest(invitationId, callerPersonId, inviterAccountId, inviteeEmail,
+                        inviteeSignInAddress,
                         result.getValue(0, 8), result.getValue(0, 9), spend, callerUserId)
                     : approveManagerInvitation(invitationId, inviterId, callerAccountId,
                         result.getValue(0, 10), result.getValue(0, 11), spend, callerUserId);
@@ -292,7 +298,11 @@ final class PersonLinkRules {
                 // established should not be announced as one. No token: this mail carries no
                 // capability, only a link to the member's own account page.
                 return approved.compose(ok -> !Boolean.TRUE.equals(ok) ? Future.succeededFuture(ok)
-                    : MemberMail.sendToPerson(inviterId, subject, body, null, callerUserId)
+                    // The inviter's tab: they offered to book (inviterPays) — "People I book for"; they
+                    // asked to be booked for — "People who book for me". The email names that tab.
+                    : MemberMail.sendToPerson(inviterId, subject, body, null,
+                        inviterPays ? MemberMail.PEOPLE_I_BOOK_FOR_PATH : MemberMail.PEOPLE_WHO_BOOK_FOR_ME_PATH,
+                        callerUserId)
                         .map(ignored -> ok));
             });
     }
@@ -303,6 +313,7 @@ final class PersonLinkRules {
      */
     private static Future<Boolean> approveValidationRequest(Object invitationId, Object callerPersonId,
                                                             Object inviterAccountId, Object inviteeEmail,
+                                                            Object inviteeSignInAddress,
                                                             Object aliasFirstName, Object aliasLastName,
                                                             SubmitArgument spend, Object callerUserId) {
         if (inviterAccountId == null) // an inviter with no account has no member row to link
@@ -311,13 +322,16 @@ final class PersonLinkRules {
         // lower(email), and against NULL they stop selecting anybody — the update matches nothing and the
         // insert's "no row with this address" is vacuously true, so a SECOND person would be created for
         // a human who already has a row. Refused instead, as the screen this replaces refused it.
-        if (inviteeEmail == null)
+        Object ownAddress = inviteeEmail != null ? inviteeEmail : inviteeSignInAddress;
+        if (ownAddress == null)
             return refusal(LINK_NOT_ESTABLISHED_KEY);
+        // Either address identifies them; with one missing, the other stands in for it in the IN list.
+        Object signInAddress = inviteeSignInAddress != null ? inviteeSignInAddress : ownAddress;
         List<SubmitArgument> batch = new ArrayList<>();
-        batch.add(statement(LINK_EXISTING_MEMBER_SQL, callerPersonId, inviterAccountId, inviteeEmail));
+        batch.add(statement(LINK_EXISTING_MEMBER_SQL, callerPersonId, inviterAccountId, ownAddress, signInAddress));
         batch.add(statement(RELINK_BY_LINK_SQL, callerPersonId, inviterAccountId));
-        batch.add(statement(CREATE_LINKED_MEMBER_SQL, callerPersonId, inviterAccountId, inviteeEmail,
-            aliasFirstName, aliasLastName));
+        batch.add(statement(CREATE_LINKED_MEMBER_SQL, callerPersonId, inviterAccountId, ownAddress,
+            aliasFirstName, aliasLastName, signInAddress));
         return runAndConfirmLink(batch, invitationId, callerPersonId, inviterAccountId, spend, callerUserId);
     }
 

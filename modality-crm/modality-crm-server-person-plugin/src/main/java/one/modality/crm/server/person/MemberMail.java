@@ -138,6 +138,24 @@ final class MemberMail {
      */
     static Future<Void> sendToPerson(Object personId, Object subject, Object body, String token,
                                      Object callerUserId) {
+        return sendToPerson(personId, subject, body, token, LEGACY_ACCOUNT_PATH, callerUserId);
+    }
+
+    /** The account page every older link opens; it lands on My profile › People I book for. */
+    static final String LEGACY_ACCOUNT_PATH = "/members";
+    /** The My profile tab for the people the reader books for. */
+    static final String PEOPLE_I_BOOK_FOR_PATH = "/user-profile/people-i-book-for";
+    /** The My profile tab for the people who book for the reader. */
+    static final String PEOPLE_WHO_BOOK_FOR_ME_PATH = "/user-profile/people-who-book-for-me";
+
+    /**
+     * As above, with the page the account link opens. An "accepted" email names a tab of My profile; its
+     * button has to open that tab, and only the operation knows which way the link runs.
+     *
+     * @param accountPath the path {@code {{ACCOUNT_LINK}}} opens, one of the constants above
+     */
+    static Future<Void> sendToPerson(Object personId, Object subject, Object body, String token,
+                                     String accountPath, Object callerUserId) {
         String baseUrl = configuredBaseUrl();
         if (baseUrl == null) {
             Console.log("⚠️ Member email not sent: modality.crm.server.person.frontofficeBaseUrl is unset"
@@ -161,7 +179,7 @@ final class MemberMail {
                 }
                 String name = joinName(valueAt(rows, 0), valueAt(rows, 1));
                 return write(personId, email, name, String.valueOf(subject),
-                    resolveLinks(String.valueOf(body), baseUrl, token), callerUserId);
+                    resolveLinks(String.valueOf(body), baseUrl, token, accountPath), callerUserId);
             });
     }
 
@@ -170,7 +188,12 @@ final class MemberMail {
      * with becomes the account page rather than a broken link — the mail still says something useful.
      */
     static String resolveLinks(String body, String baseUrl, String token) {
-        String account = baseUrl + "/members";
+        return resolveLinks(body, baseUrl, token, LEGACY_ACCOUNT_PATH);
+    }
+
+    static String resolveLinks(String body, String baseUrl, String token, String accountPath) {
+        // A constant, never from the caller: only the three paths above can reach this.
+        String account = baseUrl + (accountPath == null ? LEGACY_ACCOUNT_PATH : accountPath);
         String approve = token == null ? account : baseUrl + "/members/approve/" + token;
         String decline = token == null ? account : baseUrl + "/members/decline/" + token;
         return body.replace(APPROVE_LINK, approve)
