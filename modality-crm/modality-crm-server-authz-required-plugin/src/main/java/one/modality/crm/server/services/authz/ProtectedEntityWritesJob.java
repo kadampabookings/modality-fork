@@ -364,6 +364,8 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         // - and mail that is not the caller's own: a pending mail is a live sign-in link or somebody's
         //   booking, and until now any client could add its own address to one, or rewrite it. Clients
         //   still compose mail, which is the relay itself and is not closed here. See MailWritePolicy.
+        // - and support chat: written by its own member, or by the back office as itself. Observing first
+        //   (2026-11-09). See ChatWritePolicy.
         //
         // THREE RULES USED TO STAND HERE AND NO LONGER DO: an owner's email is their login, an email on
         // somebody else's account's person, and moving a person into another account. All three asked
@@ -376,7 +378,8 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         // - and a booking's own tables written by anything but the back office (2026-10-19), observing until
         //   its own switch flips. See BackofficeOnlyWritePolicy.
         ClientSubmitGuard.registerWritePolicy(new ClientWritePolicies(
-            new GrantTableWritePolicy(), new UnscopedWritePolicy(), new MailWritePolicy(), new BackofficeOnlyWritePolicy()));
+            new GrantTableWritePolicy(), new UnscopedWritePolicy(), new MailWritePolicy(), new BackofficeOnlyWritePolicy(),
+            new ChatWritePolicy()));
         Console.log("🛡 Write authorization active on " + REQUIRED_OPERATIONS.size() + " entities and "
                     + REQUIRED_OPERATIONS_BY_FIELD.size() + " fields"
                     + (ENFORCED_ENTITIES.isEmpty() ? " — observing only, nothing is refused yet"
@@ -390,7 +393,9 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         // triage a write that started failing on this deploy by looking anywhere but here.
         Console.log("🛡 Client write row rules ENFORCING — grant tables, unbounded writes, mail"
                     + " (person is closed outright by the deny list, not by a row rule); booking tables back-office only — "
-                    + (BackofficeOnlyWritePolicy.ENFORCING ? "ENFORCING" : "observing only"));
+                    + (BackofficeOnlyWritePolicy.ENFORCING ? "ENFORCING" : "observing only")
+                    + "; support chat written by its own member or the back office as itself — "
+                    + (ChatWritePolicy.ENFORCING ? "ENFORCING" : "observing only"));
         // The read side says its own state for the same reason the three lines above say theirs, and it
         // did not on the day it started refusing: the only way to tell whether production was running the
         // enforcing build was to notice that the SAME jar had added MoneyAccount to the first line. That
