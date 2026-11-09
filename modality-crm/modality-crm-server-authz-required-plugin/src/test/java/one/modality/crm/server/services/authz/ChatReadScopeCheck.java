@@ -1,0 +1,92 @@
+package one.modality.crm.server.services.authz;
+
+/**
+ * The chat read rules themselves — which entities are scoped, by what, and which are left alone.
+ *
+ * <p>Asserted as DQL text rather than through the compiler, deliberately. What the sql comes out as is
+ * pinned in webfx-stack-fork's {@code ChatReadScopeCheck}, against the compiler and both injection points;
+ * what is pinned HERE is the rule — that a message is bounded by its conversation and not by its author,
+ * that the centre boundary is the event and not the organisation, and that an entity nobody named is
+ * untouched. Those are the decisions a reader would want to argue with, and they are the ones that do not
+ * need a domain model to state.
+ *
+ * <p>It also means these hold while {@code ENFORCING} is false, which is now. A check that could only run
+ * after the flag flipped would be written after the flag flipped.
+ *
+ * @author Claude Code
+ */
+public class ChatReadScopeCheck {
+
+    static int pass = 0, fail = 0;
+
+    public static void main(String[] args) {
+        // ── The member: their own conversations, and everything hanging off them ─────────────────────────
+        check("a member's conversations are their own",
+              "viewerPerson=CALLER_PERSON", dql("Conversation", ChatReadScope.MEMBER));
+        check("a member's messages are bounded by the conversation, not by who wrote them",
+              "conversation in (select id from Conversation where viewerPerson=CALLER_PERSON)",
+              dql("ChatMessage", ChatReadScope.MEMBER));
+        check("and reactions two hops out, still by conversation",
+              "message in (select id from ChatMessage where conversation in"
+            + " (select id from Conversation where viewerPerson=CALLER_PERSON))",
+              dql("ChatMessageReaction", ChatReadScope.MEMBER));
+        check("a member reads only agents' presence, never another viewer's last-seen",
+              "agent", dql("ChatPresence", ChatReadScope.MEMBER));
+        check("and only their own participant row",
+              "person=CALLER_PERSON", dql("ConversationParticipant", ChatReadScope.MEMBER));
+
+        // ── The back office: the centres it is granted, expressed as EVENTS ──────────────────────────────
+        check("a back office is bounded by its granted events",
+              "event in CALLER_GRANTED_EVENTS", dql("Conversation", ChatReadScope.BACKOFFICE));
+        check("and its messages through those conversations",
+              "conversation in (select id from Conversation where event in CALLER_GRANTED_EVENTS)",
+              dql("ChatMessage", ChatReadScope.BACKOFFICE));
+        check("presence too", "event in CALLER_GRANTED_EVENTS", dql("ChatPresence", ChatReadScope.BACKOFFICE));
+
+        // THE ONE WORTH ARGUING WITH: conversation.organization_id is NULL on every production row, and the
+        // front office sets it only when a config resolves one. A rule on it would match nothing today and
+        // some rows later, silently. So no rule mentions it.
+        for (String entity : new String[] {"Conversation", "ChatMessage", "ChatMessageReaction",
+                                           "ConversationParticipant", "ChatPresence"})
+            for (String scope : new String[] {ChatReadScope.MEMBER, ChatReadScope.BACKOFFICE}) {
+                String rule = dql(entity, scope);
+                check("no rule leans on organization (" + entity + "/" + scope + ")",
+                      rule == null || !rule.contains("organization"));
+                // A path in a condition is refused at both injection points; a subquery is not. Every hop
+                // these rules take is inside a select, so none of them contains a dotted navigation.
+                check("and none of them navigates (" + entity + "/" + scope + ")",
+                      rule == null || !rule.matches(".*\\b[a-z][A-Za-z]*\\.[a-z].*"));
+            }
+
+        // ── Everything else is untouched ─────────────────────────────────────────────────────────────────
+        check("an entity this does not scope has no rule", dql("Document", ChatReadScope.MEMBER) == null);
+        check("nor does Person, which a read POLICY handles instead",
+              dql("Person", ChatReadScope.BACKOFFICE) == null);
+        check("and an unknown scope scopes nothing, rather than guessing",
+              dql("Conversation", "some.other.scope") == null);
+        check("including a null one, which is what a server-origin read compiles under",
+              dql("Conversation", null) == null);
+
+        // ── Inert until the flag flips ───────────────────────────────────────────────────────────────────
+        check("no token is issued while observing", !ChatReadScope.ENFORCING);
+
+        System.out.println(fail == 0 ? "\nALL " + pass + " PASS" : "\n" + fail + " FAILED");
+        if (fail > 0)
+            throw new AssertionError(fail + " chat read scope checks failed");
+    }
+
+    private static String dql(String entity, Object scope) {
+        return ChatReadScope.conditionDql(entity, scope);
+    }
+
+    private static void check(String what, String expected, String actual) {
+        if (expected.equals(actual)) { pass++; System.out.println("  ok   " + what); }
+        else { fail++; System.out.println("  FAIL " + what + "\n         got      " + actual
+                                        + "\n         expected " + expected); }
+    }
+
+    private static void check(String what, boolean ok) {
+        if (ok) { pass++; System.out.println("  ok   " + what); }
+        else    { fail++; System.out.println("  FAIL " + what); }
+    }
+}

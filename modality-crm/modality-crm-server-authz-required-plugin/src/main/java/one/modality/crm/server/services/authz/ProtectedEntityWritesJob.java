@@ -356,6 +356,12 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         // callers legitimately reach person through a join on resume-payment. ENFORCING since 2026-10-30:
         // the precondition that kept it observing was falsified rather than met — see NoPrincipalReadPolicy.
         ProtectedEntityReadRegistry.registerReadPolicy(new NoPrincipalReadPolicy());
+        // The data-scope half of the read plan, and the first rule of its kind: who may read a stored
+        // conversation. Registered unconditionally, and inert until ChatReadScope.ENFORCING — with it false
+        // the provider returns no condition and the resolver no token, so every query compiles as before
+        // and every push subscription stays shared. Registering it now means the wiring is exercised by
+        // every boot rather than first on the day the flag flips.
+        ChatReadScope.register();
         // And the write half of that: the account columns no client may set, enforced now rather than observed —
         // see ClientWriteSecrets for why the observe-only switch below does not apply to them.
         ClientWriteSecrets.declare();
