@@ -20,3 +20,4 @@ one.modality.crm.server.person.RequestRefundEndpoint
 one.modality.crm.server.person.ContactCentreEndpoint
 one.modality.crm.server.person.SendDocumentLetterEndpoint
 one.modality.crm.server.person.EmailHasAccountEndpoint
+one.modality.crm.server.person.ChatTypingSignalEndpoint

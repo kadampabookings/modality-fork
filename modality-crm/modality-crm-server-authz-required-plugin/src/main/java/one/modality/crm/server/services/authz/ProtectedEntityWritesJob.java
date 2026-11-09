@@ -8,6 +8,7 @@ import dev.webfx.stack.authz.core.HasAuthorizationContext;
 import dev.webfx.stack.authz.server.AuthorizationServerService;
 import dev.webfx.stack.authz.server.spi.AuthorizationServerServiceProvider;
 import dev.webfx.stack.authz.server.spi.impl.AuthorizationServerServiceProviderBase;
+import dev.webfx.stack.com.bus.BridgeAddressPolicy;
 import dev.webfx.stack.db.query.ClientReadInspectionRegistry;
 import dev.webfx.stack.db.query.ProtectedEntityReadRegistry;
 import dev.webfx.stack.db.submit.ClientSubmitGuard;
@@ -256,6 +257,17 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
                || field.startsWith("push_body_");
     }
 
+    /** The bridge address of the back office's broadcast to every front office. */
+    static final String FRONT_OFFICE_MESSAGING_ADDRESS = "front-office/messaging";
+    /** Where the server relays members' typing signals to the agents (ChatTypingSignalEndpoint). */
+    static final String SUPPORT_AGENTS_ADDRESS = "support/agents";
+    /**
+     * Whether a client without a verified back office is refused publishing on {@link #FRONT_OFFICE_MESSAGING_ADDRESS}
+     * (true), or only logged ("WOULD REFUSE a live-channel publish"). Off until the front office's own typing signals
+     * have moved to ChatTypingSignalEndpoint everywhere and a census has been read.
+     */
+    static final boolean LIVE_CHANNEL_PUBLISH_ENFORCING = false;
+
     /**
      * OBSERVE FIRST — per entity. For an entity not listed here the decision is computed and logged but never
      * acted on, so a deploy cannot lock anyone out of the screen they would need to fix a lockout — the failure
@@ -377,6 +389,19 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         // the deny rule does not say is written down in docs/security/frontoffice-write-authorization-plan.md.
         // - and a booking's own tables written by anything but the back office (2026-10-19), observing until
         //   its own switch flips. See BackofficeOnlyWritePolicy.
+        // And the client-to-client broadcasts the bridge carries, which reach no submit and no query, so none of the
+        // rules above sees them (docs/security/live-channel-plan.md). The back office's broadcast to every front
+        // office (livestream ticker and status, published media, chat refresh requests, agents' typing dots) may be
+        // published by a verified back office only — observing first. The members' typing signals reach the agents
+        // through ChatTypingSignalEndpoint, which the server publishes on support/agents: no client may publish
+        // there, and only verified back-office sessions receive it. Both enforced at once: the address is new.
+        // Mirrors: ModalityMessageAddresses.FRONT_OFFICE_MESSAGING_ADDRESS, ChatTypingSignalEndpoint.SUPPORT_AGENTS_ADDRESS.
+        BridgeAddressPolicy.restrictPublishToVerifiedBackoffice(FRONT_OFFICE_MESSAGING_ADDRESS, LIVE_CHANNEL_PUBLISH_ENFORCING);
+        BridgeAddressPolicy.restrictPublishToServer(SUPPORT_AGENTS_ADDRESS);
+        BridgeAddressPolicy.restrictDeliveryToVerifiedBackoffice(SUPPORT_AGENTS_ADDRESS);
+        Console.log("🛡 Live channel — " + FRONT_OFFICE_MESSAGING_ADDRESS + " published by a verified back office only ("
+                    + (LIVE_CHANNEL_PUBLISH_ENFORCING ? "ENFORCING" : "observing only") + "); " + SUPPORT_AGENTS_ADDRESS
+                    + " published by the server only and delivered to verified back offices only (ENFORCING)");
         ClientSubmitGuard.registerWritePolicy(new ClientWritePolicies(
             new GrantTableWritePolicy(), new UnscopedWritePolicy(), new MailWritePolicy(), new BackofficeOnlyWritePolicy(),
             new ChatWritePolicy()));
