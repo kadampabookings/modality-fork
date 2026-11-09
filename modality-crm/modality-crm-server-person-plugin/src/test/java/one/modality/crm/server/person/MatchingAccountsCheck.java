@@ -13,11 +13,11 @@ package one.modality.crm.server.person;
  * more than one {@code owner=true} person row, which is why the statement groups and takes {@code min(p.id)}
  * rather than trusting one row per address.
  *
- * <p>The reply's two pending flags are not asserted here — they need a QueryResult, and the first real client
- * call is what exercises them. They are two rather than one because the callers mean opposite things: the
- * members page excludes a member only on a pending SHARE request ({@code inviterPayer=true}), the invite
- * manager asks about a manager invitation ({@code false}). A single flag shipped first and would have hidden
- * a member card because a "book for me" invitation was outstanding.
+ * <p>The reply is now {@code {address: {id}}} and carries no pending flags. It briefly had them, and they are
+ * the reason this note exists: the first version's single flag was wrong for both callers, the split version
+ * had no caller at all, and both slipped past a suite that covers the argument thoroughly and the reply not at
+ * all. A reply field nothing reads is a contract no test exercises. Pending lives in each caller's own
+ * {@code inviter=$1} invitation query, where it already worked.
  *
  * @author Claude Code
  */

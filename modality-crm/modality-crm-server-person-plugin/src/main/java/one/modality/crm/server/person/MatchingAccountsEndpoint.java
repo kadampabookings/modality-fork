@@ -17,17 +17,18 @@ import java.util.Set;
  * "Which of these addresses have accounts, and have I already invited them?" — ids and nothing else.
  *
  * <p>Argument: the addresses, as {@code [address, address, …]}. Reply: an {@link AstObject} keyed by the
- * lower-cased addresses that HAVE an account, each mapping to
- * {@code {id, pendingShare, pendingManager}}. An address with no account is simply absent, which is the
- * whole of what a caller learns about it.
+ * lower-cased addresses that HAVE an account, each mapping to {@code {id}}. An address
+ * with no account is simply absent, which is the whole of what a caller learns about it.
  *
- * <p><b>Two pending flags, not one, because the two callers mean opposite things by it.</b> An invitation
- * carries {@code inviter_payer}, and it decides the direction: the members page excludes a member only when a
- * SHARE request is pending ({@code inviterPayer=true}, its own query), while the invite manager asks about a
- * manager invitation ({@code inviterPayer=false}). One boolean covering either would hide a member card
- * because a "book for me" invitation was outstanding, and tell the invite manager a manager invitation
- * existed when only a share request did. The column's own vocabulary is kept rather than invented:
- * {@code pendingShare} is {@code inviter_payer = true}, {@code pendingManager} is {@code false}.
+ * <p><b>It answers existence and identity, and deliberately nothing about invitations.</b> It briefly carried
+ * pending flags; they are gone. The first version had one, which was wrong for both callers — an invitation
+ * carries {@code inviter_payer}, the members page excludes a member only on a pending SHARE request
+ * ({@code true}) and the invite manager asks about a manager invitation ({@code false}), so one boolean
+ * covering either would have hidden a member card over an outstanding "book for me". Splitting it in two
+ * fixed that and left two fields nothing called. They are cut rather than kept on spec: a reply field with no
+ * consumer is a contract no test exercises, and that is exactly where the first bug was — the argument
+ * parsing had nineteen probed cases, the reply had none. Pending stays where it already works, in each
+ * caller's own {@code inviter=$1} invitation query.
  *
  * <h3>What it replaces, and why an endpoint rather than a rule</h3>
  *
@@ -79,22 +80,16 @@ public final class MatchingAccountsEndpoint extends AsyncFunctionBusCallEndpoint
      * otherwise silently overwrite the first and which one won would depend on scan order. The lowest id is
      * chosen so that two calls agree.
      *
-     * <p>{@code fa.id <> $3} excludes the caller's own account: a member matching their own address against
+     * <p>{@code fa.id <> $2} excludes the caller's own account: a member matching their own address against
      * their own account learns nothing, and leaving it in would answer "which of my own rows are owners?"
      * through a path meant for other people's.
      */
     private static final String MATCHING_SQL =
-        "select lower(fa.username) as username, min(p.id) as person_id,"
-        + " bool_or(exists (select 1 from invitation i"
-        + "                 where i.inviter_id = $2 and i.invitee_id = p.id"
-        + "                   and i.pending = true and i.inviter_payer = true)) as pending_share,"
-        + " bool_or(exists (select 1 from invitation i"
-        + "                 where i.inviter_id = $2 and i.invitee_id = p.id"
-        + "                   and i.pending = true and i.inviter_payer = false)) as pending_manager"
+        "select lower(fa.username) as username, min(p.id) as person_id"
         + " from frontend_account fa"
         + " join person p on p.frontend_account_id = fa.id"
         + " where fa.corporation_id = 1 and p.owner = true and p.removed = false"
-        + " and fa.id <> $3 and lower(fa.username) = any($1)"
+        + " and fa.id <> $2 and lower(fa.username) = any($1)"
         + " group by lower(fa.username)";
 
     public MatchingAccountsEndpoint() {
@@ -106,6 +101,8 @@ public final class MatchingAccountsEndpoint extends AsyncFunctionBusCallEndpoint
             String clientAddress = ThreadLocalStateHolder.getClientAddress();
             // Spent only once the caller is known to be a verified member, so an anonymous call cannot use
             // up anyone's budget — the order CreateInvitationEndpoint settled on for the same reason.
+            // personId is supplied by the guard and no longer used: the statement stopped binding it when the
+            // pending flags went, and only the ACCOUNT is needed, to exclude the caller's own rows.
             return MemberSessionGuard.whenCallerIsVerifiedMember((personId, accountId) -> {
                 for (int i = 0; i < addresses.length; i++)
                     if (!CallerRateLimit.EMAIL_LOOKUP.tryAcquire(clientAddress))
@@ -114,7 +111,7 @@ public final class MatchingAccountsEndpoint extends AsyncFunctionBusCallEndpoint
                 return ServerWrite.asServer(() -> QueryService.executeQuery(new QueryArgumentBuilder()
                     .setDataSourceId(DataSourceModelService.getDefaultDataSourceId())
                     .setStatement(MATCHING_SQL)
-                    .setParameters(addresses, personId, accountId)
+                    .setParameters(addresses, accountId)
                     .build())
                 ).map(MatchingAccountsEndpoint::toReply);
             });
@@ -143,12 +140,7 @@ public final class MatchingAccountsEndpoint extends AsyncFunctionBusCallEndpoint
         return addresses.toArray(new String[0]);
     }
 
-    /**
-     * The matched rows as {@code {address: {id, pendingShare, pendingManager}}}. Absent means no account.
-     *
-     * <p>Both flags are always present, so a caller reads the one it means rather than a single truthy
-     * value that could be the other direction.
-     */
+    /** The matched rows as {@code {address: {id}}}. Absent means no account, which is the answer. */
     private static AstObject toReply(dev.webfx.stack.db.query.QueryResult result) {
         AstObject reply = AST.createObject();
         if (result != null)
@@ -162,8 +154,6 @@ public final class MatchingAccountsEndpoint extends AsyncFunctionBusCallEndpoint
                 // the scalar it is rather than narrowed here.
                 AstObject match = AST.createObject();
                 match.setScalar("id", result.getValue(row, 1));
-                match.set("pendingShare", Boolean.TRUE.equals(result.getValue(row, 2)));
-                match.set("pendingManager", Boolean.TRUE.equals(result.getValue(row, 3)));
                 reply.setObject(String.valueOf(username), match);
             }
         return reply;
