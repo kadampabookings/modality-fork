@@ -20,6 +20,20 @@ import java.util.Set;
  * lower-cased addresses that HAVE an account, each mapping to {@code {id}}. An address
  * with no account is simply absent, which is the whole of what a caller learns about it.
  *
+ * <p><b>The reply reaches the client WRAPPED, as {@code {$codec: 'AstNode', v: {…}}}</b>, not as a bare
+ * object: an AstObject crosses the bus through its codec like anything else. A caller that reads the outer
+ * object as the map finds two keys named {@code $codec} and {@code v} and concludes that nobody has an
+ * account — which is what happened on the first real call, and shows as every member losing the badge rather
+ * than as an error. Unwrap {@code v}.
+ *
+ * <p><b>On the budget, measured rather than assumed.</b> A members-page load asks about one address at the
+ * median on staging, three at the 95th centile, five at the 99th — and 27 in the worst case, against a budget
+ * of 30 per ten minutes. That budget is SHARED with {@link EmailHasAccountEndpoint} and the invite form's own
+ * check, so a heavy load does not merely risk its own second refresh: it can starve the invite the member
+ * then tries to send. Two staging accounts are over fifteen unlinked members and none over thirty. The cheap
+ * answer is for the caller not to re-ask per render; if that is not enough, this wants a budget of its own
+ * rather than a larger shared one.
+ *
  * <p><b>It answers existence and identity, and deliberately nothing about invitations.</b> It briefly carried
  * pending flags; they are gone. The first version had one, which was wrong for both callers — an invitation
  * carries {@code inviter_payer}, the members page excludes a member only on a pending SHARE request
