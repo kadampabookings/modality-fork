@@ -67,8 +67,23 @@ public class ChatReadScopeCheck {
         check("including a null one, which is what a server-origin read compiles under",
               dql("Conversation", null) == null);
 
-        // ── Inert until the flag flips ───────────────────────────────────────────────────────────────────
-        check("no token is issued while observing", !ChatReadScope.ENFORCING);
+        // ── The reported line must match the census that counts it ──────────────────────────────────────
+        // The regex below is query 7e of scripts/check-prod-logs-read-aspect.sh, copied. A message that
+        // drifts from its filter is a census that reports a confident zero, which this project has shipped
+        // before: the write side needed a new filter for a new wording and did not get one, and 6a of that
+        // same script reported nothing for days because of an unescaped paren.
+        String line = ChatReadScope.logLine("ChatMessage", ChatReadScope.MEMBER);
+        check("the reported line matches the census regex",
+              line.matches(".*(WOULD SCOPE|SCOPING) READ of [A-Za-z]+ under [a-z.]+"));
+        check("and it names the entity and the scope",
+              line.contains("ChatMessage") && line.contains(ChatReadScope.MEMBER));
+        // The statement never goes in the line: its literals are a conversation id, and through it a person.
+        check("and carries nothing that could identify a conversation or a person",
+              !line.contains("$") && !line.contains("select") && !line.contains("where"));
+
+        // ── Observing: consulted, reported, and changing nothing ─────────────────────────────────────────
+        check("no rows are narrowed yet", !ChatReadScope.ENFORCING);
+        check("but the scope IS consulted, or observing would report nothing", ChatReadScope.OBSERVING);
 
         System.out.println(fail == 0 ? "\nALL " + pass + " PASS" : "\n" + fail + " FAILED");
         if (fail > 0)

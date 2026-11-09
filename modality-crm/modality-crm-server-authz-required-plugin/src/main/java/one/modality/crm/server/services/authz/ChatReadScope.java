@@ -1,5 +1,6 @@
 package one.modality.crm.server.services.authz;
 
+import dev.webfx.platform.console.Console;
 import dev.webfx.stack.db.query.ClientScopeToken;
 import dev.webfx.stack.orm.datasourcemodel.service.DataSourceModelService;
 import dev.webfx.stack.orm.dql.sqlcompiler.ClientReadScope;
@@ -35,24 +36,45 @@ import java.util.concurrent.ConcurrentHashMap;
  * {@code CALLER_GRANTED_EVENTS} is already the caller's flattened scope, so the boundary is expressed there.
  * {@code event.organization} would be a path, which is the refusal above.
  *
- * <h3>Observing means registering nothing</h3>
+ * <h3>Observing, and what it costs</h3>
  *
- * <p>A scope has no observing mode: a condition either narrows the rows or does not, and a narrowed read
- * looks to everyone like a data bug. So {@link #ENFORCING} gates BOTH halves — with it false this provider
- * returns no condition and no token, which leaves every query compiling exactly as it does now and every
- * push subscription shared exactly as it is now. A token naming a scope with no rules would fragment those
- * subscriptions and buy nothing, which is why the two are one flag and not two.
+ * <p>A scope has no observing mode of the usual kind: a condition either narrows the rows or does not, and a
+ * narrowed read looks to everyone like a data bug rather than a control working. So {@link #OBSERVING} does
+ * the only honest version — the token is issued, this provider is consulted, and it reports the rule it
+ * WOULD have applied and then returns nothing. The compiled sql is identical to the unscoped one, so no
+ * result changes; what is learned is which chat shapes real callers send and under which scope, which is the
+ * blast radius of flipping {@link #ENFORCING}.
+ *
+ * <p><b>It is a report per SHAPE, not per query</b>, because compilation is cached by (statement, token) and
+ * this is consulted on a cache miss. Frequency is the read inventory's job; this says what exists.
+ *
+ * <p><b>What observing costs, measured rather than feared.</b> Issuing a token puts it on the QueryArgument,
+ * which is part of its equality, so two scopes no longer share one push subscription. That sounds expensive
+ * and is not: callers of the SAME kind still share, so the only loss is between a member and an operator
+ * running an identical statement with identical parameters — in this system, the reactions query in
+ * {@code shared/}. Per-CALLER fragmentation, the expensive kind, does not arise: no condition is injected
+ * while observing, so the compiled statement names no caller term and {@code ServerCallerParameters}
+ * attaches nothing.
  *
  * @author Claude Code
  */
 final class ChatReadScope implements ClientReadScope.Provider, ClientScopeToken.Resolver {
 
     /**
-     * False until the comparison pass of the read plan has run. Flipping it is a change somebody reviews,
-     * for the reason {@code NoPrincipalReadPolicy} gives: a refused read changes results silently and gets
-     * reported as a data bug rather than as a control working.
+     * False until the observing pass has said what flipping would change. Flipping it is a change somebody
+     * reviews, for the reason {@code NoPrincipalReadPolicy} gives: a narrowed read changes results silently
+     * and gets reported as a data bug rather than as a control working.
      */
     static final boolean ENFORCING = false;
+
+    /**
+     * True since 2026-11-09: issue the token, report the rule each chat read WOULD get, change nothing.
+     *
+     * <p>Separate from {@link #ENFORCING} so that the reporting outlives the flip — once enforcing, the same
+     * line says which rule is being applied, which is what a census counts. With both false nothing is
+     * issued and nothing is consulted, which is the state to return to if observing itself proves costly.
+     */
+    static final boolean OBSERVING = true;
 
     /** The member reading their own conversations. */
     static final String MEMBER = "chat.member";
@@ -89,21 +111,38 @@ final class ChatReadScope implements ClientReadScope.Provider, ClientScopeToken.
      */
     @Override
     public Object tokenForCaller() {
-        if (!ENFORCING || !ThreadLocalStateHolder.isClientOrigin())
+        if (!(OBSERVING || ENFORCING) || !ThreadLocalStateHolder.isClientOrigin())
             return null;
         return ThreadLocalStateHolder.isEffectivelyBackoffice() ? BACKOFFICE : MEMBER;
     }
 
     @Override
     public Expression<?> readScopeCondition(Object domainClass, Object scopeToken) {
-        if (!ENFORCING)
-            return null;
         String name = String.valueOf(domainClass);
         String dql = conditionDql(name, scopeToken);
         if (dql == null)
             return null; // an entity this does not scope compiles exactly as it did before
+        Console.log(logLine(name, scopeToken));
+        if (!ENFORCING)
+            return null;
         return parsed.computeIfAbsent(name + '\u0000' + scopeToken, key ->
             DataSourceModelService.getDefaultDataSourceModel().getDomainModel().parseExpression(dql, domainClass));
+    }
+
+    /**
+     * The reported line, built here so the census can be asserted against it.
+     *
+     * <p>One wording for both modes so a single filter counts either, with the mode as a prefix saying
+     * which. Names the ENTITY and the SCOPE and nothing else — a chat statement's literals are a
+     * conversation id and, through it, who was talking to support.
+     *
+     * <p>Package-private because {@code scripts/check-prod-logs-read-aspect.sh} parses this shape, and a
+     * message that drifts from its filter is a census that quietly reports zero. That has happened here
+     * before, more than once; the check asserts this against the same regex the script uses.
+     */
+    static String logLine(String entityName, Object scopeToken) {
+        return "\uD83D\uDEE1 " + (ENFORCING ? "SCOPING" : "WOULD SCOPE") + " READ of " + entityName
+             + " under " + scopeToken;
     }
 
     /**
