@@ -13,6 +13,12 @@ package one.modality.crm.server.person;
  * more than one {@code owner=true} person row, which is why the statement groups and takes {@code min(p.id)}
  * rather than trusting one row per address.
  *
+ * <p>The reply's two pending flags are not asserted here — they need a QueryResult, and the first real client
+ * call is what exercises them. They are two rather than one because the callers mean opposite things: the
+ * members page excludes a member only on a pending SHARE request ({@code inviterPayer=true}), the invite
+ * manager asks about a manager invitation ({@code false}). A single flag shipped first and would have hidden
+ * a member card because a "book for me" invitation was outstanding.
+ *
  * @author Claude Code
  */
 public class MatchingAccountsCheck {

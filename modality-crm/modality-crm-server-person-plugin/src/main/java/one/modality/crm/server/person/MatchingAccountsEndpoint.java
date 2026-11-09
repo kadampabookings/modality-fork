@@ -17,8 +17,17 @@ import java.util.Set;
  * "Which of these addresses have accounts, and have I already invited them?" — ids and nothing else.
  *
  * <p>Argument: the addresses, as {@code [address, address, …]}. Reply: an {@link AstObject} keyed by the
- * lower-cased addresses that HAVE an account, each mapping to {@code {id, pending}}. An address with no
- * account is simply absent, which is the whole of what a caller learns about it.
+ * lower-cased addresses that HAVE an account, each mapping to
+ * {@code {id, pendingShare, pendingManager}}. An address with no account is simply absent, which is the
+ * whole of what a caller learns about it.
+ *
+ * <p><b>Two pending flags, not one, because the two callers mean opposite things by it.</b> An invitation
+ * carries {@code inviter_payer}, and it decides the direction: the members page excludes a member only when a
+ * SHARE request is pending ({@code inviterPayer=true}, its own query), while the invite manager asks about a
+ * manager invitation ({@code inviterPayer=false}). One boolean covering either would hide a member card
+ * because a "book for me" invitation was outstanding, and tell the invite manager a manager invitation
+ * existed when only a share request did. The column's own vocabulary is kept rather than invented:
+ * {@code pendingShare} is {@code inviter_payer = true}, {@code pendingManager} is {@code false}.
  *
  * <h3>What it replaces, and why an endpoint rather than a rule</h3>
  *
@@ -77,7 +86,11 @@ public final class MatchingAccountsEndpoint extends AsyncFunctionBusCallEndpoint
     private static final String MATCHING_SQL =
         "select lower(fa.username) as username, min(p.id) as person_id,"
         + " bool_or(exists (select 1 from invitation i"
-        + "                 where i.inviter_id = $2 and i.invitee_id = p.id and i.pending = true)) as pending"
+        + "                 where i.inviter_id = $2 and i.invitee_id = p.id"
+        + "                   and i.pending = true and i.inviter_payer = true)) as pending_share,"
+        + " bool_or(exists (select 1 from invitation i"
+        + "                 where i.inviter_id = $2 and i.invitee_id = p.id"
+        + "                   and i.pending = true and i.inviter_payer = false)) as pending_manager"
         + " from frontend_account fa"
         + " join person p on p.frontend_account_id = fa.id"
         + " where fa.corporation_id = 1 and p.owner = true and p.removed = false"
@@ -130,7 +143,12 @@ public final class MatchingAccountsEndpoint extends AsyncFunctionBusCallEndpoint
         return addresses.toArray(new String[0]);
     }
 
-    /** The matched rows as {@code {address: {id, pending}}}. Absent means no account, which is the answer. */
+    /**
+     * The matched rows as {@code {address: {id, pendingShare, pendingManager}}}. Absent means no account.
+     *
+     * <p>Both flags are always present, so a caller reads the one it means rather than a single truthy
+     * value that could be the other direction.
+     */
     private static AstObject toReply(dev.webfx.stack.db.query.QueryResult result) {
         AstObject reply = AST.createObject();
         if (result != null)
@@ -144,7 +162,8 @@ public final class MatchingAccountsEndpoint extends AsyncFunctionBusCallEndpoint
                 // the scalar it is rather than narrowed here.
                 AstObject match = AST.createObject();
                 match.setScalar("id", result.getValue(row, 1));
-                match.set("pending", Boolean.TRUE.equals(result.getValue(row, 2)));
+                match.set("pendingShare", Boolean.TRUE.equals(result.getValue(row, 2)));
+                match.set("pendingManager", Boolean.TRUE.equals(result.getValue(row, 3)));
                 reply.setObject(String.valueOf(username), match);
             }
         return reply;
