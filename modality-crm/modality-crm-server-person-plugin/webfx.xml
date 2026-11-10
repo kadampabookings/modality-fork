@@ -52,6 +52,8 @@
         <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.crm.server.person.EmailHasAccountEndpoint</provider>
         <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.crm.server.person.ChatTypingSignalEndpoint</provider>
         <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.crm.server.person.MatchingAccountsEndpoint</provider>
+        <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.crm.server.person.GetUserSettingsEndpoint</provider>
+        <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.crm.server.person.PatchUserSettingsEndpoint</provider>
     </providers>
 
 </project>
