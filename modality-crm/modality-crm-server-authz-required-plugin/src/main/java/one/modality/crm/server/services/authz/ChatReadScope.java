@@ -8,6 +8,7 @@ import dev.webfx.stack.orm.expression.Expression;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -61,10 +62,25 @@ import java.util.concurrent.ConcurrentHashMap;
 final class ChatReadScope implements ClientReadScope.Provider, ClientScopeToken.Resolver {
 
     /**
-     * False until the observing pass has said what flipping would change. Flipping it is a change somebody
-     * reviews, for the reason {@code NoPrincipalReadPolicy} gives: a narrowed read changes results silently
-     * and gets reported as a data bug rather than as a control working.
+     * The roots whose conditions are APPLIED. Everything else is reported and returns nothing.
+     *
+     * <p>A set rather than a boolean because the five roots are not one decision. They carry different rules
+     * over different data, and the plan has said from the start to flip per root — a single switch would make
+     * the first flip the riskiest one available, which is how a control gets reverted wholesale over one
+     * root's bug. Adding a name here is the reviewed change; the surrounding machinery does not move.
+     *
+     * <p>Empty, so nothing is narrowed yet. {@code Conversation} is the one to add first: it is the only
+     * rule that is a local column test, so what it returns is the easiest to reason about, and it is where
+     * the exposure actually is — any signed-in member can read any conversation by changing one id.
      */
+    private static final Set<String> ENFORCED_ROOTS = Set.of();
+
+    /** Whether this root's condition is applied rather than merely reported. */
+    static boolean isEnforced(String entityName) {
+        return ENFORCED_ROOTS.contains(entityName);
+    }
+
+    /** True while any root is still only reported — kept for the checks and the boot line. */
     static final boolean ENFORCING = false;
 
     /**
@@ -76,10 +92,17 @@ final class ChatReadScope implements ClientReadScope.Provider, ClientScopeToken.
      */
     static final boolean OBSERVING = true;
 
-    /** The member reading their own conversations. */
-    static final String MEMBER = "chat.member";
-    /** A verified back office reading the centres it is granted. */
-    static final String BACKOFFICE = "chat.backoffice";
+    /**
+     * The two caller kinds. Named for the CALLER, not for chat.
+     *
+     * <p>They were {@code chat.member} and {@code chat.backoffice} for one day. A scope token selects a set
+     * of per-entity rules and is already issued for every client read, chat or not — so the moment anything
+     * outside chat is scoped under the same caller kind, a feature-named token reads as a lie. Renamed while
+     * the only cost is a census whose counts restart, which a deploy does anyway.
+     */
+    static final String MEMBER = "member";
+    /** A verified back office, reading the centres it is granted. */
+    static final String BACKOFFICE = "backoffice";
 
     /** The member's own conversations, the hop moved inside a subquery so nothing navigates. */
     private static final String MY_CONVERSATIONS =
@@ -130,7 +153,7 @@ final class ChatReadScope implements ClientReadScope.Provider, ClientScopeToken.
      */
     @Override
     public Object tokenForCaller() {
-        if (!(OBSERVING || ENFORCING) || !ThreadLocalStateHolder.isClientOrigin())
+        if (!(OBSERVING || !ENFORCED_ROOTS.isEmpty()) || !ThreadLocalStateHolder.isClientOrigin())
             return null;
         return ThreadLocalStateHolder.isEffectivelyBackoffice() ? BACKOFFICE : MEMBER;
     }
@@ -142,7 +165,7 @@ final class ChatReadScope implements ClientReadScope.Provider, ClientScopeToken.
         if (dql == null)
             return null; // an entity this does not scope compiles exactly as it did before
         Console.log(logLine(name, scopeToken));
-        if (!ENFORCING)
+        if (!isEnforced(name))
             return null;
         return parsed.computeIfAbsent(name + '\u0000' + scopeToken, key ->
             DataSourceModelService.getDefaultDataSourceModel().getDomainModel().parseExpression(dql, domainClass));
@@ -160,7 +183,7 @@ final class ChatReadScope implements ClientReadScope.Provider, ClientScopeToken.
      * before, more than once; the check asserts this against the same regex the script uses.
      */
     static String logLine(String entityName, Object scopeToken) {
-        return "\uD83D\uDEE1 " + (ENFORCING ? "SCOPING" : "WOULD SCOPE") + " READ of " + entityName
+        return "\uD83D\uDEE1 " + (isEnforced(entityName) ? "SCOPING" : "WOULD SCOPE") + " READ of " + entityName
              + " under " + scopeToken;
     }
 

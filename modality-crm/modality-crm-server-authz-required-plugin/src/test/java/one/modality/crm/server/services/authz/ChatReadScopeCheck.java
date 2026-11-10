@@ -102,8 +102,24 @@ public class ChatReadScopeCheck {
               !line.contains("$") && !line.contains("select") && !line.contains("where"));
 
         // ── Observing: consulted, reported, and changing nothing ─────────────────────────────────────────
-        check("no rows are narrowed yet", !ChatReadScope.ENFORCING);
         check("but the scope IS consulted, or observing would report nothing", ChatReadScope.OBSERVING);
+        // Per ROOT, not one switch for all five: they carry different rules over different data, and a
+        // single flag would make the first flip the riskiest one available.
+        for (String entity : new String[] {"Conversation", "ChatMessage", "ChatMessageReaction",
+                                           "ConversationParticipant", "ChatPresence"})
+            check("no rows are narrowed yet (" + entity + ")", !ChatReadScope.isEnforced(entity));
+        check("and an entity this does not scope is not enforced either",
+              !ChatReadScope.isEnforced("Document"));
+        // The line says which mode each root is in, so one census tells observing from enforcing per root
+        // rather than per deploy.
+        check("the reported line says WOULD SCOPE while a root is observing",
+              ChatReadScope.logLine("Conversation", ChatReadScope.MEMBER).contains("WOULD SCOPE"));
+
+        // ── The token names the CALLER, not the feature ──────────────────────────────────────────────────
+        // It is issued for every client read, chat or not, and selects per-entity rules. A feature-named
+        // token becomes a lie the moment anything outside chat is scoped for the same caller kind.
+        check("the member token is not named after chat", "member", ChatReadScope.MEMBER);
+        check("nor the back-office one", "backoffice", ChatReadScope.BACKOFFICE);
 
         System.out.println(fail == 0 ? "\nALL " + pass + " PASS" : "\n" + fail + " FAILED");
         if (fail > 0)
