@@ -146,9 +146,11 @@ final class SignInApprovals {
     // The approver emails carry the same personal context (name, phone, IP, place, browser) into the `mail` table, so
     // they age out with it: subject reduced to its prefix, body replaced. What is in the super administrators' own
     // mailboxes is outside this system's reach (flagged in docs/security/backoffice-second-factor.md).
+    // The lower bound is the day approver emails started: no older mail can match, and without it the date range
+    // covers nearly all of `mail`, so the unindexed LIKE turned every boot and decision into a full scan (6 s in prod).
     private static final String CLEAR_OLD_APPROVER_MAIL_SQL =
         "UPDATE mail SET subject = $1, content = $2" +
-        " WHERE subject LIKE $3 AND date < now() - interval '" + CONTEXT_RETENTION_DAYS + " days'";
+        " WHERE subject LIKE $3 AND date >= '2026-11-06' AND date < now() - interval '" + CONTEXT_RETENTION_DAYS + " days'";
 
     // ---- coverage and status ---------------------------------------------------------------------------------------
 
