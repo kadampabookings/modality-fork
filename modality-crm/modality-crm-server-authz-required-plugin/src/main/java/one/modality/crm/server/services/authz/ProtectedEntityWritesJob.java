@@ -384,6 +384,8 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         //   still compose mail, which is the relay itself and is not closed here. See MailWritePolicy.
         // - and support chat: written by its own member, or by the back office as itself. Observing first
         //   (2026-11-09). See ChatWritePolicy.
+        // - and viewing records: a MediaConsumption row is written by the account whose attendance it is, or the
+        //   back office. Observing first (2026-11-10). See MediaConsumptionWritePolicy.
         //
         // THREE RULES USED TO STAND HERE AND NO LONGER DO: an owner's email is their login, an email on
         // somebody else's account's person, and moving a person into another account. All three asked
@@ -410,7 +412,7 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
                     + " published by the server only and delivered to verified back offices only (ENFORCING)");
         ClientSubmitGuard.registerWritePolicy(new ClientWritePolicies(
             new GrantTableWritePolicy(), new UnscopedWritePolicy(), new MailWritePolicy(), new BackofficeOnlyWritePolicy(),
-            new ChatWritePolicy()));
+            new ChatWritePolicy(), new MediaConsumptionWritePolicy()));
         Console.log("🛡 Write authorization active on " + REQUIRED_OPERATIONS.size() + " entities and "
                     + REQUIRED_OPERATIONS_BY_FIELD.size() + " fields"
                     + (ENFORCED_ENTITIES.isEmpty() ? " — observing only, nothing is refused yet"
@@ -426,7 +428,9 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
                     + " (person is closed outright by the deny list, not by a row rule); booking tables back-office only — "
                     + (BackofficeOnlyWritePolicy.ENFORCING ? "ENFORCING" : "observing only")
                     + "; support chat written by its own member or the back office as itself — "
-                    + (ChatWritePolicy.ENFORCING ? "ENFORCING" : "observing only"));
+                    + (ChatWritePolicy.ENFORCING ? "ENFORCING" : "observing only")
+                    + "; viewing records written by their own account — "
+                    + (MediaConsumptionWritePolicy.ENFORCING ? "ENFORCING" : "observing only"));
         // The read side says its own state for the same reason the three lines above say theirs, and it
         // did not on the day it started refusing: the only way to tell whether production was running the
         // enforcing build was to notice that the SAME jar had added MoneyAccount to the first line. That
