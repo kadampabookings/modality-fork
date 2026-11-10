@@ -124,9 +124,11 @@ final class ChatWritePolicy implements ClientSubmitGuard.WritePolicy {
             return foreignKey("ChatMessage", "conversation", messageId);
         }
 
+        // The seam hands ids over as strings, which the driver refuses for an integer column; see primaryKeyOf.
         private Future<Object> foreignKey(String entityName, String field, Object id) {
             return EntityStore.create(DataSourceModelService.getDefaultDataSourceModel())
-                .<Entity>executeQuery("select " + field + " from " + entityName + " where id=$1", id)
+                .<Entity>executeQuery("select " + field + " from " + entityName + " where id=$1",
+                    ProtectedEntityWritesJob.primaryKeyOf(id))
                 .map(rows -> rows.isEmpty() ? null : Entities.getPrimaryKey(rows.get(0).getForeignEntityId(field)));
         }
     };
