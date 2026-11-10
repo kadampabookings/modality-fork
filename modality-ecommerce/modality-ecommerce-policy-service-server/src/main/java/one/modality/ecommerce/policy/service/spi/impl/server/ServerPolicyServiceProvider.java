@@ -87,6 +87,10 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
         // superset).
         ", rc as materialized (select x.resource.id as rcResource, x.resource.site.id as rcSite, x.item, x.online, x.allowsMale, x.allowsFemale, x.allowsLay, x.allowsOrdained, x.max, x.maxReserved, x.startDate, x.endDate" +
         ", coalesce(x.event?.preDate, x.event?.startDate) as rcFirst, coalesce(x.event?.postDate, x.event?.endDate) as rcLast" +
+        // The beds a WHOLE-ROOM booking of this room's item needs free (V0141: share_owner_quantity := item
+        // capacity), read by the whole-room counts below. 1 for an item with no capacity, which is not a
+        // whole-room type: clients do not read the counts for it.
+        ", coalesce(x.item.capacity, 1) as rcCapacity" +
         " from ResourceConfiguration x" +
         " where (x.event=null or coalesce(x.event?.postDate, x.event?.endDate) >= (select sd.sdFirst from sd)" +
         " and coalesce(x.event?.preDate, x.event?.startDate) <= (select sd.sdLast from sd))" +
@@ -177,7 +181,17 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
         "sum(!rc.(allowsMale and allowsLay) ? 0 : " + RC_AVAIL_EXPR + ")," +       // lay male
         "sum(!rc.(allowsFemale and allowsLay) ? 0 : " + RC_AVAIL_EXPR + ")," +     // lay female
         "sum(!rc.(allowsMale and allowsOrdained) ? 0 : " + RC_AVAIL_EXPR + ")," +  // monk
-        "sum(!rc.(allowsFemale and allowsOrdained) ? 0 : " + RC_AVAIL_EXPR + ")" + // nun
+        "sum(!rc.(allowsFemale and allowsOrdained) ? 0 : " + RC_AVAIL_EXPR + ")," + // nun
+        // Then the same four categories counted in ROOMS that are entirely free: a whole-room booking is allocated
+        // into ONE room with every bed free on every night (deferred_allocate_document_line: partition and
+        // physical room both >= share_owner_quantity, the item's capacity). The bed sums above cannot say that --
+        // one stray single-bed booking in each of two twins reads as 2 free beds, and event 1957 offered its
+        // last Standard twin bed as "Book the room", refused at submit. Appended, so a client reading only the
+        // first four elements is unaffected.
+        "sum((!rc.(allowsMale and allowsLay) or " + RC_AVAIL_EXPR + " < rc.rcCapacity) ? 0 : 1)," +       // lay male rooms
+        "sum((!rc.(allowsFemale and allowsLay) or " + RC_AVAIL_EXPR + " < rc.rcCapacity) ? 0 : 1)," +     // lay female rooms
+        "sum((!rc.(allowsMale and allowsOrdained) or " + RC_AVAIL_EXPR + " < rc.rcCapacity) ? 0 : 1)," +  // monk rooms
+        "sum((!rc.(allowsFemale and allowsOrdained) or " + RC_AVAIL_EXPR + " < rc.rcCapacity) ? 0 : 1)" + // nun rooms
         "] from rc rc" +
         // Both booking sums in ONE pass over this room's live attendances (full-select LATERAL — a
         // one-row aggregate, so the cross join never drops rc rows and Postgres cannot pull it up:

@@ -134,6 +134,11 @@ public interface ScheduledItem extends Entity,
         return getBooleanFieldValue(resource);
     }
 
+    /**
+     * Free beds per category — [layMale, layFemale, monk, nun] — then, from a server that computes them, the
+     * same four categories counted in rooms entirely free (what a whole-room booking needs: one room with every
+     * bed free). Read by index, so a reader of the first four is unaffected by the rest.
+     */
     default Object[] getMaleFemaleAvailabilities() {
         return (Object[]) getFieldValue(maleFemaleAvailabilities);
     }
