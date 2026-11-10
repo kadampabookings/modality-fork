@@ -36,12 +36,24 @@ public class ChatReadScopeCheck {
               "person=CALLER_PERSON", dql("ConversationParticipant", ChatReadScope.MEMBER));
 
         // ── The back office: the centres it is granted, expressed as EVENTS ──────────────────────────────
-        check("a back office is bounded by its granted events",
-              "event in CALLER_GRANTED_EVENTS", dql("Conversation", ChatReadScope.BACKOFFICE));
+        // BOTH kinds of grant, and the second arm is why the inbox still works. A grant row names an event,
+        // an event type, or neither, and an organisation-wide one never widens into eventIds — 33 of 43
+        // staging rows are organisation-wide and 18 of 25 users hold no event grant at all, so the granted-
+        // events arm alone binds an empty array for most operators and returns nothing. Measured before the
+        // flip, which is the only time it is worth measuring.
+        String grantedEvents = "event in CALLER_GRANTED_EVENTS"
+            + " or event in (select id from Event where organization in CALLER_GRANTED_ORGANIZATIONS)";
+        check("a back office is bounded by its granted events OR its granted organisations",
+              grantedEvents, dql("Conversation", ChatReadScope.BACKOFFICE));
         check("and its messages through those conversations",
-              "conversation in (select id from Conversation where event in CALLER_GRANTED_EVENTS)",
+              "conversation in (select id from Conversation where " + grantedEvents + ")",
               dql("ChatMessage", ChatReadScope.BACKOFFICE));
-        check("presence too", "event in CALLER_GRANTED_EVENTS", dql("ChatPresence", ChatReadScope.BACKOFFICE));
+        check("presence too", grantedEvents, dql("ChatPresence", ChatReadScope.BACKOFFICE));
+        // The organisation arm must be a SUBQUERY: event.organization is a path, and a path in a scope
+        // condition is refused at both injection points.
+        for (String entity : new String[] {"Conversation", "ChatMessage", "ChatMessageReaction", "ChatPresence"})
+            check("the organisation arm never navigates (" + entity + ")",
+                  !String.valueOf(dql(entity, ChatReadScope.BACKOFFICE)).contains("event.organization"));
 
         // THE ONE WORTH ARGUING WITH: conversation.organization_id is NULL on every production row, and the
         // front office sets it only when a config resolves one. A rule on it would match nothing today and
@@ -50,8 +62,16 @@ public class ChatReadScopeCheck {
                                            "ConversationParticipant", "ChatPresence"})
             for (String scope : new String[] {ChatReadScope.MEMBER, ChatReadScope.BACKOFFICE}) {
                 String rule = dql(entity, scope);
-                check("no rule leans on organization (" + entity + "/" + scope + ")",
-                      rule == null || !rule.contains("organization"));
+                // The prohibition is on the SCOPED ROW's own organization column — conversation.
+                // organization_id, NULL on every production row — not on the word. The back-office arm
+                // reaches an organisation through `select id from Event where organization in …`, which is
+                // Event's column and is how most operators are granted anything at all. So the sanctioned
+                // subquery is removed first and nothing named organization may remain: this still fails the
+                // rule it was written to fail, and no longer fails the one that replaced it.
+                String outsideEventSubquery = rule == null ? "" : rule.replace(
+                    "(select id from Event where organization in CALLER_GRANTED_ORGANIZATIONS)", "");
+                check("no rule leans on the conversation's own organization (" + entity + "/" + scope + ")",
+                      !outsideEventSubquery.contains("organization"));
                 // A path in a condition is refused at both injection points; a subquery is not. Every hop
                 // these rules take is inside a select, so none of them contains a dotted navigation.
                 check("and none of them navigates (" + entity + "/" + scope + ")",

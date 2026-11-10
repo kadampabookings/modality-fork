@@ -32,9 +32,9 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <p>{@code conversation.organization_id} is NULL on every production row — the front office sets it only
  * when its offline-email config resolves one, which it never has. A predicate on it would match nothing
- * today and some rows later, silently. {@code event_id} is populated on every row, and
- * {@code CALLER_GRANTED_EVENTS} is already the caller's flattened scope, so the boundary is expressed there.
- * {@code event.organization} would be a path, which is the refusal above.
+ * today and some rows later, silently. {@code event_id} is populated on every row, so the boundary is
+ * expressed on the event — reached by BOTH kinds of grant, see {@link #GRANTED_EVENTS}, because most
+ * operators hold an organisation-wide grant and no event one.
  *
  * <h3>Observing, and what it costs</h3>
  *
@@ -84,9 +84,28 @@ final class ChatReadScope implements ClientReadScope.Provider, ClientScopeToken.
     /** The member's own conversations, the hop moved inside a subquery so nothing navigates. */
     private static final String MY_CONVERSATIONS =
         "(select id from Conversation where viewerPerson=CALLER_PERSON)";
-    /** The conversations of the events this caller is granted. */
+    /**
+     * The events this caller may see, by EITHER kind of grant.
+     *
+     * <p><b>Granted events alone would have emptied most inboxes.</b> A grant row names an event, an event
+     * type, or neither — and {@code CallerReadScope.assemble} is explicit that "an event row does NOT widen
+     * to its organisation": an organisation-wide grant lands in {@code organizationIds} and never in
+     * {@code eventIds}. On staging that is 33 of 43 grant rows, and <b>18 of 25 back-office users hold no
+     * event or event-type grant at all</b>, so {@code CALLER_GRANTED_EVENTS} binds an empty array for them
+     * and every chat read would have returned nothing. Measured before flipping, not after.
+     *
+     * <p>The organisation arm is a SUBQUERY rather than {@code event.organization}, which is a path, and a
+     * path in a scope condition is refused at both injection points. The two-armed shape is safe at both:
+     * each parenthesises what it injects, which is what stops {@code <caller's filter> and A or B} being read
+     * as {@code (<filter> and A) or B} — the defect {@code ClientReadScopeCheck} pins.
+     */
+    private static final String GRANTED_EVENTS =
+        "event in CALLER_GRANTED_EVENTS"
+        + " or event in (select id from Event where organization in CALLER_GRANTED_ORGANIZATIONS)";
+
+    /** The conversations of the events this caller is granted, by either kind of grant. */
     private static final String GRANTED_CONVERSATIONS =
-        "(select id from Conversation where event in CALLER_GRANTED_EVENTS)";
+        "(select id from Conversation where " + GRANTED_EVENTS + ")";
 
     private static final ChatReadScope INSTANCE = new ChatReadScope();
 
@@ -158,7 +177,7 @@ final class ChatReadScope implements ClientReadScope.Provider, ClientScopeToken.
         String conversations = backoffice ? GRANTED_CONVERSATIONS : MY_CONVERSATIONS;
         switch (entityName) {
             case "Conversation":
-                return backoffice ? "event in CALLER_GRANTED_EVENTS" : "viewerPerson=CALLER_PERSON";
+                return backoffice ? GRANTED_EVENTS : "viewerPerson=CALLER_PERSON";
             case "ChatMessage":
                 return "conversation in " + conversations;
             case "ChatMessageReaction":
@@ -172,7 +191,7 @@ final class ChatReadScope implements ClientReadScope.Provider, ClientScopeToken.
             case "ChatPresence":
                 // The front office reads agents' presence to show who is online, and nothing else needs a
                 // viewer's last-seen: a per-person last-seen readable by any member is a tracker.
-                return backoffice ? "event in CALLER_GRANTED_EVENTS" : "agent";
+                return backoffice ? GRANTED_EVENTS : "agent";
             default:
                 return null;
         }
