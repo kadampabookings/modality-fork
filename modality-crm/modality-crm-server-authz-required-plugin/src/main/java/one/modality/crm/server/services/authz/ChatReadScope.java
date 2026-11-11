@@ -165,10 +165,28 @@ final class ChatReadScope implements ClientReadScope.Provider, ClientScopeToken.
         if (dql == null)
             return null; // an entity this does not scope compiles exactly as it did before
         Console.log(logLine(name, scopeToken));
-        if (!isEnforced(name))
+        // PARSED EVEN WHILE OBSERVING, and this is the point of observing at all. Returning null before the
+        // parse — which is what this did for its first two days — means the rule TEXT is never exercised
+        // until the day a root is enforced, so the first production parse of a rule would happen under live
+        // traffic, and a rule naming a field the real domain model spells differently would surface as
+        // failing reads at the flip. Parsing here makes every observing deploy a check of the rule, which is
+        // what the census could not be: the census proves which callers read what, not that the rule compiles.
+        Expression<?> condition;
+        try {
+            condition = parsed.computeIfAbsent(name + '\u0000' + scopeToken, key ->
+                DataSourceModelService.getDefaultDataSourceModel().getDomainModel().parseExpression(dql, domainClass));
+        } catch (RuntimeException e) {
+            // Enforced and unparseable: fail the read. Returning null here would silently UNSCOPE it, which
+            // is the one direction a broken scope must never take.
+            if (isEnforced(name))
+                throw e;
+            // Observing and unparseable: harmless, and said loudly. One line per statement shape, since an
+            // unscoped compile is cached and this is not consulted again for that shape.
+            Console.log("🛡 CHAT SCOPE RULE WILL NOT COMPILE for " + name + " under " + scopeToken
+                        + " — it would fail reads if enforced: " + e);
             return null;
-        return parsed.computeIfAbsent(name + '\u0000' + scopeToken, key ->
-            DataSourceModelService.getDefaultDataSourceModel().getDomainModel().parseExpression(dql, domainClass));
+        }
+        return isEnforced(name) ? condition : null;
     }
 
     /**
