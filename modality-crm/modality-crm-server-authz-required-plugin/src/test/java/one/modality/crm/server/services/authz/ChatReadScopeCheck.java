@@ -107,20 +107,20 @@ public class ChatReadScopeCheck {
         // single flag would make the first flip the riskiest one available. Conversation goes first — it is
         // the only rule that is a local column test, so what it returns is the easiest to reason about, and
         // it is where the exposure is: any signed-in member could read any conversation by changing one id.
-        check("Conversation is the root being enforced", ChatReadScope.isEnforced("Conversation"));
-        for (String entity : new String[] {"ChatMessage", "ChatMessageReaction",
+        // Back to none: the 11 Nov staging rehearsal found the back-office arm returns nothing for a caller
+        // whose scope is UNRESTRICTED (empty arrays) or stale (null), so no root is enforced again until
+        // both are fixed. See the plan's rehearsal section.
+        for (String entity : new String[] {"Conversation", "ChatMessage", "ChatMessageReaction",
                                            "ConversationParticipant", "ChatPresence"})
-            check("and the others are still only reported (" + entity + ")",
+            check("no root is enforced while the rehearsal's findings stand (" + entity + ")",
                   !ChatReadScope.isEnforced(entity));
         check("an entity this does not scope is not enforced either",
               !ChatReadScope.isEnforced("Document"));
         // The line says which mode each root is in, so ONE census tells observing from enforcing per root.
         // With the first root flipped the two wordings appear side by side, which is the point: a census
         // that could only say "this deploy is enforcing" would say nothing about which of the five.
-        check("the enforced root reports SCOPING",
-              ChatReadScope.logLine("Conversation", ChatReadScope.MEMBER).contains("SCOPING READ"));
-        check("and an observing one still reports WOULD SCOPE",
-              ChatReadScope.logLine("ChatMessage", ChatReadScope.MEMBER).contains("WOULD SCOPE READ"));
+        check("every root reports WOULD SCOPE while none is enforced",
+              ChatReadScope.logLine("Conversation", ChatReadScope.MEMBER).contains("WOULD SCOPE READ"));
 
         // ── The token names the CALLER, not the feature ──────────────────────────────────────────────────
         // It is issued for every client read, chat or not, and selects per-entity rules. A feature-named
