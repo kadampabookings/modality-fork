@@ -104,16 +104,23 @@ public class ChatReadScopeCheck {
         // ── Observing: consulted, reported, and changing nothing ─────────────────────────────────────────
         check("but the scope IS consulted, or observing would report nothing", ChatReadScope.OBSERVING);
         // Per ROOT, not one switch for all five: they carry different rules over different data, and a
-        // single flag would make the first flip the riskiest one available.
-        for (String entity : new String[] {"Conversation", "ChatMessage", "ChatMessageReaction",
+        // single flag would make the first flip the riskiest one available. Conversation goes first — it is
+        // the only rule that is a local column test, so what it returns is the easiest to reason about, and
+        // it is where the exposure is: any signed-in member could read any conversation by changing one id.
+        check("Conversation is the root being enforced", ChatReadScope.isEnforced("Conversation"));
+        for (String entity : new String[] {"ChatMessage", "ChatMessageReaction",
                                            "ConversationParticipant", "ChatPresence"})
-            check("no rows are narrowed yet (" + entity + ")", !ChatReadScope.isEnforced(entity));
-        check("and an entity this does not scope is not enforced either",
+            check("and the others are still only reported (" + entity + ")",
+                  !ChatReadScope.isEnforced(entity));
+        check("an entity this does not scope is not enforced either",
               !ChatReadScope.isEnforced("Document"));
-        // The line says which mode each root is in, so one census tells observing from enforcing per root
-        // rather than per deploy.
-        check("the reported line says WOULD SCOPE while a root is observing",
-              ChatReadScope.logLine("Conversation", ChatReadScope.MEMBER).contains("WOULD SCOPE"));
+        // The line says which mode each root is in, so ONE census tells observing from enforcing per root.
+        // With the first root flipped the two wordings appear side by side, which is the point: a census
+        // that could only say "this deploy is enforcing" would say nothing about which of the five.
+        check("the enforced root reports SCOPING",
+              ChatReadScope.logLine("Conversation", ChatReadScope.MEMBER).contains("SCOPING READ"));
+        check("and an observing one still reports WOULD SCOPE",
+              ChatReadScope.logLine("ChatMessage", ChatReadScope.MEMBER).contains("WOULD SCOPE READ"));
 
         // ── The token names the CALLER, not the feature ──────────────────────────────────────────────────
         // It is issued for every client read, chat or not, and selects per-entity rules. A feature-named

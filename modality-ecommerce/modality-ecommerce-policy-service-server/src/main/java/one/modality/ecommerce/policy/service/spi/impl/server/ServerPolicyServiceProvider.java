@@ -191,7 +191,19 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
         "sum((!rc.(allowsMale and allowsLay) or " + RC_AVAIL_EXPR + " < rc.rcCapacity) ? 0 : 1)," +       // lay male rooms
         "sum((!rc.(allowsFemale and allowsLay) or " + RC_AVAIL_EXPR + " < rc.rcCapacity) ? 0 : 1)," +     // lay female rooms
         "sum((!rc.(allowsMale and allowsOrdained) or " + RC_AVAIL_EXPR + " < rc.rcCapacity) ? 0 : 1)," +  // monk rooms
-        "sum((!rc.(allowsFemale and allowsOrdained) or " + RC_AVAIL_EXPR + " < rc.rcCapacity) ? 0 : 1)" + // nun rooms
+        "sum((!rc.(allowsFemale and allowsOrdained) or " + RC_AVAIL_EXPR + " < rc.rcCapacity) ? 0 : 1)," + // nun rooms
+        // Then the beds, and the entirely free rooms, open to EITHER sex -- the only ones a booking with no
+        // gender can have: the allocation trigger (V0154) gives document.person_male null nothing but a
+        // configuration with allows_male AND allows_female. The four sums above cannot say it, since a mixed
+        // bed is counted once as a man's and once as a woman's: "10 and 10" is ten mixed beds, or ten men's
+        // beds and ten women's -- and in the second case a booking without a gender is refused as sold out
+        // while the client, reading 10 and 10, saw no reason to ask for one (event 1987's Dormitory).
+        // Lay and ordained apart, as the trigger treats an unknown ordination as lay. Appended, like the
+        // rooms, so a client reading only the first eight elements is unaffected.
+        "sum(!rc.(allowsMale and allowsFemale and allowsLay) ? 0 : " + RC_AVAIL_EXPR + ")," +       // either sex, lay
+        "sum(!rc.(allowsMale and allowsFemale and allowsOrdained) ? 0 : " + RC_AVAIL_EXPR + ")," +  // either sex, ordained
+        "sum((!rc.(allowsMale and allowsFemale and allowsLay) or " + RC_AVAIL_EXPR + " < rc.rcCapacity) ? 0 : 1)," +      // either-sex lay rooms
+        "sum((!rc.(allowsMale and allowsFemale and allowsOrdained) or " + RC_AVAIL_EXPR + " < rc.rcCapacity) ? 0 : 1)" +  // either-sex ordained rooms
         "] from rc rc" +
         // Both booking sums in ONE pass over this room's live attendances (full-select LATERAL — a
         // one-row aggregate, so the cross join never drops rc rows and Postgres cannot pull it up:

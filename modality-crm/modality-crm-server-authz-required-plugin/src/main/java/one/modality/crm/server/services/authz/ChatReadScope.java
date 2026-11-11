@@ -73,7 +73,7 @@ final class ChatReadScope implements ClientReadScope.Provider, ClientScopeToken.
      * rule that is a local column test, so what it returns is the easiest to reason about, and it is where
      * the exposure actually is — any signed-in member can read any conversation by changing one id.
      */
-    private static final Set<String> ENFORCED_ROOTS = Set.of();
+    private static final Set<String> ENFORCED_ROOTS = Set.of("Conversation");
 
     /** Whether this root's condition is applied rather than merely reported. */
     static boolean isEnforced(String entityName) {
