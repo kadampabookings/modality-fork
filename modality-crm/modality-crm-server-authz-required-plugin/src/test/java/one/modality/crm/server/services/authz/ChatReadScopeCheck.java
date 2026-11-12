@@ -128,6 +128,30 @@ public class ChatReadScopeCheck {
         check("the member token is not named after chat", "member", ChatReadScope.MEMBER);
         check("nor the back-office one", "backoffice", ChatReadScope.BACKOFFICE);
 
+        // ── THE UNRESTRICTED SCOPE, which the 11 Nov rehearsal cost an inbox to find ─────────────────────
+        // CallerReadScope.Scope carries an `unrestricted` flag whose javadoc says such a caller should get
+        // no predicate at all, and grantedScopeOf never consults it — UNRESTRICTED's arrays are EMPTY, so
+        // `event in CALLER_GRANTED_EVENTS` matched nothing and a super admin read NOTHING. A token rather
+        // than a conditional rule because compiled sql is cached per (statement, token): a condition that
+        // varied by caller within one token would serve one caller's compile to another.
+        //
+        // These cases guard the OUTCOME, not the branch that produces it, and the difference is worth
+        // knowing. Deleting conditionDql's explicit `if (UNRESTRICTED…) return null` fails NOTHING here,
+        // because the unknown-token fall-through below it returns null too. Probed, and reported rather
+        // than quietly accepted. The explicit branch still earns its place: it keeps "unrestricted means no
+        // rule" true however the known-token test is edited later, which is exactly the edit that would
+        // otherwise hand a super admin the back-office rule again. What no check can pin is which line
+        // returned the null.
+        for (String entity : new String[] {"Conversation", "ChatMessage", "ChatMessageReaction",
+                                           "ConversationParticipant", "ChatPresence"})
+            check("an unrestricted caller gets no rule for " + entity,
+                  dql(entity, ChatReadScope.UNRESTRICTED) == null);
+        check("and none for an entity this does not scope either",
+              dql("Document", ChatReadScope.UNRESTRICTED) == null);
+        check("the unrestricted token is its own scope, not a flag on another",
+              !ChatReadScope.UNRESTRICTED.equals(ChatReadScope.BACKOFFICE)
+              && !ChatReadScope.UNRESTRICTED.equals(ChatReadScope.MEMBER));
+
         System.out.println(fail == 0 ? "\nALL " + pass + " PASS" : "\n" + fail + " FAILED");
         if (fail > 0)
             throw new AssertionError(fail + " chat read scope checks failed");

@@ -6,6 +6,7 @@ import dev.webfx.stack.orm.datasourcemodel.service.DataSourceModelService;
 import dev.webfx.stack.orm.dql.sqlcompiler.ClientReadScope;
 import dev.webfx.stack.orm.expression.Expression;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
+import one.modality.crm.shared.services.authn.ModalityUserPrincipal;
 
 import java.util.Map;
 import java.util.Set;
@@ -103,6 +104,22 @@ final class ChatReadScope implements ClientReadScope.Provider, ClientScopeToken.
     static final String MEMBER = "member";
     /** A verified back office, reading the centres it is granted. */
     static final String BACKOFFICE = "backoffice";
+    /**
+     * A caller whose scope is UNRESTRICTED — a super admin. Its rules are all null: no predicate at all.
+     *
+     * <p><b>This exists because the 11 Nov rehearsal emptied the inbox.</b> {@code CallerReadScope.Scope}
+     * carries an {@code unrestricted} flag, and its javadoc says such a caller "should have no predicate
+     * injected at all" — but {@code grantedScopeOf} returns the arrays and never consults it, and
+     * UNRESTRICTED's arrays are EMPTY by construction. So a back-office rule reading
+     * {@code event in CALLER_GRANTED_EVENTS} matched nothing and the caller with the most access read the
+     * least.
+     *
+     * <p><b>A token rather than a conditional rule, and that is forced.</b> Compiled sql is cached per
+     * (statement, token), so a condition that varied by caller within one token would serve one caller's
+     * compile to another. Making it a third token keeps the cache honest and costs one more entry per
+     * statement shape — the fixed-set rule is what bounds that.
+     */
+    static final String UNRESTRICTED = "unrestricted";
 
     /** The member's own conversations, the hop moved inside a subquery so nothing navigates. */
     private static final String MY_CONVERSATIONS =
@@ -155,7 +172,60 @@ final class ChatReadScope implements ClientReadScope.Provider, ClientScopeToken.
     public Object tokenForCaller() {
         if (!(OBSERVING || !ENFORCED_ROOTS.isEmpty()) || !ThreadLocalStateHolder.isClientOrigin())
             return null;
-        return ThreadLocalStateHolder.isEffectivelyBackoffice() ? BACKOFFICE : MEMBER;
+        if (!ThreadLocalStateHolder.isEffectivelyBackoffice())
+            return MEMBER; // the member rules bind caller.person, which is resolved per call, not cached
+        // A back-office caller's rules bind CALLER_GRANTED_*, which come from a cache that can be
+        // UNRESTRICTED (empty arrays) or stale (null). Both make every rule match nothing, so which one this
+        // caller is decides the token — and is reported, because the rate is the thing nobody knows.
+        return scopeOfBackofficeCaller();
+    }
+
+    /**
+     * The token for a verified back office, from the scope actually computed for them.
+     *
+     * <p><b>Reports what it found, which is the point.</b> With nothing enforced, no statement names
+     * {@code CALLER_GRANTED_*}, so the resolver is never called and {@code CallerReadScope.peek} never runs
+     * — its miss counter can only read zero and the staleness rate is unmeasurable from production. This
+     * peeks on the same thread the binder would, so the rate is known BEFORE anything depends on it.
+     *
+     * <p>A miss is not made into a refusal here. While observing it changes nothing, and once enforcing a
+     * stale scope binds null and matches nothing anyway — the decision about what SHOULD happen then is
+     * {@code CallerReadScope}'s, shared with more than chat, and is meant to be taken on this evidence
+     * rather than before it.
+     */
+    private Object scopeOfBackofficeCaller() {
+        CallerReadScope.Scope scope;
+        try {
+            scope = CallerReadScope.peek(ModalityUserPrincipal.getUserPersonId(ThreadLocalStateHolder.getUserId()));
+        } catch (Throwable e) {
+            scope = null; // a probe must not be able to fail a read
+        }
+        if (scope != null && scope.unrestricted()) {
+            report(UNRESTRICTED_SEEN, "a super admin reads unscoped");
+            return UNRESTRICTED;
+        }
+        if (scope == null)
+            // Stale or never computed: the 120s TTL, or a caller whose grants were never asked for. Both
+            // bind null and match nothing once enforcing, which is the silently empty screen.
+            report(STALE_SEEN, "no scope cached for a back office — its rules would match NOTHING if enforced");
+        else if (scope.isEmpty())
+            report(EMPTY_SEEN, "a back office with no grants at all");
+        return BACKOFFICE;
+    }
+
+    private static final java.util.concurrent.atomic.AtomicLong UNRESTRICTED_SEEN = new java.util.concurrent.atomic.AtomicLong();
+    private static final java.util.concurrent.atomic.AtomicLong STALE_SEEN = new java.util.concurrent.atomic.AtomicLong();
+    private static final java.util.concurrent.atomic.AtomicLong EMPTY_SEEN = new java.util.concurrent.atomic.AtomicLong();
+
+    /**
+     * One line the first time each kind is seen, then a count every 100th, so a steady rate is visible and a
+     * busy server is not flooded. The same shape as {@code CallerReadScope}'s own miss line, for the same
+     * reason: a systematic occurrence must be visible, a frequent one must not drown the log.
+     */
+    private static void report(java.util.concurrent.atomic.AtomicLong counter, String what) {
+        long n = counter.incrementAndGet();
+        if (n == 1 || n % 100 == 0)
+            Console.log("🛡 SCOPE PROBE: " + what + " (seen " + n + ")");
     }
 
     @Override
@@ -212,6 +282,8 @@ final class ChatReadScope implements ClientReadScope.Provider, ClientScopeToken.
      * model to parse them against and without {@link #ENFORCING} having to be true to see them.
      */
     static String conditionDql(String entityName, Object scopeToken) {
+        if (UNRESTRICTED.equals(scopeToken))
+            return null; // a caller who may read anything gets no predicate at all
         boolean backoffice = BACKOFFICE.equals(scopeToken);
         if (!backoffice && !MEMBER.equals(scopeToken))
             return null; // not a scope this provider knows
