@@ -159,3 +159,4 @@ V0156__sign_in_security_board.sql
 V0157__invitation_answer_seen_date.sql
 V0158__account_settings.sql
 V0159__item_policy_gender_info_required_unset.sql
+V0160__staff_alert_letters.sql

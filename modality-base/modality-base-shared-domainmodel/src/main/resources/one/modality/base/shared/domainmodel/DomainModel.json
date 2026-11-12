@@ -1299,6 +1299,7 @@
     "payer": "boolean",
     "scopeOverride": "boolean",
     "sendPassword": "boolean",
+    "staffAlert": "boolean",
     "terms": "boolean"
   },
   "List": {

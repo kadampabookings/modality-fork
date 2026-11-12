@@ -34,6 +34,10 @@ import java.util.Set;
  * a bearer token for the booking, payment included. The send is a named, granted act now
  * (SendDocumentLetterEndpoint, SendDocumentLetter), and the column is how a client would step round it.
  *
+ * <p>{@code letter_type}, {@code mail_account} and {@code event_type.registration_mail_account_id} are closed because,
+ * since V0160, they decide where a staff alert goes — and a type flag flipped on an ordinary booking letter
+ * would send its cart link to that address instead of the booker. See the block in {@link #declare()}.
+ *
  * <p>{@code magic_link} is closed entirely: a client able to insert a row there could mint a sign-in link for any
  * account and follow it. No client writes it; the server creates, stamps and retires every row.
  *
@@ -194,9 +198,31 @@ final class ClientWriteSecrets {
         // thread). The legacy JavaFX reception and registration payment screens do write it, and are refused
         // from now on: confirmed 2026-10-19 that they are not used for payments.
         denyTable("money_transfer");
+        // Where a booking's letters go. Since V0160 a letter of a `letter_type.staff_alert` type is addressed to
+        // the mail account it is sent from (the letter's own, else the event type's registration account, else the
+        // organisation's) instead of the booker. So two values that only ever chose a SENDER now choose a
+        // RECIPIENT, and both were open to any client, anonymous included (security review, 2026-11-12):
+        //   - letter_type: flip `staff_alert` on the Confirmation or Event letter type and every automated
+        //     booking letter of every centre — the booker's details and the cart link, a bearer token for the
+        //     booking, payment included — goes to the type's sending account instead of the booker;
+        //   - mail_account.email: point that account at yourself and receive them.
+        // Closed outright, like the payment configuration above: letter types are reference rows only migrations
+        // write, and no client writes a mail account (checked 2026-11-12: kbs3-react and the legacy Java UI only
+        // READ both; KBS2 writes the database itself and never reaches this list). Any refusal is an attempt.
+        // The whole mail_account row rather than its email: its name is the recipient's display name, and its
+        // organisation and SMTP account decide whose mail it carries.
+        denyTable("letter_type");
+        denyTable("mail_account");
+        // The event type's link to its registration account is the second step of the same resolution: pointing it
+        // at an account someone else reads redirects that type's staff alerts in every centre. Only the column:
+        // nothing writes event types from a client today, but an event-type editor may, and its other columns
+        // choose no recipient. organization.registration_mail_account_id, the third step, is behind
+        // EditOrganizationDetails in ProtectedEntityWritesJob; letter.account_id, the first, behind
+        // EditLetterProperties.
+        denyColumn("event_type", "registration_mail_account_id");
         int columns = DENIED_COLUMNS.values().stream().mapToInt(Set::size).sum();
         Console.log("🛡 Client writes may not touch people, payments, payment configuration, sign-in links or invitation"
-                    + " authorship, a mail's delivery record, a booking's letter trigger, nor the account's"
+                    + " authorship, a mail's delivery record, a booking's letter trigger, where letters are addressed, nor the account's"
                     + " sign-in, status or privilege"
                     + " columns (" + String.join(", ", DENIED_TABLES) + " entirely, plus " + columns
                     + " columns across " + DENIED_COLUMNS.size() + " tables)");
