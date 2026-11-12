@@ -30,8 +30,8 @@ import java.util.Set;
  *
  * <p><b>Being on the list is not being safe.</b> This rule says only who may write a table at all. Whose rows a
  * member may write is each table's own rule: {@link ChatWritePolicy}, {@link MediaConsumptionWritePolicy},
- * {@link MailWritePolicy}. Label, the volunteer tables, SupportReport and the push tables have no such rule yet;
- * Label in particular is open to every member, translator or not. And a listed table reaches past the list through
+ * {@link MailWritePolicy}, {@link LabelWritePolicy}, {@link VolunteerWritePolicy}. SupportReport and the push tables
+ * have no such rule yet. And a listed table reaches past the list through
  * the database: deleting a VolunteeringApplication cascades to the back office's volunteering_assignment and
  * volunteering_communication rows, and a Mail insert's triggers update its booking (security review, 2026-11-12).
  *

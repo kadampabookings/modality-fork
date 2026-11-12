@@ -388,6 +388,9 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         //   back office. Observing first (2026-11-10). See MediaConsumptionWritePolicy.
         // - and back office by default: without a verified back-office token, a client writes only the tables the
         //   front office writes. Observing first (2026-11-12). See FrontOfficeTablesWritePolicy.
+        // - and two of the front office's own tables: a Label is only translated, by a translator; the volunteer
+        //   tables take only the public pages' writes, once per emailed link. Observing first (2026-11-12). See
+        //   LabelWritePolicy and VolunteerWritePolicy.
         //
         // THREE RULES USED TO STAND HERE AND NO LONGER DO: an owner's email is their login, an email on
         // somebody else's account's person, and moving a person into another account. All three asked
@@ -414,7 +417,8 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
                     + " published by the server only and delivered to verified back offices only (ENFORCING)");
         ClientSubmitGuard.registerWritePolicy(new ClientWritePolicies(
             new GrantTableWritePolicy(), new UnscopedWritePolicy(), new MailWritePolicy(), new BackofficeOnlyWritePolicy(),
-            new ChatWritePolicy(), new MediaConsumptionWritePolicy(), new FrontOfficeTablesWritePolicy()));
+            new ChatWritePolicy(), new MediaConsumptionWritePolicy(), new FrontOfficeTablesWritePolicy(),
+            new LabelWritePolicy(), new VolunteerWritePolicy()));
         Console.log("🛡 Write authorization active on " + REQUIRED_OPERATIONS.size() + " entities and "
                     + REQUIRED_OPERATIONS_BY_FIELD.size() + " fields"
                     + (ENFORCED_ENTITIES.isEmpty() ? " — observing only, nothing is refused yet"
@@ -434,7 +438,10 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
                     + "; viewing records written by their own account — "
                     + (MediaConsumptionWritePolicy.ENFORCING ? "ENFORCING" : "observing only")
                     + "; every other table back office only — "
-                    + (FrontOfficeTablesWritePolicy.ENFORCING ? "ENFORCING" : "observing only"));
+                    + (FrontOfficeTablesWritePolicy.ENFORCING ? "ENFORCING" : "observing only")
+                    + "; labels translated by translators only — " + (LabelWritePolicy.ENFORCING ? "ENFORCING" : "observing only")
+                    + "; volunteer tables as the public pages write them — "
+                    + (VolunteerWritePolicy.ENFORCING ? "ENFORCING" : "observing only"));
         // The read side says its own state for the same reason the three lines above say theirs, and it
         // did not on the day it started refusing: the only way to tell whether production was running the
         // enforcing build was to notice that the SAME jar had added MoneyAccount to the first line. That
