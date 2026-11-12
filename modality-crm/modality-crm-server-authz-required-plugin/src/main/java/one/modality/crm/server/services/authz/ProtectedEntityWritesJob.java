@@ -391,6 +391,8 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         // - and two of the front office's own tables: a Label is only translated, by a translator; the volunteer
         //   tables take only the public pages' writes, once per emailed link. Observing first (2026-11-12). See
         //   LabelWritePolicy and VolunteerWritePolicy.
+        // - and push subscriptions: a device subscribes for its own person, address and bookings, and its endpoint is
+        //   never rewritten. Observing first (2026-11-12). See PushSubscriptionWritePolicy.
         //
         // THREE RULES USED TO STAND HERE AND NO LONGER DO: an owner's email is their login, an email on
         // somebody else's account's person, and moving a person into another account. All three asked
@@ -418,7 +420,7 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         ClientSubmitGuard.registerWritePolicy(new ClientWritePolicies(
             new GrantTableWritePolicy(), new UnscopedWritePolicy(), new MailWritePolicy(), new BackofficeOnlyWritePolicy(),
             new ChatWritePolicy(), new MediaConsumptionWritePolicy(), new FrontOfficeTablesWritePolicy(),
-            new LabelWritePolicy(), new VolunteerWritePolicy()));
+            new LabelWritePolicy(), new VolunteerWritePolicy(), new PushSubscriptionWritePolicy()));
         Console.log("🛡 Write authorization active on " + REQUIRED_OPERATIONS.size() + " entities and "
                     + REQUIRED_OPERATIONS_BY_FIELD.size() + " fields"
                     + (ENFORCED_ENTITIES.isEmpty() ? " — observing only, nothing is refused yet"
@@ -441,7 +443,9 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
                     + (FrontOfficeTablesWritePolicy.ENFORCING ? "ENFORCING" : "observing only")
                     + "; labels translated by translators only — " + (LabelWritePolicy.ENFORCING ? "ENFORCING" : "observing only")
                     + "; volunteer tables as the public pages write them — "
-                    + (VolunteerWritePolicy.ENFORCING ? "ENFORCING" : "observing only"));
+                    + (VolunteerWritePolicy.ENFORCING ? "ENFORCING" : "observing only")
+                    + "; push subscriptions for the caller only — "
+                    + (PushSubscriptionWritePolicy.ENFORCING ? "ENFORCING" : "observing only"));
         // The read side says its own state for the same reason the three lines above say theirs, and it
         // did not on the day it started refusing: the only way to tell whether production was running the
         // enforcing build was to notice that the SAME jar had added MoneyAccount to the first line. That
@@ -571,7 +575,7 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         if (!clientOrigin && BOOKING_ENTITIES.contains(entityName))
             return Future.succeededFuture(true); // see BOOKING_ENTITIES: allowed anyway, and the busiest path
         if (refusesWithoutIdentity(userId, clientOrigin)) {
-            Console.log("🛡 REFUSED " + verb + " on " + entityName + " by " + userId
+            Console.log("🛡 REFUSED " + verb + " on " + entityName + " by " + CallerLabel.of(userId)
                         + " (no signed-in person behind this client write)");
             return Future.succeededFuture(false);
         }
@@ -597,7 +601,7 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
                     // A server write says so, so that a census reader is not left inferring it from a null
                     // principal — which is how the KDM sync sat in these rows unnoticed.
                     Console.log("🛡 " + (refusing ? "REFUSED" : "WOULD REFUSE") + " " + verb + " on " + entityName
-                                + " by " + userId + (clientOrigin ? "" : " [server write, allowed]")
+                                + " by " + CallerLabel.of(userId) + (clientOrigin ? "" : " [server write, allowed]")
                                 + " in " + describe(contexts) + needs);
                     return !refusing;
                 }))
@@ -609,7 +613,7 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
                 // grant, and the production alarm filters match per message — a database blip that read like an
                 // authorization refusal would be triaged as somebody lacking a grant.
                 Console.log("🛡 " + (refusing ? "REFUSED" : "WOULD REFUSE") + " " + verb + " on " + entityName
-                            + " by " + userId + (clientOrigin ? "" : " [server write, allowed]")
+                            + " by " + CallerLabel.of(userId) + (clientOrigin ? "" : " [server write, allowed]")
                             + " — OWNER LOOKUP FAILED, so where the row lives is unknown: " + failure.getMessage());
                 return Future.succeededFuture(!refusing);
             });

@@ -74,7 +74,7 @@ final class BackofficeOnlyWritePolicy implements ClientSubmitGuard.WritePolicy {
         // The principal and the audience are logged because this line exists to be acted on: it is the census.
         // Account identities, not personal data about a data subject.
         Console.log("🛡 " + (enforcing ? "REFUSED" : "WOULD REFUSE") + " " + write.verb() + " on " + write.entityName()
-                    + " by " + StateAccessor.getUserId(state)
+                    + " by " + CallerLabel.of(StateAccessor.getUserId(state))
                     + " (" + (verifiedBackoffice == null ? "no verified token" : "a front-office token")
                     + " — booking tables are written by the back office only)");
         return enforcing ? refusal : null;

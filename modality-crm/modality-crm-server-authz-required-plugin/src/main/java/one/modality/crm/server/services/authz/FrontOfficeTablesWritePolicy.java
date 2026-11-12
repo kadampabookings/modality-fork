@@ -30,8 +30,8 @@ import java.util.Set;
  *
  * <p><b>Being on the list is not being safe.</b> This rule says only who may write a table at all. Whose rows a
  * member may write is each table's own rule: {@link ChatWritePolicy}, {@link MediaConsumptionWritePolicy},
- * {@link MailWritePolicy}, {@link LabelWritePolicy}, {@link VolunteerWritePolicy}. SupportReport and the push tables
- * have no such rule yet. And a listed table reaches past the list through
+ * {@link MailWritePolicy}, {@link LabelWritePolicy}, {@link VolunteerWritePolicy}, {@link PushSubscriptionWritePolicy}.
+ * SupportReport and Error have no such rule yet. And a listed table reaches past the list through
  * the database: deleting a VolunteeringApplication cascades to the back office's volunteering_assignment and
  * volunteering_communication rows, and a Mail insert's triggers update its booking (security review, 2026-11-12).
  *
@@ -87,7 +87,7 @@ final class FrontOfficeTablesWritePolicy implements ClientSubmitGuard.WritePolic
             return null;
         // The census line: the principal and the audience, so a real member of staff left out is visible.
         Console.log("🛡 " + (enforcing ? "REFUSED" : "WOULD REFUSE") + " a write to a back-office table: " + write.verb()
-                    + " " + write.entityName() + " by " + StateAccessor.getUserId(state)
+                    + " " + write.entityName() + " by " + CallerLabel.of(StateAccessor.getUserId(state))
                     + " (" + (verifiedBackoffice == null ? "no verified token" : "a front-office token") + ")");
         return enforcing ? REFUSED : null;
     }

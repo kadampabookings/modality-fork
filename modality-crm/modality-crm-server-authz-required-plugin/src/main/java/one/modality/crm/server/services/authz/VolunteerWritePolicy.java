@@ -72,7 +72,7 @@ final class VolunteerWritePolicy implements ClientSubmitGuard.WritePolicy {
             return Future.succeededFuture(null);
         // Entity, verb and reason only: no row id, no value - these rows hold special-category data.
         Console.log("🛡 " + (ENFORCING ? "REFUSED" : "WOULD REFUSE") + " a volunteer write: "
-                    + write.verb() + " " + write.entityName() + " by " + StateAccessor.getUserId(state) + " — " + reason);
+                    + write.verb() + " " + write.entityName() + " by " + CallerLabel.of(StateAccessor.getUserId(state)) + " — " + reason);
         return Future.succeededFuture(ENFORCING ? REFUSED : null);
     }
 

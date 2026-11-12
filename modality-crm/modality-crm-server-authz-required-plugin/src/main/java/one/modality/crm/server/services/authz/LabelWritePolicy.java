@@ -94,7 +94,7 @@ final class LabelWritePolicy implements ClientSubmitGuard.WritePolicy {
                 if (reason == null)
                     return null;
                 Console.log("🛡 " + (ENFORCING ? "REFUSED" : "WOULD REFUSE") + " a label write: "
-                            + (write == null ? "?" : write.verb() + " Label") + " by " + userId + " — " + reason);
+                            + (write == null ? "?" : write.verb() + " Label") + " by " + CallerLabel.of(userId) + " — " + reason);
                 return ENFORCING ? REFUSED : null;
             });
     }

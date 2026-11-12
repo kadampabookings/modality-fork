@@ -138,7 +138,7 @@ final class MediaConsumptionWritePolicy implements ClientSubmitGuard.WritePolicy
                     return null;
                 // The census line. Account identities and entity names, no row ids and no durations.
                 Console.log("🛡 " + (ENFORCING ? "REFUSED" : "WOULD REFUSE") + " a media consumption write: "
-                            + (write == null ? "?" : write.verb() + " " + write.entityName()) + " by " + userId
+                            + (write == null ? "?" : write.verb() + " " + write.entityName()) + " by " + CallerLabel.of(userId)
                             + (backoffice ? " (back office)" : "") + " — " + reason);
                 return ENFORCING ? REFUSED : null;
             });

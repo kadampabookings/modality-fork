@@ -62,8 +62,8 @@ public final class ModalityWebPushSubscriptionStore implements WebPushSubscripti
 
                     return updateStore.submitChanges()
                             .map(result -> {
-                                Console.log("[webpush] rotated subscription " + sub.getPrimaryKey()
-                                        + " from " + oldEndpoint + " to " + newEndpoint);
+                                // Not the endpoints: each is where a device's notifications go.
+                                Console.log("[webpush] rotated subscription " + sub.getPrimaryKey());
                                 return true;
                             });
                 });
@@ -145,7 +145,7 @@ public final class ModalityWebPushSubscriptionStore implements WebPushSubscripti
                         .build())
                 .map(result -> {
                     int n = result.getRowCount();
-                    Console.log("[webpush] unsubscribed " + n + " recipient row(s) for email=" + email);
+                    Console.log("[webpush] unsubscribed " + n + " recipient row(s) for one address"); // not the address: personal data in a log nobody erases
                     return n;
                 });
     }

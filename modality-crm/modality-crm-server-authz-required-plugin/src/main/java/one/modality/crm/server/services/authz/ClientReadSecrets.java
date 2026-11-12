@@ -61,6 +61,12 @@ final class ClientReadSecrets {
         // bus. Equality against a bound parameter is what presenting a link does, and it is all that is left.
         ClientReadDenyList.denyColumnExceptEqualityMatch("volunteering_date_proposal", "action_token");
         ClientReadDenyList.denyColumnExceptEqualityMatch("volunteering_application", "arrival_confirmation_token");
+        // A push subscription's endpoint, added 2026-11-12: it is where a device's notifications go, and
+        // /rest/push/rotate-subscription (RotateSubscriptionHandler, no sign-in - the service worker calls it) moves
+        // a subscription to a new endpoint and keys given only the OLD endpoint. Readable, any client could have
+        // listed every device's endpoint and redirected its notifications to itself. The front office only ever
+        // looks its own device up BY its endpoint (use-push-subscription.ts), which equality still allows.
+        ClientReadDenyList.denyColumnExceptEqualityMatch("push_subscription", "endpoint");
         // RESTORED 2026-10-30, after 36 days paused.
         //
         // The watch it replaces is DELETED, not left beside it. The note here used to say the deny

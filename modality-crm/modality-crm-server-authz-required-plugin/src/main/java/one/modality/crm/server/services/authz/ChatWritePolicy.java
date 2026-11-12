@@ -150,7 +150,7 @@ final class ChatWritePolicy implements ClientSubmitGuard.WritePolicy {
                     return null;
                 // The census line. Account identities and entity names, not message content.
                 Console.log("🛡 " + (ENFORCING ? "REFUSED" : "WOULD REFUSE") + " a chat write: "
-                            + (write == null ? "?" : write.verb() + " " + write.entityName()) + " by " + userId
+                            + (write == null ? "?" : write.verb() + " " + write.entityName()) + " by " + CallerLabel.of(userId)
                             + (Boolean.TRUE.equals(verifiedBackoffice) ? " (back office)" : "") + " — " + reason);
                 return ENFORCING ? REFUSED : null;
             });
