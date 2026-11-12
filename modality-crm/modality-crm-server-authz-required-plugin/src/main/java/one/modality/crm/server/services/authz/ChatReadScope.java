@@ -201,15 +201,17 @@ final class ChatReadScope implements ClientReadScope.Provider, ClientScopeToken.
             scope = null; // a probe must not be able to fail a read
         }
         if (scope != null && scope.unrestricted()) {
-            report(UNRESTRICTED_SEEN, "a super admin reads unscoped");
+            // Expected and harmless now that unrestricted is its own token, so this one is throttled: the
+            // question it answers is "does it happen", which powers of ten answer as well as every line would.
+            report(UNRESTRICTED_SEEN, "a super admin reads unscoped", false);
             return UNRESTRICTED;
         }
         if (scope == null)
             // Stale or never computed: the 120s TTL, or a caller whose grants were never asked for. Both
             // bind null and match nothing once enforcing, which is the silently empty screen.
-            report(STALE_SEEN, "no scope cached for a back office — its rules would match NOTHING if enforced");
+            report(STALE_SEEN, "no scope cached for a back office — its rules would match NOTHING if enforced", true);
         else if (scope.isEmpty())
-            report(EMPTY_SEEN, "a back office with no grants at all");
+            report(EMPTY_SEEN, "a back office with no grants at all", true);
         return BACKOFFICE;
     }
 
@@ -218,15 +220,41 @@ final class ChatReadScope implements ClientReadScope.Provider, ClientScopeToken.
     private static final java.util.concurrent.atomic.AtomicLong EMPTY_SEEN = new java.util.concurrent.atomic.AtomicLong();
 
     /**
-     * One line the first time each kind is seen, then a count every 100th, so a steady rate is visible and a
-     * busy server is not flooded. The same shape as {@code CallerReadScope}'s own miss line, for the same
-     * reason: a systematic occurrence must be visible, a frequent one must not drown the log.
+     * One line per occurrence for the kinds that decide something, throttled to powers of ten for the kind
+     * that does not. The running total is IN the line either way, so one entry answers "how many so far".
+     *
+     * <p><b>This started as "the first, then every 100th", and the first four lines off staging showed why
+     * that was wrong.</b> Each kind had logged exactly {@code (seen 1)}, which is all that cadence can say
+     * until the hundredth — so the probe's answer to "how often is a back office stale?" was "somewhere
+     * between once and ninety-nine times per server run", a band wide enough to contain both "a cold-start
+     * race worth a comment" and "a hundred silently empty screens a day". The instrument could not
+     * distinguish the case that needs no fix from the case that blocks enforcement, which was its whole job.
+     *
+     * <p>{@code ClientReadInventory} had already written the rule down, for a watch throttled the same way:
+     * a throttle that manufactures the all-clear it is being consulted for is worse than no instrument at
+     * all. So the two kinds that decide something log every time, capped only against a flood, and the cap
+     * keeps powers of ten so the count stays legible past it.
      */
-    private static void report(java.util.concurrent.atomic.AtomicLong counter, String what) {
+    private static void report(java.util.concurrent.atomic.AtomicLong counter, String what, boolean everyOccurrence) {
         long n = counter.incrementAndGet();
-        if (n == 1 || n % 100 == 0)
+        if (shouldLog(n, everyOccurrence))
             Console.log("🛡 SCOPE PROBE: " + what + " (seen " + n + ")");
     }
+
+    /**
+     * The cadence decision, apart from the counting and the logging so that a check can hold it to the band
+     * it is supposed to resolve. This is the part that was wrong, so this is the part that is pinned.
+     */
+    static boolean shouldLog(long n, boolean everyOccurrence) {
+        return everyOccurrence && n <= MAX_PROBE_LINES || ClientWriteInventory.isPowerOfTen(n);
+    }
+
+    /**
+     * Past this many lines a per-occurrence kind falls back to powers of ten. A real staleness rate — even a
+     * systemic one, where every back-office query misses — is logged in full for hours before the cap, which
+     * is long enough to measure it; past that the rate is established and the lines only cost money.
+     */
+    private static final long MAX_PROBE_LINES = 5_000;
 
     @Override
     public Expression<?> readScopeCondition(Object domainClass, Object scopeToken) {

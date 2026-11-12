@@ -152,6 +152,24 @@ public class ChatReadScopeCheck {
               !ChatReadScope.UNRESTRICTED.equals(ChatReadScope.BACKOFFICE)
               && !ChatReadScope.UNRESTRICTED.equals(ChatReadScope.MEMBER));
 
+        // ── the probe's cadence ──────────────────────────────────────────────────────────────────────
+        // Pinned because the first version was wrong in a way no unit test would have caught and the first
+        // four lines off staging did: "the first, then every 100th" logged `(seen 1)` for every kind and
+        // then went silent, so the measured answer to "how often is a back office stale?" was a band from 1
+        // to 99 per server run — wide enough to hold both "a cold-start race" and "a hundred silently empty
+        // screens a day". The band these cases defend is the LOW end, where the decision actually sits.
+        check("a staleness occurrence logs the first time", ChatReadScope.shouldLog(1, true));
+        check("and the second — the band from 2 to 99 is where the decision sits",
+              ChatReadScope.shouldLog(2, true));
+        check("and the 99th, which the old cadence silently dropped", ChatReadScope.shouldLog(99, true));
+        check("past the cap it falls back to powers of ten, so a flood stays bounded",
+              !ChatReadScope.shouldLog(5_001, true) && ChatReadScope.shouldLog(10_000, true));
+        check("the expected kind stays throttled: first yes, second no",
+              ChatReadScope.shouldLog(1, false) && !ChatReadScope.shouldLog(2, false));
+        check("and logs again at ten and a hundred, not in between",
+              ChatReadScope.shouldLog(10, false) && !ChatReadScope.shouldLog(11, false)
+              && ChatReadScope.shouldLog(100, false));
+
         System.out.println(fail == 0 ? "\nALL " + pass + " PASS" : "\n" + fail + " FAILED");
         if (fail > 0)
             throw new AssertionError(fail + " chat read scope checks failed");
