@@ -70,7 +70,7 @@ public class LabelAndVolunteerWritePolicyCheck {
     public static void main(String[] args) {
         System.out.println("the switches:");
         check("Label ships OBSERVING", !LabelWritePolicy.ENFORCING);
-        check("Volunteer ships OBSERVING", !VolunteerWritePolicy.ENFORCING);
+        check("Volunteer is ENFORCING (no users to protect, 2026-11-12)", VolunteerWritePolicy.ENFORCING);
         String job = ChatWritePolicyCheck.readJob();
         check("both are registered", job == null
             || job.contains("new LabelWritePolicy()") && job.contains("new VolunteerWritePolicy()"));

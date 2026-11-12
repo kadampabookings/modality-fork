@@ -28,16 +28,22 @@ import java.util.Set;
  * security review found two more ways through). With the endpoints there is nothing left to recognise: a client
  * write that updates an application or a proposal, inserts a proposal or a timeline line, or deletes anything is
  * not a page of ours. Until the new front office is everywhere, an old cached bundle still sends the answers that
- * way — this observes them, and is switched on once they stop.
+ * way, and is refused.
  *
- * <p><b>Observed first</b> ("WOULD REFUSE a volunteer write"); its REFUSED line will need a CloudWatch filter.
+ * <p><b>Enforcing from the start (2026-11-12), without a census</b> - the one rule here switched on that way, and why:
+ * the census protects real users from a rule drawn wrong, and this system has none. The KBS volunteering pages are
+ * a proposal to replace the JotForm process the volunteers actually use, not yet adopted; production holds one
+ * application (2026-03-25, believed a test). No page of ours writes these tables by id any more, and the form's
+ * insert is still allowed, so refusing costs nobody anything - while observing would have left any application
+ * rewritable by id on every deploy until the decision. Refusals log "REFUSED a volunteer write"; that line needs
+ * its own CloudWatch filter.
  *
  * @author Claude Code
  */
 final class VolunteerWritePolicy implements ClientSubmitGuard.WritePolicy {
 
-    /** False while it observes: decisions are logged but nothing is refused. */
-    static final boolean ENFORCING = false;
+    /** On from the start (2026-11-12): see the class comment for why no census was needed. */
+    static final boolean ENFORCING = true;
 
     static final Set<String> VOLUNTEER_ENTITIES = Set.of(
         "VolunteeringApplication", "VolunteeringDateProposal", "VolunteeringTimeline");
