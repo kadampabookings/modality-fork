@@ -23,7 +23,7 @@ import java.util.Set;
  * <p><b>The list, from the code (kbs3-react {@code frontoffice/src} and the {@code shared/src} hooks it uses, every
  * {@code insert/update/delete} through a change set and every DQL write statement, 2026-11-12):</b> support chat
  * (five tables), the mail it composes (Mail, Recipient), viewing records, error reports, livestream support
- * reports, the volunteer flows (three tables), push subscriptions (two) and Label, which the front office's
+ * reports, the volunteer application form, push subscriptions (two) and Label, which the front office's
  * translation page writes. Bookings and people are not on it: the front office reaches them through server
  * endpoints, the booking tables are back office only ({@link BackofficeOnlyWritePolicy}) and Person is denied
  * outright ({@link ClientWriteSecrets}).
@@ -60,8 +60,10 @@ final class FrontOfficeTablesWritePolicy implements ClientSubmitGuard.WritePolic
         "MediaConsumption",
         // Error reports (use-error-reporter.ts, signed out too) and livestream support reports
         "Error", "SupportReport",
-        // Volunteer application, date and arrival responses
-        "VolunteeringApplication", "VolunteeringDateProposal", "VolunteeringTimeline",
+        // The public volunteer application form. The answers to the coordinators' emailed links go through
+        // AnswerVolunteerArrivalEndpoint / AnswerVolunteerDatesEndpoint (2026-11-12), so the proposal and timeline
+        // tables are the back office's.
+        "VolunteeringApplication",
         // Web push subscriptions
         "PushSubscription", "PushSubscriptionRecipient",
         // The front office's translation page (translate-event)
