@@ -1,5 +1,7 @@
 package one.modality.crm.server.services.authz;
 
+import dev.webfx.platform.async.Future;
+import dev.webfx.platform.async.Promise;
 import one.modality.crm.server.services.authz.CallerReadScope.GrantRow;
 import one.modality.crm.server.services.authz.CallerReadScope.Scope;
 
@@ -72,6 +74,59 @@ public class CallerReadScopeCheck {
               CallerReadScope.typeRowsNeedingExpansion(rows(grant(42, null, 3))).size() == 1);
         checkTrue("an event row never needs expanding",
               CallerReadScope.typeRowsNeedingExpansion(rows(grant(42, 7, null))).isEmpty());
+
+        // ── the prune predicate ─────────────────────────────────────────────────────────────────────
+        // Production, 2026-11-12: four misses in three and a half hours, three of them inside 302ms. The
+        // burst is the signature of an eviction -- a caller working steadily, their entry dropped by somebody
+        // else's login, and their next page load missing on every query it sent. The prune read
+        // computedAtMillis, so it measured how OLD an entry was; peek never consulted the TTL, so age said
+        // nothing about whether the read path still needed it. These cases hold the distinction.
+        //
+        // What they CANNOT hold is the call site. The bug was load() passing computedAtMillis to a predicate
+        // that is right either way; these cases still pass if someone passes it again. Probed by replacing
+        // the predicate with "complete", which fails two of them, and reported rather than left looking
+        // better covered than it is.
+        long now = 1_000_000;
+        checkTrue("an entry read a moment ago survives, however old it is",
+              !CallerReadScope.prunable(true, now - 5, now));
+        checkTrue("an entry nobody has read for a TTL is prunable",
+              CallerReadScope.prunable(true, now - 120_000, now));
+        checkTrue("just inside the TTL it is not",
+              !CallerReadScope.prunable(true, now - 119_999, now));
+        checkTrue("a computation still in flight is never pruned, whatever its stamp says",
+              !CallerReadScope.prunable(false, now - 10_000_000, now));
+
+        // ── refresh-ahead ───────────────────────────────────────────────────────────────────────────
+        // The security half of pruning on last use. An entry belonging to a caller who keeps reading is now
+        // never evicted, so without a refresh it would be served however old it got, and a grant withdrawn
+        // outside the back office would go on being honoured for as long as they kept clicking. The age that
+        // matters here is the VALUE's, not the last read's — they coincide only for a caller who reads once.
+        checkTrue("a freshly computed entry is not refreshed",
+                  !CallerReadScope.needsRefresh(now - 5, now));
+        checkTrue("one past the TTL is refreshed for the next read",
+                  CallerReadScope.needsRefresh(now - 120_000, now));
+        checkTrue("just inside the TTL it is not",
+                  !CallerReadScope.needsRefresh(now - 119_999, now));
+        checkTrue("refresh reads the computed stamp, not the last-used one",
+                  CallerReadScope.needsRefresh(now - 300_000, now)
+                  && !CallerReadScope.prunable(true, now - 1, now));
+
+        // ── serving through a recomputation ─────────────────────────────────────────────────────────
+        // The hole the first live run exposed. load() replaced a succeeded entry with an in-flight future,
+        // and peek demanded success -- so for the ~170ms the two scope queries took, every read by that
+        // caller missed, although a good value had just been discarded. 2026-11-13, local: queries at
+        // 11:29:32.455, six misses from .464 to .471 reporting "cache 1/100" (nothing was pruned), queries
+        // back at .625. One hole per refresh, catching every read inside it.
+        CallerReadScope.Scope value = new CallerReadScope.Scope(new int[] {7}, new int[0], false);
+        CallerReadScope.Scope older = new CallerReadScope.Scope(new int[] {4}, new int[0], false);
+        checkTrue("a computed value is served",
+                  CallerReadScope.servable(Future.succeededFuture(value), older) == value);
+        checkTrue("a refresh in flight serves the previous value, not nothing",
+                  CallerReadScope.servable(Promise.<CallerReadScope.Scope>promise().future(), older) == older);
+        checkTrue("a first load has nothing to carry, and says so",
+                  CallerReadScope.servable(Promise.<CallerReadScope.Scope>promise().future(), null) == null);
+        checkTrue("a failed refresh still serves the previous value until the entry is dropped",
+                  CallerReadScope.servable(Future.failedFuture("boom"), older) == older);
 
         System.out.println(fail == 0 ? "\nALL " + pass + " PASS" : "\n" + fail + " FAILED");
         if (fail > 0)

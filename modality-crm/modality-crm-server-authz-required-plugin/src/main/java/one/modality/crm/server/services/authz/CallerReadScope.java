@@ -60,6 +60,11 @@ import java.util.concurrent.atomic.AtomicLong;
  * when nothing has been computed yet, which is NOT the same as a caller with no grants, and the difference is
  * the caller's to act on.
  *
+ * <p><b>The TTL governs recomputation, not the read.</b> {@link #peek} has never checked it: an entry is served
+ * whatever its age, until it is pruned or {@link #clearCache} drops it. So an entry's age is not a reason the
+ * read path stopped finding it, and a miss means the entry was never there or is no longer there — which is why
+ * the prune now goes by last use (it used to go by age, and evicted callers mid-session).
+ *
  * @author Claude Code
  */
 public final class CallerReadScope {
@@ -88,13 +93,31 @@ public final class CallerReadScope {
     private static final long CACHE_TTL_MILLIS = 120_000;
     private static final int CACHE_PRUNE_SIZE = 100;
 
-    private record CachedScope(Future<Scope> future, long computedAtMillis) {}
+    /**
+     * {@code lastUsedAtMillis} is when a read last PEEKED this entry, which is not when it was computed. The
+     * prune needs the first and the TTL refresh needs the second, and conflating them is what evicted callers
+     * who were in the middle of working — see {@link #peek}.
+     */
+    private record CachedScope(Future<Scope> future, long computedAtMillis, AtomicLong lastUsedAtMillis,
+                               Scope lastGood) {
+        CachedScope(Future<Scope> future, long computedAtMillis, Scope lastGood) {
+            this(future, computedAtMillis, new AtomicLong(computedAtMillis), lastGood);
+        }
+
+        /** What a read gets: the computed value, or the previous one while a recomputation is in flight. */
+        Scope servable() {
+            return CallerReadScope.servable(future, lastGood);
+        }
+    }
 
     private static final Map<Object, CachedScope> cache = new ConcurrentHashMap<>();
 
+    /** When a re-warm was last started, for the whole server — see {@link #sinceLastRewarmExceedsCooldown}. */
+    private static final AtomicLong lastRewarmAtMillis = new AtomicLong();
+    private static final long REWARM_COOLDOWN_MILLIS = 1_000;
+
     /** How often a bind found nothing computed. Reported rather than guessed at — see {@link #peek}. */
     private static final AtomicLong missCount = new AtomicLong();
-    private static boolean missLogged;
 
     private CallerReadScope() {
     }
@@ -110,22 +133,106 @@ public final class CallerReadScope {
     public static Scope peek(Object personId) {
         if (personId == null)
             return null;
-        CachedScope cached = cache.get(Entities.getPrimaryKey(personId));
-        Scope scope = cached != null && cached.future.succeeded() ? cached.future.result() : null;
-        if (scope == null) {
-            missCount.incrementAndGet();
-            if (!missLogged) { // once per server run: a systematic miss must be visible, a busy one must not flood
-                missLogged = true;
-                Console.log("⚠️ CallerReadScope: no scope computed yet for a caller binding one"
-                    + " (person " + Entities.getPrimaryKey(personId) + "); further occurrences are counted, not logged");
-            }
+        Object key = Entities.getPrimaryKey(personId);
+        CachedScope cached = cache.get(key);
+        Scope scope = cached == null ? null : cached.servable();
+        if (scope != null) {
+            long now = System.currentTimeMillis();
+            // Stamped on every read, so the prune can tell a caller who is working from one who has gone.
+            cached.lastUsedAtMillis.set(now);
+            // REFRESH-AHEAD, and it is a SECURITY property of the prune change rather than a nicety.
+            //
+            // Pruning on last use means a caller who keeps reading is never evicted, so without this their
+            // entry would be served for as long as they kept clicking, however old it had become. Before the
+            // change the age prune eventually threw a stale entry away -- badly, by breaking the next read,
+            // but it did bound how long a withdrawn grant could go on being honoured. Keeping an entry alive
+            // for an active caller must not quietly remove that bound.
+            //
+            // So an entry past its TTL starts a recomputation for the NEXT read while this one is served
+            // from what is already known. That leaves the same staleness the TTL always allowed, and no more.
+            // An edit made through the back office does not wait for it: invalidateAllRuleRegistries clears
+            // this cache outright. This is the floor under the edits that do not go through there.
+            if (needsRefresh(cached.computedAtMillis(), now) && sinceLastRewarmExceedsCooldown(now))
+                startRewarm(personId);
+            return scope;
         }
-        return scope;
+        long n = missCount.incrementAndGet();
+        // The cache SIZE is in the line because it separates the two ways a miss happens, which need different
+        // fixes and are indistinguishable after the fact: well under CACHE_PRUNE_SIZE means nobody had computed
+        // this caller's scope yet (a first read racing the grants), at or over it means a prune may have thrown
+        // the entry away while the caller was still working.
+        if (ClientWriteInventory.isPowerOfTen(n))
+            Console.log("⚠️ CallerReadScope: no scope computed for a caller binding one (×" + n
+                + ", cache " + cache.size() + "/" + CACHE_PRUNE_SIZE + ")");
+        // RE-WARM. Fire and forget: this runs on the endpoint thread before the first async hop and cannot
+        // await, so it cannot help THIS read -- it makes the next one find a scope instead of repeating the
+        // miss. load() dedupes through the in-flight future, so a burst of misses costs one computation, and
+        // the measured rate (4 misses in 3.5 production hours, 2026-11-12) makes that cost a rounding error.
+        //
+        // What it deliberately does NOT do is turn the miss into an empty scope. A caller whose scope is
+        // unknown must not be told they may read nothing, and must not be let through either; the choice
+        // between those belongs to whoever is enforcing, which is why null still comes back here.
+        //
+        // The cooldown is what stops a re-warm becoming a stampede. load() dedupes a computation that is in
+        // FLIGHT, but a computation that FAILS is not cached -- deliberately, so the next caller retries
+        // rather than inheriting the failure -- and "the next caller" is now every read. With the database
+        // unreachable, failures return fast and every back-office read would start another query. One attempt
+        // per second server-wide cannot do that, and at four misses in three and a half hours two callers
+        // colliding inside one second is a rounding error against a mechanism that cannot storm.
+        if (sinceLastRewarmExceedsCooldown(System.currentTimeMillis()))
+            startRewarm(personId);
+        return null;
     }
 
     /** How many times {@link #peek} found nothing computed, for the observation mode to report. */
     public static long getMissCount() {
         return missCount.get();
+    }
+
+    /**
+     * True when a re-warm may be started now, claiming the slot if so. One attempt per second for the whole
+     * server, not per caller: the failure mode it exists for (a computation that fails fast, every read
+     * starting another) is server-wide, and a per-caller cooldown would let a hundred callers storm in step.
+     */
+    private static boolean sinceLastRewarmExceedsCooldown(long now) {
+        long last = lastRewarmAtMillis.get();
+        return now - last >= REWARM_COOLDOWN_MILLIS && lastRewarmAtMillis.compareAndSet(last, now);
+    }
+
+    /** Starts a recomputation and lets this read continue whatever happens to it. */
+    private static void startRewarm(Object personId) {
+        try {
+            load(personId);
+        } catch (Throwable e) {
+            Console.error("CallerReadScope: could not start a re-warm", e);
+        }
+    }
+
+    /**
+     * What a read is served, apart from the record so that a check can hold it: the computed value once it is
+     * there, and until then the previous one. Null only when there has never been a value to carry forward,
+     * which is the one case where a caller's scope is genuinely unknown.
+     */
+    static Scope servable(Future<Scope> future, Scope lastGood) {
+        return future.succeeded() ? future.result() : lastGood;
+    }
+
+    /**
+     * Whether an entry that is still being read should be recomputed for the next read. The age of the VALUE,
+     * not of its last use: the two are the same only for a caller who reads once.
+     */
+    static boolean needsRefresh(long computedAtMillis, long now) {
+        return now - computedAtMillis >= CACHE_TTL_MILLIS;
+    }
+
+    /**
+     * Whether a cache entry may be pruned, as a function of its state rather than of the map, so that a check
+     * can hold it. An entry is prunable when its computation has finished AND no read has touched it for a
+     * TTL. The second half is the fix: the predicate used to read {@code computedAtMillis}, which measured how
+     * old the entry was rather than whether anyone still needed it.
+     */
+    static boolean prunable(boolean computationComplete, long lastUsedAtMillis, long now) {
+        return computationComplete && now - lastUsedAtMillis >= CACHE_TTL_MILLIS;
     }
 
     /**
@@ -143,10 +250,26 @@ public final class CallerReadScope {
         if (cached != null && (!cached.future.isComplete()
                                || cached.future.succeeded() && now - cached.computedAtMillis < CACHE_TTL_MILLIS))
             return cached.future;
+        // Pruned on LAST USE, not on age. On age, an entry older than the TTL was dropped however recently it
+        // had been read -- and peek never consulted the TTL, so the entry's age said nothing about whether the
+        // read path still needed it. A caller working steadily through the back office was evicted mid-session
+        // by somebody else's login, and their next reads found nothing: the clustered misses of 2026-11-12.
         if (cache.size() > CACHE_PRUNE_SIZE)
-            cache.values().removeIf(c -> c.future.isComplete() && now - c.computedAtMillis >= CACHE_TTL_MILLIS);
+            cache.values().removeIf(c -> prunable(c.future.isComplete(), c.lastUsedAtMillis.get(), now));
+        // The previous value is CARRIED FORWARD, and this is the fix the first live run produced.
+        //
+        // Replacing a succeeded entry with an in-flight future opened a hole: for as long as the two scope
+        // queries took, every read by that caller found a future that had not succeeded and counted a miss,
+        // although a perfectly good value had just been thrown away. The local run of 2026-11-13 caught it
+        // exactly -- the recomputation's queries start at 11:29:32.455, six reads miss between .464 and .471
+        // with "cache 1/100" (so no prune could be involved), and the queries return at .625. A ~170ms hole,
+        // once per refresh, hitting every read in it: the clustered misses production logged.
+        //
+        // Carrying the old value forward serves it until the new one succeeds. The extra staleness is the
+        // length of one recomputation, where the alternative is a caller who may read nothing at all.
+        Scope previous = cached == null ? null : cached.servable();
         Future<Scope> future = computeScope(personId);
-        cache.put(key, new CachedScope(future, now));
+        cache.put(key, new CachedScope(future, now, previous));
         // A failed computation must not be cached: the next caller should try again rather than inherit it.
         future.onFailure(e -> {
             CachedScope current = cache.get(key);

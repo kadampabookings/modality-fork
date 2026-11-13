@@ -194,9 +194,24 @@ final class ChatReadScope implements ClientReadScope.Provider, ClientScopeToken.
      * rather than before it.
      */
     private Object scopeOfBackofficeCaller() {
+        Object personId;
+        try {
+            personId = ModalityUserPrincipal.getUserPersonId(ThreadLocalStateHolder.getUserId());
+        } catch (Throwable e) {
+            personId = null;
+        }
+        if (personId == null) {
+            // NOT a cache miss, and counting it as one was the probe's own bug. A back-office client reads
+            // before it has signed in -- the local run of 2026-11-13 shows one at 11:26:34, seventeen seconds
+            // before the login, logged by the inventory as "by String" rather than by a principal. The cache
+            // is not consulted for such a caller at all (peek returns on a null id without counting), so this
+            // inflated the staleness figure with reads that no re-warm could ever have helped.
+            report(NO_PERSON_SEEN, "a back office read with no signed-in person — not a cache miss", false);
+            return BACKOFFICE;
+        }
         CallerReadScope.Scope scope;
         try {
-            scope = CallerReadScope.peek(ModalityUserPrincipal.getUserPersonId(ThreadLocalStateHolder.getUserId()));
+            scope = CallerReadScope.peek(personId);
         } catch (Throwable e) {
             scope = null; // a probe must not be able to fail a read
         }
@@ -218,6 +233,7 @@ final class ChatReadScope implements ClientReadScope.Provider, ClientScopeToken.
     private static final java.util.concurrent.atomic.AtomicLong UNRESTRICTED_SEEN = new java.util.concurrent.atomic.AtomicLong();
     private static final java.util.concurrent.atomic.AtomicLong STALE_SEEN = new java.util.concurrent.atomic.AtomicLong();
     private static final java.util.concurrent.atomic.AtomicLong EMPTY_SEEN = new java.util.concurrent.atomic.AtomicLong();
+    private static final java.util.concurrent.atomic.AtomicLong NO_PERSON_SEEN = new java.util.concurrent.atomic.AtomicLong();
 
     /**
      * One line per occurrence for the kinds that decide something, throttled to powers of ten for the kind
