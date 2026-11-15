@@ -263,10 +263,13 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
     static final String SUPPORT_AGENTS_ADDRESS = "support/agents";
     /**
      * Whether a client without a verified back office is refused publishing on {@link #FRONT_OFFICE_MESSAGING_ADDRESS}
-     * (true), or only logged ("WOULD REFUSE a live-channel publish"). Off until the front office's own typing signals
-     * have moved to ChatTypingSignalEndpoint everywhere and a census has been read.
+     * (true), or only logged ("WOULD REFUSE a live-channel publish"). ON since 2026-11-16: the front office's typing
+     * signals go through ChatTypingSignalEndpoint, and the production census read 0 lines from the 9 Nov deploy on
+     * (runs of 11 and 15 Nov). Refusals log "REFUSED a live-channel publish" (CloudWatch filter kbs3-wg-live-channel).
+     * Consequence, accepted with the rest of the legacy GWT back office: it holds no verified token, so its livestream
+     * ticker and VOD publishes (LiveStreamingTabView) are refused - none appeared in the census.
      */
-    static final boolean LIVE_CHANNEL_PUBLISH_ENFORCING = false;
+    static final boolean LIVE_CHANNEL_PUBLISH_ENFORCING = true;
 
     /**
      * OBSERVE FIRST — per entity. For an entity not listed here the decision is computed and logged but never
