@@ -168,7 +168,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
         " from DocumentLine l where (l.item.share_mate or (l.share_mate and l.quantity=0 and l.item.capacity>1))" +
         " and l.share_mate_ownerDocumentLine=null and !l.cancelled" +
         " and l.document.(!cancelled and event=$1))" +
-        " select name,label,comment,site.(name,terminal,selfArranged,label),arrivalSite.(name,terminal,selfArranged,label),item.(name,label,perResourceLabel,code,temporal,family.(code,name,label,ord),capacity,share_mate,breakfastIncluded,ord),date,startTime,endTime,timeline?.(site,item,startTime,endTime),cancelled,resource,buddha.hyt" +
+        " select name,label,comment,site.(name,terminal,selfArranged,label),arrivalSite.(name,terminal,selfArranged,label),item.(name,label,perResourceLabel,code,temporal,family.(code,name,label,ord),capacity,share_mate,breakfastIncluded,ord,layAllowed,ordainedAllowed),date,startTime,endTime,timeline?.(site,item,startTime,endTime),cancelled,resource,buddha.hyt" +
         // Availability: for each applicable configuration (from the rc CTE above, matched on the
         // scheduled item's site & item), LATERAL computes availability once, then distributes it
         // to 4 categories. This replaces the former scheduled_resource grid: rc is matched to the
@@ -346,7 +346,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
                     , DqlQueries.newQueryArgumentForDefaultDataSourceWithMetadata(
                     "with e as (select coalesce(repeatedEvent,id) as finalEvent,coalesce(repeatedEvent?.type,type) as finalEventType,organization,venue.organization as venue_organization from Event where id=$1)" +
                     " select scope.(organization,site,eventType,event)" +
-                    ",item.(name,label,code,temporal,family.(code,name,label,ord),capacity,share_mate,breakfastIncluded,ord)" +
+                    ",item.(name,label,code,temporal,family.(code,name,label,ord),capacity,share_mate,breakfastIncluded,ord,layAllowed,ordainedAllowed)" +
                     ",applicableToInPerson,applicableToOnline,descriptionLabel,titleLabel,noticeLabel,minDay,wholeEvent,default,genderInfoRequired,earlyAccommodationAllowed,lateAccommodationAllowed,minOccupancy,forceSoldOut,autoBookItem,childAllowed,youngAdultAllowed,adultAllowed" +
                     // Which accommodation a sharing item pairs with. Bare FKs: the client only
                     // compares them by id, so there is nothing to expand.
