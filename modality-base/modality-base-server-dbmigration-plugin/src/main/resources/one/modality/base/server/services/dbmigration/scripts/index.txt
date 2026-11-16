@@ -160,3 +160,4 @@ V0157__invitation_answer_seen_date.sql
 V0158__account_settings.sql
 V0159__item_policy_gender_info_required_unset.sql
 V0160__staff_alert_letters.sql
+V0161__zero_total_batch_links_its_payments.sql
