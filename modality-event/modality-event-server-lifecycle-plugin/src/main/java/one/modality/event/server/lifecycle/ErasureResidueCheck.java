@@ -38,7 +38,10 @@ import java.util.Set;
  * magic links (email or old_email) and volunteering applications (email, or phone). An area none of the identifiers
  * can concern (an email-only area with no email) is not searched and is left out of the reply — never answered 0.
  *
- * <p>{@code people} / {@code bookings}: the given ids as they are now, for the page's before/after.
+ * <p>{@code people} / {@code bookings}: the given ids as they are now, for the page's before/after. With a
+ * {@code requestId} whose request has recorded its run, {@code bookings} also holds every booking that run anonymised
+ * ({@link #ERASED_BOOKINGS_SQL}), so the page shows them all — the booker's other bookings included, which it never
+ * named.
  *
  * <h3>Recording it on the request</h3>
  *
@@ -129,6 +132,18 @@ final class ErasureResidueCheck {
 
     static final String PEOPLE_SQL =
         "select p.id, p.first_name, p.last_name, p.email, p.removed from person p where p.id = any($1::int[]) order by p.id";
+
+    static final int MAX_ERASED_BOOKINGS = 50;
+
+    /**
+     * The bookings the request's recorded run anonymised, by the last name that run wrote on each: '#B' + the seed
+     * booking for a booker (V0163), '#' + the person for a customer (V0153/V0164). None before the erasure ran.
+     */
+    static final String ERASED_BOOKINGS_SQL =
+        "select d.id from erasure_request r join document d on d.person_last_name ="
+        + " case when r.subject_kind = 'booker' then '#B' || r.subject_id else '#' || r.subject_id end"
+        + " where r.id = $1::int and r.subject_id is not null and r.run_id is not null"
+        + " order by d.id desc limit " + MAX_ERASED_BOOKINGS;
 
     static final String DOCUMENTS_SQL =
         "select d.id, d.ref, d.person_first_name, d.person_last_name, d.person_email, nullif(trim(d.person_phone), '') is not null,"
@@ -251,7 +266,7 @@ final class ErasureResidueCheck {
         long start = System.nanoTime();
         io.vertx.core.Future<Findings> done;
         try {
-            done = EventErasureRunner.connect().compose(connection -> run(connection, identifiers, findings)
+            done = EventErasureRunner.connect().compose(connection -> run(connection, identifiers, requestId, findings)
                 .eventually(connection::close));
         } catch (RuntimeException e) {
             done = io.vertx.core.Future.failedFuture(e);
@@ -284,7 +299,9 @@ final class ErasureResidueCheck {
             });
     }
 
-    private static io.vertx.core.Future<Findings> run(PgConnection connection, Identifiers identifiers, Findings findings) {
+    private static io.vertx.core.Future<Findings> run(PgConnection connection, Identifiers identifiers, Integer requestId,
+                                                      Findings findings) {
+        Set<Integer> documentIds = new LinkedHashSet<>(identifiers.documentIds()); // + the run's bookings, below
         connection.noticeHandler(notice -> { });
         String[] emails = identifiers.emails().toArray(new String[0]);
         String[] phones = identifiers.phones().toArray(new String[0]);
@@ -319,11 +336,22 @@ final class ErasureResidueCheck {
                     });
             })
             .compose(ignored -> {
-                if (identifiers.documentIds().isEmpty())
+                if (requestId == null)
+                    return io.vertx.core.Future.succeededFuture();
+                findings.area = "erased bookings";
+                return connection.preparedQuery(ERASED_BOOKINGS_SQL).execute(Tuple.of(requestId))
+                    .map(rows -> {
+                        for (Row row : rows)
+                            documentIds.add(row.getInteger(0));
+                        return null;
+                    });
+            })
+            .compose(ignored -> {
+                if (documentIds.isEmpty())
                     return io.vertx.core.Future.succeededFuture();
                 findings.area = "bookings (ids)";
                 return connection.preparedQuery(DOCUMENTS_SQL)
-                    .execute(Tuple.tuple().addArrayOfInteger(identifiers.documentIds().toArray(new Integer[0])))
+                    .execute(Tuple.tuple().addArrayOfInteger(documentIds.toArray(new Integer[0])))
                     .map(rows -> {
                         for (Row row : rows)
                             findings.bookings.add(bookingJson(row.getInteger(0), row.getInteger(1), row.getString(2),

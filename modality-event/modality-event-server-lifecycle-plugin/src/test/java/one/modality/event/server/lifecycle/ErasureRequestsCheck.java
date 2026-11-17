@@ -206,6 +206,10 @@ public class ErasureRequestsCheck {
         check("a phone-only check (three areas): not complete",
             !ErasureResidueCheck.completeAndClean(ids(new Object[] { null, new Object[] { "07700 900123" } }), threeAreas));
         check("ids only: not complete", !ErasureResidueCheck.completeAndClean(idsOnly, new ErasureResidueCheck.Findings()));
+        check("the run's bookings: by the tag it wrote ('#B' + seed for a booker, '#' + person), for its own request, once run",
+            ErasureResidueCheck.ERASED_BOOKINGS_SQL.contains("'#B' || r.subject_id else '#' || r.subject_id")
+            && ErasureResidueCheck.ERASED_BOOKINGS_SQL.contains("r.id = $1::int") && ErasureResidueCheck.ERASED_BOOKINGS_SQL.contains("r.run_id is not null")
+            && ErasureResidueCheck.ERASED_BOOKINGS_SQL.endsWith("limit 50"));
         check("the stamp needs the request's subject and run, and is the server's own write",
             ErasureRequests.STAMP_CHECKED_SQL.contains("subject_id is not null and run_id is not null")
             && ErasureRequests.STAMP_CHECKED_SQL.contains("checked_at = now()") && ErasureRequests.STAMP_CHECKED_SQL.contains("$1::int"));
@@ -219,7 +223,7 @@ public class ErasureRequestsCheck {
 
     private static final String VALID = "{\"id\":null,\"receivedOn\":\"2026-11-15\",\"status\":\"open\",\"onHoldUntil\":null,"
         + "\"verifiedBy\":\"email\",\"subjectKind\":null,\"subjectId\":null,\"runId\":null,"
-        + "\"outside\":{\"jotform\":false,\"knackSttp\":false,\"knackAbsence\":false,\"payments\":true,\"mailbox\":false}}";
+        + "\"outside\":{\"jotform\":false,\"knackSttp\":false,\"knackAbsence\":false,\"mailers\":false,\"payments\":true,\"mailbox\":false}}";
 
     private static ErasureRequests.Save save(Object argument) {
         return ErasureRequests.parseSave(argument).save();
@@ -273,9 +277,9 @@ public class ErasureRequestsCheck {
         check("id null = create", s.id() == null);
         check("the fields as sent", s.receivedOn().equals(LocalDate.of(2026, 11, 15)) && "open".equals(s.status())
             && s.onHoldUntil() == null && "email".equals(s.verifiedBy()) && s.subjectKind() == null && s.subjectId() == null
-            && s.runId() == null && new ErasureRequests.Outside(List.of(false, false, false, true, false)).equals(s.outside()));
+            && s.runId() == null && new ErasureRequests.Outside(List.of(false, false, false, false, true, false)).equals(s.outside()));
         check("the outside checklist is stored as one boolean per processor, written by the server",
-            "{\"jotform\":false,\"knackSttp\":false,\"knackAbsence\":false,\"payments\":true,\"mailbox\":false}".equals(s.outside().toJson()));
+            "{\"jotform\":false,\"knackSttp\":false,\"knackAbsence\":false,\"mailers\":false,\"payments\":true,\"mailbox\":false}".equals(s.outside().toJson()));
 
         System.out.println("save: an update, as the object the bus decoded");
         AstObject decoded = AST.createObject();
@@ -330,10 +334,10 @@ public class ErasureRequestsCheck {
             && !ErasureRequests.FIELDS.contains("checked"));
         check("outside: exactly the processors, as booleans",
             saveRefused(with("outside", "{\"jotform\":true,\"payments\":true}"))
-            && saveRefused(with("outside", "{\"jotform\":true,\"knackSttp\":true,\"knackAbsence\":true,\"payments\":true,\"mailbox\":true,\"note\":\"Jane\"}"))
-            && saveRefused(with("outside", "{\"jotform\":\"yes\",\"knackSttp\":true,\"knackAbsence\":true,\"payments\":true,\"mailbox\":true}"))
-            && saveRefused(with("outside", "{\"photos\":true,\"knackSttp\":true,\"knackAbsence\":true,\"payments\":true,\"mailbox\":true}"))
-            && save(new Object[] { with("outside", "{\"jotform\":true,\"knackSttp\":true,\"knackAbsence\":false,\"payments\":true,\"mailbox\":true}") }) != null
+            && saveRefused(with("outside", "{\"jotform\":true,\"knackSttp\":true,\"knackAbsence\":true,\"mailers\":false,\"payments\":true,\"mailbox\":true,\"note\":\"Jane\"}"))
+            && saveRefused(with("outside", "{\"jotform\":\"yes\",\"knackSttp\":true,\"knackAbsence\":true,\"mailers\":false,\"payments\":true,\"mailbox\":true}"))
+            && saveRefused(with("outside", "{\"photos\":true,\"knackSttp\":true,\"knackAbsence\":true,\"mailers\":false,\"payments\":true,\"mailbox\":true}"))
+            && save(new Object[] { with("outside", "{\"jotform\":true,\"knackSttp\":true,\"knackAbsence\":false,\"mailers\":false,\"payments\":true,\"mailbox\":true}") }) != null
             && saveRefused(with("outside", "[true,true,true]")) && saveRefused(with("outside", "true")));
         check("outside: absent or null leaves it", save(new Object[] { with("outside", null) }).outside() == null
             && save(new Object[] { with("outside", "null") }).outside() == null);
@@ -459,7 +463,7 @@ public class ErasureRequestsCheck {
         ReadOnlyAstObject outside = r.getObject("outside");
         check("outside: every processor, a stored key it lacks unticked and an unknown one dropped",
             outside.isTrue("jotform") && !outside.isTrue("payments") && !outside.isTrue("knackSttp") && !outside.isTrue("mailbox")
-            && outside.get("photos") == null && outside.keys().size() == 5);
+            && !outside.isTrue("mailers") && outside.get("photos") == null && outside.keys().size() == 6);
         check("a save's id is the one returning gave back", Integer.valueOf(14).equals(ErasureRequests.writtenId(new SubmitResult(1, new Object[] { 14 })))
             && ErasureRequests.writtenId(new SubmitResult(1, new Object[0])) == null && ErasureRequests.writtenId(null) == null);
     }

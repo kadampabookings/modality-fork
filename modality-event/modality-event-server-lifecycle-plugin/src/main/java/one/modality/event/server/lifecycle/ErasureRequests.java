@@ -77,11 +77,12 @@ final class ErasureRequests {
         "subjectId", "runId", "outside");
     /**
      * The places outside KBS where the person's data may also live, which the DPO ticks off one by one: Jotform (its
-     * forms, the volunteering applications among them), the Knack apps (STTP, absence requests), the payment
-     * provider, and the DPO's own mailbox and spreadsheets. In display order. Adding one is a line here and one in
-     * the back office's list (and its label): the table only checks that the column is a small object.
+     * forms, the volunteering applications among them), the Knack apps (STTP, absence requests), the mailing tools
+     * (Mailchimp and similar), the payment provider, and the DPO's own mailbox and spreadsheets. In display order.
+     * Adding one is a line here and one in the back office's list (and its label): the table only checks that the
+     * column is a small object, and a stored request without a key added since reads it as unticked.
      */
-    static final List<String> OUTSIDE_KEYS = List.of("jotform", "knackSttp", "knackAbsence", "payments", "mailbox");
+    static final List<String> OUTSIDE_KEYS = List.of("jotform", "knackSttp", "knackAbsence", "mailers", "payments", "mailbox");
 
     /** The outside-KBS checklist: one boolean per {@link #OUTSIDE_KEYS}, in that order. */
     record Outside(List<Boolean> ticks) {
