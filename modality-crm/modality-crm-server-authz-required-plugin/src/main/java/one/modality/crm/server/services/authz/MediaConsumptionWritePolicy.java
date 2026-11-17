@@ -57,8 +57,8 @@ import java.util.Set;
  * media other than the one it is for, or an inflated duration on their own row: their own figures, not somebody
  * else's.
  *
- * <p><b>Observed first.</b> Row rules are enforced the moment they deploy; this ships logging "WOULD REFUSE a media
- * consumption write" and is switched on after a census. Its REFUSED line will need a CloudWatch filter of its own.
+ * <p><b>Observed first.</b> Row rules are enforced the moment they deploy; this shipped logging "WOULD REFUSE a media
+ * consumption write" and was switched on after a week's census (see {@link #ENFORCING}).
  *
  * <p>Cost: one or two reads by primary key per write, five joins each (~6 ms cold on staging). The busiest path is
  * the heartbeat, one update a minute per playing tab.
@@ -67,8 +67,12 @@ import java.util.Set;
  */
 final class MediaConsumptionWritePolicy implements ClientSubmitGuard.WritePolicy {
 
-    /** False while it observes: decisions are logged ("WOULD REFUSE a media consumption write") but nothing is refused. */
-    static final boolean ENFORCING = false;
+    /**
+     * True since 2026-11-18: from 10 to 17 Nov the production census read only "the caller has no person" lines from
+     * players whose session lapsed mid-play (about two a day). Their last minutes now go unrecorded - accepted.
+     * Refusals log "REFUSED a media consumption write" (CloudWatch filter kbs3-wg-media-consumption).
+     */
+    static final boolean ENFORCING = true;
 
     static final String ENTITY = "MediaConsumption";
 

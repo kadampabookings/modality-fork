@@ -58,8 +58,8 @@ import java.util.Set;
  * name any booking in their own conversation's {@code document} — staff then see that booking's link in the thread.
  *
  * <p><b>Observed first.</b> Row rules are enforced the moment they deploy, so one written wrong refuses real work
- * at once; this ships logging "WOULD REFUSE a chat write" and is switched on after a census. Its REFUSED line will
- * need a CloudWatch filter of its own.
+ * at once; this shipped logging "WOULD REFUSE a chat write" and was switched on after a week's clean census (see
+ * {@link #ENFORCING}).
  *
  * <p>Cost: a member's update, reaction or delete costs one or two reads by primary key. The busiest is the presence
  * heartbeat, every 30 s per open livestream page.
@@ -68,8 +68,11 @@ import java.util.Set;
  */
 final class ChatWritePolicy implements ClientSubmitGuard.WritePolicy {
 
-    /** False while it observes: decisions are logged ("WOULD REFUSE a chat write") but nothing is refused. */
-    static final boolean ENFORCING = false;
+    /**
+     * True since 2026-11-18: the production census read 0 "WOULD REFUSE a chat write" lines from the 10 Nov 20:30
+     * deploy to 17 Nov. Refusals log "REFUSED a chat write" (CloudWatch filter kbs3-wg-chat).
+     */
+    static final boolean ENFORCING = true;
 
     static final Set<String> CHAT_ENTITIES = Set.of(
         "Conversation", "ConversationParticipant", "ChatMessage", "ChatMessageReaction", "ChatPresence");

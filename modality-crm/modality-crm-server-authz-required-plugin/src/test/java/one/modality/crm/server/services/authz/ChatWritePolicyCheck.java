@@ -98,7 +98,7 @@ public class ChatWritePolicyCheck {
 
     public static void main(String[] args) {
         System.out.println("the switch:");
-        check("ships OBSERVING", !ChatWritePolicy.ENFORCING);
+        check("is ENFORCING (clean census 10-17 Nov 2026)", ChatWritePolicy.ENFORCING);
         // A rule nobody registers refuses nothing and logs nothing, which a census reads as "all clean".
         String job = readJob();
         check("is registered among the row rules", job == null || job.contains("new ChatWritePolicy()"));

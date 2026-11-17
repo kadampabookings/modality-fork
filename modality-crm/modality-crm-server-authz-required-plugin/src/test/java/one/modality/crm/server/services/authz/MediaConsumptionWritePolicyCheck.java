@@ -101,7 +101,7 @@ public class MediaConsumptionWritePolicyCheck {
 
     public static void main(String[] args) {
         System.out.println("the switch:");
-        check("ships OBSERVING", !MediaConsumptionWritePolicy.ENFORCING);
+        check("is ENFORCING (only lapsed sessions in the 10-17 Nov 2026 census)", MediaConsumptionWritePolicy.ENFORCING);
         // A rule nobody registers refuses nothing and logs nothing, which a census reads as "all clean".
         String job = readJob();
         check("is registered among the row rules", job == null || job.contains("new MediaConsumptionWritePolicy()"));

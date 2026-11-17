@@ -385,10 +385,10 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         // - and mail that is not the caller's own: a pending mail is a live sign-in link or somebody's
         //   booking, and until now any client could add its own address to one, or rewrite it. Clients
         //   still compose mail, which is the relay itself and is not closed here. See MailWritePolicy.
-        // - and support chat: written by its own member, or by the back office as itself. Observing first
-        //   (2026-11-09). See ChatWritePolicy.
+        // - and support chat: written by its own member, or by the back office as itself. Observed from
+        //   2026-11-09, enforcing from 2026-11-18. See ChatWritePolicy.
         // - and viewing records: a MediaConsumption row is written by the account whose attendance it is, or the
-        //   back office. Observing first (2026-11-10). See MediaConsumptionWritePolicy.
+        //   back office. Observed from 2026-11-10, enforcing from 2026-11-18. See MediaConsumptionWritePolicy.
         // - and back office by default: without a verified back-office token, a client writes only the tables the
         //   front office writes. Observing first (2026-11-12). See FrontOfficeTablesWritePolicy.
         // - and two of the front office's own tables: a Label is only translated, by a translator; the volunteer
