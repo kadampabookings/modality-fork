@@ -163,3 +163,4 @@ V0160__staff_alert_letters.sql
 V0161__zero_total_batch_links_its_payments.sql
 V0162__item_lay_ordained_allowed.sql
 V0163__anonymise_booker.sql
+V0164__anonymise_person_account_settings.sql
