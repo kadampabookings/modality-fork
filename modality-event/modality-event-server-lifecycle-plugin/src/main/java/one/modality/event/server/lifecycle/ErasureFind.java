@@ -100,11 +100,26 @@ final class ErasureFind {
         + "select d.person_id from document d where d.ref = $1::int"
         + CUSTOMER_SQL_TAIL;
 
-    /** One booking: its event, who it is for, and whether anonymise_booker() already took it (its own test). */
+    /**
+     * Whether anonymise_booker() (V0163) can take a booking along with others with no tick: no customer record, an
+     * address (an '@' after the first character, its v_address) and a name of two words or more (its v_name). Two such
+     * bookings with the same address (trimmed, any case) and the same abc_names are one booker: its 'auto' rule.
+     */
+    private static final String SAME_BOOKER_ELIGIBLE =
+        "(d.person_id is null and position('@' in coalesce(trim(d.person_email), '')) > 1"
+        + " and position(' ' in trim(coalesce(d.person_abc_names, ''))) > 0)";
+
+    /**
+     * One booking: its event, who it is for, whether anonymise_booker() already took it (its own test), and which
+     * booker without an account it belongs to ({@link #SAME_BOOKER_ELIGIBLE}): bookings with the same number are erased
+     * together. A window over the rows found, before the limit, so a booker's bookings get one number.
+     */
     private static final String BOOKING_SQL_HEAD =
         "select d.id, d.ref, e.name, to_char(e.start_date, 'YYYY-MM-DD'), to_char(e.end_date, 'YYYY-MM-DD'),"
         + " d.person_first_name, d.person_last_name, d.person_email, d.person_phone, d.cancelled, d.person_id,"
-        + " coalesce(d.person_first_name = 'Anonymised' and d.person_last_name like '#%' and d.person_email is null, false)"
+        + " coalesce(d.person_first_name = 'Anonymised' and d.person_last_name like '#%' and d.person_email is null, false),"
+        + " case when " + SAME_BOOKER_ELIGIBLE + " then dense_rank() over (partition by " + SAME_BOOKER_ELIGIBLE
+        + " order by lower(trim(d.person_email)), d.person_abc_names) end"
         + " from document d left join event e on e.id = d.event_id where ";
 
     private static final String BOOKING_SQL_TAIL = " order by d.id desc limit " + (MAX_ROWS + 1);
@@ -248,6 +263,7 @@ final class ErasureFind {
             .bool("cancelled", DpoErasure.bool(r.getValue(row, 9)))
             .number("personId", DpoErasure.number(r.getValue(row, 10)))
             .bool("anonymised", DpoErasure.bool(r.getValue(row, 11)))
+            .number("sameBooker", DpoErasure.number(r.getValue(row, 12)))
             .toJson();
     }
 }

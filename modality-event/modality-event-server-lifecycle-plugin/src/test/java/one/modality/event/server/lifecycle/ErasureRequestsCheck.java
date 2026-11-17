@@ -97,9 +97,13 @@ public class ErasureRequestsCheck {
             && ErasureFind.NAME_BOOKINGS_SQL.contains("= (select public.abc_names($1::text))")
             && ErasureFind.NAME_BOOKINGS_SQL.split("abc_names\\(").length == 2);
         check("customers are never anonymised rows", ErasureFind.EMAIL_CUSTOMERS_SQL.contains("p.anonymised_date is null"));
+        for (ErasureFind.Kind k : ErasureFind.Kind.values())
+            check(k.json + ": bookings number their booker as anonymise_booker's 'auto' rule (no account, address, two-word name)",
+                ErasureFind.bookingsSql(k).contains("dense_rank() over (partition by (d.person_id is null and position('@' in coalesce(trim(d.person_email), '')) > 1"
+                    + " and position(' ' in trim(coalesce(d.person_abc_names, ''))) > 0) order by lower(trim(d.person_email)), d.person_abc_names)"));
         check("bookings by email in the indexed form (lower(person_email), no trim on the column)",
             ErasureFind.EMAIL_BOOKINGS_SQL.contains("lower(d.person_email) = lower(trim($1::text))")
-            && !ErasureFind.EMAIL_BOOKINGS_SQL.contains("trim(d.person_email)"));
+            && !ErasureFind.EMAIL_BOOKINGS_SQL.substring(ErasureFind.EMAIL_BOOKINGS_SQL.lastIndexOf(" where ")).contains("trim(d.person_email)"));
     }
 
     // ===== check ==================================================================================================
@@ -396,7 +400,7 @@ public class ErasureRequestsCheck {
     private static void replies() {
         System.out.println("find: the reply");
         Object[] customer = { 12, "Jane \"JD\"", "Doe\\", "jane@x.org", null, true, null, false, 4L, "2026-05-01" };
-        Object[] booking = { 4711, 1234, "Autumn retreat", "2026-10-05", "2026-10-12", "Jane", "Doe", null, "+44\n1", false, null, true };
+        Object[] booking = { 4711, 1234, "Autumn retreat", "2026-10-05", "2026-10-12", "Jane", "Doe", null, "+44\n1", false, null, true, 3L };
         Object[][] customers = new Object[51][];
         for (int i = 0; i < 51; i++)
             customers[i] = customer;
@@ -413,7 +417,7 @@ public class ErasureRequestsCheck {
         check("a booking, escaped and typed", b.getInteger("documentId") == 4711 && b.getInteger("ref") == 1234
             && "Autumn retreat".equals(b.getString("eventName")) && "2026-10-12".equals(b.getString("eventEnd"))
             && b.get("email") == null && "+44\n1".equals(b.getString("phone")) && b.get("personId") == null
-            && b.isTrue("anonymised") && !b.isTrue("cancelled") && b.keys().size() == 12);
+            && b.isTrue("anonymised") && !b.isTrue("cancelled") && b.getInteger("sameBooker") == 3 && b.keys().size() == 13);
         ReadOnlyAstObject empty = parsed(ErasureFind.replyJson(ErasureFind.Kind.NAME, rows(new Object[0][]), rows(new Object[0][])));
         check("nothing found: empty lists, not truncated", empty.getArray("customers").size() == 0 && !empty.isTrue("truncated"));
 
