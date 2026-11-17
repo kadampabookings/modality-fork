@@ -16,9 +16,11 @@
          ManageEventBookings operation (V0151) scoped to the event's own organisation and event, as a compare-and-set
          the server makes; and the dates each of an organisation's events had its data removed, for the same page.
 
-         Anonymising ONE customer at their request (GDPR erasure, anonymise_person(), V0153), from Customers, for super
-         administrators only: here rather than in the person plugin because it needs the same dedicated connection and
-         the same super-administrator gate as the event removal, with its runs recorded in person_erasure_run. -->
+         Anonymising ONE customer at their request (GDPR erasure, anonymise_person(), V0153), from Customers, and somebody
+         who only ever booked without an account (anonymise_booker(), V0163), from a booking in Registration: for Data
+         Protection Officers only (the DataProtection operation, held through a role). Here rather than in the person
+         plugin because they need the same dedicated connection and the same access class as the event removal, with
+         their runs recorded in person_erasure_run. -->
 
     <exported-packages>
         <source-packages/>
@@ -38,6 +40,7 @@
         <source-module>webfx-stack-db-query</source-module>
         <source-module>webfx-stack-db-submit</source-module>
         <source-module>webfx-stack-orm-datasourcemodel</source-module>
+        <source-module>webfx-stack-orm-entity</source-module>
         <source-module>webfx-stack-session-state</source-module>
     </dependencies>
 
@@ -50,6 +53,9 @@
         <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.event.server.lifecycle.EventRemovalDatesEndpoint</provider>
         <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.event.server.lifecycle.PreviewPersonAnonymisationEndpoint</provider>
         <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.event.server.lifecycle.CommitPersonAnonymisationEndpoint</provider>
+        <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.event.server.lifecycle.PreviewBookerAnonymisationEndpoint</provider>
+        <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.event.server.lifecycle.CommitBookerAnonymisationEndpoint</provider>
+        <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.event.server.lifecycle.DataProtectionAccessEndpoint</provider>
     </providers>
 
     <maven-pom-manual>
