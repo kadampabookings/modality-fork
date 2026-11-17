@@ -165,3 +165,4 @@ V0162__item_lay_ordained_allowed.sql
 V0163__anonymise_booker.sql
 V0164__anonymise_person_account_settings.sql
 V0165__erasure_request.sql
+V0166__operation_explicit_only.sql

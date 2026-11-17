@@ -1578,6 +1578,7 @@
     "code": {
       "expr": "operationCode"
     },
+    "explicitOnly": "boolean",
     "frontend": "boolean",
     "frontoffice": {
       "expr": "frontend"

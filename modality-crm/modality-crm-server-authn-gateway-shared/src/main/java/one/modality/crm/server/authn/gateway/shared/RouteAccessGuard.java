@@ -168,8 +168,22 @@ public final class RouteAccessGuard {
         return RoleOperationMembership.holdsThroughRole(personId, operationCode, entityStore)
             .compose(holds -> Boolean.TRUE.equals(holds)
                 ? Future.succeededFuture(true)
-                : SuperAdminMembership.isSuperAdminPerson(personId, entityStore))
+                : superAdminHoldsOperation(personId, operationCode, entityStore))
             .compose(allowed -> Boolean.TRUE.equals(allowed) ? work.get() : refused());
+    }
+
+    /**
+     * The super-administrator fallback for an OPERATION, which is not unconditional: an operation flagged
+     * {@code explicitOnly} (V0166) is held only through a role, as the pushed grants say — a super administrator's
+     * {@code operation:*} does not cover it. Without this, a guard asked for such an operation would let every super
+     * administrator through while their browser was told no. A lookup that fails is a no.
+     */
+    private static Future<Boolean> superAdminHoldsOperation(Object personId, String operationCode, EntityStore entityStore) {
+        return entityStore.executeQuery("select id from Operation where operationCode=$1 and explicitOnly limit 1", operationCode)
+            .compose(explicitOnly -> explicitOnly.isEmpty()
+                ? SuperAdminMembership.isSuperAdminPerson(personId, entityStore)
+                : Future.succeededFuture(false))
+            .recover(e -> Future.succeededFuture(false));
     }
 
     /**
@@ -241,7 +255,8 @@ public final class RouteAccessGuard {
         return RoleOperationMembership.holdsThroughRoleFor(personId, operationCode, organizationId, eventId, entityStore)
             .compose(holds -> Boolean.TRUE.equals(holds)
                 ? Future.succeededFuture(true)
-                // A super administrator holds no operation row of their own, exactly as above
-                : SuperAdminMembership.isSuperAdminPerson(personId, entityStore));
+                // A super administrator holds no operation row of their own, exactly as above — except an
+                // explicit-only one
+                : superAdminHoldsOperation(personId, operationCode, entityStore));
     }
 }

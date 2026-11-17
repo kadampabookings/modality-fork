@@ -271,13 +271,18 @@ public final class ModalityAuthorizationServerServiceProvider extends Authorizat
                         grant operation:*
                         grant route:*
                         """;
-                })
+                }),
+            // The operations a wildcard does not cover (V0166): named in every signed-in person's grants, so that the
+            // "grant operation:*" above, and any wildcard to come, leaves them to a grant naming them. Pushed with the
+            // grants rather than known to the engine, because the browser's engine knows only what is pushed.
+            explicitOnlyDeclarations(entityStore)
         ).map(compositeFuture -> {
             String loggedInGrants   = (String) compositeFuture.list().get(0);
             String userGrants       = (String) compositeFuture.list().get(1);
             String adminGrants      = (String) compositeFuture.list().get(2);
             String superAdminGrants = (String) compositeFuture.list().get(3);
-            return superAdminGrants.isEmpty() ? loggedInGrants + userGrants + adminGrants : superAdminGrants;
+            String explicitOnly     = (String) compositeFuture.list().get(4);
+            return composeGrants(explicitOnly, loggedInGrants, userGrants, adminGrants, superAdminGrants);
         });
         if (!backoffice)
             return grantsFuture; // the front office reads by its account, not by grants - see CallerReadScope
@@ -293,6 +298,40 @@ public final class ModalityAuthorizationServerServiceProvider extends Authorizat
                 return Future.succeededFuture(null);
             })
             .compose(ignoredScope -> grantsFuture);
+    }
+
+    /**
+     * The grant string of a signed-in person, from its parts. A pure function so the composition can be checked
+     * without a database (ExplicitOnlyGrantsCheck).
+     *
+     * <p>A super administrator gets the wildcard section in place of the operations every signed-in person holds and
+     * of the organization-admin sections, which it covers — but KEEPS their role sections: since V0166 the wildcard
+     * does not cover an explicit-only operation, so a super administrator who is also, say, the Data Protection
+     * Officer holds that operation only through the role section. Adding role sections only adds grants: no revoke
+     * line can reach them while {@link #RULE_GRANTS_APPLIED} is false.
+     */
+    static String composeGrants(String explicitOnly, String loggedInGrants, String userGrants, String adminGrants,
+                                String superAdminGrants) {
+        return superAdminGrants.isEmpty()
+            ? explicitOnly + loggedInGrants + userGrants + adminGrants
+            : explicitOnly + superAdminGrants + userGrants;
+    }
+
+    /**
+     * One {@code explicit operation:<code>} line per operation flagged {@code explicitOnly} (V0166).
+     *
+     * <p>Fails the push if it cannot be read, rather than pushing without it: without the declaration a super
+     * administrator's wildcard would cover the flagged operations again, on the server and in the browser alike. The
+     * push is retried on the next trigger, and a failed computation is not cached.
+     */
+    static Future<String> explicitOnlyDeclarations(EntityStore entityStore) {
+        return entityStore.<Operation>executeQuery("select operationCode from Operation where explicitOnly order by operationCode")
+            .map(operations -> {
+                StringBuilder sb = new StringBuilder();
+                operations.forEach(operation -> sb.append(InMemoryAuthorizationRuleRegistry.EXPLICIT_OPERATION_PREFIX)
+                    .append(operation.getOperationCode()).append("\n"));
+                return sb.toString();
+            });
     }
 
     private StringBuilder grantOperations(List<Operation> operations, StringBuilder sb) {
