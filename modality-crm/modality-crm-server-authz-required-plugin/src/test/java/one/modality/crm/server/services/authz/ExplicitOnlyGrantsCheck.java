@@ -2,7 +2,6 @@ package one.modality.crm.server.services.authz;
 
 import dev.webfx.extras.operation.HasOperationCode;
 import dev.webfx.stack.authz.core.InMemoryAuthorizationRuleRegistry;
-import dev.webfx.stack.authz.core.operation.OperationAuthorizationRuleParser;
 
 import java.util.Map;
 
@@ -65,16 +64,9 @@ public class ExplicitOnlyGrantsCheck {
         if (fail > 0) System.exit(1);
     }
 
-    /** Parsed exactly as createUserRuleRegistry does: the operation parser only, line by line. */
+    /** Parsed by the provider's own parse, the one both its cached and its fresh registries use. */
     static InMemoryAuthorizationRuleRegistry registry(String grants) {
-        InMemoryAuthorizationRuleRegistry registry = new InMemoryAuthorizationRuleRegistry();
-        registry.setAuthorizationRuleParser(new OperationAuthorizationRuleParser());
-        for (String line : grants.split("\n")) {
-            line = line.trim();
-            if (!line.isEmpty())
-                registry.registerAuthorizationRule(line);
-        }
-        return registry;
+        return ModalityAuthorizationServerServiceProvider.parseRuleRegistry(grants);
     }
 
     static void check(String what, boolean actual, boolean expected) {

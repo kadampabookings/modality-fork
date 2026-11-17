@@ -134,17 +134,43 @@ public final class ModalityAuthorizationServerServiceProvider extends Authorizat
     @Override
     protected Future<InMemoryAuthorizationRuleRegistry> createUserRuleRegistry(Object userId, boolean backoffice) {
         return getOrComputeAuthorizations(userId, backoffice)
-            .map(authorizations -> {
-                InMemoryAuthorizationRuleRegistry registry = new InMemoryAuthorizationRuleRegistry();
-                registry.setAuthorizationRuleParser(new OperationAuthorizationRuleParser());
-                if (authorizations != null)
-                    for (String line : authorizations.split("\n")) {
-                        line = line.trim();
-                        if (!line.isEmpty())
-                            registry.registerAuthorizationRule(line);
-                    }
-                return registry;
-            });
+            .map(ModalityAuthorizationServerServiceProvider::parseRuleRegistry);
+    }
+
+    /**
+     * For a fresh check (an irreversible action): the grants computed now, past the pushed-grants cache as well as
+     * the base class's registry cache, so a role revoked a moment ago no longer answers. The grants are not cached
+     * from it: the answer is for this one question.
+     *
+     * <p>Two caches it does NOT bypass, both outside this class:
+     * <ul>
+     *   <li>the user-claims cache of the authentication portal (60 s): the live session check this computation starts
+     *       with ({@link AuthenticationService#getUserClaims}) may answer from it, so an account disabled, or stripped
+     *       of back-office access, less than a minute ago still passes that check here. The grants themselves are
+     *       read from the database;</li>
+     *   <li>the caller's read scope ({@link CallerReadScope#load}), which a back-office computation primes as every one
+     *       does: it is filled on a miss and otherwise left as it is.</li>
+     * </ul>
+     * Several queries per call, and no dedup: for the endpoints that ACT irreversibly, not for a check made on every
+     * page.
+     */
+    @Override
+    protected Future<InMemoryAuthorizationRuleRegistry> createFreshUserRuleRegistry(Object userId, boolean backoffice) {
+        return computeAuthorizations(userId, LogoutUserId.isLogoutUserIdOrNull(userId), backoffice)
+            .map(ModalityAuthorizationServerServiceProvider::parseRuleRegistry);
+    }
+
+    /** The grant string parsed as the server judges it: the operation parser only, line by line. */
+    static InMemoryAuthorizationRuleRegistry parseRuleRegistry(String authorizations) {
+        InMemoryAuthorizationRuleRegistry registry = new InMemoryAuthorizationRuleRegistry();
+        registry.setAuthorizationRuleParser(new OperationAuthorizationRuleParser());
+        if (authorizations != null)
+            for (String line : authorizations.split("\n")) {
+                line = line.trim();
+                if (!line.isEmpty())
+                    registry.registerAuthorizationRule(line);
+            }
+        return registry;
     }
 
     private Future<String> getOrComputeAuthorizations(Object userId, boolean backoffice) {
