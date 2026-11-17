@@ -12,7 +12,7 @@ import dev.webfx.stack.com.bus.call.spi.AsyncFunctionBusCallEndpoint;
  * account members, other customers with one of their names), for this reply only. A refusal comes back as
  * {@code [PersonAnonymise…Error] text}; see {@link PersonAnonymisationRunner} and V0153 for each.
  *
- * <p>Super administrators only, re-checked on every call ({@link EventErasureAccess}). It lives beside the event
+ * <p>Data Protection Officers only, re-checked on every call ({@link EventErasureAccess}). It lives beside the event
  * erasure because it needs the same dedicated connection and the same gate.
  *
  * @author Claude Code
@@ -23,7 +23,7 @@ public final class PreviewPersonAnonymisationEndpoint extends AsyncFunctionBusCa
     public static final String PREVIEW_PERSON_ANONYMISATION_ADDRESS = "modality/service/person/anonymise/preview";
 
     public PreviewPersonAnonymisationEndpoint() {
-        super(PREVIEW_PERSON_ANONYMISATION_ADDRESS, argument -> EventErasureAccess.whenSuperAdmin("person-anonymise preview",
+        super(PREVIEW_PERSON_ANONYMISATION_ADDRESS, argument -> EventErasureAccess.whenDataProtectionOfficer("person-anonymise preview",
             caller -> PersonAnonymisationRunner.preview(EventErasureArguments.array(argument), caller)));
     }
 }

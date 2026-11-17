@@ -11,7 +11,7 @@ import dev.webfx.stack.com.bus.call.spi.AsyncFunctionBusCallEndpoint;
  * which must be one that preview offered; and the ids of the account's members to anonymise along, each a member
  * without an account of their own that the same preview listed. The reply is the run as JSON, as for the preview.
  *
- * <p>Super administrators only, re-checked on every call ({@link EventErasureAccess}).
+ * <p>Data Protection Officers only, re-checked on every call ({@link EventErasureAccess}).
  *
  * @author Claude Code
  */
@@ -21,7 +21,7 @@ public final class CommitPersonAnonymisationEndpoint extends AsyncFunctionBusCal
     public static final String COMMIT_PERSON_ANONYMISATION_ADDRESS = "modality/service/person/anonymise/commit";
 
     public CommitPersonAnonymisationEndpoint() {
-        super(COMMIT_PERSON_ANONYMISATION_ADDRESS, argument -> EventErasureAccess.whenSuperAdmin("person-anonymise commit",
+        super(COMMIT_PERSON_ANONYMISATION_ADDRESS, argument -> EventErasureAccess.whenDataProtectionOfficer("person-anonymise commit",
             caller -> PersonAnonymisationRunner.commit(EventErasureArguments.array(argument), caller)));
     }
 }

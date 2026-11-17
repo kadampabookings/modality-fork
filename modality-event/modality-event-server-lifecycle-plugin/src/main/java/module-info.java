@@ -18,12 +18,13 @@ module modality.event.server.lifecycle.plugin {
     requires webfx.stack.db.query;
     requires webfx.stack.db.submit;
     requires webfx.stack.orm.datasourcemodel.service;
+    requires webfx.stack.orm.entity;
     requires webfx.stack.session.state;
 
     // Exported packages
     exports one.modality.event.server.lifecycle;
 
     // Provided services
-    provides dev.webfx.stack.com.bus.call.spi.BusCallEndpoint with one.modality.event.server.lifecycle.DuplicateEventEndpoint, one.modality.event.server.lifecycle.StartEventErasureEndpoint, one.modality.event.server.lifecycle.EventErasureRunEndpoint, one.modality.event.server.lifecycle.EventErasureRunsEndpoint, one.modality.event.server.lifecycle.SetEventBookingStateEndpoint, one.modality.event.server.lifecycle.EventRemovalDatesEndpoint, one.modality.event.server.lifecycle.PreviewPersonAnonymisationEndpoint, one.modality.event.server.lifecycle.CommitPersonAnonymisationEndpoint;
+    provides dev.webfx.stack.com.bus.call.spi.BusCallEndpoint with one.modality.event.server.lifecycle.DuplicateEventEndpoint, one.modality.event.server.lifecycle.StartEventErasureEndpoint, one.modality.event.server.lifecycle.EventErasureRunEndpoint, one.modality.event.server.lifecycle.EventErasureRunsEndpoint, one.modality.event.server.lifecycle.SetEventBookingStateEndpoint, one.modality.event.server.lifecycle.EventRemovalDatesEndpoint, one.modality.event.server.lifecycle.PreviewPersonAnonymisationEndpoint, one.modality.event.server.lifecycle.CommitPersonAnonymisationEndpoint, one.modality.event.server.lifecycle.PreviewBookerAnonymisationEndpoint, one.modality.event.server.lifecycle.CommitBookerAnonymisationEndpoint, one.modality.event.server.lifecycle.DataProtectionAccessEndpoint;
 
 }
