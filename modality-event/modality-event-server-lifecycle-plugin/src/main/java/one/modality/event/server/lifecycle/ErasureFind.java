@@ -75,15 +75,23 @@ final class ErasureFind {
 
     // ===== SQL — constants only; the text is bound as $1 =========================================================
 
-    /** One customer: who, whether they own an account, the row they are a linked copy of, and their bookings. */
-    private static final String CUSTOMER_SQL_HEAD =
-        "select p.id, p.first_name, p.last_name, p.email, p.phone, (p.frontend_account_id is not null and p.owner),"
-        + " p.account_person_id, p.removed, b.n, to_char(b.last_start, 'YYYY-MM-DD')"
-        + " from person p cross join lateral (select count(*) as n, max(e.start_date) as last_start"
-        + " from document d left join event e on e.id = d.event_id where d.person_id = p.id) b"
-        + " where p.anonymised_date is null and p.id in (";
+    /**
+     * One customer: who, whether they own an account, the row they are a linked copy of, and their bookings. The people
+     * the search matches are computed once, as a set (a MATERIALIZED CTE, which the planner cannot see through), then
+     * cut to the rows answered, and only theirs have their bookings counted. A booking reference is numbered per event,
+     * so it matches hundreds of people: counting the bookings of all of them took 4.5 s on staging, and letting the
+     * planner probe person after person for the reference 2.7 s.
+     */
+    private static final String CUSTOMER_SQL_HEAD = "with ids as materialized (";
 
-    private static final String CUSTOMER_SQL_TAIL = ") order by p.id desc limit " + (MAX_ROWS + 1);
+    private static final String CUSTOMER_SQL_TAIL = ")"
+        + " select p.id, p.first_name, p.last_name, p.email, p.phone, (p.frontend_account_id is not null and p.owner),"
+        + " p.account_person_id, p.removed, b.n, to_char(b.last_start, 'YYYY-MM-DD')"
+        + " from (select p0.* from person p0 where p0.anonymised_date is null and p0.id in (select * from ids)"
+        + " order by p0.id desc limit " + (MAX_ROWS + 1) + ") p"
+        + " cross join lateral (select count(*) as n, max(e.start_date) as last_start"
+        + " from document d left join event e on e.id = d.event_id where d.person_id = p.id) b"
+        + " order by p.id desc";
 
     static final String EMAIL_CUSTOMERS_SQL = CUSTOMER_SQL_HEAD
         + "select q.id from person q where lower(trim(q.email)) = lower(trim($1::text))"

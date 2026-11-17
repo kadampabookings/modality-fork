@@ -89,14 +89,15 @@ public class ErasureRequestsCheck {
         System.out.println("find: the SQL binds the text, and computes abc_names() once");
         for (ErasureFind.Kind k : ErasureFind.Kind.values()) {
             check(k.json + ": both statements bind $1", ErasureFind.customersSql(k).contains("$1") && ErasureFind.bookingsSql(k).contains("$1"));
-            check(k.json + ": both read one row more than they answer",
-                ErasureFind.customersSql(k).endsWith("limit 51") && ErasureFind.bookingsSql(k).endsWith("limit 51"));
+            check(k.json + ": both read one row more than they answer, customers before counting their bookings",
+                ErasureFind.customersSql(k).contains("order by p0.id desc limit 51) p cross join lateral")
+                && ErasureFind.bookingsSql(k).endsWith("limit 51"));
         }
         check("name: abc_names() in an uncorrelated scalar subquery only",
             ErasureFind.NAME_CUSTOMERS_SQL.contains("= (select public.abc_names($1::text))")
             && ErasureFind.NAME_BOOKINGS_SQL.contains("= (select public.abc_names($1::text))")
             && ErasureFind.NAME_BOOKINGS_SQL.split("abc_names\\(").length == 2);
-        check("customers are never anonymised rows", ErasureFind.EMAIL_CUSTOMERS_SQL.contains("p.anonymised_date is null"));
+        check("customers are never anonymised rows", ErasureFind.EMAIL_CUSTOMERS_SQL.contains("p0.anonymised_date is null"));
         for (ErasureFind.Kind k : ErasureFind.Kind.values())
             check(k.json + ": bookings number their booker as anonymise_booker's 'auto' rule (no account, address, two-word name)",
                 ErasureFind.bookingsSql(k).contains("dense_rank() over (partition by (d.person_id is null and position('@' in coalesce(trim(d.person_email), '')) > 1"
