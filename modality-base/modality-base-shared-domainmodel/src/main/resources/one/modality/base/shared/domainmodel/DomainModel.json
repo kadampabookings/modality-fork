@@ -759,7 +759,7 @@
     "bookingClosingDate": "Temporal.PlainDate",
     "bookingFormLayout": "BookingFormLayout",
     "bookingFormUrl": {
-      "expr": "frontendUrl + (frontendIsAngular ? 'en/event/' + id + '/fees' : '?eventid=' + id)"
+      "expr": "frontendUrl + (kbs3 ? 'book-event/' + id : frontendIsAngular ? 'en/event/' + id + '/fees' : '?eventid=' + id)"
     },
     "bookingProcessStart": "Temporal.PlainDateTime",
     "bookingSuccessMessage": "Label",
