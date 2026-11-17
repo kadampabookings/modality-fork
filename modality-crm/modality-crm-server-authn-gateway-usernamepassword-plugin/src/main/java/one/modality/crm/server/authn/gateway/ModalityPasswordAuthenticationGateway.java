@@ -638,6 +638,15 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
         // back-office session may then DO is fenced by RouteAccessGuard, which refuses a null outright.
         boolean isBackofficeAuthentication =
             Boolean.TRUE.equals(StateAccessor.getVerifiedBackoffice(ThreadLocalStateHolder.getThreadLocalState()));
+        // Which flavour of view-as pass must be live (see checkSupportViewStillLive below), read from the
+        // EFFECTIVE audience: the verified one when this message proved one, the session's flag otherwise.
+        // The verified value alone is not enough here. The authorization push that follows a redeem runs on a
+        // state rebuilt from the session, before the new token has come back, so it carries no verified
+        // audience: a back-office view then read as a front-office one, found no live SUPPORT_VIEW row, and
+        // the push failed - the borrowed back office opened with no rights at all, for every target.
+        // Whenever a token is presented the verified audience still decides, so a caller cannot move this by
+        // claiming; the account filter above keeps the verified audience alone.
+        boolean isBackofficeView = ThreadLocalStateHolder.isEffectivelyBackoffice();
         if (!(userId instanceof ModalityUserPrincipal modalityUserPrincipal))
             return Future.failedFuture("[%s] This userId object is not recognized by Modality".formatted(ModalityAuthenticationI18nKeys.AuthnUnrecognizedUserIdError));
         return EntityStore.create(dataSourceModel)
@@ -683,7 +692,7 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
                 // which the identity-binding token will eventually provide — milestone M1 of
                 // docs/security/backoffice-second-factor-totp-design.md.
                 return checkSupportViewStillLive(modalityUserPrincipal,
-                        isBackofficeAuthentication ? MagicLinkType.BACKOFFICE_VIEW : MagicLinkType.SUPPORT_VIEW)
+                        isBackofficeView ? MagicLinkType.BACKOFFICE_VIEW : MagicLinkType.SUPPORT_VIEW)
                     .map(ignored -> userPerson);
             });
     }
