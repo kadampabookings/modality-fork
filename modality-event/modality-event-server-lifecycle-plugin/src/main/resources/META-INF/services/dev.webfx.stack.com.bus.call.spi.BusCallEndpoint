@@ -9,3 +9,7 @@ one.modality.event.server.lifecycle.CommitPersonAnonymisationEndpoint
 one.modality.event.server.lifecycle.PreviewBookerAnonymisationEndpoint
 one.modality.event.server.lifecycle.CommitBookerAnonymisationEndpoint
 one.modality.event.server.lifecycle.DataProtectionAccessEndpoint
+one.modality.event.server.lifecycle.ErasureFindEndpoint
+one.modality.event.server.lifecycle.ErasureCheckEndpoint
+one.modality.event.server.lifecycle.ErasureRequestsEndpoint
+one.modality.event.server.lifecycle.SaveErasureRequestEndpoint

@@ -8,6 +8,7 @@ module modality.event.server.lifecycle.plugin {
     requires io.vertx.sql.client.pg;
     requires modality.crm.server.authn.gateway.shared;
     requires modality.crm.shared.authn;
+    requires webfx.platform.ast;
     requires webfx.platform.async;
     requires webfx.platform.conf;
     requires webfx.platform.console;
@@ -25,6 +26,6 @@ module modality.event.server.lifecycle.plugin {
     exports one.modality.event.server.lifecycle;
 
     // Provided services
-    provides dev.webfx.stack.com.bus.call.spi.BusCallEndpoint with one.modality.event.server.lifecycle.DuplicateEventEndpoint, one.modality.event.server.lifecycle.StartEventErasureEndpoint, one.modality.event.server.lifecycle.EventErasureRunEndpoint, one.modality.event.server.lifecycle.EventErasureRunsEndpoint, one.modality.event.server.lifecycle.SetEventBookingStateEndpoint, one.modality.event.server.lifecycle.EventRemovalDatesEndpoint, one.modality.event.server.lifecycle.PreviewPersonAnonymisationEndpoint, one.modality.event.server.lifecycle.CommitPersonAnonymisationEndpoint, one.modality.event.server.lifecycle.PreviewBookerAnonymisationEndpoint, one.modality.event.server.lifecycle.CommitBookerAnonymisationEndpoint, one.modality.event.server.lifecycle.DataProtectionAccessEndpoint;
+    provides dev.webfx.stack.com.bus.call.spi.BusCallEndpoint with one.modality.event.server.lifecycle.DuplicateEventEndpoint, one.modality.event.server.lifecycle.StartEventErasureEndpoint, one.modality.event.server.lifecycle.EventErasureRunEndpoint, one.modality.event.server.lifecycle.EventErasureRunsEndpoint, one.modality.event.server.lifecycle.SetEventBookingStateEndpoint, one.modality.event.server.lifecycle.EventRemovalDatesEndpoint, one.modality.event.server.lifecycle.PreviewPersonAnonymisationEndpoint, one.modality.event.server.lifecycle.CommitPersonAnonymisationEndpoint, one.modality.event.server.lifecycle.PreviewBookerAnonymisationEndpoint, one.modality.event.server.lifecycle.CommitBookerAnonymisationEndpoint, one.modality.event.server.lifecycle.DataProtectionAccessEndpoint, one.modality.event.server.lifecycle.ErasureFindEndpoint, one.modality.event.server.lifecycle.ErasureCheckEndpoint, one.modality.event.server.lifecycle.ErasureRequestsEndpoint, one.modality.event.server.lifecycle.SaveErasureRequestEndpoint;
 
 }

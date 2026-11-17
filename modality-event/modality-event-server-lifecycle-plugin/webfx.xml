@@ -20,7 +20,12 @@
          who only ever booked without an account (anonymise_booker(), V0163), from a booking in Registration: for Data
          Protection Officers only (the DataProtection operation, held through a role). Here rather than in the person
          plugin because they need the same dedicated connection and the same access class as the event removal, with
-         their runs recorded in person_erasure_run. -->
+         their runs recorded in person_erasure_run.
+
+         Handling a GDPR erasure request end to end on the Data Protection Officer's "Erasure requests" page, DPO only like
+         the anonymisations: finding who a request names (an email, a booking reference or a full name), checking
+         afterwards that nothing identifying them remains, and keeping the register of requests and their deadlines
+         (erasure_request, V0165). -->
 
     <exported-packages>
         <source-packages/>
@@ -42,6 +47,8 @@
         <source-module>webfx-stack-orm-datasourcemodel</source-module>
         <source-module>webfx-stack-orm-entity</source-module>
         <source-module>webfx-stack-session-state</source-module>
+        <!-- An erasure request is saved as a JSON object sent as a string (ErasureRequests): JSON must be plugged in -->
+        <plugin-module>webfx-platform-ast-json-plugin</plugin-module>
     </dependencies>
 
     <providers>
@@ -56,6 +63,10 @@
         <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.event.server.lifecycle.PreviewBookerAnonymisationEndpoint</provider>
         <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.event.server.lifecycle.CommitBookerAnonymisationEndpoint</provider>
         <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.event.server.lifecycle.DataProtectionAccessEndpoint</provider>
+        <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.event.server.lifecycle.ErasureFindEndpoint</provider>
+        <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.event.server.lifecycle.ErasureCheckEndpoint</provider>
+        <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.event.server.lifecycle.ErasureRequestsEndpoint</provider>
+        <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.event.server.lifecycle.SaveErasureRequestEndpoint</provider>
     </providers>
 
     <maven-pom-manual>
