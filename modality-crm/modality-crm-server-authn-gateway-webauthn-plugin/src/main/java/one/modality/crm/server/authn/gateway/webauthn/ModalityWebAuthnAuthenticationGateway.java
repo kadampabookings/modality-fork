@@ -1050,12 +1050,15 @@ public final class ModalityWebAuthnAuthenticationGateway implements ServerAuthen
         // ...and the session must have presented a second factor (SecondFactorAccess.ApproverStanding): the same rule
         // the TOTP gateway applies, so no passkey endpoint is the way round it. Read on this thread.
         String sessionFamilyId = StateAccessor.getSessionFamilyId(ThreadLocalStateHolder.getThreadLocalState());
-        return SuperAdminMembership.isSuperAdmin(principal, dataSourceModel)
+        // A PLATFORM super administrator (V0167): the passkey queue, the alarm and staff resets concern every member of
+        // staff, who belong to no one organization. Scoping them to "staff of my organizations" is a later step of the
+        // admin-tiers plan (Phase 2); until then a scoped super admin is refused.
+        return SuperAdminMembership.isPlatformSuperAdmin(principal, dataSourceModel)
             .compose(isSuperAdmin -> {
                 if (!Boolean.TRUE.equals(isSuperAdmin)) {
                     // Person id, not email: this lands in a log that ships to aggregation
                     Console.log(LOG_PREFIX + "Super-administrator passkey operation refused: person "
-                                + principal.getUserPersonId() + " is not a super administrator");
+                                + principal.getUserPersonId() + " is not a platform super administrator");
                     return adminNotPermittedFailure();
                 }
                 return SecondFactorAccess.approverStanding(sessionFamilyId);

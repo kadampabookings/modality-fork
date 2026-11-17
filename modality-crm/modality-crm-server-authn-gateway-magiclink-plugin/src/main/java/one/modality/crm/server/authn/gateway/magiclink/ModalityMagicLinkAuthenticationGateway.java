@@ -578,10 +578,12 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
                     return Future.succeededFuture(username);
                 // Only reached for a staff account — 28 of them on production against ~49k accounts —
                 // so the ordinary customer path costs exactly what it did before.
-                return isSuperAdmin(agentPersonId, entityStore)
+                // A super administrator of every organization the staff member holds access in (V0167): a scoped
+                // super administrator may open staff of their own organizations only, never another super admin.
+                return SuperAdminMembership.mayActOnStaff(agentPersonId, targetPersonId, entityStore)
                     .compose(superAdmin -> {
                         if (!Boolean.TRUE.equals(superAdmin))
-                            return refuseSupportViewTarget(targetPersonId, "back-office target, caller is not a super admin",
+                            return refuseSupportViewTarget(targetPersonId, "back-office target, caller is not a super admin of all its organizations",
                                 "[%s] Only a super admin can open a back-office account in support view".formatted(ModalityAuthenticationI18nKeys.SupportViewInvalidTargetError));
                         // Worth being able to find afterwards: one member of staff looked at another
                         // member of staff's front office, rather than at a customer's.
@@ -621,26 +623,14 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
         // provider resolves them. Not on Person.email, as they once were: a client can write that field,
         // so a match on it was a match on whatever the caller had typed there.
         return Future.all(
-            isSuperAdmin(agentPersonId, entityStore),
+            // "Anywhere", as the role half beside it: a customer belongs to no organization, and a role holder passes on
+            // a grant held in any organization, so a super administrator of any organization does too (V0167).
+            SuperAdminMembership.isSuperAdminAnywhere(agentPersonId, entityStore),
             RoleOperationMembership.holdsThroughRole(agentPersonId, VIEW_AS_CUSTOMER_OPERATION_CODE, entityStore)
         ).map(compositeFuture -> Boolean.TRUE.equals(compositeFuture.resultAt(0))
                                  || Boolean.TRUE.equals(compositeFuture.resultAt(1)));
     }
 
-    /**
-     * Whether this person is a super admin — the same row the authorization provider keys the
-     * {@code operation:*} wildcard on, asked of the database rather than the client.
-     *
-     * <p>Delegates to {@link SuperAdminMembership}, the one definition of "is super admin" across
-     * the gateways (the passkey approval queue asks the same question). It is deliberately the
-     * ONLY check behind the back-office view: an operation code would make the ability delegable
-     * to roles, and a free-text {@code AuthorizationRule} could forge the matching grant string —
-     * whereas membership of {@code authorization_super_admin} can only be conferred by someone
-     * who can already write that table.
-     */
-    private static Future<Boolean> isSuperAdmin(Object personId, EntityStore entityStore) {
-        return SuperAdminMembership.isSuperAdminPerson(personId, entityStore);
-    }
 
     /**
      * Redeems a support-view pass, opening the customer's front office read-only.
@@ -711,7 +701,7 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
                     // agent who signed in as a different person of their account, holding the membership
                     // there, is refused here. That errs the safe way.
                     Future<Boolean> targetStillAllowed = Boolean.TRUE.equals(targetAccount.isBackoffice())
-                        ? isSuperAdmin(agentPerson.getPrimaryKey(), entityStore) // the mint-time rule, re-asked
+                        ? SuperAdminMembership.mayActOnStaff(agentPerson.getPrimaryKey(), targetPerson.getPrimaryKey(), entityStore) // the mint-time rule, re-asked
                         : Future.succeededFuture(true);
                     return targetStillAllowed.compose(allowed -> {
                         if (!Boolean.TRUE.equals(allowed)) {
@@ -788,7 +778,7 @@ public final class ModalityMagicLinkAuthenticationGateway implements ServerAuthe
                 String agentUsername = agentPerson == null ? null : agentPerson.evaluate("frontendAccount.username");
                 if (Strings.isEmpty(agentUsername))
                     return Future.failedFuture("[%s] Your account could not be identified".formatted(ModalityAuthenticationI18nKeys.SupportViewNotPermittedError));
-                return isSuperAdmin(agentPersonId, entityStore)
+                return SuperAdminMembership.mayActOnStaff(agentPersonId, targetPersonId, entityStore)
                     .compose(superAdmin -> {
                         if (!Boolean.TRUE.equals(superAdmin)) {
                             // Person ids, not emails — same log-file discipline as requestSupportView.

@@ -174,10 +174,12 @@ final class SignInApprovals {
         "SELECT DISTINCT concat_ws(' ', p.first_name, p.last_name), a.username FROM authorization_super_admin s" +
         "  JOIN person p ON p.id = s.super_admin_id JOIN frontend_account a ON a.id = p.frontend_account_id" +
         " WHERE p.removed IS NOT TRUE AND a.disabled IS NOT TRUE AND " + APPROVED_FACTORS_OF_ACCOUNT + " = 0";
+    // The approver's bootstrap test counts PLATFORM super administrators only (V0167), as SecondFactorAccess does.
+    // The list above names every super administrator, scoped ones too: each must secure their account.
     private static final String SUPER_ADMINS_WITH_FACTOR_SQL =
         "SELECT count(DISTINCT a.id) FROM authorization_super_admin s" +
         "  JOIN person p ON p.id = s.super_admin_id JOIN frontend_account a ON a.id = p.frontend_account_id" +
-        " WHERE p.removed IS NOT TRUE AND a.disabled IS NOT TRUE AND " + APPROVED_FACTORS_OF_ACCOUNT + " > 0";
+        " WHERE s.organization_id IS NULL AND p.removed IS NOT TRUE AND a.disabled IS NOT TRUE AND " + APPROVED_FACTORS_OF_ACCOUNT + " > 0";
 
     // The caller's own factors that are not APPROVED: pending and rejected, as the setup screen shows them.
     private static final String OWN_UNAPPROVED_SQL =

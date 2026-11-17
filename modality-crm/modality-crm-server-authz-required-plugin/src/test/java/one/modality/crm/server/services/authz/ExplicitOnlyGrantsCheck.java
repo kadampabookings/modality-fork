@@ -3,7 +3,10 @@ package one.modality.crm.server.services.authz;
 import dev.webfx.extras.operation.HasOperationCode;
 import dev.webfx.stack.authz.core.InMemoryAuthorizationRuleRegistry;
 
+import one.modality.crm.server.authn.gateway.shared.SuperAdminMembership;
+
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Explicit-only operations (V0166) through the grant string the provider composes, parsed as the server parses it.
@@ -30,7 +33,8 @@ public class ExplicitOnlyGrantsCheck {
     static final String DPO_ROLE = "context:organizationId=5\ngrant operation:DataProtection\n";
     static final String OTHER_ROLE = "context:organizationId=5\ngrant operation:EditBooking\n";
     static final String ORG_ADMIN = "context:organizationId=5\ngrant operation:RouteToAdmin\n";
-    static final String SUPER_ADMIN = "context:any\ngrant operation:*\ngrant route:*\n";
+    static final SuperAdminMembership.Scope SUPER_ADMIN = new SuperAdminMembership.Scope(true, Set.of());
+    static final SuperAdminMembership.Scope NOT_SUPER_ADMIN = SuperAdminMembership.Scope.NONE;
 
     public static void main(String[] args) {
         Map<String, String> org5 = Map.of("organizationId", "5"), org6 = Map.of("organizationId", "6");
@@ -50,13 +54,13 @@ public class ExplicitOnlyGrantsCheck {
         check("...in no context either", superAdmin.doesRulesAuthorize(new Op("DataProtection"), Map.of()), false);
 
         InMemoryAuthorizationRuleRegistry dpo = registry(
-            ModalityAuthorizationServerServiceProvider.composeGrants(EXPLICIT, LOGGED_IN, DPO_ROLE, "", ""));
+            ModalityAuthorizationServerServiceProvider.composeGrants(EXPLICIT, LOGGED_IN, DPO_ROLE, "", NOT_SUPER_ADMIN));
         check("a DPO who is not a super administrator holds DataProtection",
               dpo.doesRulesAuthorize(new Op("DataProtection"), org5), true);
         check("...and the operations every signed-in person holds", dpo.doesRulesAuthorize(new Op("GuestOp"), org6), true);
 
         InMemoryAuthorizationRuleRegistry staff = registry(
-            ModalityAuthorizationServerServiceProvider.composeGrants(EXPLICIT, LOGGED_IN, OTHER_ROLE, ORG_ADMIN, ""));
+            ModalityAuthorizationServerServiceProvider.composeGrants(EXPLICIT, LOGGED_IN, OTHER_ROLE, ORG_ADMIN, NOT_SUPER_ADMIN));
         check("other staff do not hold DataProtection", staff.doesRulesAuthorize(new Op("DataProtection"), org5), false);
         check("...but keep their organization-admin grant", staff.doesRulesAuthorize(new Op("RouteToAdmin"), org5), true);
 

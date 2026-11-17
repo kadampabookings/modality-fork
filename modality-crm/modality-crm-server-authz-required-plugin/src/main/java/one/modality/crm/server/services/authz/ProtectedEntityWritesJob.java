@@ -783,9 +783,11 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
      * The fields that say which organization (and event) owns a row, per entity scoped this way.
      *
      * <p>{@code Organization} is not listed because its owner is itself: the target id IS the organization.
-     * The eight grant tables are not listed either and keep being asked in no context: they are walled to
-     * super administrators by {@link GrantTableWritePolicy} whatever this rule says, so a context would change
-     * nothing but the number of lookups.
+     * The grant tables are not listed and keep being asked in no context — they are walled to super administrators
+     * by {@link GrantTableWritePolicy} whatever this rule says — EXCEPT the access rows, which name their
+     * organization and event. Since V0167 a super administrator may be scoped to organizations, holding the wildcard
+     * only under their organizations' contexts; asked in no context, every access-row write they are allowed to make
+     * would be counted as a refusal here, and refused outright the day this table were enforced.
      */
     static final Map<String, String[]> OWNER_FIELDS = Map.of(
         "Letter",       new String[] { "organization", "event" },
@@ -796,7 +798,9 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         // placed here is refused, not only logged.
         "MoneyAccount", new String[] { "organization", "event" },
         // A booking: document.organization is NOT NULL, and event names the event it books (2026-10-19).
-        "Document", new String[] { "organization", "event" }
+        "Document", new String[] { "organization", "event" },
+        // An access row names the organization (and event) it grants in (V0167, see above)
+        "AuthorizationOrganizationUserAccess", new String[] { "organization", "event" }
     );
 
     /**

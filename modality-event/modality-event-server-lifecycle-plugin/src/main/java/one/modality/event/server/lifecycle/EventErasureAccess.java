@@ -96,8 +96,11 @@ final class EventErasureAccess {
      * @param work      what to do once allowed — not started otherwise
      */
     static <T> Future<T> whenSuperAdmin(String operation, Function<Caller, Future<T>> work) {
-        return when(operation, "super-administrator", "is not a super administrator",
-            caller -> SuperAdminMembership.isSuperAdmin(caller.principal(), DataSourceModelService.getDefaultDataSourceModel()),
+        // A PLATFORM super administrator (V0167). Erasing a past event acts on that event's organization only, so a
+        // super administrator of that organization could be allowed — once the gate is given the event (admin-tiers
+        // plan, Phase 3). Until then: platform only, the narrower answer.
+        return when(operation, "platform super-administrator", "is not a platform super administrator",
+            caller -> SuperAdminMembership.isPlatformSuperAdmin(caller.principal(), DataSourceModelService.getDefaultDataSourceModel()),
             work);
     }
 

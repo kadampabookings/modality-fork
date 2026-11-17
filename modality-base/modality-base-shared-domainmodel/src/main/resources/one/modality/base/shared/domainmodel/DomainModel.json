@@ -73,6 +73,7 @@
   },
   "AuthorizationSuperAdmin": {
     "id": 137,
+    "organization": "Organization",
     "superAdmin": "Person"
   },
   "Book": {

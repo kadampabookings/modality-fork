@@ -296,20 +296,25 @@ public final class CallerReadScope {
     private static Future<Scope> computeScope(Object personId) {
         EntityStore entityStore = EntityStore.create(DataSourceModelService.getDefaultDataSourceModel());
         return Future.all(
-                SuperAdminMembership.isSuperAdminPerson(personId, entityStore),
+                SuperAdminMembership.scopeOf(personId, entityStore),
                 entityStore.<AuthorizationOrganizationUserAccess>executeQuery(
                     "select organization.id,event.id,eventType.id from AuthorizationOrganizationUserAccess where user=$1", personId),
                 entityStore.<AuthorizationOrganizationAdmin>executeQuery(
                     "select organization.id from AuthorizationOrganizationAdmin where admin=$1", personId)
             ).compose(composite -> {
-                if (Boolean.TRUE.equals(composite.resultAt(0)))
+                SuperAdminMembership.Scope superAdmin = composite.resultAt(0);
+                // Only a PLATFORM super administrator reads unrestricted (V0167). A scoped one reads the organizations
+                // they are super administrator of, as an organization administrator reads theirs: the reason scoping
+                // exists is that a compromised developer account must not reach every organization's data.
+                if (superAdmin.platform())
                     return Future.succeededFuture(UNRESTRICTED);
-                return flattenAccessRows(composite.resultAt(1), composite.resultAt(2));
+                return flattenAccessRows(composite.resultAt(1), composite.resultAt(2), superAdmin.organizationIds());
             });
     }
 
     private static Future<Scope> flattenAccessRows(EntityList<AuthorizationOrganizationUserAccess> accessRows,
-                                                   EntityList<AuthorizationOrganizationAdmin> organizationAdminRows) {
+                                                   EntityList<AuthorizationOrganizationAdmin> organizationAdminRows,
+                                                   Set<Integer> superAdminOrganizationIds) {
         List<GrantRow> grants = new ArrayList<>();
         for (AuthorizationOrganizationUserAccess access : accessRows)
             grants.add(new GrantRow(intOrNull(Entities.getPrimaryKey(access.getOrganizationId())),
@@ -321,6 +326,8 @@ public final class CallerReadScope {
             if (organizationId != null)
                 adminOrganizationIds.add(organizationId);
         }
+        // A scoped super administrator's organizations reach exactly as far as an organization administrator's
+        adminOrganizationIds.addAll(superAdminOrganizationIds);
         List<GrantRow> typeRows = typeRowsNeedingExpansion(grants);
         if (typeRows.isEmpty())
             return Future.succeededFuture(assemble(grants, adminOrganizationIds, new int[0]));

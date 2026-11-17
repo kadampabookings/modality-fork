@@ -64,7 +64,8 @@ final class LabelWritePolicy implements ClientSubmitGuard.WritePolicy {
 
     static final TranslatorLookup DATABASE_LOOKUP = (personId, accountId) -> {
         EntityStore store = EntityStore.create(DataSourceModelService.getDefaultDataSourceModel());
-        return SuperAdminMembership.isSuperAdminPerson(personId, store)
+        // A PLATFORM super administrator (V0167): labels are shared by every organization
+        return SuperAdminMembership.isPlatformSuperAdmin(personId, store)
             .compose(superAdmin -> Boolean.TRUE.equals(superAdmin) ? Future.succeededFuture(true) : isTester(accountId, store))
             .compose(tester -> Boolean.TRUE.equals(tester) ? Future.succeededFuture(true)
                 : RouteGrantMembership.mayReachRouteAnywhere(personId, TRANSLATION_ROUTE, store));

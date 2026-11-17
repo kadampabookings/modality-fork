@@ -54,8 +54,9 @@ public final class MergeIntoAccountEndpoint extends AsyncFunctionBusCallEndpoint
             return RouteAccessGuard.whenCallerHoldsOperationAnywhere(CustomerOperations.MERGE_CUSTOMERS,
                 // The principal-taking overload, rather than building an EntityStore here: that pulled
                 // webfx-stack-orm-entity into this module's pom and module-info for one line.
+                // The relaxed merge rules are a PLATFORM super administrator's (V0167): accounts belong to no one organization
                 () -> SuperAdminMembership
-                    .isSuperAdmin(principal, DataSourceModelService.getDefaultDataSourceModel())
+                    .isPlatformSuperAdmin(principal, DataSourceModelService.getDefaultDataSourceModel())
                     .compose(superAdmin -> AccountMergeRules.merge(destination, sourceAccountIds, personIds,
                         linkToPersonId, Boolean.TRUE.equals(superAdmin), callerUserId)));
         });

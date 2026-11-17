@@ -68,12 +68,13 @@ public final class FactorApprovalNotice {
         "  LEFT JOIN organization o ON o.id = p.organization_id" +
         " WHERE a.id = $1 ORDER BY p.removed, p.owner DESC, p.id LIMIT 1";
 
-    // Every super administrator except the requester's own account, with the address to write to: the login username,
-    // which IS an address the person controls, rather than the contact email anybody may have typed.
+    // Every PLATFORM super administrator except the requester's own account, with the address to write to: the login
+    // username, which IS an address the person controls, rather than the contact email anybody may have typed.
+    // Platform only (V0167): they alone can approve, and the notice names a member of staff of any organization.
     private static final String SUPER_ADMINS_SQL =
         "SELECT DISTINCT a.username FROM authorization_super_admin s" +
         "  JOIN person p ON p.id = s.super_admin_id JOIN frontend_account a ON a.id = p.frontend_account_id" +
-        " WHERE p.removed IS NOT TRUE AND a.disabled IS NOT TRUE AND a.id <> $1";
+        " WHERE s.organization_id IS NULL AND p.removed IS NOT TRUE AND a.disabled IS NOT TRUE AND a.id <> $1";
 
     private FactorApprovalNotice() {}
 

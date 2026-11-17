@@ -834,12 +834,15 @@ public final class ModalityTotpAuthenticationGateway implements ServerAuthentica
         // ...and the session must have presented a second factor — the rule shared with the passkey gateway
         // (SecondFactorAccess.ApproverStanding). Read on this thread.
         String sessionFamilyId = StateAccessor.getSessionFamilyId(ThreadLocalStateHolder.getThreadLocalState());
-        return SuperAdminMembership.isSuperAdmin(principal, dataSourceModel)
+        // A PLATFORM super administrator (V0167). These operations list or change every member of staff's factors,
+        // and staff belong to no one organization; scoping them to "staff of my organizations" needs every list here
+        // filtered, which is a later step of the admin-tiers plan (Phase 2). Until then a scoped super admin is refused.
+        return SuperAdminMembership.isPlatformSuperAdmin(principal, dataSourceModel)
             .compose(isSuperAdmin -> {
                 if (!Boolean.TRUE.equals(isSuperAdmin)) {
                     // Person id, not email: this lands in a log that ships to aggregation
                     Console.log(LOG_PREFIX + "Super-administrator second-factor operation refused: person "
-                                + principal.getUserPersonId() + " is not a super administrator");
+                                + principal.getUserPersonId() + " is not a platform super administrator");
                     return enrolmentFailure();
                 }
                 return SecondFactorAccess.approverStanding(sessionFamilyId);

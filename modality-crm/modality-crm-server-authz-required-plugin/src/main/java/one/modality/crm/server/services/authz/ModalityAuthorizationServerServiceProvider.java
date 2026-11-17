@@ -287,17 +287,9 @@ public final class ModalityAuthorizationServerServiceProvider extends Authorizat
                     });
                     return sb.toString();
                 }),
-            // If the user is a super admin, we grant him universal permissions
-            SuperAdminMembership.isSuperAdminPerson(personId, entityStore)
-                .map(superAdmin -> {
-                    if (!superAdmin)
-                        return "";
-                    return """
-                        context:any
-                        grant operation:*
-                        grant route:*
-                        """;
-                }),
+            // If the user is a super admin: every operation and route - everywhere for a platform one, in their own
+            // organizations for a scoped one (V0167)
+            SuperAdminMembership.scopeOf(personId, entityStore),
             // The operations a wildcard does not cover (V0166): named in every signed-in person's grants, so that the
             // "grant operation:*" above, and any wildcard to come, leaves them to a grant naming them. Pushed with the
             // grants rather than known to the engine, because the browser's engine knows only what is pushed.
@@ -306,9 +298,9 @@ public final class ModalityAuthorizationServerServiceProvider extends Authorizat
             String loggedInGrants   = (String) compositeFuture.list().get(0);
             String userGrants       = (String) compositeFuture.list().get(1);
             String adminGrants      = (String) compositeFuture.list().get(2);
-            String superAdminGrants = (String) compositeFuture.list().get(3);
+            SuperAdminMembership.Scope superAdmin = (SuperAdminMembership.Scope) compositeFuture.list().get(3);
             String explicitOnly     = (String) compositeFuture.list().get(4);
-            return composeGrants(explicitOnly, loggedInGrants, userGrants, adminGrants, superAdminGrants);
+            return composeGrants(explicitOnly, loggedInGrants, userGrants, adminGrants, superAdmin);
         });
         if (!backoffice)
             return grantsFuture; // the front office reads by its account, not by grants - see CallerReadScope
@@ -328,19 +320,34 @@ public final class ModalityAuthorizationServerServiceProvider extends Authorizat
 
     /**
      * The grant string of a signed-in person, from its parts. A pure function so the composition can be checked
-     * without a database (ExplicitOnlyGrantsCheck).
+     * without a database (ExplicitOnlyGrantsCheck, SuperAdminScopeGrantsCheck).
      *
-     * <p>A super administrator gets the wildcard section in place of the operations every signed-in person holds and
-     * of the organization-admin sections, which it covers — but KEEPS their role sections: since V0166 the wildcard
-     * does not cover an explicit-only operation, so a super administrator who is also, say, the Data Protection
-     * Officer holds that operation only through the role section. Adding role sections only adds grants: no revoke
-     * line can reach them while {@link #RULE_GRANTS_APPLIED} is false.
+     * <p>A PLATFORM super administrator gets the context-free wildcard section in place of the operations every
+     * signed-in person holds and of the organization-admin sections, which it covers — but KEEPS their role sections:
+     * since V0166 the wildcard does not cover an explicit-only operation, so a super administrator who is also, say,
+     * the Data Protection Officer holds that operation only through the role section. Adding role sections only adds
+     * grants: no revoke line can reach them while {@link #RULE_GRANTS_APPLIED} is false.
+     *
+     * <p>A SCOPED super administrator (V0167) gets the wildcard section once per organization they are super
+     * administrator of, ADDED to everything an ordinary member of staff gets: the wildcard no longer covers what lies
+     * outside those organizations, so nothing it used to replace may be dropped.
      */
     static String composeGrants(String explicitOnly, String loggedInGrants, String userGrants, String adminGrants,
-                                String superAdminGrants) {
-        return superAdminGrants.isEmpty()
-            ? explicitOnly + loggedInGrants + userGrants + adminGrants
-            : explicitOnly + superAdminGrants + userGrants;
+                                SuperAdminMembership.Scope superAdmin) {
+        if (superAdmin.platform())
+            return explicitOnly + superAdminSections(superAdmin) + userGrants;
+        return explicitOnly + loggedInGrants + userGrants + adminGrants + superAdminSections(superAdmin);
+    }
+
+    /** The super-administrator wildcard sections: one context-free for a platform super admin, one per organization otherwise. */
+    static String superAdminSections(SuperAdminMembership.Scope superAdmin) {
+        String wildcards = "grant operation:*\ngrant route:*\n";
+        if (superAdmin.platform())
+            return "context:any\n" + wildcards;
+        StringBuilder sb = new StringBuilder();
+        for (Integer organizationId : superAdmin.organizationIds())
+            sb.append("context:organizationId=").append(organizationId).append("\n").append(wildcards);
+        return sb.toString();
     }
 
     /**

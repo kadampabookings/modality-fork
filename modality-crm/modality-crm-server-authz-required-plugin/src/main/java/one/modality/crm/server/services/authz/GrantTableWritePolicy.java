@@ -3,12 +3,18 @@ package one.modality.crm.server.services.authz;
 import dev.webfx.platform.async.Future;
 import dev.webfx.stack.db.submit.ClientSubmitGuard;
 import dev.webfx.stack.db.submit.ProtectedEntityWriteRegistry;
+import dev.webfx.platform.util.Numbers;
 import dev.webfx.stack.orm.datasourcemodel.service.DataSourceModelService;
+import dev.webfx.stack.orm.entity.Entities;
+import dev.webfx.stack.orm.entity.Entity;
 import dev.webfx.stack.orm.entity.EntityStore;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 import one.modality.crm.server.authn.gateway.shared.SuperAdminMembership;
 import one.modality.crm.shared.services.authn.ModalityUserPrincipal;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -44,6 +50,9 @@ import java.util.Set;
 final class GrantTableWritePolicy implements ClientSubmitGuard.WritePolicy {
 
     static final String REFUSED = "Only a super admin can change authorizations";
+    static final String PLATFORM_ONLY = "Only a platform super admin can change this";
+    static final String OUTSIDE_SCOPE = "A super admin of an organization can change only that organization's access";
+    static final String EXPLICIT_ROLE = "Only a platform super admin can assign or remove this role";
     static final String RULES_OFF_REFUSED = "Authorization rules are switched off: they can be deleted, not created or changed";
 
     private static final Set<String> GRANT_TABLES = ProtectedEntityWritesJob.privilegeBearingEntities();
@@ -99,7 +108,159 @@ final class GrantTableWritePolicy implements ClientSubmitGuard.WritePolicy {
         String refusal = refusalWithoutLookup(write, userId);
         if (refusal != null)
             return Future.succeededFuture(refusal);
-        return SuperAdminMembership.isSuperAdminPerson(callerPersonId(userId), EntityStore.create(DataSourceModelService.getDefaultDataSourceModel()))
-            .map(superAdmin -> Boolean.TRUE.equals(superAdmin) ? null : REFUSED);
+        EntityStore entityStore = EntityStore.create(DataSourceModelService.getDefaultDataSourceModel());
+        return SuperAdminMembership.scopeOf(callerPersonId(userId), entityStore)
+            .compose(scope -> scope.platform() ? Future.succeededFuture((String) null)
+                : !scope.isSuperAdmin() ? Future.succeededFuture(REFUSED)
+                : scopedRefusal(write, scope, DATABASE_LOOKUP))
+            .recover(e -> Future.succeededFuture(REFUSED));
     }
+
+    // ── A super administrator scoped to organizations (V0167) ──────────────────────────────────────────────────────
+
+    /** An access row's stored owner and role: ids, any of which may be null. */
+    record AccessRow(Object organizationId, Object eventId, Object eventTypeId, Object roleId) {}
+
+    /** The reads the scoped rule needs. An interface so the check can answer them without a database. */
+    interface AccessRowLookup {
+        /** The stored access row, or a future of null when there is none. */
+        Future<AccessRow> storedRow(Object id);
+        /** The organization an event belongs to, or a future of null when there is no such event. */
+        Future<Object> eventOrganization(Object eventId);
+        /** Whether this event type exists, and the organization it belongs to (null for a type shared by all). */
+        Future<java.util.Optional<Object>> eventTypeOrganization(Object eventTypeId);
+        /** Whether the role grants an explicit-only operation (V0166), directly or through an operation group. */
+        Future<Boolean> roleGrantsExplicitOnly(Object roleId);
+    }
+
+    /**
+     * What a SCOPED super administrator may write: access rows of their own organizations, and nothing else.
+     *
+     * <ul>
+     *   <li>Only {@code AuthorizationOrganizationUserAccess}. Roles, operations and the admin tables belong to no
+     *       organization (a role is shared by all), so they are a platform super administrator's.</li>
+     *   <li>Every organization the row is in, before and after the write, is one they are super administrator of.</li>
+     *   <li>An event on the row, before and after, belongs to that row's organization: an access row naming another
+     *       organization's event would reach that event's data through the read scope. An event type is either shared
+     *       by all organizations or the row's own.</li>
+     *   <li>The role, before and after, grants no explicit-only operation: assigning (or removing) a Data Protection
+     *       Officer is a platform super administrator's.</li>
+     *   <li>Every value is a plain id. A same-batch reference or an expression cannot be checked, so it is refused —
+     *       as is a write with no bound on its rows.</li>
+     * </ul>
+     *
+     * Returns null to allow, or the refusal. Package-private and lookup-driven so a check can run it without a database.
+     */
+    static Future<String> scopedRefusal(ProtectedEntityWriteRegistry.WriteRequest write, SuperAdminMembership.Scope scope,
+                                        AccessRowLookup lookup) {
+        if (!"AuthorizationOrganizationUserAccess".equals(write.entityName()))
+            return Future.succeededFuture(PLATFORM_ONLY);
+        if (write.unbounded())
+            return Future.succeededFuture(OUTSIDE_SCOPE);
+        java.util.Map<String, Object> written = write.writtenValues() == null ? java.util.Map.of() : write.writtenValues();
+        for (String field : new String[] { "organization", "event", "eventType", "role" })
+            if (written.containsKey(field) && written.get(field) != null && plainId(written.get(field)) == null)
+                return Future.succeededFuture(OUTSIDE_SCOPE);
+        boolean insert = write.verb() == ProtectedEntityWriteRegistry.WriteVerb.INSERT;
+        Object targetKey = insert ? null : plainId(write.targetId());
+        if (!insert && targetKey == null)
+            return Future.succeededFuture(OUTSIDE_SCOPE);
+        Future<AccessRow> storedFuture = insert ? Future.succeededFuture(null) : lookup.storedRow(targetKey);
+        return storedFuture.compose(stored -> {
+            if (!insert && stored == null)
+                return Future.succeededFuture(OUTSIDE_SCOPE); // no such row: nothing of theirs to change
+            Object organization = written.containsKey("organization") ? plainId(written.get("organization")) : stored == null ? null : stored.organizationId();
+            Object event = written.containsKey("event") ? plainId(written.get("event")) : stored == null ? null : stored.eventId();
+            Object eventType = written.containsKey("eventType") ? plainId(written.get("eventType")) : stored == null ? null : stored.eventTypeId();
+            Object role = written.containsKey("role") ? plainId(written.get("role")) : stored == null ? null : stored.roleId();
+            // The organizations, before and after
+            if (organization == null || !scope.covers(organization)
+                || stored != null && !scope.covers(stored.organizationId()))
+                return Future.succeededFuture(OUTSIDE_SCOPE);
+            // The events, before and after: each in the row's own organization
+            List<Future<Boolean>> checks = new ArrayList<>();
+            if (event != null)
+                checks.add(lookup.eventOrganization(event).map(owner -> sameId(owner, organization)));
+            if (stored != null && stored.eventId() != null)
+                checks.add(lookup.eventOrganization(stored.eventId()).map(owner -> sameId(owner, stored.organizationId())));
+            if (eventType != null)
+                checks.add(lookup.eventTypeOrganization(eventType).map(owner -> owner != null && (owner.isEmpty() || sameId(owner.get(), organization))));
+            if (stored != null && stored.eventTypeId() != null)
+                checks.add(lookup.eventTypeOrganization(stored.eventTypeId()).map(owner -> owner != null && (owner.isEmpty() || sameId(owner.get(), stored.organizationId()))));
+            Future<Boolean> eventsInPlace = Future.all(new ArrayList<>(checks)).map(all -> {
+                for (int i = 0; i < checks.size(); i++)
+                    if (!Boolean.TRUE.equals(all.resultAt(i)))
+                        return false;
+                return true;
+            });
+            // The roles, before and after
+            List<Future<Boolean>> roleChecks = new ArrayList<>();
+            if (role != null)
+                roleChecks.add(lookup.roleGrantsExplicitOnly(role));
+            if (stored != null && stored.roleId() != null && !sameId(stored.roleId(), role))
+                roleChecks.add(lookup.roleGrantsExplicitOnly(stored.roleId()));
+            Future<Boolean> explicitRole = Future.all(new ArrayList<>(roleChecks)).map(all -> {
+                for (int i = 0; i < roleChecks.size(); i++)
+                    if (!Boolean.FALSE.equals(all.resultAt(i)))
+                        return true; // grants one, or could not be told: refuse
+                return false;
+            });
+            return Future.all(eventsInPlace, explicitRole).map(both ->
+                !Boolean.TRUE.equals(both.resultAt(0)) ? OUTSIDE_SCOPE
+                : !Boolean.FALSE.equals(both.resultAt(1)) ? EXPLICIT_ROLE
+                : null);
+        });
+    }
+
+    /** A plain id (a number, or a numeric string), normalised; null for anything else — a same-batch reference, an expression. */
+    static Object plainId(Object value) {
+        Object key = Entities.getPrimaryKey(value);
+        if (key instanceof String text)
+            key = ProtectedEntityWritesJob.primaryKeyOf(text);
+        return key instanceof Number number ? Numbers.toInteger(number) : null;
+    }
+
+    private static boolean sameId(Object a, Object b) {
+        Object x = plainId(a), y = plainId(b);
+        return x != null && Objects.equals(x, y);
+    }
+
+    /** The production lookup: reads by primary key, made as the server. */
+    static final AccessRowLookup DATABASE_LOOKUP = new AccessRowLookup() {
+        @Override
+        public Future<AccessRow> storedRow(Object id) {
+            return ProtectedEntityWritesJob.asServer(() -> store()
+                .<Entity>executeQuery("select organization,event,eventType,role from AuthorizationOrganizationUserAccess where id=$1", id)
+                .map(rows -> rows.isEmpty() ? null : new AccessRow(
+                    Entities.getPrimaryKey(rows.get(0).getForeignEntityId("organization")),
+                    Entities.getPrimaryKey(rows.get(0).getForeignEntityId("event")),
+                    Entities.getPrimaryKey(rows.get(0).getForeignEntityId("eventType")),
+                    Entities.getPrimaryKey(rows.get(0).getForeignEntityId("role")))));
+        }
+
+        @Override
+        public Future<Object> eventOrganization(Object eventId) {
+            return ProtectedEntityWritesJob.asServer(() -> ProtectedEntityWritesJob.DATABASE_LOOKUP.eventOrganization(eventId));
+        }
+
+        @Override
+        public Future<java.util.Optional<Object>> eventTypeOrganization(Object eventTypeId) {
+            return ProtectedEntityWritesJob.asServer(() -> store()
+                .<Entity>executeQuery("select organization from EventType where id=$1", eventTypeId)
+                .map(rows -> rows.isEmpty() ? null
+                    : java.util.Optional.ofNullable(Entities.getPrimaryKey(rows.get(0).getForeignEntityId("organization")))));
+        }
+
+        @Override
+        public Future<Boolean> roleGrantsExplicitOnly(Object roleId) {
+            return ProtectedEntityWritesJob.asServer(() -> store()
+                .executeQuery("select id from AuthorizationRoleOperation where role=$1 and (operation in (select id from Operation where explicitOnly)"
+                              + " or operationGroup in (select o.group from Operation o where o.explicitOnly)) limit 1", roleId)
+                .map(rows -> !rows.isEmpty()));
+        }
+
+        private EntityStore store() {
+            return EntityStore.create(DataSourceModelService.getDefaultDataSourceModel());
+        }
+    };
 }

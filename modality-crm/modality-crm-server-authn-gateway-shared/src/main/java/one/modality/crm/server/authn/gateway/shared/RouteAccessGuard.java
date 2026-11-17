@@ -116,8 +116,9 @@ public final class RouteAccessGuard {
             .compose(mayReach -> Boolean.TRUE.equals(mayReach)
                 ? Future.succeededFuture(true)
                 // A super administrator holds no route grant of their own: the grant provider gives them
-                // "route:*" as a branch of its own rather than as an operation row
-                : SuperAdminMembership.isSuperAdminPerson(personId, entityStore))
+                // "route:*" as a branch of its own rather than as an operation row — over the organizations they are
+                // super administrator of (V0167), so over THIS target's organization, or everywhere for a platform one
+                : SuperAdminMembership.isSuperAdminOf(personId, organizationId, entityStore))
             .compose(allowed -> Boolean.TRUE.equals(allowed) ? work.get() : refused());
     }
 
@@ -143,7 +144,8 @@ public final class RouteAccessGuard {
         return RouteGrantMembership.mayReachRouteAnywhere(personId, route, entityStore)
             .compose(mayReach -> Boolean.TRUE.equals(mayReach)
                 ? Future.succeededFuture(true)
-                : SuperAdminMembership.isSuperAdminPerson(personId, entityStore))
+                // No target organization: a super administrator of any organization passes, as a role holder does
+                : SuperAdminMembership.isSuperAdminAnywhere(personId, entityStore))
             .compose(allowed -> Boolean.TRUE.equals(allowed) ? work.get() : refused());
     }
 
@@ -168,9 +170,12 @@ public final class RouteAccessGuard {
         return RoleOperationMembership.holdsThroughRole(personId, operationCode, entityStore)
             .compose(holds -> Boolean.TRUE.equals(holds)
                 ? Future.succeededFuture(true)
-                : superAdminHoldsOperation(personId, operationCode, entityStore))
+                : superAdminHoldsOperation(personId, operationCode, ANYWHERE, entityStore))
             .compose(allowed -> Boolean.TRUE.equals(allowed) ? work.get() : refused());
     }
+
+    /** Marks an operation asked with no target organization ({@link #whenCallerHoldsOperationAnywhere}). */
+    private static final Object ANYWHERE = new Object();
 
     /**
      * The super-administrator fallback for an OPERATION, which is not unconditional: an operation flagged
@@ -178,11 +183,12 @@ public final class RouteAccessGuard {
      * {@code operation:*} does not cover it. Without this, a guard asked for such an operation would let every super
      * administrator through while their browser was told no. A lookup that fails is a no.
      */
-    private static Future<Boolean> superAdminHoldsOperation(Object personId, String operationCode, EntityStore entityStore) {
+    private static Future<Boolean> superAdminHoldsOperation(Object personId, String operationCode, Object organizationId, EntityStore entityStore) {
         return entityStore.executeQuery("select id from Operation where operationCode=$1 and explicitOnly limit 1", operationCode)
-            .compose(explicitOnly -> explicitOnly.isEmpty()
-                ? SuperAdminMembership.isSuperAdminPerson(personId, entityStore)
-                : Future.succeededFuture(false))
+            .compose(explicitOnly -> !explicitOnly.isEmpty() ? Future.succeededFuture(false)
+                // Over the target's organization (V0167); with no target organization, any super administrator
+                : organizationId == ANYWHERE ? SuperAdminMembership.isSuperAdminAnywhere(personId, entityStore)
+                : SuperAdminMembership.isSuperAdminOf(personId, organizationId, entityStore))
             .recover(e -> Future.succeededFuture(false));
     }
 
@@ -257,6 +263,6 @@ public final class RouteAccessGuard {
                 ? Future.succeededFuture(true)
                 // A super administrator holds no operation row of their own, exactly as above — except an
                 // explicit-only one
-                : superAdminHoldsOperation(personId, operationCode, entityStore));
+                : superAdminHoldsOperation(personId, operationCode, organizationId, entityStore));
     }
 }

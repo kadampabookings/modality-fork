@@ -24,4 +24,20 @@ public interface AuthorizationSuperAdmin extends Entity {
     default Person getSuperAdmin() {
         return getForeignEntity(superAdmin);
     }
+
+    // Organization (optional, V0167): the organization this super admin is scoped to; null = platform (global)
+
+    String organization = "organization";
+
+    default void setOrganization(Object value) {
+        setForeignField(organization, value);
+    }
+
+    default EntityId getOrganizationId() {
+        return getForeignEntityId(organization);
+    }
+
+    default Organization getOrganization() {
+        return getForeignEntity(organization);
+    }
 }

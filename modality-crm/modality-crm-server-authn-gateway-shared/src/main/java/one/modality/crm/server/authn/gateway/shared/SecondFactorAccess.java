@@ -48,11 +48,12 @@ public final class SecondFactorAccess {
         "SELECT max(window_until) FROM second_factor_reset" +
         " WHERE frontend_account_id = $1 AND what = 'ENROLMENT_WINDOW' AND window_until > now()";
 
-    // How many live super administrators hold an approved factor — the bootstrap test of approverStanding
+    // How many live PLATFORM super administrators hold an approved factor — the bootstrap test of approverStanding.
+    // Platform only (V0167): only they approve, so a scoped one holding a factor must not end the bootstrap for them.
     private static final String SUPER_ADMINS_WITH_FACTOR_SQL =
         "SELECT count(DISTINCT a.id) FROM authorization_super_admin s" +
         "  JOIN person p ON p.id = s.super_admin_id JOIN frontend_account a ON a.id = p.frontend_account_id" +
-        " WHERE p.removed IS NOT TRUE AND a.disabled IS NOT TRUE AND " + approvedFactorCountSql("a.id", "$1, $2") + " > 0";
+        " WHERE s.organization_id IS NULL AND p.removed IS NOT TRUE AND a.disabled IS NOT TRUE AND " + approvedFactorCountSql("a.id", "$1, $2") + " > 0";
 
     /**
      * What a super administrator's session is worth for the second-factor operations — the ONE rule every such
@@ -90,9 +91,10 @@ public final class SecondFactorAccess {
             .otherwise(e -> false);
     }
 
+    // A PLATFORM super administrator's account (V0167): the bootstrap exists so the first approvers can be approved
     private static final String SUPER_ADMIN_ACCOUNT_SQL =
         "SELECT 1 FROM authorization_super_admin s JOIN person p ON p.id = s.super_admin_id" +
-        " WHERE p.frontend_account_id = $1 AND p.removed IS NOT TRUE LIMIT 1";
+        " WHERE s.organization_id IS NULL AND p.frontend_account_id = $1 AND p.removed IS NOT TRUE LIMIT 1";
 
     /**
      * The SQL expression (parenthesised) counting the approved factors of {@code account} — a placeholder or a column —
