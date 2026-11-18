@@ -144,6 +144,55 @@ final class EventErasureAccess {
             : failClosed(() -> holdsDataProtection(false), "access", DATA_PROTECTION_OPERATION, caller.personId());
     }
 
+    /**
+     * The access answer for the back office: whether the caller is a Data Protection Officer, and the organizations
+     * where they hold DataProtection for the whole organization — the question every action on an organization's
+     * event asks ({@link #whenHoldsInOrganization}), so the pages show exactly what the caller can act on. Cached grants,
+     * like {@link #isDataProtectionOfficer}: it only decides what to draw, never a refusal. Never fails: anybody else,
+     * or a read that fails, is a DPO of nothing.
+     */
+    static Future<DpoAccess> dataProtectionAccess() {
+        // Captured on the caller's thread: the organizations are asked after a read, when the thread-local is gone
+        Object state = ThreadLocalStateHolder.getThreadLocalState();
+        BackOfficeCaller backOffice = backOfficeCaller("access", false);
+        if (backOffice == null)
+            return Future.succeededFuture(DpoAccess.NONE);
+        Caller caller = new Caller(backOffice.personId(), state);
+        return failClosed(() -> holdsDataProtection(false), "access", DATA_PROTECTION_OPERATION, backOffice.personId())
+            .compose(dpo -> !dpo ? Future.succeededFuture(DpoAccess.NONE)
+                : EventErasureRunner.query(ORGANIZATIONS_SQL)
+                    .compose(rows -> organizationsHeld(caller, firstColumn(rows)))
+                    .map(held -> new DpoAccess(true, held))
+                    .otherwise(new DpoAccess(true, Set.of())))
+            .otherwise(DpoAccess.NONE);
+    }
+
+    /** Every organization: the ones the access answer asks the caller about. */
+    static final String ORGANIZATIONS_SQL = "select id from organization order by id";
+
+    /** Whether the caller is a DPO, and where they hold it for the whole organization. */
+    record DpoAccess(boolean dpo, Set<Integer> organizations) {
+        static final DpoAccess NONE = new DpoAccess(false, Set.of());
+
+        /** {@code {"dpo":true,"organizations":[151,187]}} — ids only, ascending. */
+        String toJson() {
+            return new EventErasureJson.ObjectWriter().bool("dpo", dpo)
+                .raw("organizations", "[" + organizations.stream().sorted().map(String::valueOf)
+                    .collect(java.util.stream.Collectors.joining(",")) + "]")
+                .toJson();
+        }
+    }
+
+    private static List<Integer> firstColumn(dev.webfx.stack.db.query.QueryResult rows) {
+        List<Integer> ids = new ArrayList<>();
+        for (int row = 0; rows != null && row < rows.getRowCount(); row++) {
+            Integer id = dev.webfx.platform.util.Numbers.toInteger(rows.getValue(row, 0));
+            if (id != null)
+                ids.add(id);
+        }
+        return ids;
+    }
+
     /** The gate both audiences share: the caller checks, then the audience's membership, failing closed. */
     private static <T> Future<T> when(String operation, String check, String refusal,
                                       Function<BackOfficeCaller, Future<Boolean>> membership, Function<Caller, Future<T>> work) {

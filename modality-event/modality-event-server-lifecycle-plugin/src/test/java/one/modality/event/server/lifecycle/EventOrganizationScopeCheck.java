@@ -135,6 +135,15 @@ public class EventOrganizationScopeCheck {
         check("a lookup that fails is refused", failedLookup.failed() && !ran[0]);
         check("...also without naming an organization", !failedLookup.cause().getMessage().contains(EventErasureAccess.NOT_YOUR_ORGANIZATION_KEY));
 
+        // ── The access answer the Data protection pages are scoped by ──
+        check("the access answer names the organizations, ascending, ids only",
+            new EventErasureAccess.DpoAccess(true, Set.of(187, 151)).toJson().equals("{\"dpo\":true,\"organizations\":[151,187]}"));
+        check("...and nobody else's: not a DPO, no organization", EventErasureAccess.DpoAccess.NONE.toJson()
+            .equals("{\"dpo\":false,\"organizations\":[]}"));
+        Future<EventErasureAccess.DpoAccess> outside = EventErasureAccess.dataProtectionAccess();
+        check("outside a back-office session it is a DPO of nothing, and does not fail",
+            outside.succeeded() && EventErasureAccess.DpoAccess.NONE.equals(outside.result()));
+
         System.out.println(pass + " passed, " + fail + " failed");
         if (fail > 0)
             System.exit(1);

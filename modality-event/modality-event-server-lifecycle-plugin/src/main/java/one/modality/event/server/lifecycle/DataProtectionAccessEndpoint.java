@@ -19,7 +19,8 @@ public final class DataProtectionAccessEndpoint extends AsyncFunctionBusCallEndp
     public static final String DPO_ACCESS_ADDRESS = "modality/service/dpo/access";
 
     public DataProtectionAccessEndpoint() {
-        super(DPO_ACCESS_ADDRESS, argument -> EventErasureAccess.isDataProtectionOfficer()
-            .map(dpo -> new EventErasureJson.ObjectWriter().bool("dpo", dpo).toJson()));
+        // Whether the caller is a DPO, and the organizations where they hold it for the whole organization: what the
+        // Data protection pages show (admin-tiers plan, "DPO pages scoped"). Every action re-checks on the server.
+        super(DPO_ACCESS_ADDRESS, argument -> EventErasureAccess.dataProtectionAccess().map(EventErasureAccess.DpoAccess::toJson));
     }
 }

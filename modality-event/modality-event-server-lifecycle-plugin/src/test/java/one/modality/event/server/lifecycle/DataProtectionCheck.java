@@ -52,7 +52,10 @@ public class DataProtectionCheck {
 
     private static boolean toldNo(Object state) {
         Future<Boolean> answer = ThreadLocalStateHolder.runWithState(state, EventErasureAccess::isDataProtectionOfficer);
-        return answer.succeeded() && Boolean.FALSE.equals(answer.result());
+        // The access answer the pages are scoped by goes through the same fences: a DPO of nothing, never a failure
+        Future<EventErasureAccess.DpoAccess> access = ThreadLocalStateHolder.runWithState(state, EventErasureAccess::dataProtectionAccess);
+        return answer.succeeded() && Boolean.FALSE.equals(answer.result())
+               && access.succeeded() && EventErasureAccess.DpoAccess.NONE.equals(access.result());
     }
 
     public static void main(String[] args) {
