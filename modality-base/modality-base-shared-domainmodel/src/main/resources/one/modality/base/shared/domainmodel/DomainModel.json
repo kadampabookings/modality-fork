@@ -1687,6 +1687,7 @@
     "lastName": "string",
     "layName": "string",
     "male": "boolean",
+    "minor": "boolean",
     "name": {
       "expr": "firstName + ' ' + lastName"
     },
@@ -2139,7 +2140,6 @@
     "criminalConvictions": "HTML",
     "dateFlexibility": "string",
     "dateNotes": "HTML",
-    "dateOfBirth": "Temporal.PlainDate",
     "datesConfirmed": "boolean",
     "datesNotes": "HTML",
     "datesStatus": "string",

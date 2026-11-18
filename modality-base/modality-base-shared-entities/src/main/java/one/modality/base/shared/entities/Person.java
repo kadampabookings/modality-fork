@@ -37,6 +37,7 @@ public interface Person extends Entity, EntityHasPersonalDetails, EntityHasEvent
     String removed = "removed";
     String neverBooked = "neverBooked";
     String occasional = "occasional";
+    String minor = "minor";
     String organizationName = "organizationName";
     String nationality = "nationality";
     String passport = "passport";
@@ -303,6 +304,16 @@ public interface Person extends Entity, EntityHasPersonalDetails, EntityHasEvent
 
     default Boolean isOccasional() {
         return getBooleanFieldValue(occasional);
+    }
+
+    // Minor flag (V0171): true = under 18, false = 18 or over, null = unknown (asked at the next booking).
+    // Replaces the date of birth; the age itself is kept per booking (Document.age), for minors only.
+    default void setMinor(Boolean value) {
+        setFieldValue(minor, value);
+    }
+
+    default Boolean isMinor() {
+        return getBooleanFieldValue(minor);
     }
 
     // Organization name

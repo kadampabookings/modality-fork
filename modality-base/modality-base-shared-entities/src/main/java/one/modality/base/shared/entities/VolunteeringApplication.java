@@ -33,7 +33,6 @@ public interface VolunteeringApplication extends Entity,
     String phone = "phone";
     String countryName = "countryName";
     String gender = "gender";
-    String dateOfBirth = "dateOfBirth";
     String age = "age";
     String photo = "photo";
 
@@ -183,11 +182,8 @@ public interface VolunteeringApplication extends Entity,
     default void setGender(String value) { setFieldValue(gender, value); }
     default String getGender() { return getStringFieldValue(gender); }
 
-    default void setDateOfBirth(LocalDate value) { setFieldValue(dateOfBirth, value); }
-    default LocalDate getDateOfBirth() { return getLocalDateFieldValue(dateOfBirth); }
-
-    // Declared on the application form since V0072. Null on legacy and KBS2-imported
-    // rows, which only carry dateOfBirth — derive the age from it in that case.
+    // Declared on the application form since V0072. The date of birth it replaced was
+    // emptied by V0171 (GDPR minimisation), after copying its age into rows without one.
     default void setAge(Integer value) { setFieldValue(age, value); }
     default Integer getAge() { return getIntegerFieldValue(age); }
 
