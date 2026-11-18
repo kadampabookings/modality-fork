@@ -99,6 +99,11 @@ final class RetentionPolicy {
      * "archive":{…}}} from {@link #CURRENT_SQL}'s rows. Pure, so a check reads it without a database.
      */
     static String policyJson(QueryResult r) {
+        return policyJson(r, null);
+    }
+
+    /** {@link #policyJson(QueryResult)} keeping only the rows {@code scope} keeps (null: every row). Pure. */
+    static String policyJson(QueryResult r, Scope scopeOf) {
         StringBuilder sb = new StringBuilder("{");
         boolean firstStage = true;
         for (String stage : List.of(STAGE_FINALISE, STAGE_ARCHIVE)) {
@@ -109,6 +114,8 @@ final class RetentionPolicy {
                 if (!stage.equals(r.getValue(row, 0)))
                     continue;
                 Object scope = r.getValue(row, 1);
+                if (!Scope.keeps(scopeOf, scope, number(r.getValue(row, 2)), number(r.getValue(row, 3))))
+                    continue;
                 Number months = number(r.getValue(row, 4));
                 if (SCOPE_DEFAULT.equals(scope))
                     defaultMonths = months;
@@ -133,21 +140,24 @@ final class RetentionPolicy {
         return new EventErasureJson.ObjectWriter().number("id", id).number("months", months).toJson();
     }
 
-    /** The current policy as PolicyJson — served inside the runs and removal-dates replies. */
-    static Future<String> currentJson() {
-        return EventErasureRunner.query(CURRENT_SQL).map(RetentionPolicy::policyJson);
-    }
-
-    /** {@code {"policy":PolicyJson,"history":[…],"staff":{…}}} for the Retention policy page. */
-    static Future<String> pageJson() {
-        return currentJson().compose(policy -> EventErasureRunner.query(HISTORY_SQL).compose(history -> {
+    /**
+     * {@code {"policy":PolicyJson,"history":[…],"staff":{…}}} for the Retention policy page — this caller's share of it:
+     * the default's rows, their organizations' and their organizations' events' ({@link Scope}). Another organization's
+     * periods, the reasons its DPO typed and the staff who set them are not theirs to read (admin-tiers plan,
+     * 2026-11-18); the page used to receive them all and hide them.
+     */
+    static Future<String> pageJson(EventErasureAccess.Caller caller) {
+        return EventErasureRunner.query(CURRENT_SQL).compose(current -> EventErasureRunner.query(HISTORY_SQL)
+            .compose(history -> scopeOf(caller, current, history).compose(scope -> {
                 List<Number> staffIds = new ArrayList<>();
-                for (int row = 0; history != null && row < history.getRowCount(); row++) {
-                    staffIds.add(number(history.getValue(row, 7)));
-                    staffIds.add(number(history.getValue(row, 10)));
-                }
-                return StaffNames.lookup(staffIds).map(staff -> pageJson(policy, history, staff));
-            }))
+                for (int row = 0; history != null && row < history.getRowCount(); row++)
+                    if (keepsHistoryRow(history, row, scope)) {
+                        staffIds.add(number(history.getValue(row, 7)));
+                        staffIds.add(number(history.getValue(row, 10)));
+                    }
+                // Names are looked up for the kept rows only: another organization's staff are not named either
+                return StaffNames.lookup(staffIds).map(staff -> pageJson(policyJson(current, scope), history, staff, scope));
+            })))
             .recover(cause -> {
                 Console.log(LOG_PREFIX + "Reading the retention policy failed: " + (cause == null ? null : cause.getMessage()));
                 return Future.failedFuture("[%s] The retention policy could not be read".formatted(FAILED_KEY));
@@ -159,9 +169,15 @@ final class RetentionPolicy {
      * only in its rows, and the names of the staff they name beside them ({@link StaffNames}). Pure, for the check.
      */
     static String pageJson(String policy, QueryResult history, String staff) {
+        return pageJson(policy, history, staff, null);
+    }
+
+    /** {@link #pageJson(String, QueryResult, String)} keeping only the history rows {@code scope} keeps. Pure. */
+    static String pageJson(String policy, QueryResult history, String staff, Scope scope) {
         List<String> rows = new ArrayList<>();
         for (int row = 0; history != null && row < history.getRowCount(); row++)
-            rows.add(new EventErasureJson.ObjectWriter()
+            if (keepsHistoryRow(history, row, scope))
+                rows.add(new EventErasureJson.ObjectWriter()
                 .number("id", number(history.getValue(row, 0)))
                 .string("stage", text(history.getValue(row, 1)))
                 .string("scope", text(history.getValue(row, 2)))
@@ -179,6 +195,70 @@ final class RetentionPolicy {
             .raw("history", EventErasureJson.array(rows))
             .raw("staff", staff == null ? "{}" : staff)
             .toJson();
+    }
+
+    private static boolean keepsHistoryRow(QueryResult history, int row, Scope scope) {
+        return Scope.keeps(scope, history.getValue(row, 2), number(history.getValue(row, 3)), number(history.getValue(row, 4)));
+    }
+
+    // ===== One DPO's share (admin-tiers plan, 2026-11-18) ===========================================================
+
+    /**
+     * What one Data Protection Officer's replies keep of the policy and its history: the default's rows (every
+     * organization starts from them), the rows of the organizations where they hold DataProtection for the whole
+     * organization, and the rows of those organizations' events. Anything that cannot be placed is left out.
+     */
+    record Scope(java.util.Set<Integer> organizations, java.util.Map<Integer, Integer> organizationByEvent) {
+
+        /** Nothing but the default: what a scope that cannot be read falls back to (fail closed). */
+        static final Scope DEFAULT_ONLY = new Scope(java.util.Set.of(), java.util.Map.of());
+
+        /** Whether a row of this scope, organization and event is kept; a null {@code scope} keeps every row. */
+        static boolean keeps(Scope scope, Object rowScope, Number organizationId, Number eventId) {
+            if (scope == null || SCOPE_DEFAULT.equals(rowScope))
+                return true;
+            if (SCOPE_ORGANIZATION.equals(rowScope))
+                return organizationId != null && scope.organizations.contains(organizationId.intValue());
+            if (SCOPE_EVENT.equals(rowScope)) {
+                Integer organization = eventId == null ? null : scope.organizationByEvent.get(eventId.intValue());
+                return organization != null && scope.organizations.contains(organization);
+            }
+            return false;
+        }
+    }
+
+    /**
+     * This caller's {@link Scope} over these reads — {@link #CURRENT_SQL}'s rows and {@link #HISTORY_SQL}'s, either may
+     * be null: the events they name are placed in one batched read, then each organization is asked once (cached
+     * grants: it decides what a reply shows, every change is re-checked fresh). Never fails: {@link Scope#DEFAULT_ONLY}.
+     */
+    static Future<Scope> scopeOf(EventErasureAccess.Caller caller, QueryResult current, QueryResult history) {
+        java.util.Set<Integer> organizationIds = new java.util.LinkedHashSet<>();
+        List<Integer> eventIds = new ArrayList<>();
+        collect(current, 1, 2, 3, organizationIds, eventIds);
+        collect(history, 2, 3, 4, organizationIds, eventIds);
+        return EventOrganizations.ofEvents(eventIds).compose(organizationByEvent -> {
+                java.util.Set<Integer> asked = new java.util.LinkedHashSet<>(organizationIds);
+                asked.addAll(organizationByEvent.values());
+                return EventErasureAccess.organizationsHeld(caller, asked).map(held -> new Scope(held, organizationByEvent));
+            })
+            .otherwise(Scope.DEFAULT_ONLY);
+    }
+
+    private static void collect(QueryResult r, int scopeColumn, int organizationColumn, int eventColumn,
+                                java.util.Set<Integer> organizationIds, List<Integer> eventIds) {
+        for (int row = 0; r != null && row < r.getRowCount(); row++) {
+            Object scope = r.getValue(row, scopeColumn);
+            if (SCOPE_ORGANIZATION.equals(scope)) {
+                Number organization = number(r.getValue(row, organizationColumn));
+                if (organization != null)
+                    organizationIds.add(organization.intValue());
+            } else if (SCOPE_EVENT.equals(scope)) {
+                Number event = number(r.getValue(row, eventColumn));
+                if (event != null)
+                    eventIds.add(event.intValue());
+            }
+        }
     }
 
     // ===== Changing ================================================================================================
@@ -278,7 +358,7 @@ final class RetentionPolicy {
                             + (change.targetId() == null ? "" : " " + change.targetId()) + " set to "
                             + (change.months() == null ? "inherited" : change.months() + " months")
                             + " by person " + caller.personId());
-                return pageJson();
+                return pageJson(caller);
             });
     }
 

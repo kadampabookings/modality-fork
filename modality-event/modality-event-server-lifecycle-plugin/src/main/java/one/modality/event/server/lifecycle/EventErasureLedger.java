@@ -326,7 +326,8 @@ final class EventErasureLedger {
             .compose(ignored -> EventErasureRunner.query(RUNS_SQL))
             .compose(runs -> EventErasureRunner.query(RetentionPolicy.CURRENT_SQL)
                 .compose(policy -> departedCounts().compose(counts -> ownEvents(caller, runs, counts[0], counts[1])
-                    .map(own -> runsJson(runs, policy, counts[0], counts[1], own)))))
+                    .compose(own -> RetentionPolicy.scopeOf(caller, policy, null)
+                        .map(scope -> runsJson(runs, policy, counts[0], counts[1], own, scope))))))
             .recover(cause -> readFailure("runs", cause));
     }
 
@@ -381,6 +382,15 @@ final class EventErasureLedger {
     /** {@link #runsJson(QueryResult, QueryResult, QueryResult, QueryResult)}, keeping only the rows of {@code own} events. */
     static String runsJson(QueryResult r, QueryResult policy, QueryResult departed, QueryResult archive,
                            java.util.function.Predicate<Number> own) {
+        return runsJson(r, policy, departed, archive, own, null);
+    }
+
+    /**
+     * ... with the policy limited to the caller's share ({@link RetentionPolicy.Scope}; null: every row): the runs
+     * reply carries the current policy too, so another organization's periods would reach the page by this road.
+     */
+    static String runsJson(QueryResult r, QueryResult policy, QueryResult departed, QueryResult archive,
+                           java.util.function.Predicate<Number> own, RetentionPolicy.Scope scope) {
         List<String> runs = new ArrayList<>();
         for (int row = 0; r != null && row < r.getRowCount(); row++) {
             if (!own.test(number(r.getValue(row, 0))))
@@ -397,7 +407,7 @@ final class EventErasureLedger {
             .bool("commitEnabled", EventErasureConfig.isCommitEnabled())
             .bool("archiveCommitEnabled", EventErasureConfig.isArchiveCommitEnabled())
             .number("retentionMonths", defaultMonths(policy, RetentionPolicy.STAGE_FINALISE))
-            .raw("policy", RetentionPolicy.policyJson(policy))
+            .raw("policy", RetentionPolicy.policyJson(policy, scope))
             .raw("runs", EventErasureJson.array(runs))
             .raw("departed", departedJson(departed, own))
             .raw("archive", archiveJson(archive, own))

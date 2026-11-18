@@ -135,6 +135,53 @@ public class EventOrganizationScopeCheck {
         check("a lookup that fails is refused", failedLookup.failed() && !ran[0]);
         check("...also without naming an organization", !failedLookup.cause().getMessage().contains(EventErasureAccess.NOT_YOUR_ORGANIZATION_KEY));
 
+        // ── The retention policy reply: the DPO's share only ──
+        // CURRENT_SQL's columns: stage, scope, organization_id, event_id, months
+        QueryResult current = new QueryResult(5, 5, new Object[] {
+            "finalise", "finalise", "finalise", "finalise", "finalise",
+            "default", "organization", "organization", "event", "event",
+            null, 151, 187, null, null,
+            null, null, null, 20, 21,
+            3, 6, 12, 24, 36 }, null);
+        RetentionPolicy.Scope dpoOf151 = new RetentionPolicy.Scope(Set.of(151), organizationByEvent);
+        String policy = RetentionPolicy.policyJson(current, dpoOf151);
+        check("the policy keeps the default, their organization's override and their event's",
+            policy.contains("\"default\":3") && policy.contains("{\"id\":151,\"months\":6}") && policy.contains("{\"id\":20,\"months\":24}"));
+        check("...not another organization's override, nor its event's",
+            !policy.contains("\"id\":187") && !policy.contains("\"id\":21"));
+        check("...and unscoped (null) keeps every row, as before", RetentionPolicy.policyJson(current).contains("{\"id\":187,\"months\":12}")
+            && RetentionPolicy.policyJson(current).equals(RetentionPolicy.policyJson(current, null)));
+        check("a scope that could not be read keeps the default only", RetentionPolicy.policyJson(current, RetentionPolicy.Scope.DEFAULT_ONLY)
+            .equals("{\"finalise\":{\"default\":3,\"organizations\":[],\"events\":[]},\"archive\":{\"default\":null,\"organizations\":[],\"events\":[]}}"));
+        // HISTORY_SQL's columns: id, stage, scope, organization_id, event_id, months, reason, set_by, set_at, superseded_at, superseded_by
+        QueryResult history = new QueryResult(4, 11, new Object[] {
+            1, 2, 3, 4,
+            "finalise", "finalise", "finalise", "finalise",
+            "default", "organization", "organization", "event",
+            null, 151, 187, null,
+            null, null, null, 21,
+            3, 6, 12, 36,
+            null, null, "their reason", "their event",
+            7, 8, 9, 10,
+            "2026-11-01T10:00:00Z", "2026-11-02T10:00:00Z", "2026-11-03T10:00:00Z", "2026-11-04T10:00:00Z",
+            null, null, null, null,
+            null, null, null, null }, null);
+        String page = RetentionPolicy.pageJson(policy, history, "{}", dpoOf151);
+        check("the history keeps the default's change and their organization's",
+            page.contains("\"id\":1,") && page.contains("\"id\":2,"));
+        check("...not another organization's change, its reason, nor its event's",
+            !page.contains("\"id\":3,") && !page.contains("their reason") && !page.contains("\"id\":4,"));
+        String runsReply = EventErasureLedger.runsJson(null, current, null, null, eventId -> true, dpoOf151);
+        check("the runs reply's copy of the policy is the same share",
+            runsReply.contains("{\"id\":151,\"months\":6}") && !runsReply.contains("\"id\":187") && !runsReply.contains("{\"id\":21,"));
+        // Organization rows only: placing an event would need the database
+        QueryResult organizationRows = new QueryResult(2, 5, new Object[] {
+            "finalise", "finalise", "organization", "organization", 151, 187, null, null, 6, 12 }, null);
+        Future<RetentionPolicy.Scope> noState = RetentionPolicy.scopeOf(new EventErasureAccess.Caller(1), organizationRows, null);
+        check("a caller with no captured state is a DPO of no organization: the default only",
+            noState.succeeded() && noState.result().organizations().isEmpty()
+            && !RetentionPolicy.policyJson(organizationRows, noState.result()).contains("\"id\""));
+
         // ── The access answer the Data protection pages are scoped by ──
         check("the access answer names the organizations, ascending, ids only",
             new EventErasureAccess.DpoAccess(true, Set.of(187, 151)).toJson().equals("{\"dpo\":true,\"organizations\":[151,187]}"));

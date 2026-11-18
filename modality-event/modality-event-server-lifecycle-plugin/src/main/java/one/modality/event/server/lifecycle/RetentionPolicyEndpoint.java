@@ -18,6 +18,6 @@ public final class RetentionPolicyEndpoint extends AsyncFunctionBusCallEndpoint<
 
     public RetentionPolicyEndpoint() {
         super(DPO_RETENTION_ADDRESS, argument -> EventErasureAccess.whenDataProtectionOfficer("retention",
-            caller -> RetentionPolicy.pageJson()));
+            RetentionPolicy::pageJson));
     }
 }
