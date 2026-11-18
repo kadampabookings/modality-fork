@@ -688,17 +688,11 @@ public final class SiteItemBill {
         int price = rate.getPrice();
         Document document = documentAggregate.getDocument();
         Person person = document.getPerson();
+        // The age declared for this booking (under-18s only; null for an adult), else the person's.
+        // No date-of-birth fallback: it is no longer collected.
         Integer age = document.getAge();
-        if (age == null && person != null) {
+        if (age == null && person != null)
             age = person.getAge();
-            if (age == null) {
-                LocalDate birthDate = person.getBirthDate();
-                if (birthDate != null) {
-                    LocalDate startDate = documentAggregate.getEvent().getStartDate();
-                    age = birthDate.until(startDate).getYears();
-                }
-            }
-        }
         boolean unemployed = Booleans.isTrue(document.isUnemployed());
         if (person != null && Booleans.isTrue(person.isUnemployed()))
             unemployed = true;

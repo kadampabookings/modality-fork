@@ -70,9 +70,14 @@ public class PersonLinkCheck {
         // A booker adding someone by address knows only their sign-in address (2026-11-09); some account
         // holders' own email differs. Either must find the row, or approval adds a twin.
         check("linking matches the member row on either address", link.contains("lower(email) in ($3, $4)"));
-        String create = writes.stream().filter(s -> s.startsWith("insert into person (first_name, last_name, frontend_account_id, account_person_id, owner)")
+        String create = writes.stream().filter(s -> s.startsWith("insert into person (first_name, last_name, frontend_account_id, account_person_id, owner, minor)")
             && s.contains("$5, $2, $1")).findFirst().orElse("");
         check("and creating one is skipped when either address already has a row", create.contains("lower(email) in ($3, $6)"));
+        // V0171: a linked copy stands for an account holder, so it is an adult. The owner trigger covers the
+        // owner row only; left null ("unknown"), the next booking for them would ask their age.
+        long adultCopies = writes.stream().filter(s -> s.startsWith("insert into person"))
+            .filter(s -> s.contains("owner, minor)") && s.contains("$1, false, false")).count();
+        check("both linked copies of an account holder are written as adults (minor = false)", adultCopies == 2);
         check("linking never touches a removed row", link.contains("removed = false"));
 
         // Both directions must be able to re-link after a withdrawal, or "ask again" works one way only.

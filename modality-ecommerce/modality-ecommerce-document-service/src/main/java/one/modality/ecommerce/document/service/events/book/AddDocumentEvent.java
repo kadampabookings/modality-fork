@@ -26,7 +26,7 @@ public final class AddDocumentEvent extends AbstractDocumentEvent {
     private String lastName;
     private String email;
     // Additional fields loaded by server only
-    private final Integer age;
+    private Integer age; // cleared by the server for an adult, see clearAge()
     private Integer ref;
     private final Instant creationDate;
 
@@ -123,6 +123,15 @@ public final class AddDocumentEvent extends AbstractDocumentEvent {
 
     public Integer getAge() {
         return age;
+    }
+
+    /**
+     * Forgets the declared age before the event is replayed. The server calls this for an adult: a booking
+     * keeps an age only for an under-18 (GDPR minimisation). Clear-only on purpose — the server may drop
+     * what the client said, never put an age of its own in its place.
+     */
+    public void clearAge() {
+        age = null;
     }
 
     public Integer getRef() {

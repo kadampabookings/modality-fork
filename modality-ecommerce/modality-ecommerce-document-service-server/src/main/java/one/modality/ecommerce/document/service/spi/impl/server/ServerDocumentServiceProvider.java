@@ -427,6 +427,12 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
 
     @Override
     public Future<SubmitDocumentChangesResult> submitDocumentChanges(SubmitDocumentChangesArgument argument) {
+        // A booking's declared age is bounded, and an adult's is forgotten (BookingAgeRule). Before create(),
+        // not in the chain below with the other refusals: create() replays the events, which copies the age
+        // into the document it inserts, and the history records the events as they are now.
+        String ageRefusal = refuseOrForgetAges(argument);
+        if (ageRefusal != null)
+            return Future.failedFuture(ageRefusal);
         DocumentSubmitRequest request = DocumentSubmitRequest.create(argument);
         // A read-only session (a support member viewing a customer's front office) must not be able
         // to book, cancel or amend anything on that customer's behalf.
@@ -811,6 +817,31 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
                 return refuseOrContinue(MateLinkRules.check(backofficeSession, backofficeAccount, mate, ownerPk != null, owner, ownerPersonNamed, submitterAccountId),
                     links, index, backofficeSession, backofficeAccount, submitterAccountId);
             }));
+    }
+
+    /**
+     * Judges every {@link AddDocumentEvent}'s declared age by {@link BookingAgeRule}: an impossible one is
+     * refused, and an adult's is cleared from the event so that neither the booking nor its history keeps it.
+     *
+     * <p>Only the Add event carries an age. A back-office edit of {@code person_age} on an existing booking
+     * is a change-set write under EditBookingDetails and does not pass through here.
+     *
+     * @return the refusal, or null when the submit may go on
+     */
+    private static String refuseOrForgetAges(SubmitDocumentChangesArgument argument) {
+        for (AbstractDocumentEvent documentEvent : argument.documentEvents()) {
+            if (documentEvent instanceof AddDocumentEvent add) {
+                String refusal = BookingAgeRule.check(add.getAge());
+                if (refusal != null) {
+                    // Without the value: an impossible age is often a birth year typed in the wrong box.
+                    Console.log(refusal);
+                    return refusal;
+                }
+                if (BookingAgeRule.mustForget(add.getAge()))
+                    add.clearAge();
+            }
+        }
+        return null;
     }
 
     /**

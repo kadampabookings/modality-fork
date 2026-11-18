@@ -78,6 +78,38 @@ public class StaffPersonCheck {
                 check("no route may set " + structural,
                     structural.equals(rejection(list, structural, 1)));
 
+        // --- the minor flag is the member's to set: no back-office screen sends it, so no route takes it ---
+        // "What its screen sends, and nothing held in reserve": it comes back with a staff control, if one is added.
+        for (java.util.Set<String> list : List.of(StaffPersonRules.CUSTOMER_FIELDS,
+                                                 StaffPersonRules.USER_FIELDS,
+                                                 StaffPersonRules.RESIDENT_FIELDS))
+            check("no staff route writes minor", "minor".equals(rejection(list, "minor", true)));
+        // The column allows null since V0171 ("unknown"), but only the database writes it: a client null is malformed.
+        check("a null minor is refused by name — null is the database's \"unknown\", never a client's",
+            StaffPersonRules.NOT_A_BOOLEAN_KEY.equals(StaffPersonRules.firstBadValue(names("minor"),
+                java.util.Collections.singletonList(null))));
+
+        // --- a RETIRED field: dropped on every route, never refused and never written ---
+        // An older customer drawer still sends the date of birth back. Every route skips it before its
+        // own list is asked, so the save goes through and the column is not named.
+        check("/customers no longer lists birthdate", !StaffPersonRules.CUSTOMER_FIELDS.contains("birthdate"));
+        for (java.util.Set<String> list : List.of(StaffPersonRules.CUSTOMER_FIELDS,
+                                                 StaffPersonRules.USER_FIELDS,
+                                                 StaffPersonRules.RESIDENT_FIELDS)) {
+            List<String> kept = new ArrayList<>();
+            List<Object> keptValues = new ArrayList<>();
+            String firstAllowed = list.iterator().next();
+            check("a route drops birthdate rather than refusing it",
+                StaffPersonRules.collect(new Object[] { firstAllowed, null, "birthdate", "1990-01-31" },
+                    kept, keptValues, list::contains) == null
+                && kept.equals(List.of(firstAllowed)));
+        }
+        List<String> none = new ArrayList<>();
+        Object[] onlyBirthdate = { "birthdate", "1990-01-31" };
+        check("birthdate sent alone leaves nothing to write, which is a save rather than a refusal",
+            StaffPersonRules.collect(onlyBirthdate, none, new ArrayList<>(), StaffPersonRules.CUSTOMER_FIELDS::contains) == null
+            && PersonFields.onlyRetired(onlyBirthdate, none));
+
         // --- the value of a marker is the server's here too ---
         String stamped = StaffPersonRules.updateStatementFor(names("genderChangedDate"));
         check("dismissing a gender-change marker clears it, and cannot post-date it",
@@ -103,7 +135,7 @@ public class StaffPersonCheck {
         check("the resident path collects against its OWN allowlist",
             residentRules.contains("collect(namesAndValues, names, values, RESIDENT_FIELDS::contains)"));
         for (String beyondResidency : new String[] { "email", "organization", "removed", "firstName",
-                                                     "birthdate", "detailsConfirmedDate", "nationality" })
+                                                     "detailsConfirmedDate", "nationality" })
             check("a /residents grant may not write " + beyondResidency,
                 !StaffPersonRules.RESIDENT_FIELDS.contains(beyondResidency));
         // THE SECOND HALF OF THE SAME LESSON. /residents was scoped to a centre and given its own list,

@@ -46,7 +46,7 @@ public class PersonDetailsCheck {
         for (String forbidden : new String[] { "frontendAccount", "accountPerson", "owner",
                                                "accountPersonRevokedDate", "genderChangedDate", "abcNames" })
             check(forbidden + " is not editable", !PersonFields.isEditable(forbidden));
-        for (String allowed : new String[] { "firstName", "birthdate", "country", "removed", "occasional", "email" })
+        for (String allowed : new String[] { "firstName", "country", "removed", "occasional", "email" })
             check(allowed + " is editable", PersonFields.isEditable(allowed));
 
         // --- a name this build does not know is REFUSED, not dropped ---
@@ -62,9 +62,90 @@ public class PersonDetailsCheck {
             PersonDetailsRules.collect(new Object[] { "firstName", "A", "phone", "1" }, got, values) == null
                 && got.size() == 2 && values.size() == 2);
 
+        // --- the minor flag that replaced the date of birth: a member's to set on their own account's people ---
+        check("minor is editable", PersonFields.isEditable("minor"));
+        check("minor is a plain boolean column, the client's own value",
+            PersonFields.fieldFor("minor").kind() == PersonFields.Kind.BOOLEAN
+            && "minor".equals(PersonFields.fieldFor("minor").column())
+            && "$1".equals(PersonFields.valueExpression("minor", 1))
+            && Boolean.TRUE.equals(PersonFields.boundValue("minor", true)));
+        // Same ownership rule as every other field: the flag is no reason to reach somebody else's row.
+        String minorEdit = PersonDetailsRules.updateStatementFor(names("minor"));
+        check("writing minor is held to the caller's own person or account",
+            minorEdit.contains("minor = $1") && minorEdit.contains("id = $3 or frontend_account_id = $4")
+            && minorEdit.contains("removed = false"));
+        check("and it is not an owner-guarded field like email",
+            !minorEdit.contains("owner = false"));
+        got.clear(); values.clear();
+        check("a booker adding a member may send it",
+            PersonDetailsRules.collect(new Object[] { "firstName", "A", "minor", true }, got, values) == null
+                && got.equals(List.of("firstName", "minor")));
+        got.clear(); values.clear();
+        check("and so may an account owner at sign-up",
+            AccountOwnerRules.rejectionFor(new Object[] { "firstName", "A", "minor", false }, got, values) == null);
+        got.clear(); values.clear();
+        // V0171: accounts are for adults. The form blocks a No itself; the server refuses a client that sends true.
+        check("sign-up refuses a person who says they are under 18",
+            AccountOwnerRules.MINOR_KEY.equals(AccountOwnerRules.rejectionFor(
+                new Object[] { "firstName", "A", "minor", true }, got, values)));
+        check("with a sentence the sign-up screen can show",
+            AccountOwnerRules.sentenceFor(AccountOwnerRules.MINOR_KEY).startsWith("Accounts are for adults"));
+        got.clear(); values.clear();
+        // An older cached front office does not send it: still accepted, and the owner trigger writes false.
+        check("a sign-up without minor is still accepted",
+            AccountOwnerRules.rejectionFor(new Object[] { "firstName", "A" }, got, values) == null);
+        got.clear(); values.clear();
+        // Three-state since V0171: the column allows null, meaning "unknown", and only the database writes it
+        // (the migration's fill). Screens send true or false; a client null would erase an answer, so it stays
+        // refused here rather than reaching the column.
+        check("a null minor is refused by name on the member paths",
+            "minor".equals(PersonDetailsRules.firstNotABoolean(names("minor"), java.util.Collections.singletonList(null))));
+        check("and so is a string standing in for one",
+            "minor".equals(PersonDetailsRules.firstNotABoolean(names("minor"), List.of("true"))));
+        check("a real boolean passes", PersonDetailsRules.firstNotABoolean(names("minor"), List.of(false)) == null);
+        check("male may still be null — its column allows it, and null means not given",
+            PersonDetailsRules.firstNotABoolean(names("male"), java.util.Collections.singletonList(null)) == null);
+        check("sign-up refuses a null minor with the same key (malformed, not a child)",
+            PersonDetailsRules.NOT_A_BOOLEAN_KEY.equals(AccountOwnerRules.rejectionFor(
+                new Object[] { "firstName", "A", "minor", null }, got, values)));
+        got.clear(); values.clear();
+        String detailsSource = AccountOwnerCheck.readSource("modality-fork/modality-crm/modality-crm-server-person-plugin/"
+            + "src/main/java/one/modality/crm/server/person/PersonDetailsRules.java");
+        check("the update and the add-member paths both ask it",
+            detailsSource.split(java.util.regex.Pattern.quote("firstNotABoolean(names, values) != null"), -1).length == 3);
+
+        // --- a RETIRED field is the exception: accepted and dropped, never written, never refused ---
+        // Date of birth is no longer collected, but stale front-office bundles still send it back on
+        // every profile save. Refused, those saves would fail; written, the value we stopped keeping
+        // would be kept.
+        check("birthdate is no longer editable", !PersonFields.isEditable("birthdate"));
+        check("birthdate resolves to no column, so no statement can write it",
+            PersonFields.fieldFor("birthdate") == null && !PersonFields.isStaffEditable("birthdate"));
+        got.clear(); values.clear();
+        check("birthdate sent beside other fields is dropped, and the rest kept",
+            PersonDetailsRules.collect(new Object[] { "firstName", "A", "birthdate", "1990-01-31", "phone", "1" },
+                got, values) == null
+                && got.equals(List.of("firstName", "phone")) && values.equals(List.of("A", "1")));
+        got.clear(); values.clear();
+        Object[] onlyBirthdate = { "birthdate", "1990-01-31" };
+        check("birthdate sent alone is accepted, with nothing to write",
+            PersonDetailsRules.collect(onlyBirthdate, got, values) == null && got.isEmpty()
+                && PersonFields.onlyRetired(onlyBirthdate, got));
+        check("and an empty request is still not mistaken for one",
+            !PersonFields.onlyRetired(new Object[0], List.of()) && !PersonFields.onlyRetired(null, List.of()));
+        got.clear(); values.clear();
+        check("a malformed birthdate is dropped too, not refused as a date",
+            PersonDetailsRules.collect(new Object[] { "birthdate", "31/01/1990" }, got, values) == null
+                && PersonDetailsRules.firstNotADate(got, values) == null);
+        got.clear(); values.clear();
+        check("sign-up drops it the same way, through the same collector",
+            AccountOwnerRules.rejectionFor(new Object[] { "firstName", "A", "birthdate", "1990-01-31" },
+                got, values) == null && got.equals(List.of("firstName")));
+
         // --- a date reaches a date column ---
-        check("birthdate carries its cast",
-            PersonDetailsRules.updateStatementFor(names("birthdate")).contains("birthdate = $1::date"));
+        // No member date is client-valued any more (every remaining one is server-stamped), so the cast
+        // is asserted on the kind that a future ordinary date field would take.
+        check("a date field carries its cast", "::date".equals(PersonFields.Kind.DATE.cast));
         check("a text field carries no cast",
             PersonDetailsRules.updateStatementFor(names("phone")).contains("phone = $1 "));
 
@@ -108,6 +189,11 @@ public class PersonDetailsCheck {
         String owner = AccountOwnerCheck.readSource(base + "AccountOwnerRules.java");
         check("the three rules sources were found",
             !details.isEmpty() && !staff.isEmpty() && !owner.isEmpty());
+        // A request of nothing but retired fields is a save, on the member update and both staff
+        // updates; without the call it would come back as "no fields" to a stale form.
+        String onlyRetiredCall = "PersonFields.onlyRetired(namesAndValues, names)";
+        check("the update paths answer a retired-only request as a save",
+            details.contains(onlyRetiredCall) && staff.split(java.util.regex.Pattern.quote(onlyRetiredCall), -1).length == 3);
         check("the update and the insert bind through boundValue",
             details.contains("PersonFields.boundValue(names.get(i), values.get(i))"));
         check("the staff paths bind through boundValues",
@@ -124,40 +210,25 @@ public class PersonDetailsCheck {
         check("a blank clears a marker rather than re-stamping it",
             Boolean.FALSE.equals(PersonFields.boundValue("detailsConfirmedDate", ""))
             && Boolean.FALSE.equals(PersonFields.boundValue("detailsConfirmedDate", "   ")));
-        check("and a blank clears an ordinary date too, the same way",
-            PersonFields.boundValue("birthdate", "") == null);
 
         // Judged where every other client-value rule is judged — before the database is asked, and
         // answered with a key the client can translate, not the driver's nameless coercion error.
+        // A marker's value is never written, but it is still judged: a client sending garbage for one is
+        // refused by name rather than having it quietly read as "a value was sent".
         check("a malformed date is refused by name, before any database call",
-            "birthdate".equals(firstNotADate("birthdate", "31/01/1990")));
+            "detailsConfirmedDate".equals(firstNotADate("detailsConfirmedDate", "31/01/1990")));
         check("a number is not a date",
-            "birthdate".equals(firstNotADate("birthdate", 19900131)));
+            "detailsConfirmedDate".equals(firstNotADate("detailsConfirmedDate", 19900131)));
         check("nor is a year Postgres cannot store",
-            "birthdate".equals(firstNotADate("birthdate", "+999999999-01-01")));
+            "detailsConfirmedDate".equals(firstNotADate("detailsConfirmedDate", "+999999999-01-01")));
+        // A Temporal date travels as `$LD:` and arrives typed; one that went through toString()
+        // somewhere arrives as text. Either is a date.
         check("an ISO string is",
-            firstNotADate("birthdate", "1990-01-31") == null);
+            firstNotADate("detailsConfirmedDate", "2026-09-22") == null);
         check("and so is a LocalDate",
-            firstNotADate("birthdate", java.time.LocalDate.of(1990, 1, 31)) == null);
-
-        // The other half of the same fix: an ORDINARY date field takes either form. A Temporal date
-        // travels as `$LD:` and arrives typed; one that went through toString() somewhere arrives as
-        // text, and the column takes a date either way.
-        java.time.LocalDate day = java.time.LocalDate.of(2026, 9, 22);
-        check("a date field accepts the wire's string form as well as a LocalDate",
-            day.equals(PersonFields.boundValue("birthdate", "2026-09-22"))
-            && day.equals(PersonFields.boundValue("birthdate", day)));
-        check("an empty date is a cleared date, not a parse failure",
-            PersonFields.boundValue("birthdate", "  ") == null);
-        String refusal = null;
-        try {
-            PersonFields.boundValue("birthdate", "not-a-date");
-        } catch (RuntimeException e) {
-            refusal = e.getMessage();
-        }
-        // Refused by NAME rather than as the driver's "can not be coerced", which names no field.
-        check("an unparseable date is refused, naming the field",
-            refusal != null && refusal.contains("birthdate"));
+            firstNotADate("detailsConfirmedDate", java.time.LocalDate.of(2026, 9, 22)) == null);
+        check("and a blank is a cleared date, not a malformed one",
+            firstNotADate("detailsConfirmedDate", "  ") == null);
 
         // Asserted on the shared builder, not only through the update: addMember composes its own insert
         // inline, and a member added with a confirmation date of its own choosing would start the year's

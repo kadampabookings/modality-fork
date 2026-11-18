@@ -88,6 +88,21 @@ final class AccountOwnerRules {
      * and a server that disagree about who decides a value should say so, not save the row and drop it.
      */
     static final String EMAIL_NOT_YOURS_KEY = "AccountOwnerEmailError";
+    /**
+     * The person signing up said they are under 18 (V0171).
+     *
+     * <p>Accounts are for adults: the owner row's {@code minor} is forced to false by the
+     * {@code person_owner_is_adult} trigger, and every linked copy of an account holder is written false, so
+     * a child's account would be priced and treated as an adult's everywhere. The sign-up form asks "18 or
+     * over?" and blocks a No itself; this is the server's half, for a client that sends {@code minor: true}
+     * anyway. A MISSING {@code minor} is still accepted, so sign-ups from an older cached front office keep
+     * working — the trigger gives the row false either way. It is a self-declaration, so refusing a missing
+     * answer would add no proof, only failed sign-ups.
+     *
+     * <p>Reached only after the account itself exists ({@code finaliseAccountCreation} ran first), as for
+     * every refusal here: the client keeps the credential and may send the owner again with {@code false}.
+     */
+    static final String MINOR_KEY = "AccountOwnerMinorError";
 
     /**
      * Fields that are membership state rather than sign-up profile, and are refused here.
@@ -221,6 +236,12 @@ final class AccountOwnerRules {
             return PersonDetailsRules.NOT_AN_ID_KEY;
         if (PersonDetailsRules.firstNotADate(names, values) != null)
             return PersonDetailsRules.NOT_A_DATE_KEY;
+        if (PersonDetailsRules.firstNotABoolean(names, values) != null)
+            return PersonDetailsRules.NOT_A_BOOLEAN_KEY;
+        // After the boolean rule, so a null or a string is refused as malformed, not as a child.
+        int minor = names.indexOf("minor");
+        if (minor >= 0 && Boolean.TRUE.equals(values.get(minor)))
+            return MINOR_KEY;
         return null;
     }
 
@@ -301,7 +322,9 @@ final class AccountOwnerRules {
      * by a log. The bracketed key is the convention every gateway refusal follows and is what a screen
      * would map if it wanted its own wording; the sentence is what is shown until one does.
      *
-     * <p>Two of the three say nothing useful on purpose. A caller sending {@code email}, or a field the
+     * <p>{@link #MINOR_KEY} says what to do instead, because the person reading it can act on it.
+     *
+     * <p>The rest say nothing useful on purpose. A caller sending {@code email}, or a field the
      * allowlist does not know, is a CLIENT that disagrees with the server — nothing the person reading
      * the screen did, and nothing they can fix.
      */
@@ -314,6 +337,8 @@ final class AccountOwnerRules {
         // saying which is the oracle described on the key itself.
         if (CREDENTIAL_KEY.equals(key))
             return "This sign-up link can no longer be used. If your account is already set up, please sign in.";
+        if (MINOR_KEY.equals(key))
+            return "Accounts are for adults: a parent or carer creates the account and adds the child under People I book for.";
         return "This operation is not available to you";
     }
 }

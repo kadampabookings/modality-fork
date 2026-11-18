@@ -60,6 +60,7 @@ final class PersonDetailsRules {
      */
     static final String NOT_AN_ID_KEY = "PersonNotAnIdError";
     static final String NOT_A_DATE_KEY = "PersonNotADateError";
+    static final String NOT_A_BOOLEAN_KEY = "PersonNotABooleanError";
 
     /**
      * Whose row this is, asked as one question.
@@ -92,6 +93,8 @@ final class PersonDetailsRules {
             // Named rather than ignored: a screen sending a field this does not know is a screen and a
             // server that disagree, and silently dropping it would save the form and lose the value.
             return refusal(FIELD_NOT_EDITABLE_KEY);
+        if (PersonFields.onlyRetired(namesAndValues, names))
+            return Future.succeededFuture(true); // nothing left to write; see PersonFields.RETIRED
         if (names.isEmpty())
             return refusal(NO_FIELDS_KEY);
         return ServerWrite.asServer(() -> QueryService.executeQuery(new QueryArgumentBuilder()
@@ -127,12 +130,15 @@ final class PersonDetailsRules {
                     return refusal(NOT_AN_ID_KEY);
                 if (firstNotADate(names, values) != null)
                     return refusal(NOT_A_DATE_KEY);
+                if (firstNotABoolean(names, values) != null)
+                    return refusal(NOT_A_BOOLEAN_KEY);
                 return runUpdate(personId, names, values, callerPersonId, callerAccountId, callerUserId);
             });
     }
 
     /**
-     * Reads the pairs, keeping only what {@link PersonFields} allows.
+     * Reads the pairs, keeping only what {@link PersonFields} allows. A {@link PersonFields#RETIRED}
+     * name is skipped, not refused.
      *
      * @return the first name that is not editable, or null when every one of them is
      */
@@ -144,6 +150,8 @@ final class PersonDetailsRules {
             return "(an unpaired field)";
         for (int i = 0; i + 1 < namesAndValues.length; i += 2) {
             String name = String.valueOf(namesAndValues[i]);
+            if (PersonFields.isRetired(name)) // accepted and dropped, never written; see PersonFields
+                continue;
             if (!PersonFields.isEditable(name))
                 return name;
             if (names.contains(name)) // the same field twice would build an invalid SET clause
@@ -211,6 +219,8 @@ final class PersonDetailsRules {
             return refusal(NOT_A_DATE_KEY);
         if (firstNotAnId(names, values) != null)
             return refusal(NOT_AN_ID_KEY);
+        if (firstNotABoolean(names, values) != null)
+            return refusal(NOT_A_BOOLEAN_KEY);
         StringBuilder columns = new StringBuilder(INSERT_SQL_PREFIX);
         StringBuilder placeholders = new StringBuilder(") values ($1, false");
         List<Object> parameters = new ArrayList<>();
@@ -338,6 +348,38 @@ final class PersonDetailsRules {
         }
         return null;
     }
+
+    /**
+     * The first boolean field whose value its column cannot hold, or null.
+     *
+     * <p>A client may send null only for {@code male}, where null means "not given" and a member form may
+     * send it. The other person booleans are {@code NOT NULL} columns, so a null would come back as a raw
+     * Postgres 23502 — the shape the other {@code firstNot…} rules exist to prevent.
+     *
+     * <p>{@code minor} is the exception in the database but not here: since V0171 its column allows null,
+     * meaning "unknown" (never asked), and only the database writes it — the migration's fill, for a person
+     * with no date of birth. Screens answer the question with {@code true} or {@code false} and never send
+     * null, so a client null stays refused: it would erase an answer back to "unknown" and make the next
+     * booking ask again.
+     */
+    static String firstNotABoolean(List<String> names, List<Object> values) {
+        for (int i = 0; i < names.size(); i++) {
+            PersonFields.Field field = PersonFields.fieldFor(names.get(i));
+            Object value = values.get(i);
+            if (field == null || field.kind() != PersonFields.Kind.BOOLEAN || value instanceof Boolean)
+                continue;
+            if (value == null && NULLABLE_BOOLEANS.contains(names.get(i)))
+                continue;
+            return names.get(i);
+        }
+        return null;
+    }
+
+    /**
+     * The one person boolean a client may set to null — see {@link #firstNotABoolean}. Not {@code minor},
+     * although its column allows null: null there is "unknown", the database's to write.
+     */
+    private static final java.util.Set<String> NULLABLE_BOOLEANS = java.util.Set.of("male");
 
     static String firstNotAnId(List<String> names, List<Object> values) {
         for (int i = 0; i < names.size(); i++) {

@@ -135,9 +135,16 @@ final class PersonLinkRules {
         "update person set account_person_revoked_date = null" +
         " where frontend_account_id = $2 and account_person_id = $1 and removed = false";
 
+    /**
+     * {@code minor = false}: the row stands for an account holder, and account holders are adults (V0171 —
+     * sign-up asks it, and {@code person_owner_is_adult} holds it on the owner row). Written here because
+     * that trigger fires on the OWNER row only; left out, this copy would be null ("unknown") and the
+     * inviter's next booking for them would ask their age. The migration's fill gives existing linked rows
+     * the same false.
+     */
     private static final String CREATE_LINKED_MEMBER_SQL =
-        "insert into person (first_name, last_name, frontend_account_id, account_person_id, owner)" +
-        " select $4, $5, $2, $1, false" +
+        "insert into person (first_name, last_name, frontend_account_id, account_person_id, owner, minor)" +
+        " select $4, $5, $2, $1, false, false" +
         " where not exists (select 1 from person where frontend_account_id = $2" +
         "                   and account_person_id = $1 and removed = false)" +
         "   and not exists (select 1 from person where frontend_account_id = $2" +
@@ -160,9 +167,10 @@ final class PersonLinkRules {
         "update person set account_person_revoked_date = null" +
         " where frontend_account_id = $2 and account_person_id = $1 and removed = false";
 
+    /** {@code minor = false} for the reason given on {@link #CREATE_LINKED_MEMBER_SQL}: the inviter holds an account. */
     private static final String CREATE_MANAGER_VIEW_SQL =
-        "insert into person (first_name, last_name, frontend_account_id, account_person_id, owner)" +
-        " select $3, $4, $2, $1, false" +
+        "insert into person (first_name, last_name, frontend_account_id, account_person_id, owner, minor)" +
+        " select $3, $4, $2, $1, false, false" +
         " where not exists (select 1 from person where frontend_account_id = $2" +
         "                   and account_person_id = $1 and removed = false)";
 

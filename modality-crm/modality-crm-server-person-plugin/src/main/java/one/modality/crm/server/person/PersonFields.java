@@ -22,7 +22,15 @@ import java.util.Map;
  *       nothing a member's screen offers.</li>
  *   <li>{@code genderChangedDate} — a marker staff read when allocating dormitories. A member changing
  *       their own record must not be able to clear it.</li>
+ *   <li>{@code birthdate} — no longer collected at all (GDPR minimisation: a booking carries the age at
+ *       the event, for under-18s only). It is in {@link #RETIRED} rather than simply absent — see there.</li>
  * </ul>
+ *
+ * <p><b>A retired name is the one exception to "refused, not dropped".</b> Every other unknown name is
+ * refused, because a screen and a server that disagree should fail loudly. A retired field is one the
+ * server stopped writing on purpose, while stale front-office bundles (an old PWA service worker) still
+ * send it back on every profile save — refusing it would break the save for the field that matters
+ * least. So it is accepted and dropped: never written, never refused.
  *
  * <p>{@code email} IS here, and is the one that needs saying twice: it reaches
  * {@code frontend_account.username} through a trigger when the person is an account owner, so setting it
@@ -69,7 +77,6 @@ final class PersonFields {
         m.put("layName", new Field("lay_name", Kind.TEXT, 91));
         m.put("male", new Field("male", Kind.BOOLEAN));
         m.put("ordained", new Field("ordained", Kind.BOOLEAN));
-        m.put("birthdate", new Field("birthdate", Kind.DATE));
         m.put("phone", new Field("phone", Kind.TEXT, 45));
         m.put("street", new Field("street", Kind.TEXT, 128));
         m.put("postCode", new Field("post_code", Kind.TEXT, 16));
@@ -82,6 +89,10 @@ final class PersonFields {
         // bookings. Both are a member's to decide about their own account's people.
         m.put("removed", new Field("removed", Kind.BOOLEAN));
         m.put("occasional", new Field("occasional", Kind.BOOLEAN));
+        // Under 18 (V0171, which replaced the date of birth): true, false, or null = unknown. A booker
+        // writes true or false (adding a member, a booking's answer, the members menu); only the database
+        // writes null. The age itself lives on each booking (document.person_age), for minors only.
+        m.put("minor", new Field("minor", Kind.BOOLEAN));
         // The booking flow's freshness markers. A booker CLEARS a deprecation marker by supplying a
         // fresh value, and stamps detailsConfirmedDate when they confirm — see useMemberDetailsReview.
         // Left out, the review step would be refused outright and a blocking marker could never be
@@ -90,6 +101,32 @@ final class PersonFields {
         m.put("addressDeprecatedDate", new Field("address_deprecated_date", Kind.DATE));
         m.put("organizationDeprecatedDate", new Field("organization_deprecated_date", Kind.DATE));
         return m;
+    }
+
+    /**
+     * Fields a client may still send but that are never written, on any route — see the class note.
+     *
+     * <p>Not in {@link #EDITABLE}, so {@link #isEditable} and {@link #fieldFor} know nothing of them and
+     * no statement can name their column; the collectors skip them before asking whether a name is
+     * allowed. {@code person.birthdate} is also nulled on every write by a database trigger, so a path
+     * that forgot this list would still store nothing.
+     */
+    static final java.util.Set<String> RETIRED = java.util.Set.of("birthdate");
+
+    static boolean isRetired(String name) {
+        return RETIRED.contains(name);
+    }
+
+    /**
+     * Whether a request sent fields and every one of them was retired — a save with nothing to write.
+     *
+     * <p>Answered as success rather than as "no fields": a stale form that sends only a retired field
+     * did nothing wrong, and its member would otherwise see an error for a value we chose not to keep.
+     *
+     * @param collected what a collector kept from {@code namesAndValues}, after it accepted them
+     */
+    static boolean onlyRetired(Object[] namesAndValues, java.util.List<String> collected) {
+        return collected.isEmpty() && namesAndValues != null && namesAndValues.length > 0;
     }
 
     /**

@@ -48,7 +48,7 @@ final class StaffPersonRules {
     /** No row matched — a person id that does not exist, or an owner whose email was being changed. */
     static final String NOT_UPDATED_KEY = "StaffPersonNotUpdatedError";
     /** A null or a string where a NOT NULL boolean column is, refused by name rather than by Postgres. */
-    static final String NOT_A_BOOLEAN_KEY = "PersonNotABooleanError";
+    static final String NOT_A_BOOLEAN_KEY = PersonDetailsRules.NOT_A_BOOLEAN_KEY;
 
     /**
      * Updates the fields named in {@code namesAndValues} on {@code rawPersonId}.
@@ -105,6 +105,8 @@ final class StaffPersonRules {
         String rejected = collect(namesAndValues, names, values, allowed::contains);
         if (rejected != null)
             return refusal(FIELD_NOT_EDITABLE_KEY);
+        if (PersonFields.onlyRetired(namesAndValues, names))
+            return Future.succeededFuture(true); // nothing left to write; see PersonFields.RETIRED
         if (names.isEmpty())
             return refusal(PersonDetailsRules.NO_FIELDS_KEY);
         String badValue = firstBadValue(names, values);
@@ -180,6 +182,8 @@ final class StaffPersonRules {
         String rejected = collect(namesAndValues, names, values, RESIDENT_FIELDS::contains);
         if (rejected != null)
             return refusal(FIELD_NOT_EDITABLE_KEY);
+        if (PersonFields.onlyRetired(namesAndValues, names))
+            return Future.succeededFuture(true); // nothing left to write; see PersonFields.RETIRED
         if (names.isEmpty())
             return refusal(PersonDetailsRules.NO_FIELDS_KEY);
         String badValue = firstBadValue(names, values);
@@ -238,13 +242,15 @@ final class StaffPersonRules {
      * the scoped endpoints exist to refuse. A list per route is the only version of this that says
      * what it means.
      *
-     * <p>Each one is what its SCREEN sends, and nothing held in reserve. When the customer merge moves
+     * <p>Each one is what its SCREEN sends, and nothing held in reserve. {@code birthdate} left
+     * {@code CUSTOMER_FIELDS} when it was retired: the customer drawer of an older bundle may still send
+     * it, and {@link #collect} drops it before this list is asked — see {@code PersonFields.RETIRED}. When the customer merge moves
      * onto these endpoints it will need {@code removed}; it can be added then, by somebody who can see
      * why.
      */
     static final java.util.Set<String> CUSTOMER_FIELDS = java.util.Set.of(
         "firstName", "lastName", PersonFields.EMAIL, "phone", "male", "ordained", "layName",
-        "street", "postCode", "cityName", "country", "nationality", "passport", "birthdate",
+        "street", "postCode", "cityName", "country", "nationality", "passport",
         "organization", "genderChangedDate", "addressDeprecatedDate", "organizationDeprecatedDate");
 
     /** The users screen's personal-details form, which sends exactly these. */
@@ -302,6 +308,10 @@ final class StaffPersonRules {
             return "(an unpaired field)";
         for (int i = 0; i + 1 < namesAndValues.length; i += 2) {
             String name = String.valueOf(namesAndValues[i]);
+            // Before the route's list, and on every route: a retired field is nobody's to write, and
+            // a stale form sending it back is not a reason to refuse the save.
+            if (PersonFields.isRetired(name))
+                continue;
             if (!allowed.test(name))
                 return name;
             if (names.contains(name)) // the same field twice would build an invalid SET clause
