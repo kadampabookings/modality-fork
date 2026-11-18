@@ -167,3 +167,6 @@ V0164__anonymise_person_account_settings.sql
 V0165__erasure_request.sql
 V0166__operation_explicit_only.sql
 V0167__super_admin_organization.sql
+V0168__data_protection.sql
+V0169__erase_departed_bookings.sql
+V0170__archive_event_bookings.sql

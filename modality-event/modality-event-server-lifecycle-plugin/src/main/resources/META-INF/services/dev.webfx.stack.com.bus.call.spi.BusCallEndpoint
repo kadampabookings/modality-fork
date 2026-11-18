@@ -13,3 +13,6 @@ one.modality.event.server.lifecycle.ErasureFindEndpoint
 one.modality.event.server.lifecycle.ErasureCheckEndpoint
 one.modality.event.server.lifecycle.ErasureRequestsEndpoint
 one.modality.event.server.lifecycle.SaveErasureRequestEndpoint
+one.modality.event.server.lifecycle.RetentionPolicyEndpoint
+one.modality.event.server.lifecycle.SetRetentionPolicyEndpoint
+one.modality.event.server.lifecycle.DataProtectionActivityEndpoint

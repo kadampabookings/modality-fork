@@ -109,22 +109,33 @@ public class EventRemovalDatesCheck {
         // ── The reply ──
         QueryResult rows = new QueryResult(3, 3,
             new Object[] { 12, 40, 41, "2026-01-31", "2026-07-02", "not a date", false, true, false }, null);
-        String json = EventErasureLedger.removalDatesJson(rows);
-        check("the reply is the retention period and one removal per event, in the contract's spelling",
-            ("{\"retentionMonths\":3,\"removals\":[{\"eventId\":12,\"removedOn\":\"2026-01-31\",\"changedSince\":false},"
+        QueryResult policy = new QueryResult(3, 5, new Object[] {
+            "finalise", "finalise", "archive",   // stage
+            "default", "organization", "event",  // scope
+            null, 5, null,                       // organization_id
+            null, null, 77,                      // event_id
+            3, 6, 24 }, null);                   // months
+        String json = EventErasureLedger.removalDatesJson(rows, policy);
+        String policyJson = "{\"finalise\":{\"default\":3,\"organizations\":[{\"id\":5,\"months\":6}],\"events\":[]},"
+                            + "\"archive\":{\"default\":null,\"organizations\":[],\"events\":[{\"id\":77,\"months\":24}]}}";
+        check("the reply is the finalise default, the policy and one removal per event, in the contract's spelling",
+            ("{\"retentionMonths\":3,\"policy\":" + policyJson + ",\"removals\":[{\"eventId\":12,\"removedOn\":\"2026-01-31\",\"changedSince\":false},"
              + "{\"eventId\":40,\"removedOn\":\"2026-07-02\",\"changedSince\":true}]}").equals(json));
         java.util.Set<String> keys = new java.util.TreeSet<>();
         java.util.regex.Matcher key = java.util.regex.Pattern.compile("\"([A-Za-z]+)\":").matcher(json);
         while (key.find())
             keys.add(key.group(1));
         check("the reply carries exactly the contract's keys - no personal data field: " + keys,
-            keys.equals(new java.util.TreeSet<>(java.util.List.of("retentionMonths", "removals", "eventId", "removedOn", "changedSince"))));
+            keys.equals(new java.util.TreeSet<>(java.util.List.of("retentionMonths", "policy", "finalise", "archive", "default",
+                "organizations", "events", "id", "months", "removals", "eventId", "removedOn", "changedSince"))));
+        QueryResult noPolicy = new QueryResult(0, 5, new Object[0], null);
         check("a null changedSince reads as false, never as text",
-            EventErasureLedger.removalDatesJson(new QueryResult(1, 3, new Object[] { 7, "2026-02-01", null }, null))
+            EventErasureLedger.removalDatesJson(new QueryResult(1, 3, new Object[] { 7, "2026-02-01", null }, null), noPolicy)
                 .contains("\"changedSince\":false"));
-        check("an organisation with no removal answers an empty list",
-            "{\"retentionMonths\":3,\"removals\":[]}".equals(EventErasureLedger.removalDatesJson(new QueryResult(0, 3, new Object[0], null))));
-        check("retentionMonths is the erasure configuration's", json.startsWith("{\"retentionMonths\":" + EventErasureConfig.RETENTION_MONTHS + ","));
+        check("an organisation with no removal and no confirmed policy answers null months and an empty list",
+            ("{\"retentionMonths\":null,\"policy\":{\"finalise\":{\"default\":null,\"organizations\":[],\"events\":[]},"
+             + "\"archive\":{\"default\":null,\"organizations\":[],\"events\":[]}},\"removals\":[]}")
+                .equals(EventErasureLedger.removalDatesJson(new QueryResult(0, 3, new Object[0], null), noPolicy)));
         String dbText = "ERROR: permission denied for table event_erasure_run (host 10.0.3.17)";
         Future<String> failed = EventErasureLedger.removalDatesReply(Future.failedFuture(dbText));
         check("a read that fails answers the contract's failure, its database text not echoed",

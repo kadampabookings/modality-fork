@@ -11,7 +11,7 @@ import dev.webfx.stack.com.bus.call.spi.AsyncFunctionBusCallEndpoint;
  * the error text); an unknown or malformed id is {@code [EventErasureNotFoundError]}. Polled by the screen every few
  * seconds while the run is {@code running}.
  *
- * <p>Super administrators only, re-checked on every call ({@link EventErasureAccess}). The grid holds counts and
+ * <p>Data Protection Officers only, re-checked on every call ({@link EventErasureAccess}). The grid holds counts and
  * event facts, never guest data.
  *
  * @author Claude Code
@@ -22,7 +22,7 @@ public final class EventErasureRunEndpoint extends AsyncFunctionBusCallEndpoint<
     public static final String EVENT_ERASURE_RUN_ADDRESS = "modality/service/event/erasure/run";
 
     public EventErasureRunEndpoint() {
-        super(EVENT_ERASURE_RUN_ADDRESS, argument -> EventErasureAccess.whenSuperAdmin("run",
+        super(EVENT_ERASURE_RUN_ADDRESS, argument -> EventErasureAccess.whenDataProtectionOfficer("run",
             caller -> EventErasureLedger.runJson(EventErasureArguments.positiveId(
                 argument instanceof Object[] array ? EventErasureArguments.at(array, 0) : argument))));
     }

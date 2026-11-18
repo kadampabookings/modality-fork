@@ -12,7 +12,7 @@ import java.util.function.Supplier;
  * The date each of an organisation's events had its guests' personal data removed — for the Registration › Event
  * status page, whose audience cannot read the removal record itself.
  *
- * <p><b>Why.</b> {@code event_erasure_run} (V0146) is read only through the super-administrator endpoints. Without
+ * <p><b>Why.</b> {@code event_erasure_run} (V0146) is read only through the Data Protection Officer endpoints. Without
  * these dates, a CLOSED event whose data was removed by date would look "due for removal" to Registration, and its
  * Reopen button would be offered — and then refused by V0147 ({@code EVENT_DATA_REMOVED_STAYS_CLOSED}).
  *

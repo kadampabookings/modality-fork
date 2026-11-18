@@ -9,7 +9,7 @@ import dev.webfx.stack.com.bus.call.spi.AsyncFunctionBusCallEndpoint;
  * again.
  *
  * <p>The argument is ignored ({@code []} or null). The reply is a JSON string (RunsJson in the shared contract,
- * see {@link EventErasureLedger}): summaries only, no grids. Super administrators only, re-checked on every call
+ * see {@link EventErasureLedger}): summaries only, no grids. Data Protection Officers only, re-checked on every call
  * ({@link EventErasureAccess}).
  *
  * @author Claude Code
@@ -20,7 +20,7 @@ public final class EventErasureRunsEndpoint extends AsyncFunctionBusCallEndpoint
     public static final String EVENT_ERASURE_RUNS_ADDRESS = "modality/service/event/erasure/runs";
 
     public EventErasureRunsEndpoint() {
-        super(EVENT_ERASURE_RUNS_ADDRESS, argument -> EventErasureAccess.whenSuperAdmin("runs",
+        super(EVENT_ERASURE_RUNS_ADDRESS, argument -> EventErasureAccess.whenDataProtectionOfficer("runs",
             caller -> EventErasureLedger.runsJson()));
         EventErasureConfig.listen();
     }

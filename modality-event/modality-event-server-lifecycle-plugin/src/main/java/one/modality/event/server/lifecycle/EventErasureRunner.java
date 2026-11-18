@@ -36,7 +36,9 @@ import java.util.TreeSet;
 import java.util.function.Supplier;
 
 /**
- * Runs {@code erase_past_event()} (V0077) for one event, from the back office, as a job of its own.
+ * Runs {@code erase_past_event()} (V0077, a wrapper of {@code erase_bookings_core} since V0169) for one event, from the
+ * back office, as a job of its own — or, for a continuous event, {@code erase_departed_bookings()} (V0169): the same
+ * removal for the bookings of the people who LEFT more than the event's period ago (see "Departed stays" below).
  *
  * <h3>Why a job, on a connection of its own</h3>
  *
@@ -59,7 +61,7 @@ import java.util.function.Supplier;
  *       continuous one (its type is not {@code ongoing}: those bookings follow the per-stay retention rule instead),
  *       it no longer takes bookings (its state is in the closed family, or it is a legacy event with none), it has
  *       ended and its retention
- *       line — GREATEST(end_date, audio_closing_date) plus {@link EventErasureConfig#RETENTION_MONTHS} months — is
+ *       line — GREATEST(end_date, audio_closing_date) plus the months the DPO's policy gives the event ({@link RetentionPolicy}) — is
  *       behind us (a dry run locks the event's bookings for its whole length, and before the line it could never
  *       serve as a commit's baseline anyway). For a commit, in addition: commit is enabled on this server, the phrase reads exactly
  *       {@code ERASE EVENT <id>}, and the commit names a dry run of the SAME event that succeeded less than 24
@@ -94,9 +96,32 @@ import java.util.function.Supplier;
  *   <li>The connection is closed.</li>
  * </ol>
  *
+ * <h3>Departed stays (a continuous event, V0169)</h3>
+ *
+ * <p>A continuous event (its type is {@code ongoing}: stays, volunteering) never ends, so it is never removed whole —
+ * that would reach the guests staying now. With the argument {@code scope = "departed"}, a run removes the sensitive
+ * details of the bookings whose person left before a cutoff: today (Europe/London) minus the period the DPO set on that
+ * event (never inherited for a continuous event, {@link RetentionPolicy}). The cutoff is computed HERE, recorded on the
+ * ledger row ({@code kind = 'departed'}, {@code departed_before}), part of the database's statement of intent
+ * ({@code ERASE DEPARTED <id> <YYYY-MM-DD>}), and a commit's dry run must have been made with the same cutoff. The rules
+ * that differ ({@link #departedRefusalFor}): the event must BE continuous; its state and end do not matter (it is
+ * running); the period must be set; a commit's typed phrase is {@code ERASE DEPARTED <id>}. A commit locks nothing on
+ * the event and changes no state; it writes the trail marker on exactly the bookings the function reached (its
+ * {@code sn_target_docs}), which is also what makes a booking no longer "due" on the page.
+ *
+ * <h3>Retention stage 2: anonymising registrations (V0170)</h3>
+ *
+ * <p>With the argument {@code stage = "archive"}, a run calls {@code archive_event_bookings()} instead: the registrations
+ * of a finished event that stage 1 already finalised (or a KBS2 event, which has no state), or a continuous event's stays
+ * departed before today minus its ARCHIVE period, are anonymised (provisional rules, aggregate repo
+ * docs/design/event-archive-anonymisation.md). Its own period ({@link RetentionPolicy}, stage archive), its own phrases
+ * ({@code ARCHIVE EVENT <id>}, {@code ARCHIVE DEPARTED <id>}), its own commit switch
+ * ({@link EventErasureConfig#isArchiveCommitEnabled}), and a dry run vouches only for a commit of the same stage. The
+ * function writes its own trail markers; a whole event's commit moves FINALISED → ARCHIVED.
+ *
  * <h3>What is and is not logged</h3>
  *
- * <p>One line per run: its id, the event, the mode, the outcome, the duration, the super administrator's person
+ * <p>One line per run: its id, the event, the mode, the outcome, the duration, the Data Protection Officer's person
  * id and a few counts. Never a text value — the grid's names stay in the ledger, the database's error text too.
  * The function's NOTICEs are dropped for the same reason.
  *
@@ -111,9 +136,12 @@ final class EventErasureRunner {
 
     static final String NOT_FOUND_KEY = "EventErasureNotFoundError";
     static final String CONTINUOUS_EVENT_KEY = "EventErasureContinuousEventError";
+    static final String NOT_CONTINUOUS_KEY = "EventErasureNotContinuousError";
+    static final String NOT_FINALISED_KEY = "EventArchiveNotFinalisedError";
     static final String NOT_CLOSED_KEY = "EventErasureNotClosedError";
     static final String NOT_ENDED_KEY = "EventErasureNotEndedError";
     static final String RETENTION_NOT_REACHED_KEY = "EventErasureRetentionNotReachedError";
+    static final String RETENTION_UNDEFINED_KEY = "EventErasureRetentionUndefinedError";
     static final String BUSY_KEY = "EventErasureBusyError";
     static final String COMMIT_DISABLED_KEY = "EventErasureCommitDisabledError";
     static final String CONFIRM_MISMATCH_KEY = "EventErasureConfirmMismatchError";
@@ -124,6 +152,10 @@ final class EventErasureRunner {
 
     static final String MODE_PREVIEW = "preview";
     static final String MODE_COMMIT = "commit";
+
+    /** The two scopes of a run: every booking of a finished event, or a continuous event's departed stays. */
+    static final String SCOPE_EVENT = "event";
+    static final String SCOPE_DEPARTED = "departed";
 
     private static final String STATUS_SUCCEEDED = "succeeded";
     private static final String STATUS_FAILED = "failed";
@@ -145,19 +177,25 @@ final class EventErasureRunner {
      * audio_closing_date is set at all: to_char() answers NULL for 'infinity', and a closing date that is set but
      * unreadable must not pass for one that is absent (see {@link #refusalFor}). Last, whether the event's type is
      * continuous (event_type.ongoing, NOT NULL since V0071); LEFT JOIN and coalesce because an event with no type is
-     * simply not a continuous one.
+     * simply not a continuous one. Last, the months the finalise stage keeps its data, as the DPO's policy resolves
+     * them for this event ({@link RetentionPolicy#monthsSql}): NULL while undefined.
      */
-    private static final String EVENT_SQL =
+    static final String EVENT_SQL =
         "select e.id, to_char(e.end_date, 'YYYY-MM-DD'), to_char(e.audio_closing_date, 'YYYY-MM-DD'), e.state::text,"
-        + " e.audio_closing_date is not null, coalesce(t.ongoing, false)"
+        + " e.audio_closing_date is not null, coalesce(t.ongoing, false), "
+        + RetentionPolicy.monthsSql(RetentionPolicy.STAGE_FINALISE) + ", "
+        + RetentionPolicy.monthsSql(RetentionPolicy.STAGE_ARCHIVE)
         + " from event e left join event_type t on t.id = e.type_id where e.id = $1";
 
-    /** Everything that makes a run a valid baseline for a commit, judged by the database's clock. */
+    /**
+     * Everything that makes a run a valid baseline for a commit, judged by the database's clock — including the period
+     * it was judged by: a dry run made under another period vouches for nothing once the DPO changed it.
+     */
     private static final String PREVIEW_SQL =
         "select p.event_id, p.mode, p.status, p.finished_at > now() - interval '24 hours',"
         + " exists (select 1 from event_erasure_run c where c.event_id = p.event_id and c.mode = 'commit'"
-        + " and c.status = 'succeeded' and c.id > p.id),"
-        + " jsonb_typeof(p.grid) = 'array'"
+        + " and c.status = 'succeeded' and c.id > p.id and c.stage = p.stage),"
+        + " jsonb_typeof(p.grid) = 'array', p.retention_months, p.kind, to_char(p.departed_before, 'YYYY-MM-DD'), p.stage"
         + " from event_erasure_run p where p.id = $1";
 
     /** The dry run's grid as rows, in the function's order. */
@@ -172,8 +210,9 @@ final class EventErasureRunner {
     private static final String APPLICATION_NAME_SQL = "select set_config('application_name', $1, false)";
 
     private static final String INSERT_RUN_SQL =
-        "insert into event_erasure_run (id, event_id, mode, status, preview_run_id, requested_by_person_id, state_before, app_name)"
-        + " values ($1, $2, $3, 'running', $4, $5, $6, $7)";
+        "insert into event_erasure_run (id, event_id, mode, status, preview_run_id, requested_by_person_id, state_before, app_name,"
+        + " stage, kind, departed_before, retention_months, triggered_by)"
+        + " values ($1, $2, $3, 'running', $4, $5, $6, $7, $8, $9, $10, $11, 'manual')";
 
     private static final String BEGIN_SQL = "BEGIN ISOLATION LEVEL REPEATABLE READ";
 
@@ -194,6 +233,21 @@ final class EventErasureRunner {
 
     private static final String ERASE_SQL = "select step, metric, value from erase_past_event($1)";
 
+    /** A continuous event's departed stays (V0169): the event and the cutoff, both computed and validated here. */
+    private static final String ERASE_DEPARTED_SQL = "select step, metric, value from erase_departed_bookings($1, $2)";
+
+    /** Retention stage 2 (V0170): the event, and the cutoff for a continuous event's departed stays (NULL: the whole event). */
+    private static final String ARCHIVE_SQL = "select step, metric, value from archive_event_bookings($1, $2::date)";
+
+    /** ARCHIVED is written by a committed anonymisation of a FINALISED event's registrations (V0147 allows only that move). */
+    /**
+     * FINALISED → ARCHIVED, once no booking of the event is left un-anonymised: a booking still owing money, or one with a
+     * volunteering application, keeps the event FINALISED until a later run reaches it. Inside the anonymisation's own
+     * transaction, whose kbs.erase_confirm is the only thing V0170's state guard accepts for ARCHIVED.
+     */
+    private static final String ARCHIVE_STATE_SQL = "update event set state = 'ARCHIVED' where id = $1 and state = 'FINALISED'"
+        + " and not exists (select 1 from document d where d.event_id = $1 and d.archived_date is null)";
+
     /**
      * One trail entry per booking of the event, where it has none yet. The target set is V0077's own
      * ({@code document.event_id = p_event_id}, its sn_target_docs), cancelled bookings included. username is
@@ -204,6 +258,17 @@ final class EventErasureRunner {
         + " select d.id, 'Personal data removed (GDPR retention policy)', 'gdpr-retention', $2"
         + " from document d where d.event_id = $1"
         + " and not exists (select 1 from history h where h.document_id = d.id and h.username = 'gdpr-retention')";
+
+    /**
+     * A departed run's trail entries: one per booking the function reached — its own target set, {@code sn_target_docs},
+     * a temp table it leaves in this session — where it has none yet. The same entry as {@link #MARKERS_SQL}'s; it is
+     * also what tells the page a booking is no longer due ({@link EventErasureLedger#DEPARTED_SQL}).
+     */
+    private static final String MARKERS_DEPARTED_SQL =
+        "insert into history (document_id, comment, username, user_person_id)"
+        + " select t.id, 'Personal data removed (GDPR retention policy)', 'gdpr-retention', $1"
+        + " from sn_target_docs t"
+        + " where not exists (select 1 from history h where h.document_id = t.id and h.username = 'gdpr-retention')";
 
     /** FINALISED is written by a committed removal of a RECONCILED event, and by nothing else (decision D3). */
     private static final String FINALISE_SQL = "update event set state = 'FINALISED' where id = $1 and state = 'RECONCILED'";
@@ -227,19 +292,40 @@ final class EventErasureRunner {
 
     /**
      * The event as the server read it ({@link #eventFacts}). {@code audioClosingDateSet} is true even when the date could
-     * not be read; {@code ongoing} is the event type's continuous flag, false for an event with no type.
+     * not be read; {@code ongoing} is the event type's continuous flag, false for an event with no type;
+     * {@code retentionMonths} is the DPO's period for it, null while undefined.
      */
     record EventFacts(int id, LocalDate endDate, LocalDate audioClosingDate, String state, boolean audioClosingDateSet,
-                      boolean ongoing) {
+                      boolean ongoing, Integer retentionMonths, Integer archiveMonths) {
+        /** Without an archive period (the checks of stage 1 need none). */
+        EventFacts(int id, LocalDate endDate, LocalDate audioClosingDate, String state, boolean audioClosingDateSet,
+                   boolean ongoing, Integer retentionMonths) {
+            this(id, endDate, audioClosingDate, state, audioClosingDateSet, ongoing, retentionMonths, null);
+        }
     }
 
     /** A refusal the screen can explain: the key it maps, and the server's short text. */
     record Refusal(String key, String text) {
     }
 
-    /** A run that has passed every check and is about to get its ledger row. */
+    /**
+     * A run that has passed every check and is about to get its ledger row. {@code departedBefore} is null for a whole
+     * event, the cutoff for a continuous event's departed stays.
+     */
     private record RunRequest(EventFacts event, boolean commit, Integer previewRunId, List<GridRow> baseline,
-                              Integer personId) {
+                              Integer personId, LocalDate departedBefore, String stage) {
+        boolean departed() {
+            return departedBefore != null;
+        }
+
+        boolean archive() {
+            return RetentionPolicy.STAGE_ARCHIVE.equals(stage);
+        }
+
+        /** The period the run was judged by: the stage's own. */
+        Integer months() {
+            return archive() ? event.archiveMonths() : event.retentionMonths();
+        }
     }
 
     /** A run with its ledger row. The outcome fields are for the log line, written on the connection's thread. */
@@ -269,8 +355,11 @@ final class EventErasureRunner {
     /**
      * Checks the request and, when it passes, starts the run.
      *
-     * @param arguments {@code [eventId, mode, confirmPhrase, previewRunId]}, as the bus decoded them
-     * @param caller    the super administrator {@link EventErasureAccess} allowed
+     * @param arguments {@code [eventId, mode, confirmPhrase, previewRunId, scope, stage]}, as the bus decoded them;
+     *                  scope is {@code "event"} (or absent) or {@code "departed"}; stage is {@code "finalise"} (or
+     *                  absent: stage 1, remove sensitive details) or {@code "archive"} (stage 2, anonymise
+     *                  registrations, V0170)
+     * @param caller    the Data Protection Officer {@link EventErasureAccess} allowed
      * @return the run's id, as soon as its ledger row exists
      */
     static Future<Integer> start(Object[] arguments, EventErasureAccess.Caller caller) {
@@ -278,6 +367,15 @@ final class EventErasureRunner {
         String mode = EventErasureArguments.string(EventErasureArguments.at(arguments, 1));
         if (eventId == null || !(MODE_PREVIEW.equals(mode) || MODE_COMMIT.equals(mode)))
             return refusal(NOT_FOUND_KEY, "No such event, or the request is malformed", eventId, mode, caller.personId());
+        Object scopeArgument = EventErasureArguments.at(arguments, 4);
+        boolean departed = SCOPE_DEPARTED.equals(scopeArgument);
+        if (scopeArgument != null && !departed && !SCOPE_EVENT.equals(scopeArgument))
+            return refusal(NOT_FOUND_KEY, "No such event, or the request is malformed", eventId, mode, caller.personId());
+        Object stageArgument = EventErasureArguments.at(arguments, 5);
+        boolean archive = RetentionPolicy.STAGE_ARCHIVE.equals(stageArgument);
+        if (stageArgument != null && !archive && !RetentionPolicy.STAGE_FINALISE.equals(stageArgument))
+            return refusal(NOT_FOUND_KEY, "No such event, or the request is malformed", eventId, mode, caller.personId());
+        String stage = archive ? RetentionPolicy.STAGE_ARCHIVE : RetentionPolicy.STAGE_FINALISE;
         boolean commit = MODE_COMMIT.equals(mode);
         String confirmPhrase = EventErasureArguments.string(EventErasureArguments.at(arguments, 2));
         Object previewRunIdArgument = EventErasureArguments.at(arguments, 3);
@@ -286,17 +384,25 @@ final class EventErasureRunner {
             if (event == null)
                 return refusal(NOT_FOUND_KEY, "No such event, or the request is malformed", eventId, mode, caller.personId());
             Integer previewRunId = commit ? EventErasureArguments.positiveId(previewRunIdArgument) : null;
-            Refusal refused = refusalFor(event, commit, LocalDate.now(BUSINESS_ZONE), EventErasureConfig.isCommitEnabled(),
-                confirmPhrase, previewRunId);
+            LocalDate today = LocalDate.now(BUSINESS_ZONE);
+            Refusal refused = archive
+                ? archiveRefusalFor(event, departed, commit, today, EventErasureConfig.isArchiveCommitEnabled(), confirmPhrase, previewRunId)
+                : departed
+                ? departedRefusalFor(event, commit, EventErasureConfig.isCommitEnabled(), confirmPhrase, previewRunId)
+                : refusalFor(event, commit, today, EventErasureConfig.isCommitEnabled(), confirmPhrase, previewRunId);
             if (refused != null)
                 return refusal(refused.key(), refused.text(), eventId, mode, caller.personId());
+            LocalDate departedBefore = !departed ? null
+                : archive ? today.minusMonths(event.archiveMonths()) : departedBefore(event, today);
             if (!commit)
-                return open(new RunRequest(event, false, null, List.of(), caller.personId()));
-            return loadBaseline(eventId, previewRunId).compose(baseline -> baseline == null
+                return open(new RunRequest(event, false, null, List.of(), caller.personId(), departedBefore, stage));
+            Integer months = archive ? event.archiveMonths() : event.retentionMonths();
+            return loadBaseline(eventId, previewRunId, months, departedBefore, stage).compose(baseline -> baseline == null
                 ? refusal(PREVIEW_REQUIRED_KEY, "Dry run " + previewRunId + " cannot vouch for this commit: it must be a"
-                    + " successful dry run of event " + eventId + ", finished less than 24 hours ago, with no commit since",
+                    + " successful dry run of event " + eventId + (departed ? " with today's departure cutoff" : "")
+                    + ", finished less than 24 hours ago, with no commit since",
                     eventId, mode, caller.personId())
-                : open(new RunRequest(event, true, previewRunId, baseline, caller.personId())));
+                : open(new RunRequest(event, true, previewRunId, baseline, caller.personId(), departedBefore, stage)));
         }).recover(cause -> startFailure(cause, eventId, mode, caller.personId()));
     }
 
@@ -307,7 +413,7 @@ final class EventErasureRunner {
      */
     private static Future<Integer> startFailure(Throwable cause, Integer eventId, String mode, Integer personId) {
         String message = cause == null ? null : cause.getMessage();
-        if (message != null && message.startsWith("[EventErasure"))
+        if (message != null && (message.startsWith("[EventErasure") || message.startsWith("[EventArchive")))
             return Future.failedFuture(message);
         Console.log(LOG_PREFIX + "Could not start a " + mode + " of event " + eventId + " for person " + personId + ": " + message);
         return Future.failedFuture("[%s] The removal could not be started".formatted(SQL_KEY));
@@ -333,7 +439,8 @@ final class EventErasureRunner {
      *       balances or buying recordings it would stall them. And it exists only to be a commit's baseline for 24
      *       hours, which it can never be before the line. A closing date that is set but unreadable ('infinity':
      *       recordings that never close) puts the line out of reach, as GREATEST(end_date, audio_closing_date) +
-     *       3 months would: refused, never a fall back to end_date.</li>
+     *       the period would: refused, never a fall back to end_date. Before that, the period itself: no period the
+     *       DPO confirmed for this event ({@code EventErasureRetentionUndefinedError}) means no removal at all.</li>
      *   <li>COMMIT ONLY. Commit is enabled on this server, the phrase reads exactly {@code ERASE EVENT <id>}, and a
      *       dry run is named (whether that dry run can vouch is read afterwards, by {@link #loadBaseline}).</li>
      * </ol>
@@ -352,6 +459,9 @@ final class EventErasureRunner {
                 + " collect new personal data after its removal");
         if (event.endDate() == null || !event.endDate().isBefore(today))
             return new Refusal(NOT_ENDED_KEY, "Event " + eventId + " has not ended yet");
+        if (event.retentionMonths() == null)
+            return new Refusal(RETENTION_UNDEFINED_KEY, "No retention period is confirmed for event " + eventId
+                + ": the Data Protection Officer sets it first");
         if (event.audioClosingDateSet() && event.audioClosingDate() == null)
             return new Refusal(RETENTION_NOT_REACHED_KEY, "Event " + eventId + "'s recordings have no closing date the"
                 + " retention rule can reach");
@@ -369,12 +479,134 @@ final class EventErasureRunner {
         return null;
     }
 
+    /**
+     * What a start of a departed run decides, in this order (the first rule that fails is the answer):
+     *
+     * <ol>
+     *   <li>BOTH MODES. The event IS continuous ({@code EventErasureNotContinuousError}): a finished event is removed
+     *       whole, once its own retention line has passed — a departed run would leave its other bookings behind.</li>
+     *   <li>BOTH MODES. The DPO set the event's own period ({@code EventErasureRetentionUndefinedError}); a continuous
+     *       event never inherits one.</li>
+     *   <li>COMMIT ONLY. Commit is enabled, the phrase reads exactly {@code ERASE DEPARTED <id>}, and a dry run is
+     *       named (whether it can vouch — same cutoff, under a day old — is read by {@link #loadBaseline}).</li>
+     * </ol>
+     *
+     * <p>No state or end-date rule: the event is running, which is the point. The database refuses a cutoff after
+     * today on its own; the cutoff computed here is always at least a month back (periods are 1–240 months).
+     */
+    static Refusal departedRefusalFor(EventFacts event, boolean commit, boolean commitEnabled, String confirmPhrase,
+                                      Integer previewRunId) {
+        int eventId = event.id();
+        if (!event.ongoing())
+            return new Refusal(NOT_CONTINUOUS_KEY, "Event " + eventId + " is not a continuous event: its data is removed"
+                + " whole, once its retention period has passed");
+        if (event.retentionMonths() == null)
+            return new Refusal(RETENTION_UNDEFINED_KEY, "No retention period is set for continuous event " + eventId
+                + ": the Data Protection Officer sets the event's own period first");
+        if (!commit)
+            return null;
+        if (!commitEnabled)
+            return new Refusal(COMMIT_DISABLED_KEY, "Removal can only be previewed on this server");
+        if (!departedConfirmPhrase(eventId).equals(confirmPhrase))
+            return new Refusal(CONFIRM_MISMATCH_KEY, "The confirmation phrase does not match");
+        if (previewRunId == null)
+            return new Refusal(PREVIEW_REQUIRED_KEY, "A commit needs a recent dry run of the same event's departed stays");
+        return null;
+    }
+
+    /**
+     * What a start of retention stage 2 decides (anonymising registrations, V0170), in this order:
+     *
+     * <ol>
+     *   <li>A whole event: not continuous ({@code EventErasureContinuousEventError}); finalised by stage 1 — state
+     *       FINALISED (or ARCHIVED, re-run), or a KBS2 event with no state ({@code EventArchiveNotFinalisedError}; the
+     *       database also refuses any booking still holding free text); ended; its ARCHIVE period set
+     *       ({@code EventErasureRetentionUndefinedError}); the archive line — the later of the end and the recordings
+     *       closing, plus that period — behind us ({@code EventErasureRetentionNotReachedError}).</li>
+     *   <li>Departed stays: the event is continuous ({@code EventErasureNotContinuousError}); its own archive period
+     *       set.</li>
+     *   <li>COMMIT ONLY: the archive switch is on, the phrase reads {@code ARCHIVE EVENT <id>} (or
+     *       {@code ARCHIVE DEPARTED <id>}), a dry run is named.</li>
+     * </ol>
+     */
+    static Refusal archiveRefusalFor(EventFacts event, boolean departed, boolean commit, LocalDate today,
+                                     boolean archiveCommitEnabled, String confirmPhrase, Integer previewRunId) {
+        int eventId = event.id();
+        if (departed) {
+            if (!event.ongoing())
+                return new Refusal(NOT_CONTINUOUS_KEY, "Event " + eventId + " is not a continuous event: its registrations are"
+                    + " anonymised whole");
+        } else {
+            if (event.ongoing())
+                return new Refusal(CONTINUOUS_EVENT_KEY, "Event " + eventId + " is a continuous event: its registrations are"
+                    + " anonymised per stay, by departure");
+            if (event.state() != null && !"FINALISED".equals(event.state()) && !"ARCHIVED".equals(event.state()))
+                return new Refusal(NOT_FINALISED_KEY, "Remove event " + eventId + "'s sensitive details first: only a"
+                    + " finalised event's registrations are anonymised");
+            if (event.endDate() == null || !event.endDate().isBefore(today))
+                return new Refusal(NOT_ENDED_KEY, "Event " + eventId + " has not ended yet");
+        }
+        if (event.archiveMonths() == null)
+            return new Refusal(RETENTION_UNDEFINED_KEY, "No period for anonymising registrations is set for event " + eventId
+                + ": the Data Protection Officer sets it first");
+        if (!departed) {
+            if (event.audioClosingDateSet() && event.audioClosingDate() == null)
+                return new Refusal(RETENTION_NOT_REACHED_KEY, "Event " + eventId + "'s recordings have no closing date the"
+                    + " retention rule can reach");
+            LocalDate archiveLine = archiveLine(event);
+            if (!archiveLine.isBefore(today))
+                return new Refusal(RETENTION_NOT_REACHED_KEY, "Event " + eventId + " keeps its registrations until " + archiveLine);
+        }
+        if (!commit)
+            return null;
+        if (!archiveCommitEnabled)
+            return new Refusal(COMMIT_DISABLED_KEY, "Anonymising registrations can only be previewed on this server");
+        if (!archiveConfirmPhrase(eventId, departed).equals(confirmPhrase))
+            return new Refusal(CONFIRM_MISMATCH_KEY, "The confirmation phrase does not match");
+        if (previewRunId == null)
+            return new Refusal(PREVIEW_REQUIRED_KEY, "A commit needs a recent dry run of the same anonymisation");
+        return null;
+    }
+
+    /** GREATEST(end_date, audio_closing_date::date) + the event's ARCHIVE period. */
+    static LocalDate archiveLine(EventFacts event) {
+        LocalDate anchor = event.audioClosingDate() != null && event.audioClosingDate().isAfter(event.endDate())
+            ? event.audioClosingDate() : event.endDate();
+        return anchor.plusMonths(event.archiveMonths());
+    }
+
+    /** The phrase a person types to commit stage 2: {@code ARCHIVE EVENT <id>}, or {@code ARCHIVE DEPARTED <id>}. */
+    static String archiveConfirmPhrase(int eventId, boolean departed) {
+        return (departed ? "ARCHIVE DEPARTED " : "ARCHIVE EVENT ") + eventId;
+    }
+
+    /** The database's statement of intent for a stage-2 run: the typed phrase, plus the cutoff for departed stays. */
+    static String archiveDatabasePhrase(int eventId, LocalDate departedBefore) {
+        return departedBefore == null ? archiveConfirmPhrase(eventId, false) : archiveConfirmPhrase(eventId, true) + " " + departedBefore;
+    }
+
+    /** The departure cutoff of a continuous event: today minus its period (null when it has none). */
+    static LocalDate departedBefore(EventFacts event, LocalDate today) {
+        return event.retentionMonths() == null ? null : today.minusMonths(event.retentionMonths());
+    }
+
+    /** The phrase a person types to commit a departed run: the id only, the cutoff is the server's. */
+    static String departedConfirmPhrase(int eventId) {
+        return "ERASE DEPARTED " + eventId;
+    }
+
+    /** The database's statement of intent for a run: V0077's, or V0169's with the cutoff (ISO date) in it. */
+    static String databasePhrase(int eventId, LocalDate departedBefore) {
+        return departedBefore == null ? confirmPhrase(eventId) : departedConfirmPhrase(eventId) + " " + departedBefore;
+    }
+
     /** EVENT_SQL's row as the rules read it, or null when there is no such event. */
     static EventFacts eventFacts(int eventId, QueryResult result) {
         if (result == null || result.getRowCount() == 0)
             return null;
         return new EventFacts(eventId, date(result.getValue(0, 1)), date(result.getValue(0, 2)),
-            (String) result.getValue(0, 3), Boolean.TRUE.equals(result.getValue(0, 4)), Boolean.TRUE.equals(result.getValue(0, 5)));
+            (String) result.getValue(0, 3), Boolean.TRUE.equals(result.getValue(0, 4)), Boolean.TRUE.equals(result.getValue(0, 5)),
+            asInteger(result.getValue(0, 6)), asInteger(result.getValue(0, 7)));
     }
 
     /** The statement of intent V0077 demands, built from the validated id — for the phrase check and the database. */
@@ -382,11 +614,11 @@ final class EventErasureRunner {
         return "ERASE EVENT " + eventId;
     }
 
-    /** GREATEST(end_date, audio_closing_date::date) + RETENTION_MONTHS: a run of either mode is allowed once this is past. */
+    /** GREATEST(end_date, audio_closing_date::date) + the event's period: a run of either mode is allowed once this is past. */
     private static LocalDate retentionLine(EventFacts event) {
         LocalDate anchor = event.audioClosingDate() != null && event.audioClosingDate().isAfter(event.endDate())
             ? event.audioClosingDate() : event.endDate();
-        return anchor.plusMonths(EventErasureConfig.RETENTION_MONTHS);
+        return anchor.plusMonths(event.retentionMonths());
     }
 
     private static Future<EventFacts> loadEvent(int eventId) {
@@ -394,7 +626,8 @@ final class EventErasureRunner {
     }
 
     /** The dry run's grid when that run may serve as this commit's baseline, else null. */
-    private static Future<List<GridRow>> loadBaseline(int eventId, int previewRunId) {
+    private static Future<List<GridRow>> loadBaseline(int eventId, int previewRunId, Integer retentionMonths,
+                                                      LocalDate departedBefore, String stage) {
         return query(PREVIEW_SQL, previewRunId).compose(preview -> {
             boolean usable = preview != null && preview.getRowCount() == 1
                 && Objects.equals(asInteger(preview.getValue(0, 0)), eventId)
@@ -402,7 +635,12 @@ final class EventErasureRunner {
                 && STATUS_SUCCEEDED.equals(preview.getValue(0, 2))
                 && Boolean.TRUE.equals(preview.getValue(0, 3))   // finished less than 24 hours ago
                 && Boolean.FALSE.equals(preview.getValue(0, 4))  // no successful commit of the event since
-                && Boolean.TRUE.equals(preview.getValue(0, 5));  // it has a grid, as an array
+                && Boolean.TRUE.equals(preview.getValue(0, 5))   // it has a grid, as an array
+                && Objects.equals(asInteger(preview.getValue(0, 6)), retentionMonths) // judged by today's period
+                // the same scope, and for departed stays the same cutoff: the dry run vouches for exactly who goes
+                && Objects.equals(preview.getValue(0, 7), departedBefore == null ? SCOPE_EVENT : SCOPE_DEPARTED)
+                && Objects.equals(preview.getValue(0, 8), departedBefore == null ? null : departedBefore.toString())
+                && Objects.equals(preview.getValue(0, 9), stage); // a dry run vouches only for its own stage
             if (!usable)
                 return Future.succeededFuture(null);
             return query(BASELINE_SQL, previewRunId).map(rows -> {
@@ -475,7 +713,11 @@ final class EventErasureRunner {
                         .addValue(request.previewRunId())
                         .addValue(request.personId())
                         .addValue(request.event().state())
-                        .addValue(applicationName)))
+                        .addValue(applicationName)
+                        .addValue(request.stage())
+                        .addValue(request.departed() ? SCOPE_DEPARTED : SCOPE_EVENT)
+                        .addValue(request.departedBefore())
+                        .addValue(request.months() == null ? null : request.months().shortValue())))
                     .map(ignored -> {
                         runInBackground(connection, new Run(runId, request));
                         return runId;
@@ -489,12 +731,21 @@ final class EventErasureRunner {
         io.vertx.core.Future<Void> work;
         try {
             work = connection.query(BEGIN_SQL).execute()
-                .compose(ignored -> connection.preparedQuery(SETTINGS_SQL).execute(Tuple.of(confirmPhrase(run.eventId()))))
-                .compose(ignored -> run.request.commit() ? stillClosed(connection, run) : io.vertx.core.Future.succeededFuture(true))
+                .compose(ignored -> connection.preparedQuery(SETTINGS_SQL)
+                    .execute(Tuple.of(run.request.archive()
+                        ? archiveDatabasePhrase(run.eventId(), run.request.departedBefore())
+                        : databasePhrase(run.eventId(), run.request.departedBefore()))))
+                // A departed run's event is running by design: no closed-state lock to take
+                .compose(ignored -> run.request.commit() && !run.request.departed()
+                    ? stillClosed(connection, run) : io.vertx.core.Future.succeededFuture(true))
                 .compose(stillClosed -> !stillClosed
                     ? rollbackAndFinish(connection, run, STATUS_REFUSED, NOT_CLOSED_KEY,
                         "the event was reopened while the removal was starting")
-                    : connection.preparedQuery(ERASE_SQL).execute(Tuple.of(run.eventId()))
+                    : (run.request.archive()
+                        ? connection.preparedQuery(ARCHIVE_SQL).execute(Tuple.tuple().addValue(run.eventId()).addValue(run.request.departedBefore()))
+                        : run.request.departed()
+                        ? connection.preparedQuery(ERASE_DEPARTED_SQL).execute(Tuple.of(run.eventId(), run.request.departedBefore()))
+                        : connection.preparedQuery(ERASE_SQL).execute(Tuple.of(run.eventId())))
                         .compose(rows -> {
                             run.grid = gridOf(rows);
                             return run.request.commit() ? commit(connection, run) : preview(connection, run);
@@ -504,7 +755,13 @@ final class EventErasureRunner {
             work = failed(connection, run, e);
         }
         work.eventually(connection::close)
-            .onComplete(result -> logRun(run, result.failed() ? result.cause() : null));
+            .onComplete(result -> {
+                // Any commit changes who is due: a departed or stage-2 run its own stays or bookings, and a whole-event
+                // stage-1 commit makes its event due for stage 2. The next runs read counts again.
+                if (run.request.commit())
+                    EventErasureLedger.forgetDepartedCounts();
+                logRun(run, result.failed() ? result.cause() : null);
+            });
     }
 
     /**
@@ -532,15 +789,22 @@ final class EventErasureRunner {
         if (drift != null)
             return rollbackAndFinish(connection, run, STATUS_FAILED, DRIFT_KEY,
                 "The event changed since dry run " + run.request.previewRunId() + ": " + drift);
+        if (run.request.archive())
+            return commitArchive(connection, run);
         String queued = valueOf(run.grid, "preflight", "executed_payloads_to_tag");
         if (!"0".equals(queued))
             return rollbackAndFinish(connection, run, STATUS_REFUSED, QUEUED_PAYLOADS_KEY,
                 "preflight/executed_payloads_to_tag = " + queued + ": executed KBS2 payloads of this event would keep"
                 + " its text, and this run does not rewrite them");
-        return connection.preparedQuery(MARKERS_SQL).execute(Tuple.of(run.eventId(), run.request.personId()))
-            .compose(markers -> {
-                run.markers = markers.rowCount();
-                return connection.preparedQuery(FINALISE_SQL).execute(Tuple.of(run.eventId()));
+        io.vertx.core.Future<RowSet<Row>> markers = run.request.departed()
+            ? connection.preparedQuery(MARKERS_DEPARTED_SQL).execute(Tuple.of(run.request.personId()))
+            : connection.preparedQuery(MARKERS_SQL).execute(Tuple.of(run.eventId(), run.request.personId()));
+        return markers
+            .compose(written -> {
+                run.markers = written.rowCount();
+                // A continuous event keeps running: its state is not the removal's to change
+                return run.request.departed() ? io.vertx.core.Future.succeededFuture()
+                    : connection.preparedQuery(FINALISE_SQL).execute(Tuple.of(run.eventId())).mapEmpty();
             })
             .compose(ignored -> connection.preparedQuery(STATE_SQL).execute(Tuple.of(run.eventId())))
             .compose(state -> finish(connection, run, STATUS_SUCCEEDED, null, null, firstString(state)))
@@ -550,6 +814,22 @@ final class EventErasureRunner {
                 // erasure its own record says did not happen. Fail instead; the recover rolls it back. (That is the
                 // row ended BEFORE this transaction's snapshot; ended after it, the UPDATE above fails with 40001
                 // instead, and the same recover rolls back.)
+                : io.vertx.core.Future.failedFuture("The run's ledger row is no longer running"))
+            .mapEmpty();
+    }
+
+    /**
+     * A stage-2 commit, after the drift check: the function refused queued mail and payloads itself and wrote its own
+     * markers; a whole event moves FINALISED → ARCHIVED (a KBS2 event keeps no state, a continuous one keeps its own).
+     */
+    private static io.vertx.core.Future<Void> commitArchive(PgConnection connection, Run run) {
+        io.vertx.core.Future<Void> state = run.request.departed() ? io.vertx.core.Future.succeededFuture()
+            : connection.preparedQuery(ARCHIVE_STATE_SQL).execute(Tuple.of(run.eventId())).mapEmpty();
+        return state
+            .compose(ignored -> connection.preparedQuery(STATE_SQL).execute(Tuple.of(run.eventId())))
+            .compose(after -> finish(connection, run, STATUS_SUCCEEDED, null, null, firstString(after)))
+            .compose(updated -> updated == 1
+                ? connection.query("COMMIT").execute()
                 : io.vertx.core.Future.failedFuture("The run's ledger row is no longer running"))
             .mapEmpty();
     }
@@ -566,9 +846,25 @@ final class EventErasureRunner {
     private static io.vertx.core.Future<Void> failed(PgConnection connection, Run run, Throwable cause) {
         run.sqlState = sqlStateOf(cause);
         String error = truncate(errorText(cause));
+        String key = archiveRefusalKey(error);
         return connection.query("ROLLBACK").execute()
-            .transform(ignored -> finish(connection, run, STATUS_FAILED, SQL_KEY, error, run.request.event().state()))
+            .transform(ignored -> finish(connection, run, key != null ? STATUS_REFUSED : STATUS_FAILED, key != null ? key : SQL_KEY,
+                error, run.request.event().state()))
             .mapEmpty();
+    }
+
+    /** The refusals V0170 raises itself, by key: the screen explains each; any other failure stays a SQL error. */
+    static final Set<String> ARCHIVE_SQL_REFUSALS = Set.of("EventArchiveFinaliseFirstError", "EventArchiveQueuedMailError",
+        "EventArchiveQueuedPayloadsError", "EventArchiveSchemaChangedError", "EventArchiveContinuousEventError",
+        "EventArchiveNotContinuousError", "EventArchiveNotEndedError");
+    private static final java.util.regex.Pattern ARCHIVE_REFUSAL = java.util.regex.Pattern.compile("\\[(EventArchive[A-Za-z]+Error)\\]");
+
+    /** The V0170 refusal key in a failure's text (SQLSTATE, then the message), or null when it is none of them. */
+    static String archiveRefusalKey(String errorText) {
+        if (errorText == null)
+            return null;
+        java.util.regex.Matcher m = ARCHIVE_REFUSAL.matcher(errorText);
+        return m.find() && ARCHIVE_SQL_REFUSALS.contains(m.group(1)) ? m.group(1) : null;
     }
 
     /**
@@ -616,12 +912,15 @@ final class EventErasureRunner {
         return EventErasureJson.array(rows);
     }
 
-    /** The rows a commit must find as its dry run found them: every preflight count, the bookings, the end date. */
+    /**
+     * The rows a commit must find as its dry run found them: every preflight count, the bookings, the end date — and,
+     * for departed stays, the scope rows (the cutoff and how many stays it reaches).
+     */
     private static Map<String, String> driftChecked(List<GridRow> grid) {
         Map<String, String> checked = new LinkedHashMap<>();
         if (grid != null)
             for (GridRow row : grid)
-                if ("preflight".equals(row.step())
+                if ("preflight".equals(row.step()) || "scope".equals(row.step())
                     || ("event".equals(row.step()) && ("bookings".equals(row.metric()) || "end_date".equals(row.metric()))))
                     checked.put(row.step() + "/" + row.metric(), row.value());
         return checked;
@@ -659,7 +958,9 @@ final class EventErasureRunner {
     private static void logRun(Run run, Throwable unrecorded) {
         long millis = (System.nanoTime() - run.startNanos) / 1_000_000;
         StringBuilder line = new StringBuilder(LOG_PREFIX).append("Run ").append(run.id)
-            .append(" (").append(run.request.commit() ? MODE_COMMIT : MODE_PREVIEW).append(") of event ").append(run.eventId())
+            .append(" (").append(run.request.archive() ? "archive " : "").append(run.request.commit() ? MODE_COMMIT : MODE_PREVIEW)
+            .append(run.request.departed() ? ", departed before " + run.request.departedBefore() : "")
+            .append(") of event ").append(run.eventId())
             .append(" by person ").append(run.request.personId()).append(": ")
             .append(run.status == null ? "ended unrecorded" : run.status)
             .append(" in ").append(millis / 1000).append('.').append(millis % 1000 / 100).append(" s");
@@ -676,7 +977,7 @@ final class EventErasureRunner {
         }
         if (run.markers >= 0)
             line.append(", markers ").append(run.markers);
-        if (run.request.commit() && STATUS_SUCCEEDED.equals(run.status))
+        if (run.request.commit() && STATUS_SUCCEEDED.equals(run.status) && !run.request.departed())
             line.append(", state ").append(run.request.event().state()).append(" -> ").append(run.stateAfter);
         if (unrecorded != null)
             // The ledger write itself failed (the connection is gone): the row stays 'running' until the next
@@ -716,7 +1017,7 @@ final class EventErasureRunner {
         }
     }
 
-    private static Integer asInteger(Object value) {
+    static Integer asInteger(Object value) {
         return value instanceof Number n ? n.intValue() : null;
     }
 

@@ -8,7 +8,7 @@ import dev.webfx.platform.util.Strings;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Whether a personal-data removal may COMMIT on this server, and how long an event's data is kept first.
+ * Whether a personal-data removal may COMMIT on this server.
  *
  * <p><b>The commit switch fails closed.</b> Removal ships dry-run-only: the design's enablement ladder
  * wants the DPO's sign-off before the back office can make an irreversible change, so a commit is refused
@@ -24,10 +24,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * {@code ${{ EVENT_ERASURE_COMMIT_ENABLED | false }}}; that file says how an environment turns it on, and
  * why a line in {@code public-variables.properties} does not.
  *
- * <p><b>The retention period is not configurable.</b> Three months after the later of the event's end and its
- * recordings closing is the managers' decision (D5 in the aggregate repo's docs/design/event-lifecycle-retention-design.md), so it
- * is a constant here, reported to the lifecycle page by the runs endpoint so the screen explains the same
- * line the server enforces.
+ * <p><b>The retention period is not here.</b> It used to be a constant (three months, decision D5); since V0168 the
+ * Data Protection Officer sets it per stage, organisation and event ({@link RetentionPolicy}), and a stage stays locked
+ * until they confirm its default.
  *
  * @author Claude Code
  */
@@ -39,14 +38,18 @@ final class EventErasureConfig {
     /** Where the switch lives; matches the module's declare@ file and the server's src-root.json. */
     static final String CONFIG_PATH = "modality.event.server.erasure";
 
-    /** Managers' decision D5: data is kept this many months after GREATEST(end_date, audio_closing_date). */
-    static final int RETENTION_MONTHS = 3;
-
     private static final String LOG_PREFIX = "[event-erasure] ";
 
     // Written once by the config-loaded callback, read by every start: volatile is the contract. False until
     // then, which is the fail-closed reading of "not known yet".
     private static volatile boolean commitEnabled;
+
+    /**
+     * Retention stage 2 (anonymising registrations, V0170): a switch of its own, read from the same node
+     * ({@code archiveCommitEnabled}, from {@code EVENT_ARCHIVE_COMMIT_ENABLED}), off until the DPO confirms the stage's
+     * rules. Like the first, it fails closed: absent (src-root.json not regenerated yet) or anything but "true" is off.
+     */
+    private static volatile boolean archiveCommitEnabled;
 
     private static final AtomicBoolean LISTENING = new AtomicBoolean();
 
@@ -64,6 +67,7 @@ final class EventErasureConfig {
     private static void onConfigLoaded(Config config) {
         if (config == null) {
             commitEnabled = false;
+            archiveCommitEnabled = false;
             Console.log(LOG_PREFIX + "⚠️ " + CONFIG_PATH + " is missing from the server's configuration (src-root.json"
                         + " was not regenerated with `webfx update`?) — personal-data removal is DRY-RUN ONLY on this server");
             return;
@@ -75,9 +79,19 @@ final class EventErasureConfig {
             value = null;
         }
         commitEnabled = "true".equalsIgnoreCase(value);
+        String archiveValue;
+        try {
+            archiveValue = Strings.trim(config.getString("archiveCommitEnabled"));
+        } catch (RuntimeException e) {
+            archiveValue = null;
+        }
+        archiveCommitEnabled = "true".equalsIgnoreCase(archiveValue);
+        Console.log(LOG_PREFIX + (archiveCommitEnabled
+            ? "Anonymising registrations COMMIT is ENABLED on this server (EVENT_ARCHIVE_COMMIT_ENABLED=true)"
+            : "Anonymising registrations is DRY-RUN ONLY on this server (archiveCommitEnabled is not true)"));
         if (commitEnabled)
             Console.log(LOG_PREFIX + "Personal-data removal COMMIT is ENABLED on this server"
-                        + " (EVENT_ERASURE_COMMIT_ENABLED=true): super administrators can remove a past event's guest data for good");
+                        + " (EVENT_ERASURE_COMMIT_ENABLED=true): Data Protection Officers can remove a past event's guest data for good");
         else
             Console.log(LOG_PREFIX + "Personal-data removal is DRY-RUN ONLY on this server (commitEnabled is not true)");
     }
@@ -85,5 +99,10 @@ final class EventErasureConfig {
     /** True only once the configuration has loaded and said {@code true} (in any letter case). */
     static boolean isCommitEnabled() {
         return commitEnabled;
+    }
+
+    /** The same, for retention stage 2 (anonymising registrations). */
+    static boolean isArchiveCommitEnabled() {
+        return archiveCommitEnabled;
     }
 }
