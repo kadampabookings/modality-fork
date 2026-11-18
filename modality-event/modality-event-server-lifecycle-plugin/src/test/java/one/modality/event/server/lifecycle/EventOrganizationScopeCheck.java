@@ -123,12 +123,17 @@ public class EventOrganizationScopeCheck {
         Future<String> gated = EventErasureAccess.whenHoldsInOrganization("check", stateless, Future.succeededFuture(151), true,
             () -> { ran[0] = true; return Future.succeededFuture("ran"); });
         check("the gate refuses it, and the work does not run", gated.failed() && !ran[0]);
+        check("...saying it is another organization's (the caller is a DPO; the screens list it by organization)",
+            gated.cause().getMessage().startsWith("[" + EventErasureAccess.NOT_YOUR_ORGANIZATION_KEY + "] "));
         Future<String> noTarget = EventErasureAccess.whenHoldsInOrganization("check", stateless, Future.succeededFuture(null), true,
             () -> { ran[0] = true; return Future.succeededFuture("ran"); });
         check("a target with no organization is refused", noTarget.failed() && !ran[0]);
+        check("...with the refusal that says nothing (nothing to name: it may not exist)",
+            !noTarget.cause().getMessage().contains(EventErasureAccess.NOT_YOUR_ORGANIZATION_KEY));
         Future<String> failedLookup = EventErasureAccess.whenHoldsInOrganization("check", stateless, Future.failedFuture("db down"), true,
             () -> { ran[0] = true; return Future.succeededFuture("ran"); });
         check("a lookup that fails is refused", failedLookup.failed() && !ran[0]);
+        check("...also without naming an organization", !failedLookup.cause().getMessage().contains(EventErasureAccess.NOT_YOUR_ORGANIZATION_KEY));
 
         System.out.println(pass + " passed, " + fail + " failed");
         if (fail > 0)

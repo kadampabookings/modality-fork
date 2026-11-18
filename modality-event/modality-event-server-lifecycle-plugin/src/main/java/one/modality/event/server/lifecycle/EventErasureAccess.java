@@ -200,6 +200,11 @@ final class EventErasureAccess {
      * data-controller question is answered (admin-tiers plan, Phase 0); an event belongs to one organization, so it
      * need not wait.
      *
+     * <p>A refusal for ANOTHER organization's target says so ({@link #NOT_YOUR_ORGANIZATION_KEY}): the caller is a Data
+     * Protection Officer, and the screens that offer these actions already list every organization's events by
+     * organization, so naming the reason discloses nothing they cannot see — and "something went wrong" told them
+     * nothing they could act on. A target with no organization (gone, malformed) keeps the refusal that says nothing.
+     *
      * @param organizationId the target's organization, looked up by the caller (null: no such target — refused)
      * @param fresh          from grants recomputed for this one call: for what acts; cached for what only shows status
      */
@@ -207,10 +212,22 @@ final class EventErasureAccess {
                                                  Supplier<Future<T>> work) {
         return organizationId.otherwise((Object) null)
             .compose(organization -> holdsIn(caller, organization, fresh)
-                .compose(held -> held ? work.get()
-                    : refuse(operation, "person " + caller.personId() + " does not hold " + DATA_PROTECTION_OPERATION
-                                        + " in organization " + organization)));
+                .compose(held -> {
+                    if (held)
+                        return work.get();
+                    String why = "person " + caller.personId() + " does not hold " + DATA_PROTECTION_OPERATION
+                                 + " in organization " + organization;
+                    if (organization == null)
+                        return refuse(operation, why);
+                    logRefusal(operation, why);
+                    return Future.failedFuture(NOT_YOUR_ORGANIZATION_REFUSAL);
+                }));
     }
+
+    /** The key of a refusal for another organization's target — mirrored in the back office's DPO error tables. */
+    static final String NOT_YOUR_ORGANIZATION_KEY = "DpoNotYourOrganizationError";
+    static final String NOT_YOUR_ORGANIZATION_REFUSAL =
+        "[" + NOT_YOUR_ORGANIZATION_KEY + "] This belongs to another organisation: you are not its Data Protection Officer";
 
     /**
      * Whether the caller holds DataProtection for the whole of this organization — and the operation still passes the
