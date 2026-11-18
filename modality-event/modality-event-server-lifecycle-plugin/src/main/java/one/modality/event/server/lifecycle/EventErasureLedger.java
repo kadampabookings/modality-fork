@@ -321,12 +321,29 @@ final class EventErasureLedger {
      * RunsJson: the commit switch, the retention policy (per stage, organisation and event), and a summary per event that has any run — its last
      * successful commit carrying {@code changedSince}, true once its bookings changed after that commit.
      */
-    static Future<String> runsJson() {
+    static Future<String> runsJson(EventErasureAccess.Caller caller) {
         return settleStaleRuns()
             .compose(ignored -> EventErasureRunner.query(RUNS_SQL))
             .compose(runs -> EventErasureRunner.query(RetentionPolicy.CURRENT_SQL)
-                .compose(policy -> departedCounts().map(counts -> runsJson(runs, policy, counts[0], counts[1]))))
+                .compose(policy -> departedCounts().compose(counts -> ownEvents(caller, runs, counts[0], counts[1])
+                    .map(own -> runsJson(runs, policy, counts[0], counts[1], own)))))
             .recover(cause -> readFailure("runs", cause));
+    }
+
+    /**
+     * The events of these rows (each read's first column is the event id) whose organization the caller holds
+     * DataProtection in: the runs, departed stays and archive rows of other organizations' events are left out of the
+     * caller's list (admin-tiers plan, 2026-11-18). RUNS_SQL itself is untouched — EventRemovalDatesCheck pins it —
+     * so the filter is applied to its rows. Anything that cannot be placed is left out.
+     */
+    static Future<java.util.function.Predicate<Number>> ownEvents(EventErasureAccess.Caller caller, QueryResult... reads) {
+        List<Integer> eventIds = new ArrayList<>();
+        for (QueryResult r : reads)
+            for (int row = 0; r != null && row < r.getRowCount(); row++)
+                eventIds.add(dev.webfx.platform.util.Numbers.toInteger(r.getValue(row, 0)));
+        return EventOrganizations.ofEvents(eventIds)
+            .compose(organizationByEvent -> EventErasureAccess.organizationsHeld(caller, organizationByEvent.values())
+                .map(held -> EventOrganizations.eventsIn(organizationByEvent, held)));
     }
 
     /**
@@ -358,8 +375,16 @@ final class EventErasureLedger {
     }
 
     static String runsJson(QueryResult r, QueryResult policy, QueryResult departed, QueryResult archive) {
+        return runsJson(r, policy, departed, archive, eventId -> true);
+    }
+
+    /** {@link #runsJson(QueryResult, QueryResult, QueryResult, QueryResult)}, keeping only the rows of {@code own} events. */
+    static String runsJson(QueryResult r, QueryResult policy, QueryResult departed, QueryResult archive,
+                           java.util.function.Predicate<Number> own) {
         List<String> runs = new ArrayList<>();
         for (int row = 0; r != null && row < r.getRowCount(); row++) {
+            if (!own.test(number(r.getValue(row, 0))))
+                continue;
             EventErasureJson.ObjectWriter latest = summaryWriter(r, row, 1);
             runs.add(new EventErasureJson.ObjectWriter()
                 .number("eventId", number(r.getValue(row, 0)))
@@ -374,8 +399,8 @@ final class EventErasureLedger {
             .number("retentionMonths", defaultMonths(policy, RetentionPolicy.STAGE_FINALISE))
             .raw("policy", RetentionPolicy.policyJson(policy))
             .raw("runs", EventErasureJson.array(runs))
-            .raw("departed", departedJson(departed))
-            .raw("archive", archiveJson(archive))
+            .raw("departed", departedJson(departed, own))
+            .raw("archive", archiveJson(archive, own))
             .toJson();
     }
 
@@ -384,10 +409,16 @@ final class EventErasureLedger {
      * a continuous event; a row with an unreadable cutoff is skipped.
      */
     static String archiveJson(QueryResult r) {
+        return archiveJson(r, eventId -> true);
+    }
+
+    /** {@link #archiveJson(QueryResult)}, keeping only the rows of {@code own} events. */
+    static String archiveJson(QueryResult r, java.util.function.Predicate<Number> own) {
         List<String> rows = new ArrayList<>();
         for (int row = 0; r != null && row < r.getRowCount(); row++) {
             String cutoff = text(r.getValue(row, 2));
-            if (number(r.getValue(row, 0)) == null || (cutoff != null && !ISO_DATE.matcher(cutoff).matches()))
+            if (number(r.getValue(row, 0)) == null || (cutoff != null && !ISO_DATE.matcher(cutoff).matches())
+                || !own.test(number(r.getValue(row, 0))))
                 continue;
             rows.add(new EventErasureJson.ObjectWriter()
                 .number("eventId", number(r.getValue(row, 0)))
@@ -401,10 +432,16 @@ final class EventErasureLedger {
 
     /** {@code [{eventId, months, departedBefore, due}]} from {@link #DEPARTED_SQL}'s rows; a row with an unreadable cutoff is skipped. */
     static String departedJson(QueryResult r) {
+        return departedJson(r, eventId -> true);
+    }
+
+    /** {@link #departedJson(QueryResult)}, keeping only the rows of {@code own} events. */
+    static String departedJson(QueryResult r, java.util.function.Predicate<Number> own) {
         List<String> rows = new ArrayList<>();
         for (int row = 0; r != null && row < r.getRowCount(); row++) {
             String cutoff = text(r.getValue(row, 2));
-            if (number(r.getValue(row, 0)) == null || cutoff == null || !ISO_DATE.matcher(cutoff).matches())
+            if (number(r.getValue(row, 0)) == null || cutoff == null || !ISO_DATE.matcher(cutoff).matches()
+                || !own.test(number(r.getValue(row, 0))))
                 continue;
             rows.add(new EventErasureJson.ObjectWriter()
                 .number("eventId", number(r.getValue(row, 0)))

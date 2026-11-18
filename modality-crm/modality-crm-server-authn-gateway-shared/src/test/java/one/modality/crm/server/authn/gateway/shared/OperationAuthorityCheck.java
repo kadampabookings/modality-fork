@@ -46,6 +46,19 @@ public class OperationAuthorityCheck {
         check("the fresh flag reaches the authority", lastFresh[0]);
         check("no operation code: no", refused(OperationAuthority.holdsInSomeOrganization(null, false)));
 
+        // The per-organization question
+        check("an authority that does not implement the per-organization question refuses it",
+            refused(OperationAuthority.holdsInOrganization("DataProtection", 151, false)));
+        OperationAuthority.register(new OperationAuthority.Authority() {
+            public Future<Boolean> holdsInSomeOrganization(String code, boolean fresh) { return Future.succeededFuture(true); }
+            public Future<Boolean> holdsInOrganization(String code, Object organizationId, boolean fresh) {
+                return Future.succeededFuture(Integer.valueOf(151).equals(organizationId));
+            }
+        });
+        check("the per-organization answer passes through", answer(OperationAuthority.holdsInOrganization("DataProtection", 151, false)));
+        check("...for the organization asked about only", refused(OperationAuthority.holdsInOrganization("DataProtection", 187, false)));
+        check("no organization: no, without asking", refused(OperationAuthority.holdsInOrganization("DataProtection", null, false)));
+
         OperationAuthority.register((code, fresh) -> Future.failedFuture("database down"));
         check("an authority that fails: no", refused(OperationAuthority.holdsInSomeOrganization("DataProtection", false)));
 

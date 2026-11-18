@@ -35,6 +35,16 @@ public final class OperationAuthority {
          *              irreversible actions, where a role revoked a moment ago must not still answer
          */
         Future<Boolean> holdsInSomeOrganization(String operationCode, boolean fresh);
+
+        /**
+         * Whether the caller holds the operation for the whole of THIS organization: an organization-wide grant there
+         * (a grant scoped to one event or event type of it does not count), or a context-free one — never a wildcard
+         * for an explicit-only operation. For an action on something one organization owns (an event, its period).
+         * Defaults to no, so an authority that has not implemented it refuses.
+         */
+        default Future<Boolean> holdsInOrganization(String operationCode, Object organizationId, boolean fresh) {
+            return Future.succeededFuture(false);
+        }
     }
 
     private static volatile Authority authority;
@@ -47,6 +57,18 @@ public final class OperationAuthority {
     /** Whether an authority is registered — for a boot check that wants to say so loudly. */
     public static boolean isRegistered() {
         return authority != null;
+    }
+
+    /** @see Authority#holdsInOrganization — no organization is a no. */
+    public static Future<Boolean> holdsInOrganization(String operationCode, Object organizationId, boolean fresh) {
+        Authority a = authority;
+        if (a == null || operationCode == null || organizationId == null)
+            return Future.succeededFuture(false);
+        try {
+            return a.holdsInOrganization(operationCode, organizationId, fresh).otherwise(false);
+        } catch (RuntimeException e) {
+            return Future.succeededFuture(false);
+        }
     }
 
     /** @see Authority#holdsInSomeOrganization */

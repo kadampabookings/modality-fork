@@ -12,6 +12,11 @@ import one.modality.crm.server.authn.gateway.shared.OperationAuthority;
 import one.modality.crm.server.authn.gateway.shared.RouteAccessGuard;
 import one.modality.crm.shared.services.authn.ModalityUserPrincipal;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -86,7 +91,15 @@ final class EventErasureAccess {
      *                 Byte or a Long for the same person) — written into the run ledger and the history
      *                 markers, and named in the log
      */
-    record Caller(Integer personId) {
+    record Caller(Integer personId, Object state) {
+
+        /**
+         * A caller known by person id alone — the checks' doubles. With no captured state, every question about one
+         * organization ({@link #holdsIn}, {@link #organizationsHeld}) is answered no.
+         */
+        Caller(Integer personId) {
+            this(personId, null);
+        }
     }
 
     /** A back-office caller, before the audience check: their principal and person id. */
@@ -134,12 +147,15 @@ final class EventErasureAccess {
     /** The gate both audiences share: the caller checks, then the audience's membership, failing closed. */
     private static <T> Future<T> when(String operation, String check, String refusal,
                                       Function<BackOfficeCaller, Future<Boolean>> membership, Function<Caller, Future<T>> work) {
+        // Captured here, on the caller's thread: a check about one organization comes after a lookup (the event's
+        // organization), when the thread-local state is gone, and is asked inside this state again (holdsIn)
+        Object state = ThreadLocalStateHolder.getThreadLocalState();
         BackOfficeCaller caller = backOfficeCaller(operation, true);
         if (caller == null)
             return RouteAccessGuard.refused();
         return failClosed(() -> membership.apply(caller), operation, check, caller.personId())
             .compose(allowed -> allowed
-                ? work.apply(new Caller(caller.personId()))
+                ? work.apply(new Caller(caller.personId(), state))
                 : refuse(operation, "person " + caller.personId() + " " + refusal));
     }
 
@@ -172,6 +188,80 @@ final class EventErasureAccess {
         if (logRefusal)
             logRefusal(operation, refusal);
         return null;
+    }
+
+    // ── One organization's events (V0168 powers, scoped 2026-11-18) ───────────────────────────────────────────────────
+
+    /**
+     * Runs {@code work} once the caller — already let through by {@link #whenDataProtectionOfficer} or
+     * {@link #whenDataProtectionOfficerReadingStatus} — holds DataProtection for the whole of the organization
+     * {@code organizationId} resolves to, and refuses otherwise. For an action on something one organization owns: a
+     * past event's removal, its run, its retention period. Erasing a person stays any organization's DPO's until the
+     * data-controller question is answered (admin-tiers plan, Phase 0); an event belongs to one organization, so it
+     * need not wait.
+     *
+     * @param organizationId the target's organization, looked up by the caller (null: no such target — refused)
+     * @param fresh          from grants recomputed for this one call: for what acts; cached for what only shows status
+     */
+    static <T> Future<T> whenHoldsInOrganization(String operation, Caller caller, Future<Object> organizationId, boolean fresh,
+                                                 Supplier<Future<T>> work) {
+        return organizationId.otherwise((Object) null)
+            .compose(organization -> holdsIn(caller, organization, fresh)
+                .compose(held -> held ? work.get()
+                    : refuse(operation, "person " + caller.personId() + " does not hold " + DATA_PROTECTION_OPERATION
+                                        + " in organization " + organization)));
+    }
+
+    /**
+     * Whether the caller holds DataProtection for the whole of this organization — and the operation still passes the
+     * flag guard. Asked inside the state captured when the call came in: called after a lookup, the thread-local is
+     * gone. No state, no organization, a lookup that fails: no.
+     */
+    static Future<Boolean> holdsIn(Caller caller, Object organizationId, boolean fresh) {
+        if (caller == null || caller.state() == null || organizationId == null)
+            return Future.succeededFuture(false);
+        Future<Boolean> held = heldIn(caller, organizationId, fresh);
+        Future<Boolean> guarded = dataProtectionStaysExplicitOnly(EntityStore.create(DataSourceModelService.getDefaultDataSourceModel()));
+        return Future.all(held, guarded)
+            .map(both -> Boolean.TRUE.equals(both.resultAt(0)) && Boolean.TRUE.equals(both.resultAt(1)))
+            .otherwise(false);
+    }
+
+    /** The framework's answer alone, inside the captured state — the flag guard is the caller's to add. */
+    private static Future<Boolean> heldIn(Caller caller, Object organizationId, boolean fresh) {
+        if (caller == null || caller.state() == null || organizationId == null)
+            return Future.succeededFuture(false);
+        return ThreadLocalStateHolder.runWithState(caller.state(),
+            () -> OperationAuthority.holdsInOrganization(DATA_PROTECTION_OPERATION, organizationId, fresh))
+            .otherwise(false);
+    }
+
+    /**
+     * Which of these organizations the caller holds DataProtection in — for filtering a list (runs, departed stays,
+     * activity) to the caller's own. From the CACHED grants: the gate in front of the list already asked fresh, and a
+     * fresh computation per organization would cost a whole grant computation each. All asked at once, inside the
+     * captured state; the flag guard is read ONCE for the whole list, not once per organization (a list polled every
+     * minute over a dozen organizations would otherwise read it a dozen times). A failure leaves that organization out;
+     * a guard that fails, or refuses, leaves them all out.
+     */
+    static Future<Set<Integer>> organizationsHeld(Caller caller, Collection<Integer> organizationIds) {
+        List<Integer> ids = new ArrayList<>(new LinkedHashSet<>(organizationIds));
+        ids.remove(null);
+        if (ids.isEmpty() || caller == null || caller.state() == null)
+            return Future.succeededFuture(Set.of());
+        List<Future<Boolean>> answers = new ArrayList<>();
+        for (Integer id : ids)
+            answers.add(heldIn(caller, id, false));
+        Future<Boolean> guarded = dataProtectionStaysExplicitOnly(EntityStore.create(DataSourceModelService.getDefaultDataSourceModel()))
+            .otherwise(false);
+        return guarded.compose(guard -> !Boolean.TRUE.equals(guard) ? Future.succeededFuture(Set.<Integer>of())
+            : Future.all(new ArrayList<>(answers)).map(all -> {
+            Set<Integer> held = new LinkedHashSet<>();
+            for (int i = 0; i < ids.size(); i++)
+                if (Boolean.TRUE.equals(all.resultAt(i)))
+                    held.add(ids.get(i));
+            return (Set<Integer>) held;
+        })).otherwise(Set.of());
     }
 
     /**

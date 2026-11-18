@@ -17,6 +17,6 @@ public final class DataProtectionActivityEndpoint extends AsyncFunctionBusCallEn
 
     public DataProtectionActivityEndpoint() {
         super(DPO_ACTIVITY_ADDRESS, argument -> EventErasureAccess.whenDataProtectionOfficer("activity",
-            caller -> DataProtectionActivity.json()));
+            caller -> DataProtectionActivity.json(caller)));
     }
 }

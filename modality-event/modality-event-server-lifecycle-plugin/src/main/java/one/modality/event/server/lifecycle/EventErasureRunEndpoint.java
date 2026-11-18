@@ -23,7 +23,12 @@ public final class EventErasureRunEndpoint extends AsyncFunctionBusCallEndpoint<
 
     public EventErasureRunEndpoint() {
         super(EVENT_ERASURE_RUN_ADDRESS, argument -> EventErasureAccess.whenDataProtectionOfficerReadingStatus("run",
-            caller -> EventErasureLedger.runJson(EventErasureArguments.positiveId(
-                argument instanceof Object[] array ? EventErasureArguments.at(array, 0) : argument))));
+            caller -> {
+                Integer runId = EventErasureArguments.positiveId(
+                    argument instanceof Object[] array ? EventErasureArguments.at(array, 0) : argument);
+                // A DPO of the run's EVENT's organization; cached, as the gate in front (a polled status)
+                return EventErasureAccess.whenHoldsInOrganization("run", caller, EventOrganizations.ofRun(runId), false,
+                    () -> EventErasureLedger.runJson(runId));
+            }));
     }
 }

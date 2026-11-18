@@ -25,8 +25,13 @@ public final class StartEventErasureEndpoint extends AsyncFunctionBusCallEndpoin
     public static final String START_EVENT_ERASURE_ADDRESS = "modality/service/event/erasure/start";
 
     public StartEventErasureEndpoint() {
-        super(START_EVENT_ERASURE_ADDRESS, argument -> EventErasureAccess.whenDataProtectionOfficer("start",
-            caller -> EventErasureRunner.start(EventErasureArguments.array(argument), caller)));
+        super(START_EVENT_ERASURE_ADDRESS, argument -> EventErasureAccess.whenDataProtectionOfficer("start", caller -> {
+            Object[] arguments = EventErasureArguments.array(argument);
+            // A DPO of the EVENT's organization (fresh: this removes data): the event is argument 0
+            return EventErasureAccess.whenHoldsInOrganization("start", caller,
+                EventOrganizations.ofEvent(EventErasureArguments.at(arguments, 0)), true,
+                () -> EventErasureRunner.start(arguments, caller));
+        }));
         // Endpoints are instantiated at boot, so the commit switch's state is in the boot log from the start
         EventErasureConfig.listen();
     }

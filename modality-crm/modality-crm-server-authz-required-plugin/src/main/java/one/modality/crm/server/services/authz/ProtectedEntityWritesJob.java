@@ -356,15 +356,36 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         // And the answer to "does the caller hold this operation, for a whole organization?" for the modules that do
         // not depend on the authorization framework (the erasure endpoints ask it for DataProtection): the framework's
         // own check, through the seam in gateway-shared, so they need no new dependency. Fails closed when unregistered.
-        one.modality.crm.server.authn.gateway.shared.OperationAuthority.register((operationCode, fresh) -> {
-            // While free-text rules are applied, a rule could grant anything — DataProtection included — and nothing
-            // classifies what it grants; the erasure gate used to ignore rules, so it must not start reading them.
-            if (ModalityAuthorizationServerServiceProvider.RULE_GRANTS_APPLIED)
-                return dev.webfx.platform.async.Future.succeededFuture(false);
-            dev.webfx.stack.authz.server.AuthorizationCheck wholeOrganization =
-                dev.webfx.stack.authz.server.AuthorizationCheck.inSomeContextKeyedBy(ORGANIZATION_KEY);
-            return AuthorizationServerService.isAuthorized(new OperationRequest(operationCode, NO_CONTEXT),
-                fresh ? wholeOrganization.fresh() : wholeOrganization);
+        // While free-text rules are applied, a rule could grant anything — DataProtection included — and nothing
+        // classifies what it grants; the erasure gate used to ignore rules, so it must not start reading them.
+        one.modality.crm.server.authn.gateway.shared.OperationAuthority.register(new one.modality.crm.server.authn.gateway.shared.OperationAuthority.Authority() {
+            @Override
+            public dev.webfx.platform.async.Future<Boolean> holdsInSomeOrganization(String operationCode, boolean fresh) {
+                if (ModalityAuthorizationServerServiceProvider.RULE_GRANTS_APPLIED)
+                    return dev.webfx.platform.async.Future.succeededFuture(false);
+                dev.webfx.stack.authz.server.AuthorizationCheck wholeOrganization =
+                    dev.webfx.stack.authz.server.AuthorizationCheck.inSomeContextKeyedBy(ORGANIZATION_KEY);
+                return AuthorizationServerService.isAuthorized(new OperationRequest(operationCode, NO_CONTEXT),
+                    fresh ? wholeOrganization.fresh() : wholeOrganization);
+            }
+
+            /**
+             * Judged in the organization's own context, keyed by the organization alone: a section granting the operation
+             * for that whole organization applies, one also keyed by an event or event type does not (the request has
+             * no such key), and the context-free sections apply as everywhere — where a wildcard does not cover an
+             * explicit-only operation.
+             */
+            @Override
+            public dev.webfx.platform.async.Future<Boolean> holdsInOrganization(String operationCode, Object organizationId, boolean fresh) {
+                if (ModalityAuthorizationServerServiceProvider.RULE_GRANTS_APPLIED)
+                    return dev.webfx.platform.async.Future.succeededFuture(false);
+                Integer id = dev.webfx.platform.util.Numbers.toInteger(dev.webfx.stack.orm.entity.Entities.getPrimaryKey(organizationId));
+                if (id == null)
+                    return dev.webfx.platform.async.Future.succeededFuture(false);
+                OperationRequest request = new OperationRequest(operationCode, Map.of(ORGANIZATION_KEY, String.valueOf(id)));
+                return fresh ? AuthorizationServerService.isAuthorized(request, dev.webfx.stack.authz.server.AuthorizationCheck.DEFAULT.fresh())
+                    : AuthorizationServerService.isAuthorized(request);
+            }
         });
         // And the first arm of the read plan's step 3, the first thing on the read side that refuses rather
         // than counts: a client caller with no USABLE principal — anonymous, or signed out, which is twice as

@@ -64,6 +64,19 @@ public class ExplicitOnlyGrantsCheck {
         check("other staff do not hold DataProtection", staff.doesRulesAuthorize(new Op("DataProtection"), org5), false);
         check("...but keep their organization-admin grant", staff.doesRulesAuthorize(new Op("RouteToAdmin"), org5), true);
 
+        // The per-organization question the erasure endpoints ask through OperationAuthority (holdsInOrganization): the
+        // request is judged in {organizationId: X} alone — exactly what the registered authority builds.
+        String eventScopedDpo = "context:organizationId=6,eventId=9\ngrant operation:DataProtection\n";
+        InMemoryAuthorizationRuleRegistry dpoOf5 = registry(
+            ModalityAuthorizationServerServiceProvider.composeGrants(EXPLICIT, LOGGED_IN, DPO_ROLE + eventScopedDpo, "", NOT_SUPER_ADMIN));
+        check("a DPO of organization 5 holds it in 5", dpoOf5.doesRulesAuthorize(new Op("DataProtection"), org5), true);
+        check("...not in 6, where their DPO role is scoped to one event", dpoOf5.doesRulesAuthorize(new Op("DataProtection"), org6), false);
+        check("...nor in an organization they have no role in", dpoOf5.doesRulesAuthorize(new Op("DataProtection"), Map.of("organizationId", "7")), false);
+        InMemoryAuthorizationRuleRegistry platform = registry(
+            ModalityAuthorizationServerServiceProvider.composeGrants(EXPLICIT, LOGGED_IN, OTHER_ROLE, ORG_ADMIN, SUPER_ADMIN));
+        check("a platform super admin without the role holds it in no organization",
+            platform.doesRulesAuthorize(new Op("DataProtection"), org5) || platform.doesRulesAuthorize(new Op("DataProtection"), org6), false);
+
         System.out.println("\n" + pass + " passed, " + fail + " failed");
         if (fail > 0) System.exit(1);
     }
