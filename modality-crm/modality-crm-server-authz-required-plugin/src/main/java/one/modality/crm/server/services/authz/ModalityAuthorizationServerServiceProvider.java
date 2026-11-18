@@ -60,7 +60,9 @@ public final class ModalityAuthorizationServerServiceProvider extends Authorizat
      * <p>To switch rules back on: first refuse rule text that holds a line break or starts a line with
      * {@code context:} (the registry treats any such line as a context switch, so it would escape its role's
      * organization), then teach RoleOperationMembership and the audits to read rules, and only then set this to true
-     * - with the back office's RULES_APPLIED.
+     * - with the back office's RULES_APPLIED. While it is true, the OperationAuthority seam (the erasure endpoints'
+     * DataProtection check) refuses everybody: a rule could grant that operation, and nothing checks what a rule
+     * grants. Lift that in ProtectedEntityWritesJob only once rules cannot name an explicit-only operation.
      */
     static final boolean RULE_GRANTS_APPLIED = false;
 

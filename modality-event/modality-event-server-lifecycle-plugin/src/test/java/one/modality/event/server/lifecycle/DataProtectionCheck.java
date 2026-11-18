@@ -11,9 +11,10 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Check for the Data Protection Officer's gate (V0163): the strictly-DPO gate's database-free fences, and the access
  * answer the back office draws from.
  *
- * <p>No test framework (see MoneyTransferVerificationCheck); main() exits non-zero on failure. The membership lookup
- * itself ({@code RoleOperationMembership.holdsThroughRole}) needs a database and is the shared one: that a super
- * administrator without the role is refused is checked on staging.
+ * <p>No test framework (see MoneyTransferVerificationCheck); main() exits non-zero on failure. The operation itself is
+ * asked of the authorization framework through {@code OperationAuthority} (OperationAuthorityCheck in gateway-shared
+ * covers the seam; the framework's "held for a whole organization" answer is CoreSemanticsCheck's), and the flag guard
+ * needs a database: that a super administrator without the role is refused is checked on staging.
  */
 public class DataProtectionCheck {
 

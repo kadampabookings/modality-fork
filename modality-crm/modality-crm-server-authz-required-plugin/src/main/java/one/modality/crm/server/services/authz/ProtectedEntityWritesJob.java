@@ -353,6 +353,19 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         // the principal — on the endpoint thread, which is the only place the principal is still there.
         // Registered here for the same reason as the two above.
         ModalityCallerParameterResolver.register();
+        // And the answer to "does the caller hold this operation, for a whole organization?" for the modules that do
+        // not depend on the authorization framework (the erasure endpoints ask it for DataProtection): the framework's
+        // own check, through the seam in gateway-shared, so they need no new dependency. Fails closed when unregistered.
+        one.modality.crm.server.authn.gateway.shared.OperationAuthority.register((operationCode, fresh) -> {
+            // While free-text rules are applied, a rule could grant anything — DataProtection included — and nothing
+            // classifies what it grants; the erasure gate used to ignore rules, so it must not start reading them.
+            if (ModalityAuthorizationServerServiceProvider.RULE_GRANTS_APPLIED)
+                return dev.webfx.platform.async.Future.succeededFuture(false);
+            dev.webfx.stack.authz.server.AuthorizationCheck wholeOrganization =
+                dev.webfx.stack.authz.server.AuthorizationCheck.inSomeContextKeyedBy(ORGANIZATION_KEY);
+            return AuthorizationServerService.isAuthorized(new OperationRequest(operationCode, NO_CONTEXT),
+                fresh ? wholeOrganization.fresh() : wholeOrganization);
+        });
         // And the first arm of the read plan's step 3, the first thing on the read side that refuses rather
         // than counts: a client caller with no USABLE principal — anonymous, or signed out, which is twice as
         // many callers — may not select FROM Person or FrontendAccount. Root entity only, because anonymous

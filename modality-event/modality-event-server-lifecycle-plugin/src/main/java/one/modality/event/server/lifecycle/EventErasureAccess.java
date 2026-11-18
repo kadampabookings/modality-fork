@@ -7,7 +7,8 @@ import dev.webfx.stack.orm.datasourcemodel.service.DataSourceModelService;
 import dev.webfx.stack.orm.entity.EntityStore;
 import dev.webfx.stack.session.state.StateAccessor;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
-import one.modality.crm.server.authn.gateway.shared.RoleOperationMembership;
+import dev.webfx.stack.orm.entity.Entity;
+import one.modality.crm.server.authn.gateway.shared.OperationAuthority;
 import one.modality.crm.server.authn.gateway.shared.RouteAccessGuard;
 import one.modality.crm.server.authn.gateway.shared.SuperAdminMembership;
 import one.modality.crm.shared.services.authn.ModalityUserPrincipal;
@@ -47,11 +48,18 @@ import java.util.function.Supplier;
  *       <li><b>super-administrator membership</b>, read from the database for that person
  *           ({@link SuperAdminMembership}) — NOT an operation code and NOT a route grant, so nothing in the role
  *           and grant tables can delegate it;</li>
- *       <li>or <b>the DataProtection operation</b>, held through a role
- *           ({@link RoleOperationMembership#holdsThroughRole}): organisation-wide (a grant scoped to one event or
- *           event type is not an answer about all of them), on an access row that is not read-only. Asked of the
- *           membership directly rather than through {@link RouteAccessGuard}, whose checks let a super
- *           administrator's {@code operation:*} through.</li>
+ *       <li>or <b>the DataProtection operation</b>, asked of the authorization framework through
+ *           {@link OperationAuthority} (admin-tiers plan, Phase 3): held for a whole organisation, in some
+ *           organisation (a grant scoped to one event or event type is not an answer about all of them), on an access
+ *           row that is not read-only. A super administrator's {@code operation:*} does not cover it because
+ *           DataProtection is explicit-only (V0166) — which is why that flag is CHECKED here on every call
+ *           ({@link #dataProtectionStaysExplicitOnly}): cleared, every super administrator would pass. Every endpoint
+ *           behind {@link #whenDataProtectionOfficer} asks it FRESH, from grants recomputed for the call — the old SQL
+ *           was live on every call, and a cached answer would let a Data Protection Officer whose role was just
+ *           revoked keep finding people and previewing their data for up to two minutes. Only
+ *           {@link #isDataProtectionOfficer}, which decides what the browser draws and is asked on every page, reads
+ *           the cache. Until 2026-11-18 this asked the role tables in SQL ({@code RoleOperationMembership}), a second
+ *           copy of the grant rules.</li>
  *     </ul></li>
  * </ol>
  *
@@ -112,8 +120,10 @@ final class EventErasureAccess {
      * @param work      what to do once allowed — not started otherwise
      */
     static <T> Future<T> whenDataProtectionOfficer(String operation, Function<Caller, Future<T>> work) {
+        // Fresh: these screens are few and seldom used, and each one shows or changes personal data — a revoked
+        // role must stop answering at once (see the class comment). A few queries per call is the price.
         return when(operation, DATA_PROTECTION_OPERATION, "does not hold " + DATA_PROTECTION_OPERATION,
-            caller -> holdsDataProtection(caller.personId()), work);
+            caller -> holdsDataProtection(true), work);
     }
 
     /**
@@ -125,7 +135,7 @@ final class EventErasureAccess {
     static Future<Boolean> isDataProtectionOfficer() {
         BackOfficeCaller caller = backOfficeCaller("access", false);
         return caller == null ? Future.succeededFuture(false)
-            : failClosed(() -> holdsDataProtection(caller.personId()), "access", DATA_PROTECTION_OPERATION, caller.personId());
+            : failClosed(() -> holdsDataProtection(false), "access", DATA_PROTECTION_OPERATION, caller.personId());
     }
 
     /** The gate both audiences share: the caller checks, then the audience's membership, failing closed. */
@@ -171,9 +181,44 @@ final class EventErasureAccess {
         return null;
     }
 
-    private static Future<Boolean> holdsDataProtection(Integer personId) {
-        return RoleOperationMembership.holdsThroughRole(personId, DATA_PROTECTION_OPERATION,
-            EntityStore.create(DataSourceModelService.getDefaultDataSourceModel()));
+    /**
+     * Whether the caller holds DataProtection — the framework's answer AND the guard on the operation itself. The
+     * framework's question is started first, synchronously: it reads the caller from the thread-local state, which is
+     * gone after the first asynchronous step.
+     */
+    private static Future<Boolean> holdsDataProtection(boolean fresh) {
+        if (!OperationAuthority.isRegistered()) // still refused below; said here, because nothing else would say it
+            Console.log(LOG_PREFIX + "refused: no operation authority is registered (is the authz plugin running?)");
+        Future<Boolean> held = OperationAuthority.holdsInSomeOrganization(DATA_PROTECTION_OPERATION, fresh);
+        Future<Boolean> guarded = dataProtectionStaysExplicitOnly(EntityStore.create(DataSourceModelService.getDefaultDataSourceModel()));
+        return Future.all(held, guarded).map(both -> Boolean.TRUE.equals(both.resultAt(0)) && Boolean.TRUE.equals(both.resultAt(1)));
+    }
+
+    /**
+     * Whether every operation coded DataProtection is still explicit-only, and neither public nor guest — the flags
+     * the framework's answer depends on. Explicit-only is all that keeps a super administrator's {@code operation:*}
+     * from covering it (V0166); public or guest would hand it to everybody signed in. Codes are not unique (a back-
+     * and a front-office row may share one), so every row with the code must hold, and there must be at least one.
+     * Asked on every call: a flag cleared by hand must close the door at once, not at the next deploy.
+     */
+    static Future<Boolean> dataProtectionStaysExplicitOnly(EntityStore entityStore) {
+        return entityStore.<Entity>executeQuery("select explicitOnly, public, guest from Operation where operationCode=$1", DATA_PROTECTION_OPERATION)
+            .map(rows -> {
+                if (rows.isEmpty()) {
+                    Console.log(LOG_PREFIX + "refused: no " + DATA_PROTECTION_OPERATION + " operation exists");
+                    return false;
+                }
+                for (Entity row : rows) {
+                    if (!Boolean.TRUE.equals(row.getBooleanFieldValue("explicitOnly"))
+                        || Boolean.TRUE.equals(row.getBooleanFieldValue("public"))
+                        || Boolean.TRUE.equals(row.getBooleanFieldValue("guest"))) {
+                        Console.log(LOG_PREFIX + "refused: the " + DATA_PROTECTION_OPERATION
+                                    + " operation is not explicit-only, or is public or guest — every super administrator would pass");
+                        return false;
+                    }
+                }
+                return true;
+            });
     }
 
     /**
