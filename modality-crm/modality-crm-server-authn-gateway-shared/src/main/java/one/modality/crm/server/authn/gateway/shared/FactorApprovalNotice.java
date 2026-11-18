@@ -174,7 +174,7 @@ public final class FactorApprovalNotice {
         return String.join(" + ", parts);
     }
 
-    private static String page(String title, String content) {
+    static String page(String title, String content) {
         return "<html lang=\"en\"><head><meta charset=\"UTF-8\"><title>" + esc(title) + "</title></head>"
                + "<body style=\"margin:0;padding:0;font-family:Arial,sans-serif;background:#f9fafb\">"
                + "<div style=\"max-width:600px;margin:20px auto;background:#fff;border-radius:12px;padding:20px 40px;"

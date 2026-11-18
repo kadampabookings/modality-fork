@@ -170,3 +170,4 @@ V0167__super_admin_organization.sql
 V0168__data_protection.sql
 V0169__erase_departed_bookings.sql
 V0170__archive_event_bookings.sql
+V0172__data_protection_grant_seen.sql

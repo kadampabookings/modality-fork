@@ -137,7 +137,10 @@ final class PersonReferences {
     static final Map<String, String[]> UNCONSTRAINED = Map.of(
         "person_account_move", new String[] { "person_id", "changed_by_person_id" },
         "person_link_change", new String[] { "person_id", "old_account_person_id", "new_account_person_id", "changed_by_person_id" },
-        "document_line", new String[] { "share_mate_owner_person_id" }
+        "document_line", new String[] { "share_mate_owner_person_id" },
+        // Who has been alerted about as holding DataProtection (V0172). No key, to keep the migration off person's
+        // lock; in practice never repointed, since the row's person holds an access row and that refuses the merge.
+        "data_protection_grant_seen", new String[] { "user_id" }
     );
 
     /** Told to the caller when the catalogue holds a reference this file does not. */

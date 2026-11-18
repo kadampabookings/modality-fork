@@ -353,6 +353,10 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         // the principal — on the endpoint thread, which is the only place the principal is still there.
         // Registered here for the same reason as the two above.
         ModalityCallerParameterResolver.register();
+        // And the alert to the platform super administrators whenever somebody new holds DataProtection (admin-tiers
+        // plan, D5; V0172): a check every two minutes of who holds it, wherever the grant came from. Started here for
+        // the same reason as the registrations above.
+        one.modality.crm.server.authn.gateway.shared.DataProtectionGrantAlert.start();
         // And the answer to "does the caller hold this operation, for a whole organization?" for the modules that do
         // not depend on the authorization framework (the erasure endpoints ask it for DataProtection): the framework's
         // own check, through the seam in gateway-shared, so they need no new dependency. Fails closed when unregistered.
@@ -508,6 +512,8 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
     private static void onProtectedWriteSucceeded(String entityName, ProtectedEntityWriteRegistry.WriteVerb verb) {
         if (!entityName.startsWith("Authorization") && !entityName.startsWith("Operation"))
             return;
+        // Who holds DataProtection may just have changed: asked now, not in up to two minutes (D5, V0172)
+        one.modality.crm.server.authn.gateway.shared.DataProtectionGrantAlert.checkSoon();
         AuthorizationServerServiceProvider provider = AuthorizationServerService.getProvider();
         if (provider instanceof AuthorizationServerServiceProviderBase base) {
             base.invalidateAllRuleRegistries();
