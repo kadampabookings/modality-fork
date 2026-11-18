@@ -74,6 +74,8 @@ public final class DataProtectionGrantAlert {
     public static final String LOG_MARKER = "DataProtection granted";
 
     static final long INTERVAL_MILLIS = 2 * 60 * 1000;
+    /** "At once" for a timer: Vert.x refuses a delay under 1 ms (IllegalArgumentException), so 0 never runs at all. */
+    static final long SOON_DELAY_MILLIS = 1;
     private static final long FIRST_DELAY_MILLIS = 60 * 1000;
     private static final String LOG_PREFIX = "[authz] ";
     private static final String MAIL_FROM = "kbs@kadampa.net";
@@ -133,10 +135,19 @@ public final class DataProtectionGrantAlert {
      * A check now, after a back-office write to the grant tables succeeded: without it, a role given and taken back
      * within the two minutes between checks — long enough to act as the Data Protection Officer — would never be seen.
      * Only for writes this server makes; a direct database write still waits for the next periodic check.
+     *
+     * <p>Never throws: it is called from the write observer, which also discards cached authorizations, and an
+     * exception here once skipped that silently (the registry swallows what an observer throws).
      */
     public static void checkSoon() {
-        if (started.get())
-            Scheduler.scheduleDelay(0, DataProtectionGrantAlert::check);
+        if (!started.get())
+            return;
+        try {
+            Scheduler.scheduleDelay(SOON_DELAY_MILLIS, DataProtectionGrantAlert::check);
+        } catch (RuntimeException e) {
+            Console.log(LOG_PREFIX + "⚠️ DataProtection grant check could not be scheduled after a grant write ("
+                        + e.getClass().getSimpleName() + ") — the periodic check still runs");
+        }
     }
 
     /** One comparison. While one runs, a second request runs once more after it rather than being dropped. */
@@ -145,10 +156,17 @@ public final class DataProtectionGrantAlert {
             rerun.set(true);
             return;
         }
-        SubmitService.executeSubmit(SubmitArgument.builder()
+        Future<SubmitResult> claim;
+        try {
+            claim = SubmitService.executeSubmit(SubmitArgument.builder()
                 .setDataSourceId(DataSourceModelService.getDefaultDataSourceId())
                 .setStatement(CLAIM_SQL)
-                .build())
+                .build());
+        } catch (RuntimeException e) {
+            // Thrown rather than failed: the flag must still come down, or no check would ever run again
+            claim = Future.failedFuture(e);
+        }
+        claim
             .compose(result -> {
                 if (failing) {
                     failing = false;

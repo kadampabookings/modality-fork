@@ -512,13 +512,14 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
     private static void onProtectedWriteSucceeded(String entityName, ProtectedEntityWriteRegistry.WriteVerb verb) {
         if (!entityName.startsWith("Authorization") && !entityName.startsWith("Operation"))
             return;
-        // Who holds DataProtection may just have changed: asked now, not in up to two minutes (D5, V0172)
-        one.modality.crm.server.authn.gateway.shared.DataProtectionGrantAlert.checkSoon();
         AuthorizationServerServiceProvider provider = AuthorizationServerService.getProvider();
         if (provider instanceof AuthorizationServerServiceProviderBase base) {
             base.invalidateAllRuleRegistries();
             Console.log("🛡 " + verb + " on " + entityName + " — cached authorizations discarded on this instance");
         }
+        // Who holds DataProtection may just have changed: asked now, not in up to two minutes (D5, V0172). After the
+        // invalidation, so that nothing here can ever stand between a grant change and the cache that must forget it.
+        one.modality.crm.server.authn.gateway.shared.DataProtectionGrantAlert.checkSoon();
     }
 
     /**

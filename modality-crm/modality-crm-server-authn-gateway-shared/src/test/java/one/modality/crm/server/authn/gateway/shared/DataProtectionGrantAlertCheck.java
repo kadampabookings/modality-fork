@@ -23,6 +23,10 @@ public class DataProtectionGrantAlertCheck {
         else { fail++; System.out.println("  FAIL " + what); }
     }
 
+    static boolean noThrow(Runnable runnable) {
+        try { runnable.run(); return true; } catch (RuntimeException e) { return false; }
+    }
+
     public static void main(String[] args) {
         System.out.println("DataProtectionGrantAlertCheck");
 
@@ -46,6 +50,10 @@ public class DataProtectionGrantAlertCheck {
             && claim.contains("c.event_type_id is not distinct from s.event_type_id"));
         check("a holder already alerted is not claimed again, by this server or another",
             claim.endsWith("on conflict do nothing returning id"));
+
+        // ── The check after a grant write ──
+        check("'at once' is a delay Vert.x accepts (setTimer refuses under 1 ms)", DataProtectionGrantAlert.SOON_DELAY_MILLIS >= 1);
+        check("before start(), asking for a check does nothing and does not throw", noThrow(DataProtectionGrantAlert::checkSoon));
 
         // ── The claimed ids ──
         check("no keys, nothing to alert", DataProtectionGrantAlert.claimedIds(new SubmitResult(0, null)).isEmpty());
