@@ -22,7 +22,7 @@ one.modality.crm.server.person.SendDocumentLetterEndpoint
 one.modality.crm.server.person.EmailHasAccountEndpoint
 one.modality.crm.server.person.ChatTypingSignalEndpoint
 one.modality.crm.server.person.MatchingAccountsEndpoint
-one.modality.crm.server.person.GetUserSettingsEndpoint
-one.modality.crm.server.person.PatchUserSettingsEndpoint
 one.modality.crm.server.person.AnswerVolunteerArrivalEndpoint
 one.modality.crm.server.person.AnswerVolunteerDatesEndpoint
+one.modality.crm.server.person.GetUserSettingsEndpoint
+one.modality.crm.server.person.PatchUserSettingsEndpoint
