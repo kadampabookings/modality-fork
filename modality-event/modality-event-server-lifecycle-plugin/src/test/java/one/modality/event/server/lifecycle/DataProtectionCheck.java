@@ -39,6 +39,17 @@ public class DataProtectionCheck {
         return answer.failed() && REFUSED.equals(answer.cause().getMessage()) && runs.get() == 0;
     }
 
+    /** The same fences for the cached status gate the polled run and runs endpoints use. */
+    private static boolean statusRefusedWithoutWork(Object state) {
+        AtomicInteger runs = new AtomicInteger();
+        Future<String> answer = ThreadLocalStateHolder.runWithState(state,
+            () -> EventErasureAccess.whenDataProtectionOfficerReadingStatus("check", caller -> {
+                runs.incrementAndGet();
+                return Future.succeededFuture("ran");
+            }));
+        return answer.failed() && REFUSED.equals(answer.cause().getMessage()) && runs.get() == 0;
+    }
+
     private static boolean toldNo(Object state) {
         Future<Boolean> answer = ThreadLocalStateHolder.runWithState(state, EventErasureAccess::isDataProtectionOfficer);
         return answer.succeeded() && Boolean.FALSE.equals(answer.result());
@@ -59,6 +70,9 @@ public class DataProtectionCheck {
         check("a session the server did not establish is refused", refusedWithoutWork(noFamily));
         check("a front-office session is refused", refusedWithoutWork(frontOffice));
         check("a support view is refused", refusedWithoutWork(supportView));
+        check("the status gate refuses an anonymous caller", statusRefusedWithoutWork(anonymous));
+        check("the status gate refuses a front-office session", statusRefusedWithoutWork(frontOffice));
+        check("the status gate refuses a support view", statusRefusedWithoutWork(supportView));
         check("dpo/access tells an anonymous caller no, without refusing", toldNo(anonymous));
         check("dpo/access tells a front-office session no", toldNo(frontOffice));
         check("dpo/access tells a support view no", toldNo(supportView));

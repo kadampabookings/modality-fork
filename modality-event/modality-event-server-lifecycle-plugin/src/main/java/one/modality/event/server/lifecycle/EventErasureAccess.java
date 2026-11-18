@@ -10,7 +10,6 @@ import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 import dev.webfx.stack.orm.entity.Entity;
 import one.modality.crm.server.authn.gateway.shared.OperationAuthority;
 import one.modality.crm.server.authn.gateway.shared.RouteAccessGuard;
-import one.modality.crm.server.authn.gateway.shared.SuperAdminMembership;
 import one.modality.crm.shared.services.authn.ModalityUserPrincipal;
 
 import java.util.function.Function;
@@ -18,15 +17,15 @@ import java.util.function.Supplier;
 
 /**
  * Who may touch personal-data removal and anonymisation at all, asked again on EVERY call of every endpoint that
- * uses it. Two audiences:
+ * uses it. One audience since V0168 (removing a past event's guest data moved from the super administrator to the
+ * Data Protection Officer):
  *
  * <ul>
- *   <li>{@link #whenSuperAdmin} — removing a past event's guest data (V0077): a super administrator.</li>
  *   <li>{@link #whenDataProtectionOfficer} — anonymising a customer (V0153) or somebody who only booked without an
- *       account (V0163): a Data Protection Officer, a person holding the {@code DataProtection} operation through a
- *       role. <b>A super administrator does NOT pass without it</b> (David, 2026-11-06 and 2026-11-17: strictly
- *       DPO); a super administrator can still assign the role, to anybody including themself, visibly in
- *       Authorizations.</li>
+ *       account (V0163), removing a past event's guest data (V0077, V0168-V0170), retention periods: a Data
+ *       Protection Officer, a person holding the {@code DataProtection} operation through a role. <b>A super
+ *       administrator does NOT pass without it</b> (David, 2026-11-06 and 2026-11-17: strictly DPO); a platform super
+ *       administrator can still assign the role, to anybody including themself, visibly in Authorizations.</li>
  * </ul>
  *
  * <p>The actions are irreversible — the only way back is a point-in-time restore of the whole database — and act on
@@ -45,10 +44,7 @@ import java.util.function.Supplier;
  *       person.</li>
  *   <li>The audience:
  *     <ul>
- *       <li><b>super-administrator membership</b>, read from the database for that person
- *           ({@link SuperAdminMembership}) — NOT an operation code and NOT a route grant, so nothing in the role
- *           and grant tables can delegate it;</li>
- *       <li>or <b>the DataProtection operation</b>, asked of the authorization framework through
+ *       <li><b>the DataProtection operation</b>, asked of the authorization framework through
  *           {@link OperationAuthority} (admin-tiers plan, Phase 3): held for a whole organisation, in some
  *           organisation (a grant scoped to one event or event type is not an answer about all of them), on an access
  *           row that is not read-only. A super administrator's {@code operation:*} does not cover it because
@@ -56,9 +52,10 @@ import java.util.function.Supplier;
  *           ({@link #dataProtectionStaysExplicitOnly}): cleared, every super administrator would pass. Every endpoint
  *           behind {@link #whenDataProtectionOfficer} asks it FRESH, from grants recomputed for the call — the old SQL
  *           was live on every call, and a cached answer would let a Data Protection Officer whose role was just
- *           revoked keep finding people and previewing their data for up to two minutes. Only
- *           {@link #isDataProtectionOfficer}, which decides what the browser draws and is asked on every page, reads
- *           the cache. Until 2026-11-18 this asked the role tables in SQL ({@code RoleOperationMembership}), a second
+ *           revoked keep finding people and previewing their data for up to two minutes. Two kinds of call read the
+ *           cache: {@link #isDataProtectionOfficer}, which decides what the browser draws and is asked on every page,
+ *           and {@link #whenDataProtectionOfficerReadingStatus}, the removal-run status the page polls every few
+ *           seconds while a removal runs (no person in it, nothing changed by it). Until 2026-11-18 this asked the role tables in SQL ({@code RoleOperationMembership}), a second
  *           copy of the grant rules.</li>
  *     </ul></li>
  * </ol>
@@ -97,22 +94,6 @@ final class EventErasureAccess {
     }
 
     /**
-     * Runs {@code work} for a super administrator and refuses everybody else. MUST be called on the caller's
-     * thread (see the class comment).
-     *
-     * @param operation which endpoint is asking, for the log line of a refusal
-     * @param work      what to do once allowed — not started otherwise
-     */
-    static <T> Future<T> whenSuperAdmin(String operation, Function<Caller, Future<T>> work) {
-        // A PLATFORM super administrator (V0167). Erasing a past event acts on that event's organization only, so a
-        // super administrator of that organization could be allowed — once the gate is given the event (admin-tiers
-        // plan, Phase 3). Until then: platform only, the narrower answer.
-        return when(operation, "platform super-administrator", "is not a platform super administrator",
-            caller -> SuperAdminMembership.isPlatformSuperAdmin(caller.principal(), DataSourceModelService.getDefaultDataSourceModel()),
-            work);
-    }
-
-    /**
      * Runs {@code work} for a Data Protection Officer and refuses everybody else, super administrators without the
      * role included. MUST be called on the caller's thread (see the class comment).
      *
@@ -124,6 +105,18 @@ final class EventErasureAccess {
         // role must stop answering at once (see the class comment). A few queries per call is the price.
         return when(operation, DATA_PROTECTION_OPERATION, "does not hold " + DATA_PROTECTION_OPERATION,
             caller -> holdsDataProtection(true), work);
+    }
+
+    /**
+     * {@link #whenDataProtectionOfficer} from the CACHED grants, for the removal-run status a page polls: the run
+     * (every 3 s while one runs) and the runs list (every minute). They show ids, counts and dates — no person — and
+     * change nothing, so a revocation reaching them up to two minutes late costs nothing, while a fresh grant
+     * computation on every poll would cost several queries each time. Anything that acts, or shows or finds a person,
+     * stays on {@link #whenDataProtectionOfficer}. The flag guard runs either way.
+     */
+    static <T> Future<T> whenDataProtectionOfficerReadingStatus(String operation, Function<Caller, Future<T>> work) {
+        return when(operation, DATA_PROTECTION_OPERATION, "does not hold " + DATA_PROTECTION_OPERATION,
+            caller -> holdsDataProtection(false), work);
     }
 
     /**

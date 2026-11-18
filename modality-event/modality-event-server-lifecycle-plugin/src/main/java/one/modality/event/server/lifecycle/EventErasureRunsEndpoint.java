@@ -20,7 +20,7 @@ public final class EventErasureRunsEndpoint extends AsyncFunctionBusCallEndpoint
     public static final String EVENT_ERASURE_RUNS_ADDRESS = "modality/service/event/erasure/runs";
 
     public EventErasureRunsEndpoint() {
-        super(EVENT_ERASURE_RUNS_ADDRESS, argument -> EventErasureAccess.whenDataProtectionOfficer("runs",
+        super(EVENT_ERASURE_RUNS_ADDRESS, argument -> EventErasureAccess.whenDataProtectionOfficerReadingStatus("runs",
             caller -> EventErasureLedger.runsJson()));
         EventErasureConfig.listen();
     }
