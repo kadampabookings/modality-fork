@@ -86,27 +86,45 @@ public class ErasureStepsCheck {
         check("two texts refused", refused(new Object[] { "Jane Doe", "John Doe" }));
         check("the refusal key is the contract's", "ErasureQueryError".equals(ErasureFind.QUERY_KEY));
 
-        System.out.println("find: the SQL binds the text, and computes abc_names() once");
+        System.out.println("find: one match bound to the text, reading each big table once; the rows from the ids it found");
         for (ErasureFind.Kind k : ErasureFind.Kind.values()) {
-            check(k.json + ": every statement binds $1", ErasureFind.customersSql(k, OWN).contains("$1")
-                && ErasureFind.bookingsSql(k, OWN).contains("$1") && ErasureFind.hiddenSql(k, OWN).contains("$1"));
-            check(k.json + ": both read one row more than they answer, customers before counting their bookings",
-                ErasureFind.customersSql(k, OWN).contains("order by p0.id desc limit 51) p cross join lateral")
-                && ErasureFind.bookingsSql(k, OWN).endsWith("limit 51"));
+            String match = ErasureFind.matchSql(k, OWN);
+            check(k.json + ": the match binds $1, the rows do not", match.contains("$1")
+                && !ErasureFind.customersSql(PEOPLE, OWN).contains("$") && !ErasureFind.bookingsSql(BOOKINGS, OWN).contains("$"));
+            check(k.json + ": the match reads the bookings once, into a materialised CTE, and the people into another",
+                match.contains("m as materialized (select d.id, ") && match.contains(" ids(id) as materialized (")
+                && match.contains("p0.id = any(array(select ids.id from ids))"));
         }
-        check("name: abc_names() in an uncorrelated scalar subquery only",
-            ErasureFind.NAME_CUSTOMERS_SQL.contains("= (select public.abc_names($1::text))")
-            && ErasureFind.NAME_BOOKINGS_SQL.contains("= (select public.abc_names($1::text))")
-            && ErasureFind.NAME_BOOKINGS_SQL.split("abc_names\\(").length == 2);
-        check("customers are never anonymised rows", ErasureFind.EMAIL_CUSTOMERS_SQL.contains("p0.anonymised_date is null"));
-        for (ErasureFind.Kind k : ErasureFind.Kind.values())
-            check(k.json + ": bookings number their booker as anonymise_booker's 'auto' rule (no account, address, two-word name)",
-                ErasureFind.bookingsSql(k, OWN).contains("dense_rank() over (partition by (d.person_id is null and position('@' in coalesce(trim(d.person_email), '')) > 1"
-                    + " and position(' ' in trim(coalesce(d.person_abc_names, ''))) > 0) order by lower(trim(d.person_email)), d.person_abc_names)"));
+        check("the ids found are inlined, sorted", ErasureFind.customersSql(PEOPLE, OWN).contains("p0.id = any('{7,12}'::int[])")
+            && ErasureFind.bookingsSql(BOOKINGS, OWN).contains("d.id = any('{4711}'::int[])"));
+        check("both read one row more than they answer, customers before counting their bookings",
+            ErasureFind.customersSql(PEOPLE, OWN).contains("order by f.id desc limit 51) s join person p on p.id = s.id cross join lateral")
+            && ErasureFind.bookingsSql(BOOKINGS, OWN).endsWith("limit 51"));
+        String nameMatch = ErasureFind.matchSql(ErasureFind.Kind.NAME, OWN);
+        check("name: abc_names() computed once, in a materialised CTE, read by scalar subqueries",
+            nameMatch.startsWith("with n as materialized (select public.abc_names($1::text) as v), ")
+            && nameMatch.split("abc_names\\(").length == 2
+            && nameMatch.contains("q.abc_names = (select n.v from n)") && nameMatch.contains("d.person_abc_names = (select n.v from n)"));
+        String refMatch = ErasureFind.matchSql(ErasureFind.Kind.REF, OWN);
+        check("reference: document read once, its people taken from the bookings it matched",
+            refMatch.split("d\\.ref = ").length == 2 && refMatch.contains("ids(id) as materialized (select m.person_id from m)"));
+        check("customers are never anonymised rows", ErasureFind.customersSql(PEOPLE, OWN).contains("p0.anonymised_date is null")
+            && ErasureFind.matchSql(ErasureFind.Kind.EMAIL, OWN).contains("p0.anonymised_date is null"));
+        check("bookings number their booker as anonymise_booker's 'auto' rule (no account, address, two-word name)",
+            ErasureFind.bookingsSql(BOOKINGS, OWN).contains("dense_rank() over (partition by (d.person_id is null and position('@' in coalesce(trim(d.person_email), '')) > 1"
+                + " and position(' ' in trim(coalesce(d.person_abc_names, ''))) > 0) order by lower(trim(d.person_email)), d.person_abc_names)"));
+        String emailMatch = ErasureFind.matchSql(ErasureFind.Kind.EMAIL, OWN);
+        String emailBookings = emailMatch.substring(emailMatch.indexOf("m as materialized"), emailMatch.indexOf(" ids(id)"));
         check("bookings by email in the indexed form (lower(person_email), no trim on the column)",
-            ErasureFind.EMAIL_BOOKINGS_SQL.contains("lower(d.person_email) = lower(trim($1::text))")
-            && !ErasureFind.EMAIL_BOOKINGS_SQL.substring(ErasureFind.EMAIL_BOOKINGS_SQL.lastIndexOf(" where ")).contains("trim(d.person_email)"));
+            emailBookings.contains("lower(d.person_email) = lower(trim($1::text))") && !emailBookings.contains("trim(d.person_email)"));
+        check("the match's answer is read as ids", ErasureFind.matchedIds(rows(new Object[][] { { "3,12", "", true } }), 0).equals(Set.of(3, 12))
+            && ErasureFind.matchedIds(rows(new Object[][] { { "3,12", "", true } }), 1).isEmpty()
+            && ErasureFind.matchedIds(null, 0).isEmpty()
+            && ErasureFind.matchedIds(rows(new Object[][] { { "3;12", "", false } }), 0) == null);
     }
+
+    /** The ids a match found, for the statements built from them. */
+    private static final List<Integer> PEOPLE = List.of(12, 7), BOOKINGS = List.of(4711);
 
     // ===== the caller's organisations ==============================================================================
 
@@ -117,38 +135,43 @@ public class ErasureStepsCheck {
             && "'{}'::int[]".equals(ErasureFind.intArray(List.of()))
             && "'{5}'::int[]".equals(ErasureFind.intArray(java.util.Arrays.asList(null, 5))));
         String covered = "coalesce(coalesce(e.organization_id, d.organization_id) = any('{151,187}'::int[]), false)";
+        String here = " f as materialized (select p0.id, " + ErasureFind.recordsHere("p0.id", "'{151,187}'::int[]") + " as here";
         for (ErasureFind.Kind k : ErasureFind.Kind.values()) {
-            String customers = ErasureFind.customersSql(k, OWN), bookings = ErasureFind.bookingsSql(k, OWN), hidden = ErasureFind.hiddenSql(k, OWN);
-            check(k.json + ": no placeholder left", !customers.contains(ErasureFind.COVERED) && !bookings.contains(ErasureFind.COVERED)
-                && !hidden.contains(ErasureFind.COVERED));
-            check(k.json + ": bookings only of the caller's organisations, before the limit",
-                bookings.contains(" where " + covered + " and ") && bookings.indexOf(covered) < bookings.indexOf("limit 51"));
-            check(k.json + ": a booking carries its organisation (the event's, else its own)",
-                bookings.contains(", coalesce(e.organization_id, d.organization_id), o.name from document d"));
-            check(k.json + ": customers only with a record here, or none anywhere, before the limit",
-                customers.contains("join f on f.id = p0.id and (f.here or not f.anywhere) order by p0.id desc limit 51"));
-            check(k.json + ": 'here' is a booking or an application in the caller's organisations",
-                customers.contains(" f as materialized (select p0.id, " + ErasureFind.recordsHere("p0.id", "'{151,187}'::int[]") + " as here")
-                && ErasureFind.recordsHere("p0.id", "x").contains("and " + covered.replace("'{151,187}'::int[]", "x") + ")")
-                && ErasureFind.recordsHere("p0.id", "x").contains("va.person_id in (select p0.id union all select lc.id from person lc where lc.account_person_id = p0.id)"
-                    + " and coalesce(va.organization_id = any(x), false)"));
-            check(k.json + ": counts here and in all, the last event start of those here only",
-                customers.contains("count(*) filter (where " + covered + ") as here")
-                && customers.contains("max(e.start_date) filter (where " + covered + ") as last_start"));
+            String match = ErasureFind.matchSql(k, OWN);
+            check(k.json + ": no placeholder left", !match.contains(ErasureFind.COVERED));
+            check(k.json + ": the match marks each booking it found here or not",
+                match.contains("m as materialized (select d.id, " + covered + " as here, d.person_id from document d left join event e on e.id = d.event_id where "));
+            check(k.json + ": the match's 'here' is a booking or an application in the caller's organisations", match.contains(here));
             check(k.json + ": hiddenElsewhere = a customer with records elsewhere only, or a booking elsewhere",
-                hidden.contains("select exists (select 1 from f where f.anywhere and not f.here) or exists (select 1 from document d")
-                && hidden.contains("where not " + covered + " and "));
+                match.endsWith(" exists (select 1 from f where f.anywhere and not f.here) or exists (select 1 from m where not m.here)"));
         }
+        String customers = ErasureFind.customersSql(PEOPLE, OWN), bookings = ErasureFind.bookingsSql(BOOKINGS, OWN);
+        check("no placeholder left in the rows", !customers.contains(ErasureFind.COVERED) && !bookings.contains(ErasureFind.COVERED));
+        check("bookings only of the caller's organisations, before the limit",
+            bookings.contains(" where " + covered + " and d.id = any(") && bookings.indexOf(covered) < bookings.indexOf("limit 51"));
+        check("a booking carries its organisation (the event's, else its own)",
+            bookings.contains(", coalesce(e.organization_id, d.organization_id), o.name from document d"));
+        check("customers only with a record here, or none anywhere, before the limit",
+            customers.contains("(select f.id from f where f.here or not f.anywhere order by f.id desc limit 51) s"));
+        check("'here' is a booking or an application in the caller's organisations",
+            customers.contains(here)
+            && ErasureFind.recordsHere("p0.id", "x").contains("and " + covered.replace("'{151,187}'::int[]", "x") + ")")
+            && ErasureFind.recordsHere("p0.id", "x").contains("va.person_id in (select p0.id union all select lc.id from person lc where lc.account_person_id = p0.id)"
+                + " and coalesce(va.organization_id = any(x), false)"));
+        check("counts here and in all, the last event start of those here only",
+            customers.contains("count(*) filter (where " + covered + ") as here")
+            && customers.contains("max(e.start_date) filter (where " + covered + ") as last_start"));
         check("a DPO of nothing finds only people with no record",
-            ErasureFind.bookingsSql(ErasureFind.Kind.REF, Set.of()).contains("= any('{}'::int[]), false) and "));
+            ErasureFind.bookingsSql(BOOKINGS, Set.of()).contains("= any('{}'::int[]), false) and "));
         check("bookingsElsewhere = all minus here", ErasureFind.elsewhere(5L, 3L).longValue() == 2 && ErasureFind.elsewhere(null, 3L) == null);
 
         System.out.println("check: the caller's organisations only (removing the filter fails these)");
         check("bookings: the caller's organisations; the others apart, as keptElsewhere",
-            ErasureResidueCheck.BOOKINGS_SQL.contains(") and coalesce(coalesce((select e.organization_id from event e where e.id = d.event_id), d.organization_id) = any(q.covered), false)")
-            && ErasureResidueCheck.KEPT_ELSEWHERE_SQL.contains(") and not coalesce(coalesce((select e.organization_id from event e where e.id = d.event_id), d.organization_id) = any(q.covered), false)"));
-        check("...both over the same match", matchOf(ErasureResidueCheck.BOOKINGS_SQL) != null
-            && matchOf(ErasureResidueCheck.BOOKINGS_SQL).equals(matchOf(ErasureResidueCheck.KEPT_ELSEWHERE_SQL)));
+            ErasureResidueCheck.BOOKINGS_SQL.contains(" as matched, coalesce(coalesce((select e.organization_id from event e where e.id = d.event_id), d.organization_id) = any(q.covered), false) as here,")
+            && ErasureResidueCheck.BOOKINGS_SQL.contains("(select count(*) from (select 1 from m where m.matched and m.here limit 100) t)")
+            && ErasureResidueCheck.BOOKINGS_SQL.contains("(select count(*) from (select 1 from m where m.matched and not m.here limit 100) t)"));
+        check("...both over the same match, in one read of document",
+            ErasureResidueCheck.BOOKINGS_SQL.split("from document d").length == 2 && ErasureResidueCheck.BOOKINGS_SQL.contains("m as materialized (select d.id, ("));
         check("emails: not those of another organisation's booking's mails",
             ErasureResidueCheck.EMAILS_SQL.contains("and not exists (select 1 from mail m where m.id = r.mail_id and exists (select 1 from document d"));
         check("history: not that of another organisation's booking",
@@ -173,11 +196,12 @@ public class ErasureStepsCheck {
         check("...a covered one as it is", "Jane".equals(own.getString("firstName")) && own.getInteger("priceNet") == 12000 && own.isTrue("hasPhone"));
 
         System.out.println("find: linked copies' records count as the customer's (S2)");
-        String customers = ErasureFind.customersSql(ErasureFind.Kind.EMAIL, OWN);
-        check("here and anywhere over the person and their linked copies", customers.contains(ErasureFind.recordsHere("p0.id", "'{151,187}'::int[]"))
-            && customers.contains(ErasureFind.recordsAnywhere("p0.id"))
+        String linked = ErasureFind.customersSql(PEOPLE, OWN), linkedMatch = ErasureFind.matchSql(ErasureFind.Kind.EMAIL, OWN);
+        check("here and anywhere over the person and their linked copies", linked.contains(ErasureFind.recordsHere("p0.id", "'{151,187}'::int[]"))
+            && linkedMatch.contains(ErasureFind.recordsHere("p0.id", "'{151,187}'::int[]")) && linkedMatch.contains(ErasureFind.recordsAnywhere("p0.id"))
+            && linked.contains(ErasureFind.recordsAnywhere("p0.id"))
             && ErasureFind.recordsAnywhere("p0.id").contains("d.person_id in (select p0.id union all select lc.id from person lc where lc.account_person_id = p0.id)"));
-        check("...and the counts", customers.contains("where d.person_id in (select p.id union all select lc.id from person lc where lc.account_person_id = p.id)) b"));
+        check("...and the counts", linked.contains("where d.person_id in (select p.id union all select lc.id from person lc where lc.account_person_id = p.id)) b"));
     }
 
     /** A slice of a main source file, read from the module directory (the checks run from there). */
@@ -192,11 +216,6 @@ public class ErasureStepsCheck {
     }
 
     /** The WHERE clause of a capped area statement up to its organisation filter, or null without one. */
-    private static String matchOf(String sql) {
-        int from = sql.indexOf(" where "), to = sql.indexOf(") and ");
-        return from < 0 || to < from ? null : sql.substring(from, to);
-    }
-
     // ===== approvals ===============================================================================================
 
     private static ErasureApprovals.Row row(int org, String state, boolean expired, Integer askedBy) {
@@ -414,7 +433,7 @@ public class ErasureStepsCheck {
         check("ids alone concern no area", ErasureResidueCheck.AREAS.stream().noneMatch(a -> a.concerns(idsOnly)));
         check("every area binds the three arrays and is capped at 100", ErasureResidueCheck.AREAS.stream().allMatch(a ->
             a.sql().contains("$1::text[]") && a.sql().contains("$2::text[]") && a.sql().contains("$3::int[] as covered")
-            && a.sql().contains("limit 100")) && ErasureResidueCheck.KEPT_ELSEWHERE_SQL.contains("$3::int[] as covered"));
+            && a.sql().contains("limit 100")) && ErasureResidueCheck.BOOKINGS_AREA.sql().contains("$4::text"));
         check("history matches the address and 'guest:' + its first 58 characters, built once in the CTE",
             ErasureResidueCheck.HISTORY_SQL.contains("'guest:' || left(x, 58) from unnest(e) x) as usernames")
             && ErasureResidueCheck.HISTORY_SQL.contains("where lower(trim(h.username)) = any(q.usernames) and ")
@@ -425,8 +444,10 @@ public class ErasureStepsCheck {
         System.out.println("check: the subject's erased bookings, by the tag the functions write");
         check("'#' + the person, '#B' + the seed booking", "#12".equals(ErasureResidueCheck.erasedTag(PersonAnonymisationRunner.Subject.person(12)))
             && "#B4711".equals(ErasureResidueCheck.erasedTag(PersonAnonymisationRunner.Subject.booker(4711))));
-        check("found by that last name, bound, newest 50", ErasureResidueCheck.ERASED_BOOKINGS_SQL.contains("d.person_last_name = $1::text")
-            && ErasureResidueCheck.ERASED_BOOKINGS_SQL.endsWith("limit 50") && !ErasureResidueCheck.ERASED_BOOKINGS_SQL.contains("erasure_request"));
+        check("found by that last name, bound, newest 50, in the bookings' read of document",
+            ErasureResidueCheck.BOOKINGS_SQL.contains("d.person_last_name = $4::text as erased")
+            && ErasureResidueCheck.BOOKINGS_SQL.endsWith("array(select m.id from m where m.erased order by m.id desc limit 50), ',')")
+            && !ErasureResidueCheck.BOOKINGS_SQL.contains("erasure_request"));
         check("no stamping, no register: nothing in the check writes", !ErasureResidueCheck.class.getDeclaredFields().toString().contains("STAMP")
             && java.util.Arrays.stream(ErasureResidueCheck.class.getDeclaredFields()).noneMatch(f -> f.getName().contains("STAMP"))
             && java.util.Arrays.stream(ErasureResidueCheck.Findings.class.getDeclaredFields()).noneMatch(f -> f.getName().equals("recorded")));
