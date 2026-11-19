@@ -86,8 +86,20 @@ final class ChatReadScope implements ClientReadScope.Provider, ClientScopeToken.
      * it against real volume before the flip, not after — a rule that is free on 248 conversations is not
      * free on every message in them.
      *
-     * <p>{@code ChatMessageReaction} is the open question beside these two: the same boundary two subqueries
-     * deep, leaking who reacted to what rather than any text.
+     * <p><b>{@code ChatMessageReaction} goes with them</b> (2026-11-19). It is the third root a client reaches
+     * with a conversation id of its own choosing — {@code use-message-reactions.ts} reads
+     * {@code ChatMessageReaction where message.conversation=$1} — so leaving it out of the flip leaves the
+     * same enumeration open one table further along, answering who reacted to what in any conversation. Its
+     * rule is the same boundary two subqueries deep, already pinned by {@code ChatReadScopeCheck}, and
+     * measured on staging at 0.46 ms of extra planning and 0.07 ms of execution: both injected conditions
+     * collapse to primary-key lookups rather than materialising. The three roots that take a client-chosen
+     * conversation id are therefore one flip.
+     *
+     * <p>{@code ConversationParticipant} and {@code ChatPresence} stay out of it, not because they are safe
+     * by nature but because nobody has asked the question of them yet: the first is read only as the
+     * caller's own row today, which is what makes {@code person=CALLER_PERSON} sufficient, and the second is
+     * about agents' presence rather than a conversation. Both would need revisiting the moment anything
+     * wants a membership list.
      */
     private static final Set<String> ENFORCED_ROOTS = Set.of();
 
