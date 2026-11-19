@@ -78,6 +78,26 @@
 -- the other's body: V0175 ships first, so V0171 must be renumbered above V0176 and its anonymise_person()
 -- regenerated on THIS body (with its two minor lines added back).
 --
+-- COST (19 Nov 2026; marked "V0175 (cost)"). On staging, erasing one booking took 73 s to preview and 73 s to erase
+-- (the server gives up at 2 minutes): both functions read whole tables many times, mostly since V0153/V0163 —
+-- document about seven to ten times (1.1 GB on production), document_line twice, mail twice for a row count — and one
+-- V0175 proof looked up each booking's organisation for the whole table (2 million page reads). Rewritten WITHOUT a
+-- new index (David): each function reads document ONCE into a pool of every booking any later step can match
+-- (ap_doc_pool, ab_doc_pool: built from supersets, see there), anonymise_person reads document_line once
+-- (ap_line_pool), lookups that hid an index behind IN ... OR IN use it again, and the mail table's own change is read
+-- from this transaction's counters. Results are unchanged: the committed body and this one were run side by side on a
+-- copy of staging (about 1,000 runs: customers and bookers, every organisation, one, another, with and without ticks,
+-- with synthetic mails, recipients and history) and wrote the same rows, returned the same grids and refused alike.
+-- Pages read per run, before -> after: a customer 456,000 -> 90,000 (2.33 million -> 107,000 for one organisation),
+-- another 893,000 -> 104,000, a booker 105,000 -> 29,000; and faster even with everything cached (a customer 1.8 s ->
+-- 1.0 s, a booker 1.0 s -> 0.7 s). Still read whole, once each: mail by sender and recipient by address (no index on
+-- either, by choice), and person / frontend_account (13 MB and 9 MB) a few times. A review of the rewrite found one
+-- check the pool did not cover (bookings the person trigger can write into: every booking of an event not over, read
+-- by index — about 16,000 of the customer's pages); a case built for it refuses as the committed body refused.
+-- EDITED IN PLACE, not as a new version: staging had applied this script (19 Nov), production had not. A database
+-- that applied the earlier text refuses to boot (checksum): delete its db_migration row 175 first — the boot then
+-- runs this script again, which is safe (old signatures dropped IF EXISTS, CREATE OR REPLACE, REVOKE repeated).
+--
 -- ANONYMISER / ERASURE MANIFEST. No table or column is added: nothing to classify. The person routine's reasons in
 -- scripts/gdpr-erasure/manifest.tsv now say "in the DPO's organisations".
 --
@@ -125,6 +145,13 @@ DECLARE
     v_kept_candidates bigint := 0;
     n2            bigint;
     v_id_rx       text;
+    -- V0175 (cost): the supersets ap_doc_pool is read with (see the pool, under SCOPE)
+    v_pool_addresses text[];
+    v_pool_names  text[];
+    v_pool_phones text[];
+    v_pool_persons integer[];
+    -- V0175 (cost): the mail table's own changes, from this transaction's counters, instead of counting 1.1M rows twice
+    v_mail_counted boolean := current_setting('track_counts')::boolean;
 BEGIN
     v_tag := v_tag_prefix || ' on ' || current_date || ']';
 
@@ -207,7 +234,8 @@ BEGIN
     DROP TABLE IF EXISTS ap_members, ap_persons, ap_core_addresses, ap_addresses, ap_names, ap_phones, ap_candidates, ap_docs,
                          ap_email_docs, ap_events, ap_share_lines, ap_hist_docs, ap_hist, ap_recipients, ap_sender_mails, ap_mails, ap_namesakes, ap_carer_docs,
                          ap_member_docs, ap_kept, ap_mentions, ap_owner_lines, ap_kept_recipients, ap_kept_applications,
-                         ap_kept_conversations, ap_applications, ap_kept_snapshot;
+                         ap_kept_conversations, ap_applications, ap_kept_snapshot,
+                         ap_mp, ap_doc_pool, ap_line_pool, ap_event_docs; -- V0175 (cost)
 
     -- The human: the row, and its linked copies on other accounts.
     CREATE TEMP TABLE ap_persons (id integer PRIMARY KEY);
@@ -292,6 +320,86 @@ BEGIN
                          AND NOT EXISTS (SELECT 1 FROM ap_persons s WHERE s.id = x.id));
     v_unique_names := coalesce(v_unique_names, '{}'::text[]);
 
+    -- V0175 (cost): ONE read of document for every step below that has no index to go by — an address trimmed, a
+    -- phone's digits, a name typed on a booking or in a carer slot, a payer's or a carer's id. document is 1.1 GB on
+    -- production (294,000 rows) and this function read it whole about ten times: about 70 s on staging, cold, for
+    -- one customer. ap_doc_pool holds every booking any of those steps can match, found with SUPERSETS known here:
+    --   addresses: the certain ones, every address on their bookings and account moves, their members' — every
+    --              address a step below tests a booking against is one of these;
+    --   names:     theirs (v_names) and their members';
+    --   phones:    of their rows and bookings, and of the removed duplicates who join below (ap_persons);
+    --   persons:   theirs, those removed duplicates, their members (with linked copies and removed duplicates);
+    --   carers:    every booking naming somebody as carer, each name normalised once, kept when it is one of theirs.
+    -- Each step keeps its own condition, on the pool instead of the table: it finds the same rows. The checks after
+    -- the writes read document again through the pool's ids (primary key), so they test the rows as written.
+    --
+    -- The persons ap_member_docs counts for each member (the member, their linked copies, their removed
+    -- duplicates), read here once (there was the same query, as a CTE).
+    CREATE TEMP TABLE ap_mp AS
+    SELECT m.id AS member_id, q.id AS person_id, q.abc_names, lower(trim(q.email)) AS email
+      FROM ap_members m JOIN person mm ON mm.id = m.id
+      JOIN person q ON q.id = m.id OR q.account_person_id = m.id
+                    -- their removed duplicates, which ticking them brings in too
+                    OR (q.removed AND q.anonymised_date IS NULL AND q.abc_names = mm.abc_names
+                        AND lower(trim(q.email)) = lower(trim(mm.email)))
+     WHERE NOT m.linked;
+    ANALYZE ap_mp;
+    v_pool_addresses := ARRAY(
+        SELECT a FROM (
+            SELECT ca.address AS a FROM ap_core_addresses ca
+            UNION SELECT lower(trim(d.person_email)) FROM document d JOIN ap_persons s ON s.id = d.person_id
+            UNION SELECT lower(trim(m.from_account_username)) FROM person_account_move m JOIN ap_persons s ON s.id = m.person_id
+                   WHERE m.was_owner
+            UNION SELECT mp.email FROM ap_mp mp) t
+         WHERE a IS NOT NULL);
+    v_pool_names := ARRAY(SELECT x FROM unnest(v_names) AS x UNION SELECT mp.abc_names FROM ap_mp mp WHERE mp.abc_names IS NOT NULL);
+    -- the removed duplicates who join ap_persons below have one of these addresses and one of their row names
+    v_pool_persons := ARRAY(
+        SELECT s.id FROM ap_persons s
+        UNION SELECT q.id FROM person q
+               WHERE q.removed AND q.anonymised_date IS NULL
+                 AND lower(trim(q.email)) = ANY (v_pool_addresses) AND q.abc_names = ANY (v_row_names)
+        UNION SELECT mp.person_id FROM ap_mp mp);
+    v_pool_phones := ARRAY(
+        SELECT DISTINCT right(dg, 9) FROM (
+            SELECT regexp_replace(q.phone, '\D', '', 'g') AS dg FROM person q WHERE q.id = ANY (v_pool_persons)
+            UNION SELECT regexp_replace(d.person_phone, '\D', '', 'g') FROM document d WHERE d.person_id = ANY (v_pool_persons)
+        ) t WHERE length(coalesce(dg, '')) >= 9);
+    -- (OFFSET 0 fences each level, so each value is computed once per row: the phone's digits are a regular
+    -- expression, the carer names a plpgsql call, and document has 294,000 rows.)
+    CREATE TEMP TABLE ap_doc_pool AS
+    SELECT x.id, x.ref, x.event_id, coalesce(e.organization_id, x.organization_id) AS organization_id,
+           x.person_id, x.payer_id, x.person_carer1_id, x.person_carer2_id, x.email, x.abc_names, x.phone9, x.n1, x.n2
+      FROM (SELECT y.*,
+                   -- both slots normalised when either is filled, as the carer step always did
+                   CASE WHEN y.carer_named THEN public.abc_names(y.person_carer1_name) END AS n1,
+                   CASE WHEN y.carer_named THEN public.abc_names(y.person_carer2_name) END AS n2
+              FROM (SELECT z.*,
+                           coalesce(   z.email = ANY (v_pool_addresses) OR z.abc_names = ANY (v_pool_names)
+                                    OR z.phone9 = ANY (v_pool_phones)
+                                    OR z.person_id = ANY (v_pool_persons) OR z.payer_id = ANY (v_pool_persons)
+                                    OR z.person_carer1_id = ANY (v_pool_persons) OR z.person_carer2_id = ANY (v_pool_persons),
+                                    false) AS hit
+                      FROM (SELECT w.*, CASE WHEN length(w.dg) >= 9 THEN right(w.dg, 9) END AS phone9
+                              FROM (SELECT d.id, d.ref, d.event_id, d.organization_id, d.person_id, d.payer_id,
+                                           d.person_carer1_id, d.person_carer2_id, d.person_carer1_name, d.person_carer2_name,
+                                           lower(trim(d.person_email)) AS email, d.person_abc_names AS abc_names,
+                                           -- phones are matched on bookings made without an account only (ap_phones,
+                                           -- ap_candidates): the digits are worked out for those alone
+                                           CASE WHEN d.person_id IS NULL
+                                                THEN regexp_replace(coalesce(d.person_phone, ''), '\D', '', 'g') END AS dg,
+                                           (d.person_carer1_name IS NOT NULL OR d.person_carer2_name IS NOT NULL) AS carer_named
+                                      FROM document d
+                                    OFFSET 0) w -- the one read of document
+                            OFFSET 0) z
+                    OFFSET 0) y
+             WHERE y.hit OR y.carer_named
+            OFFSET 0) x
+      LEFT JOIN event e ON e.id = x.event_id
+     WHERE x.hit OR x.n1 = ANY (v_row_names) OR x.n2 = ANY (v_row_names);
+    ALTER TABLE ap_doc_pool ADD PRIMARY KEY (id);
+    ANALYZE ap_doc_pool;
+
     -- Addresses that are probably theirs (their bookings' snapshot, accounts they owned before a move), KEPT ONLY
     -- WHEN NOTHING SAYS OTHERWISE: an inferred address is dropped as soon as it also belongs to somebody else — a
     -- person row (removed or not) or another account holds it, a volunteering application of another person uses
@@ -315,10 +423,10 @@ BEGIN
                           AND fa.id IS DISTINCT FROM v_account_id)
        AND NOT EXISTS (SELECT 1 FROM volunteering_application va WHERE lower(trim(va.email)) = t.a
                           AND va.person_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM ap_persons s WHERE s.id = va.person_id))
-       AND NOT EXISTS (SELECT 1 FROM document d WHERE lower(trim(d.person_email)) = t.a
+       AND NOT EXISTS (SELECT 1 FROM ap_doc_pool d WHERE d.email = t.a -- V0175 (cost): the pool
                           AND NOT EXISTS (SELECT 1 FROM ap_persons s WHERE s.id = d.person_id)
                           -- a booking without a name is not known to be theirs: it contradicts too
-                          AND NOT coalesce(d.person_abc_names = ANY (v_names), false))
+                          AND NOT coalesce(d.abc_names = ANY (v_names), false))
     ON CONFLICT DO NOTHING;
     ANALYZE ap_addresses;
 
@@ -349,10 +457,10 @@ BEGIN
     -- them carrying 22,755 of 88,587 such bookings: matched on, they would bury the real candidates. Set aside.
     ALTER TABLE ap_phones ADD COLUMN guest_bookings bigint;
     UPDATE ap_phones ph SET guest_bookings = c.n
-      FROM (SELECT right(regexp_replace(d.person_phone, '\D', '', 'g'), 9) AS phone, count(*) AS n
-              FROM document d
-             WHERE d.person_id IS NULL AND length(regexp_replace(coalesce(d.person_phone, ''), '\D', '', 'g')) >= 9
-               AND right(regexp_replace(d.person_phone, '\D', '', 'g'), 9) IN (SELECT phone FROM ap_phones)
+      FROM (SELECT d.phone9 AS phone, count(*) AS n
+              FROM ap_doc_pool d -- V0175 (cost): the pool (phone9 = the last 9 digits, when there are 9)
+             WHERE d.person_id IS NULL AND d.phone9 IS NOT NULL
+               AND d.phone9 IN (SELECT phone FROM ap_phones)
              GROUP BY 1) c
      WHERE c.phone = ph.phone;
     DELETE FROM ap_phones WHERE guest_bookings > 5;
@@ -392,17 +500,15 @@ BEGIN
     -- Bookings made without an account that match them.
     CREATE TEMP TABLE ap_candidates AS
     SELECT d.id, d.ref, d.event_id,
-           (lower(trim(d.person_email)) IN (SELECT address FROM ap_addresses))             AS by_email,
-           coalesce(d.person_abc_names = ANY (v_names), false)                            AS by_name,
-           coalesce(d.person_abc_names = ANY (v_row_names), false)                        AS by_row_name,
-           (length(regexp_replace(coalesce(d.person_phone, ''), '\D', '', 'g')) >= 9
-            AND right(regexp_replace(d.person_phone, '\D', '', 'g'), 9) IN (SELECT phone FROM ap_phones)) AS by_phone
-      FROM document d
+           (d.email IN (SELECT address FROM ap_addresses))                                AS by_email,
+           coalesce(d.abc_names = ANY (v_names), false)                                   AS by_name,
+           coalesce(d.abc_names = ANY (v_row_names), false)                               AS by_row_name,
+           (d.phone9 IS NOT NULL AND d.phone9 IN (SELECT phone FROM ap_phones))           AS by_phone
+      FROM ap_doc_pool d -- V0175 (cost): the pool
      WHERE d.person_id IS NULL
-       AND (   lower(trim(d.person_email)) IN (SELECT address FROM ap_addresses)
-            OR d.person_abc_names = ANY (v_names)
-            OR (length(regexp_replace(coalesce(d.person_phone, ''), '\D', '', 'g')) >= 9
-                AND right(regexp_replace(d.person_phone, '\D', '', 'g'), 9) IN (SELECT phone FROM ap_phones)));
+       AND (   d.email IN (SELECT address FROM ap_addresses)
+            OR d.abc_names = ANY (v_names)
+            OR (d.phone9 IS NOT NULL AND d.phone9 IN (SELECT phone FROM ap_phones)));
     ALTER TABLE ap_candidates ADD COLUMN action text, ADD COLUMN carer_match boolean NOT NULL DEFAULT false;
     -- email + the name of one of their rows = the same human; email + a name only from their bookings' snapshots =
     -- perhaps them (ticked, in full; unticked, the address still goes — see ap_email_docs); their email alone = their
@@ -424,20 +530,18 @@ BEGIN
     CREATE TEMP TABLE ap_carer_docs AS
     SELECT c.id, c.n1 = ANY (v_row_names) OR c.n2 = ANY (v_row_names) AS by_name,
            c.n1 = ANY (v_unique_names) OR c.n2 = ANY (v_unique_names) AS unique_name
-      FROM (SELECT x.id, public.abc_names(x.n1) AS n1, public.abc_names(x.n2) AS n2
-              FROM (SELECT d.id, d.person_carer1_name AS n1, d.person_carer2_name AS n2 FROM document d
-                     WHERE d.person_carer1_name IS NOT NULL OR d.person_carer2_name IS NOT NULL
-                    OFFSET 0) x
-            OFFSET 0) c
+      FROM ap_doc_pool c -- V0175 (cost): the pool, whose n1/n2 are the carer names already normalised
      WHERE c.n1 = ANY (v_row_names) OR c.n2 = ANY (v_row_names);
     ALTER TABLE ap_carer_docs ADD COLUMN tied boolean;
+    -- V0175 (cost): every carer booking is in the pool (ap_carer_docs comes from it); on document, an unanalysed
+    -- ap_carer_docs could plan this as a read of the whole table
     UPDATE ap_carer_docs cd SET tied = cd.unique_name
-        OR EXISTS (SELECT 1 FROM document d WHERE d.id = cd.id
+        OR EXISTS (SELECT 1 FROM ap_doc_pool d WHERE d.id = cd.id
                      AND (   d.person_id IN (SELECT s.id FROM ap_persons s) OR d.person_id IN (SELECT m.id FROM ap_members m)
                           OR d.payer_id IN (SELECT s.id FROM ap_persons s)
                           OR d.person_carer1_id IN (SELECT s.id FROM ap_persons s)
                           OR d.person_carer2_id IN (SELECT s.id FROM ap_persons s)
-                          OR lower(trim(d.person_email)) IN (SELECT address FROM ap_addresses)))
+                          OR d.email IN (SELECT address FROM ap_addresses)))
         OR EXISTS (SELECT 1 FROM ap_candidates c WHERE c.id = cd.id AND c.action IN ('auto', 'auto-contact'));
     -- A booking that is already a candidate on its own (name, phone) carries the carer match along; the others
     -- become 'carer' candidates.
@@ -480,10 +584,11 @@ BEGIN
      WHERE c.action = 'auto' OR (c.action = 'full' AND c.id = ANY (v_ticked)) ON CONFLICT DO NOTHING;
     INSERT INTO ap_docs SELECT c.id, 'contact' FROM ap_candidates c
      WHERE c.action = 'auto-contact' OR (c.action = 'contact' AND c.id = ANY (v_ticked)) ON CONFLICT DO NOTHING;
-    INSERT INTO ap_docs (id, scope, paid) SELECT DISTINCT d.id, 'payer', true FROM document d JOIN ap_persons s ON s.id = d.payer_id
+    -- V0175 (cost): payer and carer ids have no index: the pool
+    INSERT INTO ap_docs (id, scope, paid) SELECT DISTINCT d.id, 'payer', true FROM ap_doc_pool d JOIN ap_persons s ON s.id = d.payer_id
     ON CONFLICT (id) DO UPDATE SET paid = true;
     INSERT INTO ap_docs (id, scope, cared)
-    SELECT DISTINCT d.id, 'carer', true FROM document d JOIN ap_persons s ON s.id IN (d.person_carer1_id, d.person_carer2_id)
+    SELECT DISTINCT d.id, 'carer', true FROM ap_doc_pool d JOIN ap_persons s ON s.id IN (d.person_carer1_id, d.person_carer2_id)
     ON CONFLICT (id) DO UPDATE SET cared = true;
     -- ... and by the typed name (ap_carer_docs): tied to them, or ticked.
     INSERT INTO ap_docs (id, scope, cared)
@@ -584,9 +689,36 @@ BEGIN
     -- V0175: the lines naming them as room owner by id are found once, each with whether its booking is in an
     -- organisation this run covers: a line of another organisation's booking is kept, only its id link is cut.
     CREATE TEMP TABLE ap_owner_lines (id integer PRIMARY KEY, document_id integer NOT NULL, covered boolean NOT NULL);
+    -- V0175 (cost): ONE read of document_line (1.4M lines, 213 MB on production) for both passes: the lines naming
+    -- them as room owner by id (that column has no index) and, among their events' bookings, the lines carrying
+    -- any room name. Each pass then reads this pool with its own condition. Their events' bookings are read first,
+    -- by document's event_id index (a join on ap_events read the whole table).
+    CREATE TEMP TABLE ap_event_docs AS
+    SELECT d.id FROM document d WHERE d.event_id = ANY (ARRAY(SELECT e.event_id FROM ap_events e));
+    ALTER TABLE ap_event_docs ADD PRIMARY KEY (id);
+    ANALYZE ap_event_docs;
+    CREATE TEMP TABLE ap_line_pool AS
+    SELECT dl.id, dl.document_id, dl.share_mate_owner_person_id,
+           dl.document_id IN (SELECT ed.id FROM ap_event_docs ed) AS in_events,
+           ARRAY[dl.share_mate_owner_name, dl.share_owner_mate1_name, dl.share_owner_mate2_name,
+                 dl.share_owner_mate3_name, dl.share_owner_mate4_name, dl.share_owner_mate5_name,
+                 dl.share_owner_mate6_name, dl.share_owner_mate7_name] AS names,
+           (dl.share_mate_owner_name IS NOT NULL OR dl.share_owner_mate1_name IS NOT NULL
+            OR dl.share_owner_mate2_name IS NOT NULL OR dl.share_owner_mate3_name IS NOT NULL
+            OR dl.share_owner_mate4_name IS NOT NULL OR dl.share_owner_mate5_name IS NOT NULL
+            OR dl.share_owner_mate6_name IS NOT NULL OR dl.share_owner_mate7_name IS NOT NULL) AS named
+      FROM document_line dl
+     WHERE dl.share_mate_owner_person_id IN (SELECT id FROM ap_persons)
+        OR (    (dl.share_mate_owner_name IS NOT NULL OR dl.share_owner_mate1_name IS NOT NULL
+                 OR dl.share_owner_mate2_name IS NOT NULL OR dl.share_owner_mate3_name IS NOT NULL
+                 OR dl.share_owner_mate4_name IS NOT NULL OR dl.share_owner_mate5_name IS NOT NULL
+                 OR dl.share_owner_mate6_name IS NOT NULL OR dl.share_owner_mate7_name IS NOT NULL)
+            AND dl.document_id IN (SELECT ed.id FROM ap_event_docs ed));
+    ALTER TABLE ap_line_pool ADD PRIMARY KEY (id);
+    ANALYZE ap_line_pool;
     INSERT INTO ap_owner_lines
     SELECT dl.id, dl.document_id, v_orgs IS NULL OR coalesce((SELECT coalesce(oe.organization_id, od.organization_id) FROM document od LEFT JOIN event oe ON oe.id = od.event_id WHERE od.id = dl.document_id) = ANY (v_orgs), false)
-      FROM document_line dl WHERE dl.share_mate_owner_person_id IN (SELECT id FROM ap_persons);
+      FROM ap_line_pool dl WHERE dl.share_mate_owner_person_id IN (SELECT id FROM ap_persons);
     INSERT INTO ap_share_lines
     SELECT o.id, o.document_id FROM ap_owner_lines o
      WHERE o.covered AND NOT EXISTS (SELECT 1 FROM ap_docs t WHERE t.id = o.document_id AND t.scope = 'full');
@@ -595,18 +727,10 @@ BEGIN
      WHERE NOT o.covered AND NOT EXISTS (SELECT 1 FROM ap_kept k WHERE k.id = o.document_id);
     INSERT INTO ap_share_lines
     SELECT DISTINCT c.id, c.document_id
-      FROM (SELECT dl.id, dl.document_id,
-                   ARRAY[dl.share_mate_owner_name, dl.share_owner_mate1_name, dl.share_owner_mate2_name,
-                         dl.share_owner_mate3_name, dl.share_owner_mate4_name, dl.share_owner_mate5_name,
-                         dl.share_owner_mate6_name, dl.share_owner_mate7_name] AS names
-              FROM ap_events e
-              JOIN document d ON d.event_id = e.event_id
-              JOIN document_line dl ON dl.document_id = d.id
-             WHERE NOT EXISTS (SELECT 1 FROM ap_docs t WHERE t.id = d.id AND t.scope = 'full')
-               AND (dl.share_mate_owner_name IS NOT NULL OR dl.share_owner_mate1_name IS NOT NULL
-                    OR dl.share_owner_mate2_name IS NOT NULL OR dl.share_owner_mate3_name IS NOT NULL
-                    OR dl.share_owner_mate4_name IS NOT NULL OR dl.share_owner_mate5_name IS NOT NULL
-                    OR dl.share_owner_mate6_name IS NOT NULL OR dl.share_owner_mate7_name IS NOT NULL)
+      FROM (SELECT dl.id, dl.document_id, dl.names
+              FROM ap_line_pool dl -- V0175 (cost): the pool; in_events = a line of one of their events' bookings
+             WHERE dl.in_events AND dl.named
+               AND NOT EXISTS (SELECT 1 FROM ap_docs t WHERE t.id = dl.document_id AND t.scope = 'full')
             OFFSET 0) c -- OFFSET 0: a fence, so the planner cannot push the name test below into this scan
       CROSS JOIN LATERAL unnest(c.names) AS n(name)
      WHERE n.name IS NOT NULL AND public.abc_names(n.name) = ANY (v_row_names)
@@ -616,8 +740,8 @@ BEGIN
     -- Somebody else's bookings (a family member's, one they paid for or cared on) carrying one of their addresses:
     -- that address goes, nothing else.
     CREATE TEMP TABLE ap_email_docs AS
-    SELECT d.id FROM document d
-     WHERE lower(trim(d.person_email)) IN (SELECT address FROM ap_addresses)
+    SELECT d.id FROM ap_doc_pool d -- V0175 (cost): the pool
+     WHERE d.email IN (SELECT address FROM ap_addresses)
        AND NOT EXISTS (SELECT 1 FROM ap_docs t WHERE t.id = d.id AND t.scope IN ('full', 'contact'));
     ALTER TABLE ap_email_docs ADD PRIMARY KEY (id);
     -- V0175: another organisation's booking carrying their address is that organisation's record: kept as it is.
@@ -674,7 +798,8 @@ BEGIN
     -- on its own. family_names = the other people on that customer's account who bear a name from this account
     -- (theirs or a member's): a family registered twice scores high, and is listed first.
     SELECT array_agg(DISTINCT q.abc_names) INTO v_family_names FROM person q
-     WHERE (q.id IN (SELECT s.id FROM ap_persons s) OR q.id IN (SELECT m.id FROM ap_members m))
+     -- V0175 (cost): one array of ids, read by the primary key (an OR of two INs read the whole table)
+     WHERE q.id = ANY (ARRAY(SELECT s.id FROM ap_persons s UNION SELECT m.id FROM ap_members m))
        AND position(' ' IN trim(coalesce(q.abc_names, ''))) > 0;
     v_family_names := coalesce(v_family_names, '{}'::text[]);
     CREATE TEMP TABLE ap_namesakes AS
@@ -692,21 +817,15 @@ BEGIN
     -- their copies', those they paid for, and the bookings made without an account under their name with their own
     -- address or one of the requester's (ticked, those become theirs in full), and their removed duplicates'. A hint
     -- shown before the tick, not the rule: the preview re-run with the tick has the last word.
+    -- V0175 (cost): the persons are ap_mp (read before the pool), the payer and name arms read the pool
     CREATE TEMP TABLE ap_member_docs AS
-    WITH mp AS (SELECT m.id AS member_id, q.id AS person_id, q.abc_names, lower(trim(q.email)) AS email
-                  FROM ap_members m JOIN person mm ON mm.id = m.id
-                  JOIN person q ON q.id = m.id OR q.account_person_id = m.id
-                                -- their removed duplicates, which ticking them brings in too
-                                OR (q.removed AND q.anonymised_date IS NULL AND q.abc_names = mm.abc_names
-                                    AND lower(trim(q.email)) = lower(trim(mm.email)))
-                 WHERE NOT m.linked)
-    SELECT mp.member_id, d.id AS doc_id FROM mp JOIN document d ON d.person_id = mp.person_id
+    SELECT mp.member_id, d.id AS doc_id FROM ap_mp mp JOIN document d ON d.person_id = mp.person_id
     UNION
-    SELECT mp.member_id, d.id FROM mp JOIN document d ON d.payer_id = mp.person_id
+    SELECT mp.member_id, d.id FROM ap_mp mp JOIN ap_doc_pool d ON d.payer_id = mp.person_id
     UNION
-    SELECT mp.member_id, d.id FROM mp JOIN document d
-        ON d.person_id IS NULL AND d.person_abc_names = mp.abc_names
-       AND (lower(trim(d.person_email)) = mp.email OR lower(trim(d.person_email)) IN (SELECT address FROM ap_addresses));
+    SELECT mp.member_id, d.id FROM ap_mp mp JOIN ap_doc_pool d
+        ON d.person_id IS NULL AND d.abc_names = mp.abc_names
+       AND (d.email = mp.email OR d.email IN (SELECT address FROM ap_addresses));
     -- V0175: ticked, a member's bookings of another organisation would be kept: they would not stop the run
     IF v_orgs IS NOT NULL THEN
         DELETE FROM ap_member_docs md WHERE NOT coalesce((SELECT coalesce(oe.organization_id, od.organization_id) FROM document od LEFT JOIN event oe ON oe.id = od.event_id WHERE od.id = md.doc_id) = ANY (v_orgs), false);
@@ -741,7 +860,15 @@ BEGIN
     END IF;
 
     -- ================= THE GRID: where, who, what is in scope =================
-    SELECT count(*) INTO v_mail_rows_before FROM mail;
+    -- V0175 (cost): the mail table's net change by this transaction, from its own counters (inserts minus deletes:
+    -- what a count before and after measured, since REPEATABLE READ hides everybody else's) instead of counting
+    -- 1.1M rows (925 MB on production) twice; counted, as before, only if the server does not track counts.
+    IF v_mail_counted THEN
+        SELECT coalesce(sum(s.n_tup_ins - s.n_tup_del), 0) INTO v_mail_rows_before
+          FROM pg_stat_xact_user_tables s WHERE s.relid = 'public.mail'::regclass;
+    ELSE
+        SELECT count(*) INTO v_mail_rows_before FROM mail;
+    END IF;
     SELECT count(*) INTO v_mail_queued_before FROM mail WHERE NOT transmitted;
 
     RETURN QUERY VALUES
@@ -863,6 +990,9 @@ BEGIN
         SELECT d.id, d.person_first_name, d.person_last_name, d.person_male, d.person_ordained, d.person_lay_name, d.person_phone, d.person_email, d.person_organization_id, d.person_street, d.person_post_code, d.person_city_name, d.person_country_id, d.person_abc_names
           FROM event e JOIN document d ON d.event_id = e.id
          WHERE e.end_date > now() AND d.person_id IS NOT NULL
+           -- V0175 (cost): the events not over, as an array, so their bookings are read by document's event_id
+           -- index (the join alone read the whole table)
+           AND d.event_id = ANY (ARRAY(SELECT e2.id FROM event e2 WHERE e2.end_date > now()))
            AND NOT coalesce(coalesce(e.organization_id, d.organization_id) = ANY (v_orgs), false);
         ALTER TABLE ap_kept_snapshot ADD PRIMARY KEY (id);
     END IF;
@@ -1435,8 +1565,19 @@ BEGIN
                            OR (e ? 'lastName' AND coalesce(e ->> 'lastName', '') NOT LIKE '#%')));
     IF n > 0 THEN bad := bad || format(E'\n  history.changes still holding a name: %s', n); END IF;
 
-    SELECT count(*) INTO n FROM document d WHERE lower(trim(d.person_email)) IN (SELECT address FROM ap_addresses)
-       AND (v_orgs IS NULL OR coalesce((SELECT coalesce(oe.organization_id, od.organization_id) FROM document od LEFT JOIN event oe ON oe.id = od.event_id WHERE od.id = d.id) = ANY (v_orgs), false)); -- V0175: another organisation's bookings are kept as they are
+    -- V0175 (cost): the bookings as written now, by index, instead of the whole table (whose organisation test read
+    -- each booking's event per row: 2 million page reads). Two sets cover every booking that can hold one of these
+    -- addresses after the run: the pool (every booking that carried one before it), and every booking of an event not
+    -- over — the only bookings the person trigger on_details_change_update_upcoming_bookings writes into, and it can
+    -- write their account's login there while a person row it updates still resolves to that account (a removed or
+    -- linked row of the account, a row naming them as carer: found by review, 19 Nov). The whole-table check refused
+    -- such a run; so does this one.
+    SELECT count(*) INTO n FROM document d LEFT JOIN event e ON e.id = d.event_id
+     WHERE d.id = ANY (ARRAY(SELECT pl.id FROM ap_doc_pool pl
+                             UNION SELECT d2.id FROM document d2
+                                    WHERE d2.event_id = ANY (ARRAY(SELECT e2.id FROM event e2 WHERE e2.end_date > now()))))
+       AND lower(trim(d.person_email)) IN (SELECT address FROM ap_addresses)
+       AND (v_orgs IS NULL OR coalesce(coalesce(e.organization_id, d.organization_id) = ANY (v_orgs), false)); -- V0175: another organisation's bookings are kept as they are
     IF n > 0 THEN bad := bad || format(E'\n  bookings still holding an address: %s', n); END IF;
 
     SELECT count(*) INTO n FROM person_account_move m WHERE lower(trim(m.from_account_username)) IN (SELECT address FROM ap_addresses);
@@ -1465,11 +1606,12 @@ BEGIN
     -- V0175: no row another organisation keeps still points at a person erased here — kept and named, it would tell
     -- who '#id' was.
     IF v_orgs IS NOT NULL THEN
+        -- V0175 (cost): person_id by its index; payer and carer ids (no index) on the bookings as written now,
+        -- through the pool's ids: every booking that pointed at them is in the pool, and the run only cuts links
         SELECT count(*) INTO n FROM (
                   SELECT d.id FROM document d JOIN ap_persons s ON s.id = d.person_id
-            UNION SELECT d.id FROM document d JOIN ap_persons s ON s.id = d.payer_id
-            UNION SELECT d.id FROM document d JOIN ap_persons s ON s.id = d.person_carer1_id
-            UNION SELECT d.id FROM document d JOIN ap_persons s ON s.id = d.person_carer2_id) x
+            UNION SELECT d.id FROM ap_doc_pool pl JOIN document d ON d.id = pl.id
+                    JOIN ap_persons s ON s.id IN (d.payer_id, d.person_carer1_id, d.person_carer2_id)) x
          WHERE NOT coalesce((SELECT coalesce(oe.organization_id, od.organization_id) FROM document od LEFT JOIN event oe ON oe.id = od.event_id WHERE od.id = x.id) = ANY (v_orgs), false);
         IF n > 0 THEN bad := bad || format(E'\n  kept bookings still linked to them: %s', n); END IF;
 
@@ -1520,7 +1662,12 @@ BEGIN
         RAISE EXCEPTION 'Personal data survives the anonymisation of person % [db=%]:% — ROLLBACK and investigate', p_person_id, current_database(), bad;
     END IF;
 
-    SELECT count(*) INTO n FROM mail;
+    IF v_mail_counted THEN -- V0175 (cost): see the grid
+        SELECT coalesce(sum(s.n_tup_ins - s.n_tup_del), 0) INTO n
+          FROM pg_stat_xact_user_tables s WHERE s.relid = 'public.mail'::regclass;
+    ELSE
+        SELECT count(*) INTO n FROM mail;
+    END IF;
     IF n <> v_mail_rows_before THEN
         RAISE EXCEPTION 'The mail table gained or lost rows (% now, % before) — a trigger fired: ROLLBACK', n, v_mail_rows_before;
     END IF;
@@ -1578,6 +1725,9 @@ DECLARE
                                     THEN ARRAY(SELECT DISTINCT o FROM unnest(p_organization_ids) AS o WHERE o IS NOT NULL ORDER BY o) END;
     v_kept_candidates bigint := 0;
     v_kept_address boolean := false;
+    -- V0175 (cost): the seed's phone as the pool reads phones (the last 9 digits, when there are 9); the mail counters
+    v_seed_phone  text;
+    v_mail_counted boolean := current_setting('track_counts')::boolean;
 BEGIN
     v_tag := v_tag_prefix || ' on ' || current_date || ']';
 
@@ -1665,7 +1815,51 @@ BEGIN
     DROP TABLE IF EXISTS ab_address_owners, ab_phones, ab_candidates, ab_addresses, ab_carer_docs, ab_docs,
                          ab_doc_addresses, ab_recipients, ab_sender_mails, ab_mails, ab_events, ab_share_lines,
                          ab_email_docs, ab_hist_docs, ab_hist, ab_namesakes, ab_linked_names, ab_applications,
-                         ab_kept, ab_kept_applications;
+                         ab_kept, ab_kept_applications, ab_doc_pool; -- V0175 (cost): ab_doc_pool
+
+    -- V0175 (cost): ONE read of document for every step below that has no index to go by (an address trimmed, a
+    -- phone's digits, a name typed on a booking or in a carer slot) — it read the whole table about seven times: 73 s
+    -- on staging for one booking, cold. ab_doc_pool holds every booking those steps can match: under A, under N,
+    -- naming N as carer (each carer name normalised once), or made without an account with one of their phones —
+    -- the seed's, and those of the A+N bookings (PHONES), found in the same read: the read keeps every booking made
+    -- without an account that has a phone (scan), then the pool takes those whose phone is one of the A+N bookings'.
+    -- Every address a step tests is A (ab_addresses holds A or nothing) and every name N. Each step keeps its own
+    -- condition, on the pool instead of the table. The checks after the writes read document again through the
+    -- pool's ids, so they test the rows as written. (OFFSET 0 fences each level: every value once per row.)
+    v_seed_phone := CASE WHEN length(regexp_replace(coalesce(b.person_phone, ''), '\D', '', 'g')) >= 9
+                         THEN right(regexp_replace(b.person_phone, '\D', '', 'g'), 9) END;
+    CREATE TEMP TABLE ab_doc_pool AS
+    WITH scan AS MATERIALIZED (
+        SELECT y.*,
+               -- both slots normalised when either is filled, as the carer step always did
+               CASE WHEN y.carer_named AND cardinality(v_names) > 0 THEN public.abc_names(y.person_carer1_name) END AS n1,
+               CASE WHEN y.carer_named AND cardinality(v_names) > 0 THEN public.abc_names(y.person_carer2_name) END AS n2
+          FROM (SELECT z.*, coalesce(z.email = v_address OR z.abc_names = v_name OR z.phone9 = v_seed_phone, false) AS hit
+                  FROM (SELECT w.*, CASE WHEN length(w.dg) >= 9 THEN right(w.dg, 9) END AS phone9
+                          FROM (SELECT d.id, d.ref, d.event_id, d.organization_id, d.person_id,
+                                       d.person_carer1_name, d.person_carer2_name,
+                                       lower(trim(d.person_email)) AS email, d.person_abc_names AS abc_names,
+                                       -- phones are matched on bookings made without an account, and read on the
+                                       -- customer bookings under A (ab_candidates.by_phone): the digits for those alone
+                                       CASE WHEN d.person_id IS NULL OR lower(trim(d.person_email)) = v_address
+                                            THEN regexp_replace(coalesce(d.person_phone, ''), '\D', '', 'g') END AS dg,
+                                       (d.person_carer1_name IS NOT NULL OR d.person_carer2_name IS NOT NULL) AS carer_named
+                                  FROM document d
+                                OFFSET 0) w -- the one read of document
+                        OFFSET 0) z
+                OFFSET 0) y
+         WHERE y.hit OR (y.carer_named AND cardinality(v_names) > 0) OR (y.person_id IS NULL AND y.phone9 IS NOT NULL))
+    SELECT s.id, s.ref, s.event_id, coalesce(e.organization_id, s.organization_id) AS organization_id,
+           s.person_id, s.email, s.abc_names, s.phone9, s.n1, s.n2
+      FROM scan s
+      LEFT JOIN event e ON e.id = s.event_id
+     WHERE s.hit OR s.n1 = ANY (v_names) OR s.n2 = ANY (v_names)
+        -- the phones of the A+N bookings made without an account (PHONES reads them from the pool)
+        OR (s.person_id IS NULL AND s.phone9 IN (SELECT a.phone9 FROM scan a
+                                                 WHERE a.person_id IS NULL AND v_address IS NOT NULL AND v_name IS NOT NULL
+                                                   AND a.email = v_address AND a.abc_names = v_name AND a.phone9 IS NOT NULL));
+    ALTER TABLE ab_doc_pool ADD PRIMARY KEY (id);
+    ANALYZE ab_doc_pool;
 
     -- Who else holds A: listed (ids; the names travel in the endpoint's reply, never in this grid). An account
     -- without an owner row still makes A somebody else's (v_owned), with nobody to list.
@@ -1684,10 +1878,10 @@ BEGIN
          WHERE va.person_id IS NOT NULL AND lower(trim(va.email)) = v_address
         ON CONFLICT DO NOTHING;
         INSERT INTO ab_address_owners
-        SELECT DISTINCT coalesce(q.account_person_id, q.id), 'booking' FROM document d JOIN person q ON q.id = d.person_id
-         WHERE lower(trim(d.person_email)) = v_address
+        SELECT DISTINCT coalesce(q.account_person_id, q.id), 'booking' FROM ab_doc_pool d JOIN person q ON q.id = d.person_id
+         WHERE d.email = v_address -- V0175 (cost): the pool
            -- one carrying their name too is theirs, made under somebody's account: a candidate (below)
-           AND NOT coalesce(d.person_abc_names = v_name, false)
+           AND NOT coalesce(d.abc_names = v_name, false)
         ON CONFLICT DO NOTHING;
         v_owned := EXISTS (SELECT 1 FROM ab_address_owners)
                    OR EXISTS (SELECT 1 FROM frontend_account fa WHERE lower(trim(fa.username)) = v_address);
@@ -1702,23 +1896,24 @@ BEGIN
     -- The seed's and the A+N bookings', as the last 9 digits (V0153). A phone on more than 5 OTHER bookings made
     -- without an account is a shared number (a centre's, a family's) and is set aside.
     CREATE TEMP TABLE ab_phones (phone text PRIMARY KEY, guest_bookings bigint);
+    -- V0175 (cost): the pool; phone9 = the last 9 digits of a phone that has 9 (the seed's is v_seed_phone)
     INSERT INTO ab_phones (phone)
-    SELECT DISTINCT right(dg, 9) FROM (
-        SELECT regexp_replace(b.person_phone, '\D', '', 'g') AS dg
+    SELECT DISTINCT ph FROM (
+        SELECT v_seed_phone AS ph
         UNION
-        SELECT regexp_replace(d.person_phone, '\D', '', 'g') FROM document d
+        SELECT d.phone9 FROM ab_doc_pool d
          WHERE d.person_id IS NULL AND v_address IS NOT NULL AND v_name IS NOT NULL
-           AND lower(trim(d.person_email)) = v_address AND d.person_abc_names = v_name
-    ) t WHERE length(coalesce(dg, '')) >= 9;
+           AND d.email = v_address AND d.abc_names = v_name
+    ) t WHERE ph IS NOT NULL;
     UPDATE ab_phones ph SET guest_bookings = c.n
-      FROM (SELECT right(regexp_replace(d.person_phone, '\D', '', 'g'), 9) AS phone, count(*) AS n
-              FROM document d
+      FROM (SELECT d.phone9 AS phone, count(*) AS n
+              FROM ab_doc_pool d -- V0175 (cost): the pool
              WHERE d.person_id IS NULL AND d.id <> p_document_id
-               AND length(regexp_replace(coalesce(d.person_phone, ''), '\D', '', 'g')) >= 9
-               AND right(regexp_replace(d.person_phone, '\D', '', 'g'), 9) IN (SELECT phone FROM ab_phones)
+               AND d.phone9 IS NOT NULL
+               AND d.phone9 IN (SELECT phone FROM ab_phones)
                -- coalesce: a booking without an address must count, not vanish into NOT NULL
                AND NOT coalesce(v_address IS NOT NULL AND v_name IS NOT NULL
-                                AND lower(trim(d.person_email)) = v_address AND d.person_abc_names = v_name, false)
+                                AND d.email = v_address AND d.abc_names = v_name, false)
              GROUP BY 1) c
      WHERE c.phone = ph.phone;
     DELETE FROM ab_phones WHERE guest_bookings > 5;
@@ -1729,22 +1924,20 @@ BEGIN
     -- while A is free (owned, A under another name is somebody else's booking, not a match).
     CREATE TEMP TABLE ab_candidates AS
     SELECT d.id, d.ref, d.event_id, d.person_id AS customer_id,
-           coalesce(v_address IS NOT NULL AND lower(trim(d.person_email)) = v_address
-                    AND (NOT v_owned OR d.person_abc_names = v_name), false) AS by_email,
-           coalesce(d.person_abc_names = v_name, false) AS by_name,
-           (length(regexp_replace(coalesce(d.person_phone, ''), '\D', '', 'g')) >= 9
-            AND right(regexp_replace(d.person_phone, '\D', '', 'g'), 9) IN (SELECT phone FROM ab_phones)) AS by_phone
-      FROM document d
+           coalesce(v_address IS NOT NULL AND d.email = v_address
+                    AND (NOT v_owned OR d.abc_names = v_name), false) AS by_email,
+           coalesce(d.abc_names = v_name, false) AS by_name,
+           (d.phone9 IS NOT NULL AND d.phone9 IN (SELECT phone FROM ab_phones)) AS by_phone
+      FROM ab_doc_pool d -- V0175 (cost): the pool
      WHERE d.id <> p_document_id
        AND (   (d.person_id IS NULL
-                AND (   (v_address IS NOT NULL AND lower(trim(d.person_email)) = v_address)
-                     OR d.person_abc_names = v_name
-                     OR (length(regexp_replace(coalesce(d.person_phone, ''), '\D', '', 'g')) >= 9
-                         AND right(regexp_replace(d.person_phone, '\D', '', 'g'), 9) IN (SELECT phone FROM ab_phones))))
+                AND (   (v_address IS NOT NULL AND d.email = v_address)
+                     OR d.abc_names = v_name
+                     OR (d.phone9 IS NOT NULL AND d.phone9 IN (SELECT phone FROM ab_phones))))
             -- a customer's own booking made under their name and address (a parent's account booking for them, or
             -- for the same human under another name: the customer-record test below refuses a row bearing N)
             OR (d.person_id IS NOT NULL AND v_address IS NOT NULL AND v_name IS NOT NULL
-                AND lower(trim(d.person_email)) = v_address AND d.person_abc_names = v_name));
+                AND d.email = v_address AND d.abc_names = v_name));
     DELETE FROM ab_candidates WHERE NOT (by_email OR by_name OR by_phone);
     ALTER TABLE ab_candidates ADD COLUMN action text, ADD COLUMN carer_match boolean NOT NULL DEFAULT false;
     -- on a customer's account = perhaps them, in full if ticked (the booking stays on that account); email + name =
@@ -1764,7 +1957,7 @@ BEGIN
     IF v_orgs IS NOT NULL THEN
         UPDATE ab_candidates c SET covered = false WHERE NOT coalesce((SELECT coalesce(oe.organization_id, od.organization_id) FROM document od LEFT JOIN event oe ON oe.id = od.event_id WHERE od.id = c.id) = ANY (v_orgs), false);
         v_kept_address := v_address IS NOT NULL
-            AND (   EXISTS (SELECT 1 FROM document d WHERE lower(trim(d.person_email)) = v_address AND NOT coalesce((SELECT coalesce(oe.organization_id, od.organization_id) FROM document od LEFT JOIN event oe ON oe.id = od.event_id WHERE od.id = d.id) = ANY (v_orgs), false))
+            AND (   EXISTS (SELECT 1 FROM ab_doc_pool d WHERE d.email = v_address AND NOT coalesce(d.organization_id = ANY (v_orgs), false)) -- V0175 (cost): the pool, with each booking's organisation
                  OR EXISTS (SELECT 1 FROM volunteering_application va WHERE lower(trim(va.email)) = v_address AND NOT coalesce(va.organization_id = ANY (v_orgs), false)));
     END IF;
 
@@ -1789,17 +1982,14 @@ BEGIN
     -- namesake may be the carer, and the booking is a candidate.
     CREATE TEMP TABLE ab_carer_docs AS
     SELECT c.id
-      FROM (SELECT x.id, public.abc_names(x.n1) AS n1, public.abc_names(x.n2) AS n2
-              FROM (SELECT d.id, d.person_carer1_name AS n1, d.person_carer2_name AS n2 FROM document d
-                     WHERE (d.person_carer1_name IS NOT NULL OR d.person_carer2_name IS NOT NULL)
-                       AND cardinality(v_names) > 0
-                    OFFSET 0) x
-            OFFSET 0) c
+      FROM ab_doc_pool c -- V0175 (cost): the pool, whose n1/n2 are the carer names already normalised
      WHERE c.n1 = ANY (v_names) OR c.n2 = ANY (v_names);
     ALTER TABLE ab_carer_docs ADD COLUMN tied boolean;
     UPDATE ab_carer_docs cd SET tied = cd.id = p_document_id
         OR EXISTS (SELECT 1 FROM ab_candidates c WHERE c.id = cd.id AND c.action = 'auto')
-        OR EXISTS (SELECT 1 FROM document d WHERE d.id = cd.id AND lower(trim(d.person_email)) IN (SELECT address FROM ab_addresses));
+        -- V0175 (cost): every carer booking is in the pool (on document, an unanalysed ab_carer_docs could plan a
+        -- read of the whole table)
+        OR EXISTS (SELECT 1 FROM ab_doc_pool d WHERE d.id = cd.id AND d.email IN (SELECT address FROM ab_addresses));
     UPDATE ab_candidates c SET carer_match = true FROM ab_carer_docs cd WHERE cd.id = c.id AND NOT cd.tied;
     INSERT INTO ab_candidates (id, ref, event_id, by_email, by_name, by_phone, action, carer_match)
     SELECT d.id, d.ref, d.event_id, false, true, false, 'carer', true
@@ -1983,10 +2173,12 @@ BEGIN
     CREATE TEMP TABLE ab_share_lines (id integer PRIMARY KEY, document_id integer NOT NULL, by_id boolean NOT NULL);
     INSERT INTO ab_share_lines
     SELECT dl.id, dl.document_id, true
-      FROM ab_events e
-      JOIN document d ON d.event_id = e.event_id
-      JOIN document_line dl ON dl.document_id = d.id
-     WHERE dl.share_mate_owner_document_line_id IN (SELECT ol.id FROM document_line ol JOIN ab_docs t ON t.id = ol.document_id AND t.scope = 'full')
+      FROM document_line dl
+      JOIN document d ON d.id = dl.document_id
+      JOIN ab_events e ON e.event_id = d.event_id
+     -- V0175 (cost): their lines as an array, so the mates' lines are read by
+     -- document_line_share_mate_owner_document_line_id_idx (through the events, it read every line of every booking there)
+     WHERE dl.share_mate_owner_document_line_id = ANY (ARRAY(SELECT ol.id FROM document_line ol JOIN ab_docs t ON t.id = ol.document_id AND t.scope = 'full'))
        AND NOT EXISTS (SELECT 1 FROM ab_docs t WHERE t.id = d.id AND t.scope = 'full');
     IF cardinality(v_names) > 0 THEN
         INSERT INTO ab_share_lines
@@ -2015,8 +2207,8 @@ BEGIN
     CREATE TEMP TABLE ab_email_docs (id integer PRIMARY KEY);
     IF v_theirs THEN
         INSERT INTO ab_email_docs
-        SELECT d.id FROM document d
-         WHERE lower(trim(d.person_email)) IN (SELECT address FROM ab_addresses)
+        SELECT d.id FROM ab_doc_pool d -- V0175 (cost): the pool
+         WHERE d.email IN (SELECT address FROM ab_addresses)
            AND NOT EXISTS (SELECT 1 FROM ab_docs t WHERE t.id = d.id AND t.scope IN ('full', 'contact'));
     END IF;
 
@@ -2026,11 +2218,17 @@ BEGIN
     INSERT INTO ab_linked_names
     SELECT DISTINCT x.id, x.abc
       FROM (SELECT d.id, public.abc_names(CASE WHEN k.slot = 1 THEN d.person_carer1_name ELSE d.person_carer2_name END) AS abc
+              -- V0175 (cost): one branch per carer slot, each on its index (document_carer1_idx, document_carer2_idx);
+              -- an OR of two INs read the whole table
               FROM (SELECT d0.id, d0.person_carer1_name, d0.person_carer2_name, d0.person_carer1_document_id,
                            d0.person_carer2_document_id
                       FROM document d0
-                     WHERE d0.person_carer1_document_id IN (SELECT t.id FROM ab_docs t WHERE t.scope = 'full')
-                        OR d0.person_carer2_document_id IN (SELECT t.id FROM ab_docs t WHERE t.scope = 'full')
+                     WHERE d0.person_carer1_document_id = ANY (ARRAY(SELECT t.id FROM ab_docs t WHERE t.scope = 'full'))
+                    UNION
+                    SELECT d0.id, d0.person_carer1_name, d0.person_carer2_name, d0.person_carer1_document_id,
+                           d0.person_carer2_document_id
+                      FROM document d0
+                     WHERE d0.person_carer2_document_id = ANY (ARRAY(SELECT t.id FROM ab_docs t WHERE t.scope = 'full'))
                     OFFSET 0) d
              CROSS JOIN (VALUES (1), (2)) AS k(slot)
              WHERE (k.slot = 1 AND d.person_carer1_document_id IN (SELECT t.id FROM ab_docs t WHERE t.scope = 'full')
@@ -2098,7 +2296,13 @@ BEGIN
      WHERE cardinality(v_names) > 0 AND x.abc_names = ANY (v_names) AND NOT x.removed AND x.account_person_id IS NULL;
 
     -- ================= THE GRID =================
-    SELECT count(*) INTO v_mail_rows_before FROM mail;
+    -- V0175 (cost): the mail table's net change by this transaction, from its own counters (see anonymise_person)
+    IF v_mail_counted THEN
+        SELECT coalesce(sum(s.n_tup_ins - s.n_tup_del), 0) INTO v_mail_rows_before
+          FROM pg_stat_xact_user_tables s WHERE s.relid = 'public.mail'::regclass;
+    ELSE
+        SELECT count(*) INTO v_mail_rows_before FROM mail;
+    END IF;
     SELECT count(*) INTO v_mail_queued_before FROM mail WHERE NOT transmitted;
 
     RETURN QUERY VALUES
@@ -2488,7 +2692,9 @@ BEGIN
                            OR (e ? 'lastName' AND coalesce(e ->> 'lastName', '') NOT LIKE '#%')));
     IF n > 0 THEN bad := bad || format(E'\n  history.changes still holding a name: %s', n); END IF;
 
-    SELECT count(*) INTO n FROM document d WHERE lower(trim(d.person_email)) IN (SELECT address FROM ab_addresses);
+    -- V0175 (cost): the bookings as written now, through the pool's ids (every booking that carried A is in it)
+    SELECT count(*) INTO n FROM document d JOIN ab_doc_pool pl ON pl.id = d.id
+     WHERE lower(trim(d.person_email)) IN (SELECT address FROM ab_addresses);
     IF n > 0 THEN bad := bad || format(E'\n  bookings still holding their address: %s', n); END IF;
 
     SELECT count(*) INTO n FROM document d JOIN ab_docs t ON t.id = d.id AND t.cared
@@ -2523,10 +2729,13 @@ BEGIN
 
     -- V0175: no row another organisation keeps still points at a booking erased here.
     IF v_orgs IS NOT NULL THEN
-        SELECT count(*) INTO n FROM document d
-         WHERE (   d.person_carer1_document_id IN (SELECT t.id FROM ab_docs t WHERE t.scope = 'full')
-                OR d.person_carer2_document_id IN (SELECT t.id FROM ab_docs t WHERE t.scope = 'full'))
-           AND NOT coalesce((SELECT coalesce(oe.organization_id, od.organization_id) FROM document od LEFT JOIN event oe ON oe.id = od.event_id WHERE od.id = d.id) = ANY (v_orgs), false);
+        -- V0175 (cost): one branch per carer slot, each on its index
+        SELECT count(*) INTO n FROM (
+                  SELECT d.id FROM document d
+                   WHERE d.person_carer1_document_id = ANY (ARRAY(SELECT t.id FROM ab_docs t WHERE t.scope = 'full'))
+            UNION SELECT d.id FROM document d
+                   WHERE d.person_carer2_document_id = ANY (ARRAY(SELECT t.id FROM ab_docs t WHERE t.scope = 'full'))) d
+         WHERE NOT coalesce((SELECT coalesce(oe.organization_id, od.organization_id) FROM document od LEFT JOIN event oe ON oe.id = od.event_id WHERE od.id = d.id) = ANY (v_orgs), false);
         IF n > 0 THEN bad := bad || format(E'\n  kept bookings still linked to theirs: %s', n); END IF;
 
         SELECT count(*) INTO n FROM document_line dl
@@ -2544,7 +2753,12 @@ BEGIN
         RAISE EXCEPTION 'Personal data survives the anonymisation of the booker of booking % [db=%]:% — ROLLBACK and investigate', p_document_id, current_database(), bad;
     END IF;
 
-    SELECT count(*) INTO n FROM mail;
+    IF v_mail_counted THEN -- V0175 (cost): see the grid
+        SELECT coalesce(sum(s.n_tup_ins - s.n_tup_del), 0) INTO n
+          FROM pg_stat_xact_user_tables s WHERE s.relid = 'public.mail'::regclass;
+    ELSE
+        SELECT count(*) INTO n FROM mail;
+    END IF;
     IF n <> v_mail_rows_before THEN
         RAISE EXCEPTION 'The mail table gained or lost rows (% now, % before) — a trigger fired: ROLLBACK', n, v_mail_rows_before;
     END IF;

@@ -392,5 +392,31 @@ public class PersonAnonymisationCheck {
                 v0175.contains("('scope',  'organisations', coalesce(array_to_string(v_orgs, ','), 'all'))"));
         } else
             System.out.println("V0175 not written yet: its checks skipped");
+
+        // V0175 (cost, 19 Nov 2026): one erasure read document whole about ten times — 73 s on staging, cold, for one
+        // booking; document is 1.1 GB on production. Both functions now read it once, into a pool. A later migration
+        // restating either function from an older body would bring the reads back without anybody noticing: whichever
+        // script restates it LAST must keep the pools.
+        System.out.println("the newest body of each function reads document once (V0175's pools)");
+        String person = newestBody("anonymise_person"), booker = newestBody("anonymise_booker");
+        check("anonymise_person reads document once (ap_doc_pool) and document_line once (ap_line_pool)",
+            person.contains("CREATE TEMP TABLE ap_doc_pool AS") && person.contains("CREATE TEMP TABLE ap_line_pool AS"));
+        check("anonymise_booker reads document once (ab_doc_pool)", booker.contains("CREATE TEMP TABLE ab_doc_pool AS"));
+        check("neither counts the mail table whole (its own counters instead)",
+            person.contains("pg_stat_xact_user_tables") && booker.contains("pg_stat_xact_user_tables"));
+    }
+
+    /** The text of the migration listed last in index.txt that restates public.&lt;name&gt;(. */
+    private static String newestBody(String name) throws java.io.IOException {
+        String newest = "";
+        for (String line : Files.readAllLines(SCRIPTS.resolve("index.txt"))) {
+            String file = line.trim();
+            if (file.isEmpty() || file.startsWith("#") || !Files.exists(SCRIPTS.resolve(file)))
+                continue;
+            String sql = Files.readString(SCRIPTS.resolve(file));
+            if (sql.contains("CREATE OR REPLACE FUNCTION public." + name + "("))
+                newest = sql;
+        }
+        return newest;
     }
 }
