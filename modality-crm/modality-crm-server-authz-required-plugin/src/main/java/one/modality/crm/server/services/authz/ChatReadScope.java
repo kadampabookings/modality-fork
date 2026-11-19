@@ -70,9 +70,24 @@ final class ChatReadScope implements ClientReadScope.Provider, ClientScopeToken.
      * the first flip the riskiest one available, which is how a control gets reverted wholesale over one
      * root's bug. Adding a name here is the reviewed change; the surrounding machinery does not move.
      *
-     * <p>Empty, so nothing is narrowed yet. {@code Conversation} is the one to add first: it is the only
-     * rule that is a local column test, so what it returns is the easiest to reason about, and it is where
-     * the exposure actually is — any signed-in member can read any conversation by changing one id.
+     * <p>Empty, so nothing is narrowed yet. <b>The first flip is {@code Conversation} AND
+     * {@code ChatMessage}, together</b> — decided 2026-11-18, after a security pass over the token seam
+     * asked what the obvious first entry would actually close.
+     *
+     * <p>{@code Conversation} alone was that obvious entry: it is the only rule that is a local column test,
+     * so what it returns is the easiest to reason about. But it does not close the exposure named at the top
+     * of this file. The front office reads a thread as {@code ChatMessage where conversation=$1}, and
+     * {@link #readScopeCondition} returns a condition only for a root that is enforced — so scoping
+     * {@code Conversation} by itself hides the listing and leaves the message bodies readable by any
+     * signed-in member who changes that one id. The two roots are one exposure and go in one change.
+     *
+     * <p>That makes the first flip cost more than a local column test: {@code ChatMessage}'s rule is a
+     * subquery evaluated for every message row, and the back-office arm nests a second one inside it. Time
+     * it against real volume before the flip, not after — a rule that is free on 248 conversations is not
+     * free on every message in them.
+     *
+     * <p>{@code ChatMessageReaction} is the open question beside these two: the same boundary two subqueries
+     * deep, leaking who reacted to what rather than any text.
      */
     private static final Set<String> ENFORCED_ROOTS = Set.of();
 
@@ -166,7 +181,11 @@ final class ChatReadScope implements ClientReadScope.Provider, ClientScopeToken.
      * The first is the audience of a token this server verified.
      *
      * <p>Server-origin reads get no scope. They do not pass the endpoint that calls this, so this is belt
-     * and braces rather than the boundary — the boundary is where it is asked.
+     * and braces rather than the boundary — the boundary is where it is asked. Note what that null now costs
+     * once a root is enforced: {@link #isScopeRequired()} turns it into a refusal rather than an unscoped
+     * compile, so if the thread state ever said "not a client" at a client endpoint, that read would be
+     * refused instead of quietly reading everything. Refusing is the direction to fail in, but it is a
+     * refusal, so it is the thing to watch on the first flip.
      */
     @Override
     public Object tokenForCaller() {
@@ -178,6 +197,20 @@ final class ChatReadScope implements ClientReadScope.Provider, ClientScopeToken.
         // UNRESTRICTED (empty arrays) or stale (null). Both make every rule match nothing, so which one this
         // caller is decides the token — and is reported, because the rate is the thing nobody knows.
         return scopeOfBackofficeCaller();
+    }
+
+    /**
+     * True once any root is enforced: from then on a client read that cannot be scoped is refused rather
+     * than run unscoped. See {@code ClientScopeToken.forCaller} for why those two states differ.
+     *
+     * <p><b>Derived from {@link #ENFORCED_ROOTS}, deliberately, rather than being a flag beside it.</b>
+     * Adding a root is meant to be the whole reviewed change; a second switch to remember on the same day is
+     * the one that gets forgotten, and forgetting it means the first enforced root silently reads every
+     * centre's rows — the exact failure this closes.
+     */
+    @Override
+    public boolean isScopeRequired() {
+        return !ENFORCED_ROOTS.isEmpty();
     }
 
     /**
