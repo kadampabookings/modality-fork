@@ -7,6 +7,7 @@ import dev.webfx.stack.db.query.QueryService;
 import dev.webfx.stack.orm.datasourcemodel.service.DataSourceModelService;
 import dev.webfx.stack.session.state.ThreadLocalStateHolder;
 import one.modality.crm.server.authn.gateway.shared.CallerRateLimit;
+import one.modality.crm.server.authn.gateway.shared.EmailAddresses;
 
 /**
  * "Is there an account I can sign in to with this address?" — yes or no, and nothing else.
@@ -67,6 +68,7 @@ public final class EmailHasAccountEndpoint extends AsyncFunctionBusCallEndpoint<
         String email = s.trim();
         if (email.isEmpty() || email.length() > MAX_EMAIL_LENGTH || email.indexOf('@') <= 0)
             return null;
-        return email;
+        // The stored spelling, so x@googlemail.com is answered about the account x@gmail.com holds.
+        return EmailAddresses.canonical(email);
     }
 }

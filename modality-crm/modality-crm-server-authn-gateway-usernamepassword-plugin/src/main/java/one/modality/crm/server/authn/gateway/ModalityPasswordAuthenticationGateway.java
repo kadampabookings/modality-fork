@@ -29,6 +29,7 @@ import one.modality.crm.server.authn.gateway.magiclink.ModalityMagicLinkAuthenti
 import one.modality.crm.server.authn.gateway.shared.AccountSignInRestrictionStore;
 import one.modality.crm.server.authn.gateway.shared.PasswordClosedNotice;
 import one.modality.crm.server.authn.gateway.shared.CredentialChangeProof;
+import one.modality.crm.server.authn.gateway.shared.EmailAddresses;
 import one.modality.crm.server.authn.gateway.shared.EmailChangeNotice;
 import one.modality.crm.server.authn.gateway.shared.GuestPersonLinker;
 import one.modality.base.server.mail.LocalizedMailTemplate;
@@ -232,9 +233,9 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
         String password = credentials.password();
         if (Strings.isEmpty(username) || Strings.isEmpty(password))
             return Future.failedFuture("[%s] Username and password must not be empty".formatted(ModalityAuthenticationI18nKeys.AuthnUserOrPasswordEmptyError));
-        username = username.trim(); // Ignoring leading and tailing spaces in username
-        if (username.contains("@")) // If the username is an email address, it shouldn't be case-sensitive
-            username = username.toLowerCase(); // emails are stored in lowercase in the database
+        // Trimmed; and when it is an address, lower-cased with @googlemail.com folded into @gmail.com — the
+        // spelling every login is stored under (see EmailAddresses). A name without @ is only trimmed.
+        username = EmailAddresses.canonical(username);
         final String normalizedUsername = username; // effectively-final copy for lambda capture
         return EntityStore.create(dataSourceModel)
             // Note: accounts are created from the front-office and can first be used only to log in in the front-office,
@@ -431,16 +432,19 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
         // The user's chosen UI language flows in via InitiateAccountCreationCredentials so the
         // email matches what they saw on the sign-up page.
         String lang = Strings.toSafeString(credentials.getLanguage());
+        // Asked by the stored spelling: x@googlemail.com must find the account x@gmail.com already has, and be
+        // told so, rather than be offered a second account for the same inbox.
+        String email = EmailAddresses.canonical(credentials.getEmail());
         return EntityStore.create(dataSourceModel)
-            .<FrontendAccount>executeQuery("select FrontendAccount where corporation=$1 and lower(username)=lower($2) limit 1", 1, credentials.getEmail())
+            .<FrontendAccount>executeQuery("select FrontendAccount where corporation=$1 and lower(username)=lower($2) limit 1", 1, email)
             .compose(accounts -> {
                     boolean doesntExists = accounts.isEmpty();
                     // The "already exists" mail carries a sign-in link, so an account whose password is closed gets the
                     // passkey notice instead (V0096). Read fail-open: the link's redeem path reads it again, fail-closed.
                     if (!doesntExists)
-                        return AccountSignInRestrictionStore.isPasswordClosedForEmail(credentials.getEmail())
+                        return AccountSignInRestrictionStore.isPasswordClosedForEmail(email)
                             .compose(closed -> Boolean.TRUE.equals(closed)
-                                ? PasswordClosedNotice.send(credentials.getEmail(), lang)
+                                ? PasswordClosedNotice.send(email, lang)
                                 : sendAccountCreationMail(credentials, false, verificationCodeOnly, loginRunId, lang));
                     return sendAccountCreationMail(credentials, true, verificationCodeOnly, loginRunId, lang);
                 }
@@ -498,7 +502,9 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
                 // Above the link's store so the usage mark below can be staged next to the account insert.
                 UpdateStore updateStore = UpdateStore.createAbove(magicLink.getStore());
                 FrontendAccount fa = updateStore.insertEntity(FrontendAccount.class);
-                String email = magicLink.getEmail();
+                // Canonical even for a link issued before EmailAddresses existed (V0173's trigger would fold it
+                // anyway); the salt follows, so it is the address the account was created under.
+                String email = EmailAddresses.canonical(magicLink.getEmail());
                 String salt = email; // like KBS2 for now
                 fa.setUsername(email);
                 fa.setSalt(salt);

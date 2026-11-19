@@ -48,7 +48,7 @@ public final class GuestPersonLinker {
         return EntityStore.create(dataSourceModel)
             .<Person>executeQuery(
                 "select id from Person where lower(email)=lower($1) and frontendAccount=null",
-                email)
+                EmailAddresses.canonical(email))
             .compose(persons -> {
                 if (persons.isEmpty())
                     return Future.succeededFuture();

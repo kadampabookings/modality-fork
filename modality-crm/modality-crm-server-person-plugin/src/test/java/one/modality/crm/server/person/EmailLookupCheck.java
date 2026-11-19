@@ -39,6 +39,8 @@ public class EmailLookupCheck {
         // --- the argument ---
         check("[email] is read", "a@b.co".equals(EmailHasAccountEndpoint.emailOf(new Object[]{"a@b.co"})));
         check("and trimmed", "a@b.co".equals(EmailHasAccountEndpoint.emailOf(new Object[]{"  a@b.co "})));
+        check("and given the stored spelling: googlemail is gmail (2026-11-19)",
+            "jo@gmail.com".equals(EmailHasAccountEndpoint.emailOf(new Object[]{"Jo@GoogleMail.com"})));
         check("a bare string is refused", EmailHasAccountEndpoint.emailOf("a@b.co") == null);
         check("two elements are refused", EmailHasAccountEndpoint.emailOf(new Object[]{"a@b.co", "c@d.co"}) == null);
         check("a number is refused", EmailHasAccountEndpoint.emailOf(new Object[]{42}) == null);

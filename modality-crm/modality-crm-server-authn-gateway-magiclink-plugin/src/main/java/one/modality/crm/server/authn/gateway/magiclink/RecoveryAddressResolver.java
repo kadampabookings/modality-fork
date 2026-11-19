@@ -1,5 +1,6 @@
 package one.modality.crm.server.authn.gateway.magiclink;
 
+import one.modality.crm.server.authn.gateway.shared.EmailAddresses;
 import dev.webfx.platform.async.Future;
 import dev.webfx.stack.orm.domainmodel.DataSourceModel;
 import dev.webfx.stack.orm.entity.EntityStore;
@@ -32,7 +33,7 @@ final class RecoveryAddressResolver {
     }
 
     static Future<String> accountUsernameFor(String typedEmail, DataSourceModel dataSourceModel) {
-        String email = typedEmail == null ? "" : typedEmail.trim();
+        String email = typedEmail == null ? "" : EmailAddresses.canonical(typedEmail);
         if (email.isEmpty())
             return Future.succeededFuture(null);
         // As the server, not as the caller: who may read these rows is not the question here, and the caller learns

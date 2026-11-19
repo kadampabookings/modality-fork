@@ -331,7 +331,7 @@ public final class AccountSignInRestrictionStore {
     public static Future<Boolean> readPasswordClosedForEmail(String email) {
         if (email == null || email.isBlank())
             return Future.succeededFuture(false);
-        return executeRawQuery(IS_RESTRICTED_BY_USERNAME_SQL, email.trim(), PASSWORD_METHOD)
+        return executeRawQuery(IS_RESTRICTED_BY_USERNAME_SQL, EmailAddresses.canonical(email), PASSWORD_METHOD)
             .map(result -> result != null && result.getRowCount() > 0);
     }
 

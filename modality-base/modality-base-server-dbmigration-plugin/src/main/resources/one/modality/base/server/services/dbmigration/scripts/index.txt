@@ -171,3 +171,4 @@ V0168__data_protection.sql
 V0169__erase_departed_bookings.sql
 V0170__archive_event_bookings.sql
 V0172__data_protection_grant_seen.sql
+V0173__fold_googlemail_into_gmail.sql

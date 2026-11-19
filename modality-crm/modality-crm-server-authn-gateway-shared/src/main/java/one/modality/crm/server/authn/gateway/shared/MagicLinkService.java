@@ -231,7 +231,10 @@ public final class MagicLinkService {
                 magicLink.setToken(token);
                 magicLink.setLang(lang);
                 magicLink.setLink(link);
-                magicLink.setEmail(email);
+                // The canonical spelling (see EmailAddresses): it is what the account is found or created by
+                // when the link is redeemed, and it reaches the same inbox. oldEmail is left as given — on an
+                // email change it is the requester's stored username, matched exactly.
+                magicLink.setEmail(EmailAddresses.canonical(email));
                 magicLink.setOldEmail(oldEmail);
                 magicLink.setRequestedPath(path);
                 return updateStore.submitChanges()
@@ -603,7 +606,12 @@ public final class MagicLinkService {
         // in the table a year-long sign-in credential for whoever could read it.
         if (magicLink.isBookingAccess())
             return Future.succeededFuture(null);
-        String email = Objects.coalesce(magicLink.getOldEmail(), magicLink.getEmail());
+        // The link's own address is folded (see EmailAddresses): a sign-in link issued before the googlemail fold
+        // still opens the account it was renamed to, and it is the inbox the link was mailed to. oldEmail is NOT
+        // folded: it names the requesting account's stored username, and folding it would let a googlemail
+        // account's email-change link sign its holder into the separate gmail account while both still exist.
+        String oldEmail = magicLink.getOldEmail();
+        String email = oldEmail != null ? oldEmail : EmailAddresses.canonical(magicLink.getEmail());
         return magicLink.getStore()
             // Only the frontendAccount id is ever needed. This used to select the password hash as well, for the
             // magic-link password reset — which no longer needs it (that flow proves identity by the link itself,

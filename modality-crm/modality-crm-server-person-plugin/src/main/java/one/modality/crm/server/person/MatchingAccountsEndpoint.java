@@ -1,5 +1,8 @@
 package one.modality.crm.server.person;
 
+import java.util.Map;
+import java.util.Locale;
+import java.util.HashMap;
 import dev.webfx.platform.ast.AST;
 import dev.webfx.platform.ast.AstObject;
 import dev.webfx.platform.async.Future;
@@ -127,7 +130,7 @@ public final class MatchingAccountsEndpoint extends AsyncFunctionBusCallEndpoint
                     .setStatement(MATCHING_SQL)
                     .setParameters(addresses, accountId)
                     .build())
-                ).map(MatchingAccountsEndpoint::toReply);
+                ).map(result -> toReply(result, argument));
             });
         });
     }
@@ -154,21 +157,37 @@ public final class MatchingAccountsEndpoint extends AsyncFunctionBusCallEndpoint
         return addresses.toArray(new String[0]);
     }
 
-    /** The matched rows as {@code {address: {id}}}. Absent means no account, which is the answer. */
-    private static AstObject toReply(dev.webfx.stack.db.query.QueryResult result) {
-        AstObject reply = AST.createObject();
+    /**
+     * The matched rows as {@code {address: {id}}}, keyed by each address as the caller ASKED it (trimmed and
+     * lower-cased). Absent means no account, which is the answer.
+     *
+     * <p>The query runs on the canonical spelling ({@link EmailHasAccountEndpoint#emailOf}), so a member typed as
+     * x@googlemail.com matches the account x@gmail.com. The client looks the answer up by what it sent, so the
+     * reply is keyed back to that spelling — keyed by the username instead, that member would read as "no account".
+     */
+    private static AstObject toReply(dev.webfx.stack.db.query.QueryResult result, Object argument) {
+        Map<String, Object> idByUsername = new HashMap<>();
         if (result != null)
             for (int row = 0; row < result.getRowCount(); row++) {
                 Object username = result.getValue(row, 0);
-                if (username == null)
+                if (username != null)
+                    idByUsername.put(String.valueOf(username), result.getValue(row, 1));
+            }
+        AstObject reply = AST.createObject();
+        if (argument instanceof Object[] asked)
+            for (Object element : asked) {
+                if (!(element instanceof String text))
+                    continue;
+                Object id = idByUsername.get(EmailHasAccountEndpoint.emailOf(new Object[] { text }));
+                if (id == null)
                     continue;
                 // setScalar, not set: the set(String, …) overloads are ambiguous for a bare Object, and
                 // picking one by casting would decide the wire type by which cast was written. The id is
                 // whatever the driver returned for min(p.id) — a Number of some width — so it is passed as
                 // the scalar it is rather than narrowed here.
                 AstObject match = AST.createObject();
-                match.setScalar("id", result.getValue(row, 1));
-                reply.setObject(String.valueOf(username), match);
+                match.setScalar("id", id);
+                reply.setObject(text.trim().toLowerCase(Locale.ROOT), match);
             }
         return reply;
     }

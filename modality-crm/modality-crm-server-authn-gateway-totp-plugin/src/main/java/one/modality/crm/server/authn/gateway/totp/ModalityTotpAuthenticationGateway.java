@@ -1,5 +1,6 @@
 package one.modality.crm.server.authn.gateway.totp;
 
+import one.modality.crm.server.authn.gateway.shared.EmailAddresses;
 import dev.webfx.platform.ast.AST;
 import dev.webfx.platform.ast.AstArray;
 import dev.webfx.platform.ast.AstObject;
@@ -911,7 +912,8 @@ public final class ModalityTotpAuthenticationGateway implements ServerAuthentica
      * account id that matched.
      */
     private Future<?> lookupSecondFactors(ModalityUserPrincipal approver, String email) {
-        String needle = Strings.toSafeString(email).trim();
+        // The stored spelling (see EmailAddresses): x@googlemail.com finds the account x@gmail.com signs in as.
+        String needle = Strings.toSafeString(EmailAddresses.canonical(email));
         if (needle.isEmpty()) // Nothing to match: answered like any other miss, without a query
             return Future.succeededFuture(notFoundJson(false));
         EntityStore entityStore = EntityStore.create(dataSourceModel);
