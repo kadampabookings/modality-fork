@@ -16,18 +16,28 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Step 3 of an erasure request — did it work? — for {@link ErasureCheckEndpoint}: an independent look, after (or
+ * Step 3 of erasing a person's data — did it work? — for {@link ErasureCheckEndpoint}: an independent look, after (or
  * before) an anonymisation, at whether KBS still holds the identifiers the Data Protection Officer captured at step 1.
  * Independent of the functions on purpose: it asks the tables, not the functions' own grids.
  *
- * <h3>The argument: {@code [emails[], phones[], personIds[], documentIds[], requestId]}</h3>
+ * <h3>The argument: {@code [emails[], phones[], personIds[], documentIds[], subject]}</h3>
  *
  * Each array may be null or absent, and holds at most {@link #MAX_ENTRIES} entries. An email is a string, trimmed, 3
  * to 200 characters, with an {@code @}, compared as {@code lower(trim(column)) = lower(trim(email))}. A phone is a
  * string of at most 50 characters, compared on its last 9 digits (digits only, as V0153 matches phones, so
  * {@code +44 7700 900123} and {@code 07700 900123} meet); a phone with fewer than 9 digits is IGNORED, not refused.
- * Ids are positive integers. {@code requestId}, optional (null or a positive id), is the erasure request the check is
- * for. Anything else, or nothing left to check, is refused {@code [ErasureCheckError]}.
+ * Ids are positive integers. {@code subject}, optional, is who was erased: {@code ["person", personId]} or
+ * {@code ["booker", documentId]}, or null. Anything else, or nothing left to check, is refused
+ * {@code [ErasureCheckError]}.
+ *
+ * <h3>Other organisations</h3>
+ *
+ * A Data Protection Officer erases what their organisations hold; another organisation's bookings are KEPT (V0175).
+ * The areas count only what the caller's organisations hold — {@link EventErasureAccess#allOrganizationsHeld}, the
+ * cached grants (the gate in front asked fresh) —: a booking of another organisation (or of none) is left out of
+ * {@code bookings} and counted in {@code keptElsewhere} instead, which does not fail the verdict; so are, in
+ * {@code emails} and {@code history}, the rows tied to such a booking, and another organisation's volunteering
+ * applications. Rows tied to no booking are always counted.
  *
  * <h3>The areas</h3>
  *
@@ -38,19 +48,13 @@ import java.util.Set;
  * magic links (email or old_email) and volunteering applications (email, or phone). An area none of the identifiers
  * can concern (an email-only area with no email) is not searched and is left out of the reply — never answered 0.
  *
- * <p>{@code people} / {@code bookings}: the given ids as they are now, for the page's before/after. With a
- * {@code requestId} whose request has recorded its run, {@code bookings} also holds every booking that run anonymised
- * ({@link #ERASED_BOOKINGS_SQL}), so the page shows them all — the booker's other bookings included, which it never
- * named.
- *
- * <h3>Recording it on the request</h3>
- *
- * With a {@code requestId}, a check that is complete and clean — every area searched (an email concerns them all) and
- * every one at 0 — stamps that request's {@code checked_at} ({@link ErasureRequests#stampChecked}), provided the
- * request names its subject and the run that erased them. The server decides, never the page: "checked" in the
- * register is what a check established. The reply says whether it was stamped ({@code recorded}). The stamp is
- * written after the read-only transaction, on its own; if it fails, that is logged and answered
- * {@code recorded: false}, never as a failed check.
+ * <p>{@code people} / {@code bookings}: the given ids as they are now, for the page's before/after, each booking with
+ * its organisation and whether the caller covers it. With a {@code subject}, {@code bookings} also holds every
+ * booking anonymised under that subject — found by the last name the functions write on them
+ * ({@link #ERASED_BOOKINGS_SQL}) — so the page shows them all, the booker's other bookings included, which it never
+ * named. Nothing is recorded: the check only answers. An id is no key to another organisation's data: a person comes
+ * back only if they are the subject or somebody the caller could find ({@link #PEOPLE_SQL}), and another
+ * organisation's booking with its id, ref and organisation only ({@link #bookingJson}).
  *
  * <h3>How it runs</h3>
  *
@@ -83,8 +87,8 @@ final class ErasureResidueCheck {
         }
     }
 
-    /** {@link #parse}'s answer: the identifiers and the request the check is for (or null), or the refusal's text. */
-    record Parsed(Identifiers identifiers, Integer requestId, String refusal) {
+    /** {@link #parse}'s answer: the identifiers and who was erased (or null), or the refusal's text. */
+    record Parsed(Identifiers identifiers, PersonAnonymisationRunner.Subject subject, String refusal) {
         static Parsed refused(String text) {
             return new Parsed(null, null, text);
         }
@@ -100,7 +104,16 @@ final class ErasureResidueCheck {
      */
     private static final String IDENTIFIERS_CTE =
         "with q as materialized (select e as emails, e || array(select 'guest:' || left(x, 58) from unnest(e) x) as usernames,"
-        + " $2::text[] as phones from (select array(select lower(trim(x)) from unnest($1::text[]) x) as e) s) ";
+        + " $2::text[] as phones, $3::int[] as covered from (select array(select lower(trim(x)) from unnest($1::text[]) x) as e) s) ";
+
+    /** Whether booking {@code d} (its event {@code e} joined) belongs to one of the covered organisations ($3). */
+    private static final String COVERED_BOOKING = "coalesce(coalesce(e.organization_id, d.organization_id) = any(q.covered), false)";
+
+    /** Whether the booking {@code documentId} (a column) is another organisation's, or one with no organisation. */
+    private static String bookingElsewhere(String documentId) {
+        return "exists (select 1 from document d left join event e on e.id = d.event_id where d.id = " + documentId
+               + " and not " + COVERED_BOOKING + ")";
+    }
 
     /** The last 9 digits of a phone column, as V0153 compares phones ('\D' = not a digit). */
     private static String lastNineDigits(String column) {
@@ -116,38 +129,73 @@ final class ErasureResidueCheck {
 
     static final String LOGINS_SQL = capped("frontend_account fa", "lower(trim(fa.username)) = any(q.emails)");
 
-    static final String BOOKINGS_SQL = capped("document d",
-        "lower(trim(d.person_email)) = any(q.emails) or (cardinality(q.phones) > 0 and " + lastNineDigits("d.person_phone") + " = any(q.phones))");
+    private static final String BOOKING_MATCH =
+        "(lower(trim(d.person_email)) = any(q.emails) or (cardinality(q.phones) > 0 and " + lastNineDigits("d.person_phone") + " = any(q.phones)))";
 
-    static final String EMAILS_SQL = capped("recipient r", "lower(trim(r.email)) = any(q.emails)");
+    /**
+     * Whether booking {@code d} is the covered organisations', its event's organisation read by a correlated subquery:
+     * evaluated for the matched rows only. Joining event in the FROM made the bookings area scan 4 times slower on
+     * staging (2.1 s against 0.55 s, 19 Nov 2026), the join being built for every booking.
+     */
+    private static final String COVERED_MATCHED_BOOKING =
+        "coalesce(coalesce((select e.organization_id from event e where e.id = d.event_id), d.organization_id) = any(q.covered), false)";
 
-    /** A guest is recorded as 'guest:' + the first 58 characters of their address (64 in all); an SSO login as the address. */
-    static final String HISTORY_SQL = capped("history h", "lower(trim(h.username)) = any(q.usernames)");
+    /** The covered organisations' bookings still holding an identifier. */
+    static final String BOOKINGS_SQL = capped("document d", BOOKING_MATCH + " and " + COVERED_MATCHED_BOOKING);
+
+    /** Every other booking still holding one: another organisation's, kept on purpose (V0175) — counted, not a failure. */
+    static final String KEPT_ELSEWHERE_SQL = capped("document d", BOOKING_MATCH + " and not " + COVERED_MATCHED_BOOKING);
+
+    /** A mail's recipients, but those of another organisation's booking's mails (kept with it). */
+    static final String EMAILS_SQL = capped("recipient r", "lower(trim(r.email)) = any(q.emails)"
+        + " and not exists (select 1 from mail m where m.id = r.mail_id and " + bookingElsewhere("m.document_id") + ")");
+
+    /**
+     * A guest is recorded as 'guest:' + the first 58 characters of their address (64 in all); an SSO login as the
+     * address. Another organisation's booking's history is kept with it.
+     */
+    static final String HISTORY_SQL = capped("history h", "lower(trim(h.username)) = any(q.usernames)"
+        + " and not " + bookingElsewhere("h.document_id"));
 
     static final String MAGIC_LINKS_SQL = capped("magic_link ml",
         "lower(trim(ml.email)) = any(q.emails) or lower(trim(ml.old_email)) = any(q.emails)");
 
+    /** The covered organisations' applications (another organisation's are kept, V0175). */
     static final String VOLUNTEERING_SQL = capped("volunteering_application va",
-        "lower(trim(va.email)) = any(q.emails) or (cardinality(q.phones) > 0 and " + lastNineDigits("va.phone") + " = any(q.phones))");
+        "(lower(trim(va.email)) = any(q.emails) or (cardinality(q.phones) > 0 and " + lastNineDigits("va.phone") + " = any(q.phones)))"
+        + " and coalesce(va.organization_id = any(q.covered), false)");
 
+    /**
+     * The given people as they are now — only the subject ($2, the person erased; 0 for a booker) and the people the
+     * caller could find themselves ({@link ErasureFind}'s rule over the covered organisations, $3: a record in one of
+     * them, or none anywhere, linked copies counted). Another organisation's customer named by id gets nothing back.
+     */
     static final String PEOPLE_SQL =
-        "select p.id, p.first_name, p.last_name, p.email, p.removed from person p where p.id = any($1::int[]) order by p.id";
+        "select p.id, p.first_name, p.last_name, p.email, p.removed from person p where p.id = any($1::int[])"
+        + " and (p.id = $2::int or " + ErasureFind.recordsHere("p.id", "$3::int[]") + " or not " + ErasureFind.recordsAnywhere("p.id") + ")"
+        + " order by p.id";
 
     static final int MAX_ERASED_BOOKINGS = 50;
 
     /**
-     * The bookings the request's recorded run anonymised, by the last name that run wrote on each: '#B' + the seed
-     * booking for a booker (V0163), '#' + the person for a customer (V0153/V0164). None before the erasure ran.
+     * The bookings anonymised under the subject, by the last name the functions write on each ($1, {@link #erasedTag}):
+     * '#B' + the seed booking for a booker (V0163), '#' + the person for a customer (V0153/V0164). None before the
+     * erasure ran. No index on the column: a scan of document, bounded by the statement timeout.
      */
     static final String ERASED_BOOKINGS_SQL =
-        "select d.id from erasure_request r join document d on d.person_last_name ="
-        + " case when r.subject_kind = 'booker' then '#B' || r.subject_id else '#' || r.subject_id end"
-        + " where r.id = $1::int and r.subject_id is not null and r.run_id is not null"
-        + " order by d.id desc limit " + MAX_ERASED_BOOKINGS;
+        "select d.id from document d where d.person_last_name = $1::text order by d.id desc limit " + MAX_ERASED_BOOKINGS;
+
+    /** The last name an anonymisation writes on a subject's bookings. */
+    static String erasedTag(PersonAnonymisationRunner.Subject subject) {
+        return (subject.isBooker() ? "#B" : "#") + subject.id();
+    }
 
     static final String DOCUMENTS_SQL =
         "select d.id, d.ref, d.person_first_name, d.person_last_name, d.person_email, nullif(trim(d.person_phone), '') is not null,"
-        + " d.price_net, d.cancelled from document d where d.id = any($1::int[]) order by d.id";
+        + " d.price_net, d.cancelled, coalesce(e.organization_id, d.organization_id), o.name"
+        + " from document d left join event e on e.id = d.event_id"
+        + " left join organization o on o.id = coalesce(e.organization_id, d.organization_id)"
+        + " where d.id = any($1::int[]) order by d.id";
 
     static final String BEGIN_SQL = "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY";
 
@@ -163,11 +211,13 @@ final class ErasureResidueCheck {
         }
     }
 
+    static final Area BOOKINGS_AREA = new Area("bookings", BOOKINGS_SQL, true);
+
     /** In the reply's order. */
     static final List<Area> AREAS = List.of(
         new Area("customers", CUSTOMERS_SQL, true),
         new Area("logins", LOGINS_SQL, false),
-        new Area("bookings", BOOKINGS_SQL, true),
+        BOOKINGS_AREA,
         new Area("emails", EMAILS_SQL, false),
         new Area("history", HISTORY_SQL, false),
         new Area("magicLinks", MAGIC_LINKS_SQL, false),
@@ -178,7 +228,7 @@ final class ErasureResidueCheck {
     static Parsed parse(Object argument) {
         Object[] arguments = EventErasureArguments.array(argument);
         if (arguments.length > 5)
-            return Parsed.refused("Send at most four lists and a request id: emails, phones, person ids, booking ids");
+            return Parsed.refused("Send at most four lists and a subject: emails, phones, person ids, booking ids");
         Object[][] lists = new Object[4][];
         for (int i = 0; i < 4; i++) {
             Object list = EventErasureArguments.at(arguments, i);
@@ -207,10 +257,10 @@ final class ErasureResidueCheck {
             if (key != null) // fewer than 9 digits: ignored, as V0153 ignores them
                 phones.add(key);
         }
-        Object requestValue = EventErasureArguments.at(arguments, 4);
-        Integer requestId = requestValue == null ? null : EventErasureArguments.positiveId(requestValue);
-        if (requestValue != null && requestId == null)
-            return Parsed.refused("The request id must be a positive integer or null");
+        Object subjectValue = EventErasureArguments.at(arguments, 4);
+        PersonAnonymisationRunner.Subject subject = subject(subjectValue);
+        if (subjectValue != null && subject == null)
+            return Parsed.refused("The subject must be [\"person\", id], [\"booker\", documentId] or null");
         List<Integer> personIds = ids(lists[2]);
         List<Integer> documentIds = ids(lists[3]);
         if (personIds == null || documentIds == null)
@@ -218,7 +268,18 @@ final class ErasureResidueCheck {
         Identifiers identifiers = new Identifiers(List.copyOf(emails.values()), List.copyOf(phones), personIds, documentIds);
         if (identifiers.isEmpty())
             return Parsed.refused("Nothing to check: give an email, a phone of 9 digits or more, or an id");
-        return new Parsed(identifiers, requestId, null);
+        return new Parsed(identifiers, subject, null);
+    }
+
+    /** {@code ["person", id]} or {@code ["booker", documentId]}; anything else null. */
+    static PersonAnonymisationRunner.Subject subject(Object value) {
+        if (!(value instanceof Object[] pair) || pair.length != 2)
+            return null;
+        Integer id = EventErasureArguments.positiveId(pair[1]);
+        if (id == null)
+            return null;
+        return "person".equals(pair[0]) ? PersonAnonymisationRunner.Subject.person(id)
+            : "booker".equals(pair[0]) ? PersonAnonymisationRunner.Subject.booker(id) : null;
     }
 
     /** The last 9 digits of a phone, or null when it has fewer than 9. */
@@ -247,13 +308,8 @@ final class ErasureResidueCheck {
         final List<String> people = new ArrayList<>();
         final List<String> bookings = new ArrayList<>();
         String area = "connect";
-        boolean recorded;
-    }
-
-    /** Every area searched (an email concerns them all) and every one at 0: what may be recorded as "checked". */
-    static boolean completeAndClean(Identifiers identifiers, Findings findings) {
-        return !identifiers.emails().isEmpty() && findings.found.size() == AREAS.size()
-               && findings.found.values().stream().allMatch(n -> n == 0);
+        /** Other organisations' bookings still holding an identifier (capped); null when no area concerned them. */
+        Long keptElsewhere;
     }
 
     static Future<String> check(Object argument, EventErasureAccess.Caller caller) {
@@ -261,50 +317,45 @@ final class ErasureResidueCheck {
         if (parsed.identifiers() == null)
             return DpoErasure.refusal(CHECK_KEY, parsed.refusal(), "check", caller.personId());
         Identifiers identifiers = parsed.identifiers();
-        Integer requestId = parsed.requestId();
+        PersonAnonymisationRunner.Subject subject = parsed.subject();
         Findings findings = new Findings();
         long start = System.nanoTime();
-        io.vertx.core.Future<Findings> done;
-        try {
-            done = EventErasureRunner.connect().compose(connection -> run(connection, identifiers, requestId, findings)
-                .eventually(connection::close));
-        } catch (RuntimeException e) {
-            done = io.vertx.core.Future.failedFuture(e);
-        }
-        return VertxAsync.toWebfxFuture(done)
-            .compose(ignored -> requestId == null || !completeAndClean(identifiers, findings) ? Future.succeededFuture(false)
-                : ErasureRequests.stampChecked(requestId).recover(cause -> {
-                    Console.log(DpoErasure.LOG_PREFIX + "check by person " + caller.personId() + ": request " + requestId
-                                + " not stamped: " + EventErasureRunner.sqlStateOf(cause));
-                    return Future.succeededFuture(false);
-                }))
-            .map(recorded -> {
-                findings.recorded = recorded;
+        return EventErasureAccess.allOrganizationsHeld(caller).compose(covered -> {
+            io.vertx.core.Future<Findings> done;
+            try {
+                done = EventErasureRunner.connect().compose(connection -> run(connection, identifiers, subject, covered, findings)
+                    .eventually(connection::close));
+            } catch (RuntimeException e) {
+                done = io.vertx.core.Future.failedFuture(e);
+            }
+            return VertxAsync.toWebfxFuture(done).map(ignored -> {
                 StringBuilder line = new StringBuilder(DpoErasure.LOG_PREFIX).append("check by person ").append(caller.personId())
                     .append(" (").append(identifiers.emails().size()).append(" emails, ").append(identifiers.phones().size())
                     .append(" phones, ").append(identifiers.personIds().size()).append(" people, ")
-                    .append(identifiers.documentIds().size()).append(" bookings) in ")
-                    .append((System.nanoTime() - start) / 1_000_000).append(" ms:");
+                    .append(identifiers.documentIds().size()).append(" bookings, ").append(covered.size())
+                    .append(" organisations) in ").append((System.nanoTime() - start) / 1_000_000).append(" ms:");
                 findings.found.forEach((area, n) -> line.append(' ').append(area).append('=').append(n));
-                if (requestId != null)
-                    line.append("; request ").append(requestId).append(recorded ? " stamped" : " not stamped");
+                if (findings.keptElsewhere != null)
+                    line.append(" keptElsewhere=").append(findings.keptElsewhere);
                 Console.log(line.toString());
-                return replyJson(findings);
-            })
-            .recover(cause -> {
-                boolean timedOut = "57014".equals(EventErasureRunner.sqlStateOf(cause));
-                return DpoErasure.failure(cause, "check (" + findings.area + ")", caller.personId(), timedOut
-                    ? "The check took too long, so nothing can be said yet: try again later"
-                    : "The check could not be completed");
+                return replyJson(findings, covered);
             });
+        }).recover(cause -> {
+            boolean timedOut = "57014".equals(EventErasureRunner.sqlStateOf(cause));
+            return DpoErasure.failure(cause, "check (" + findings.area + ")", caller.personId(), timedOut
+                ? "The check took too long, so nothing can be said yet: try again later"
+                : "The check could not be completed");
+        });
     }
 
-    private static io.vertx.core.Future<Findings> run(PgConnection connection, Identifiers identifiers, Integer requestId,
+    private static io.vertx.core.Future<Findings> run(PgConnection connection, Identifiers identifiers,
+                                                      PersonAnonymisationRunner.Subject subject, Set<Integer> covered,
                                                       Findings findings) {
-        Set<Integer> documentIds = new LinkedHashSet<>(identifiers.documentIds()); // + the run's bookings, below
+        Set<Integer> documentIds = new LinkedHashSet<>(identifiers.documentIds()); // + the subject's erased bookings, below
         connection.noticeHandler(notice -> { });
         String[] emails = identifiers.emails().toArray(new String[0]);
         String[] phones = identifiers.phones().toArray(new String[0]);
+        Integer[] organizations = new java.util.TreeSet<>(covered).toArray(new Integer[0]);
         io.vertx.core.Future<?> chain = connection.query(BEGIN_SQL).execute()
             .compose(ignored -> connection.query(SETTINGS_SQL).execute());
         for (Area area : AREAS)
@@ -314,7 +365,8 @@ final class ErasureResidueCheck {
                 if (!area.concerns(identifiers))
                     return io.vertx.core.Future.succeededFuture();
                 findings.area = area.name();
-                return connection.preparedQuery(area.sql()).execute(Tuple.tuple().addArrayOfString(emails).addArrayOfString(phones))
+                return connection.preparedQuery(area.sql()).execute(Tuple.tuple().addArrayOfString(emails).addArrayOfString(phones)
+                        .addArrayOfInteger(organizations))
                     .map(rows -> {
                         Long n = rows.iterator().next().getLong(0);
                         findings.found.put(area.name(), Math.min(n == null ? 0 : n, CAP));
@@ -323,11 +375,25 @@ final class ErasureResidueCheck {
             });
         return chain
             .compose(ignored -> {
+                // The bookings area's other half: what other organisations keep, a number and nothing more
+                if (!BOOKINGS_AREA.concerns(identifiers))
+                    return io.vertx.core.Future.succeededFuture();
+                findings.area = "kept elsewhere";
+                return connection.preparedQuery(KEPT_ELSEWHERE_SQL).execute(Tuple.tuple().addArrayOfString(emails)
+                        .addArrayOfString(phones).addArrayOfInteger(organizations))
+                    .map(rows -> {
+                        Long n = rows.iterator().next().getLong(0);
+                        findings.keptElsewhere = Math.min(n == null ? 0 : n, CAP);
+                        return null;
+                    });
+            })
+            .compose(ignored -> {
                 if (identifiers.personIds().isEmpty())
                     return io.vertx.core.Future.succeededFuture();
                 findings.area = "people";
                 return connection.preparedQuery(PEOPLE_SQL)
-                    .execute(Tuple.tuple().addArrayOfInteger(identifiers.personIds().toArray(new Integer[0])))
+                    .execute(Tuple.tuple().addArrayOfInteger(identifiers.personIds().toArray(new Integer[0]))
+                        .addValue(subject != null && !subject.isBooker() ? subject.id() : 0).addArrayOfInteger(organizations))
                     .map(rows -> {
                         for (Row row : rows)
                             findings.people.add(personJson(row.getInteger(0), row.getString(1), row.getString(2),
@@ -336,10 +402,10 @@ final class ErasureResidueCheck {
                     });
             })
             .compose(ignored -> {
-                if (requestId == null)
+                if (subject == null)
                     return io.vertx.core.Future.succeededFuture();
                 findings.area = "erased bookings";
-                return connection.preparedQuery(ERASED_BOOKINGS_SQL).execute(Tuple.of(requestId))
+                return connection.preparedQuery(ERASED_BOOKINGS_SQL).execute(Tuple.of(erasedTag(subject)))
                     .map(rows -> {
                         for (Row row : rows)
                             documentIds.add(row.getInteger(0));
@@ -353,10 +419,13 @@ final class ErasureResidueCheck {
                 return connection.preparedQuery(DOCUMENTS_SQL)
                     .execute(Tuple.tuple().addArrayOfInteger(documentIds.toArray(new Integer[0])))
                     .map(rows -> {
-                        for (Row row : rows)
+                        for (Row row : rows) {
+                            Integer organization = row.getInteger(8);
                             findings.bookings.add(bookingJson(row.getInteger(0), row.getInteger(1), row.getString(2),
                                 row.getString(3), row.getString(4), Boolean.TRUE.equals(row.getBoolean(5)),
-                                row.getInteger(6), Boolean.TRUE.equals(row.getBoolean(7))));
+                                row.getInteger(6), Boolean.TRUE.equals(row.getBoolean(7)), organization, row.getString(9),
+                                organization != null && covered.contains(organization)));
+                        }
                         return null;
                     });
             })
@@ -370,11 +439,12 @@ final class ErasureResidueCheck {
     // ===== The reply ===============================================================================================
 
     /**
-     * {@code {areas: [{area, found}], people: [...], bookings: [...], recorded}}, the areas in {@link #AREAS}' order —
-     * only those actually searched: a missing area means "not looked at", never "nothing found". {@code recorded}:
-     * whether this check was stamped on its request.
+     * {@code {areas: [{area, found}], keptElsewhere, people: [...], bookings: [...]}}, the areas in {@link #AREAS}'
+     * order — only those actually searched: a missing area means "not looked at", never "nothing found".
+     * {@code keptElsewhere}: other organisations' bookings still holding an identifier (capped at {@link #CAP}), null
+     * when the bookings were not looked at.
      */
-    static String replyJson(Findings findings) {
+    static String replyJson(Findings findings, Set<Integer> covered) {
         List<String> areas = new ArrayList<>();
         for (Area area : AREAS)
             if (findings.found.containsKey(area.name()))
@@ -384,9 +454,9 @@ final class ErasureResidueCheck {
                     .toJson());
         return new EventErasureJson.ObjectWriter()
             .raw("areas", EventErasureJson.array(areas))
+            .number("keptElsewhere", findings.keptElsewhere)
             .raw("people", EventErasureJson.array(findings.people))
             .raw("bookings", EventErasureJson.array(findings.bookings))
-            .bool("recorded", findings.recorded)
             .toJson();
     }
 
@@ -400,8 +470,19 @@ final class ErasureResidueCheck {
             .toJson();
     }
 
+    /**
+     * One booking as it is now. Another organisation's (or one with none) carries its id, ref, organisation and
+     * {@code covered: false} only: no name, address, phone flag, price or state — a DPO learns that it exists, nothing
+     * of who it is for.
+     */
     static String bookingJson(Integer documentId, Integer ref, String firstName, String lastName, String email,
-                              boolean hasPhone, Integer priceNet, boolean cancelled) {
+                              boolean hasPhone, Integer priceNet, boolean cancelled, Integer organizationId,
+                              String organizationName, boolean covered) {
+        if (!covered) {
+            firstName = lastName = email = null;
+            hasPhone = cancelled = false;
+            priceNet = null;
+        }
         return new EventErasureJson.ObjectWriter()
             .number("documentId", documentId)
             .number("ref", ref)
@@ -411,6 +492,9 @@ final class ErasureResidueCheck {
             .bool("hasPhone", hasPhone)
             .number("priceNet", priceNet)
             .bool("cancelled", cancelled)
+            .number("organizationId", organizationId)
+            .string("organizationName", organizationName)
+            .bool("covered", covered)
             .toJson();
     }
 }

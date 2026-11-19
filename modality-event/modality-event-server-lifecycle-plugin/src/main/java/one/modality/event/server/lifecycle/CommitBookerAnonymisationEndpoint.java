@@ -6,7 +6,8 @@ import dev.webfx.stack.com.bus.call.spi.AsyncFunctionBusCallEndpoint;
  * Anonymises for good somebody who only ever booked without an account (GDPR erasure, V0163), started from one of
  * their bookings. Irreversible: the only way back is a point-in-time restore.
  *
- * <p>The argument is {@code [documentId, confirmPhrase, previewRunId, candidateDocumentIds]}: the phrase
+ * <p>The argument is {@code [documentId, confirmPhrase, previewRunId, candidateDocumentIds, mode?, proposalRunId?]}
+ * (as for a customer): the phrase
  * {@code ANONYMISE BOOKER <documentId>}, typed; the id of a succeeded preview of the same booking from the last
  * {@value PersonAnonymisationRunner#PREVIEW_VALIDITY}, whose facts must still hold; and the ids of the candidate
  * bookings staff ticked, exactly those that preview ran with. The reply is the run as JSON, as for the preview.

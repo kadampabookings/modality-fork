@@ -6,10 +6,12 @@ import dev.webfx.stack.com.bus.call.spi.AsyncFunctionBusCallEndpoint;
  * A dry run of a customer's anonymisation (GDPR erasure, V0153): what would be removed, and which bookings made
  * without an account might be theirs.
  *
- * <p>The argument is {@code [personId]}. The reply is a JSON string {@code {runId, personId, mode, grid,
- * candidateDetails, memberDetails, namesakeDetails}}: the grid — what the run ledger keeps — holds counts, ids, refs,
- * event names and dates, never personal data; the three details arrays name the people it lists (candidate bookings,
- * account members, other customers with one of their names), for this reply only. A refusal comes back as
+ * <p>The argument is {@code [personId, candidateDocumentIds?, memberIds?, mode?]}, {@code mode} = {@code "mine"} (the
+ * default: the organisations the DPO covers) or {@code "everywhere"}. The reply is a JSON string {@code {runId, personId,
+ * mode, scope, coveredOrganizations, grid, candidateDetails, memberDetails, namesakeDetails, bookings,
+ * keptOrganizations, approvals}}: the grid — what the run ledger keeps — holds counts, ids, refs, event names and
+ * dates, never personal data; the details arrays and the covered bookings name the people it lists (candidate
+ * bookings, account members, other customers with one of their names), for this reply only. A refusal comes back as
  * {@code [PersonAnonymise…Error] text}; see {@link PersonAnonymisationRunner} and V0153 for each.
  *
  * <p>Data Protection Officers only, re-checked on every call ({@link EventErasureAccess}). It lives beside the event

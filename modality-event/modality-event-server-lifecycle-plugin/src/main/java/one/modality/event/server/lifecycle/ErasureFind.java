@@ -5,12 +5,31 @@ import dev.webfx.platform.console.Console;
 import dev.webfx.stack.db.query.QueryResult;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 
 /**
- * Step 1 of an erasure request — who is it? — for {@link ErasureFindEndpoint}: the customers and the bookings an
+ * Step 1 of erasing a person's data — who is it? — for {@link ErasureFindEndpoint}: the customers and the bookings an
  * email address, a booking reference or a full name points at, so the Data Protection Officer can pick the person to
  * erase without Registration or Customers access.
+ *
+ * <h3>Only the caller's organisations</h3>
+ *
+ * A Data Protection Officer finds the people their organisations hold — the organisations where they hold
+ * DataProtection for the whole organisation, {@link EventErasureAccess#allOrganizationsHeld} (cached grants; the gate
+ * in front asked fresh). A booking belongs to its event's organisation, else its own.
+ * <ul>
+ *   <li>A customer is listed when they have a booking or a volunteering application in one of them — or no booking
+ *       and no application anywhere (an account alone belongs to no organisation). Each says how many of their
+ *       bookings (theirs and their linked copies') are in those organisations ({@code bookingsHere}) and elsewhere
+ *       ({@code bookingsElsewhere}): counts,
+ *       no detail. {@code lastEventStart} is of their bookings here.</li>
+ *   <li>A booking is listed only in those organisations, with its organisation; {@code sameBooker} groups those.</li>
+ *   <li>{@code hiddenElsewhere}: whether anything matched only in other organisations — a yes or no, no count, so the
+ *       page can say that such people are not shown.</li>
+ * </ul>
+ * The organisation ids are integers the framework answered, inlined in the statement ({@link #intArray}); the text
+ * stays bound as $1.
  *
  * <h3>What the text is ({@link #classify}, the server decides)</h3>
  *
@@ -84,29 +103,68 @@ final class ErasureFind {
      */
     private static final String CUSTOMER_SQL_HEAD = "with ids as materialized (";
 
-    private static final String CUSTOMER_SQL_TAIL = ")"
+    /** Where the caller's organisations are written into a statement ({@link #withCovered}). */
+    static final String COVERED = "{{covered}}";
+
+    /** A booking {@code d} (its event {@code e} joined) of one of the caller's organisations. */
+    static final String COVERED_BOOKING = "coalesce(coalesce(e.organization_id, d.organization_id) = any(" + COVERED + "), false)";
+
+    /**
+     * The person rows of one customer: the row {@code personId} (a column or a literal) and its linked copies on other
+     * accounts — whose bookings are theirs too (anonymise_person() takes them with the person).
+     */
+    static String personRows(String personId) {
+        return "(select " + personId + " union all select lc.id from person lc where lc.account_person_id = " + personId + ")";
+    }
+
+    /** Whether the customer {@code personId} has a booking or an application in one of {@code covered} (an int[] expression). */
+    static String recordsHere(String personId, String covered) {
+        return "(exists (select 1 from document d left join event e on e.id = d.event_id where d.person_id in " + personRows(personId)
+            + " and coalesce(coalesce(e.organization_id, d.organization_id) = any(" + covered + "), false))"
+            + " or exists (select 1 from volunteering_application va where va.person_id in " + personRows(personId)
+            + " and coalesce(va.organization_id = any(" + covered + "), false)))";
+    }
+
+    /** Whether the customer {@code personId} has a booking or an application anywhere. */
+    static String recordsAnywhere(String personId) {
+        return "(exists (select 1 from document d where d.person_id in " + personRows(personId) + ")"
+            + " or exists (select 1 from volunteering_application va where va.person_id in " + personRows(personId) + "))";
+    }
+
+    /**
+     * Each matched customer (not anonymised): whether they have a record here (a booking or an application in a covered
+     * organisation, theirs or a linked copy's) and whether they have one anywhere — EXISTS, not counts: a reference
+     * matches hundreds of people. The rule every DPO reply about a person follows (the check's people, the preview's
+     * members and namesakes).
+     */
+    private static final String CUSTOMER_FLAGS = "),"
+        + " f as materialized (select p0.id, " + recordsHere("p0.id", COVERED) + " as here, " + recordsAnywhere("p0.id") + " as anywhere"
+        + " from person p0 where p0.anonymised_date is null and p0.id in (select * from ids))";
+
+    private static final String CUSTOMER_SQL_TAIL = CUSTOMER_FLAGS
         + " select p.id, p.first_name, p.last_name, p.email, p.phone, (p.frontend_account_id is not null and p.owner),"
-        + " p.account_person_id, p.removed, b.n, to_char(b.last_start, 'YYYY-MM-DD')"
-        + " from (select p0.* from person p0 where p0.anonymised_date is null and p0.id in (select * from ids)"
+        + " p.account_person_id, p.removed, b.n, to_char(b.last_start, 'YYYY-MM-DD'), b.here"
+        + " from (select p0.* from person p0 join f on f.id = p0.id and (f.here or not f.anywhere)"
         + " order by p0.id desc limit " + (MAX_ROWS + 1) + ") p"
-        + " cross join lateral (select count(*) as n, max(e.start_date) as last_start"
-        + " from document d left join event e on e.id = d.event_id where d.person_id = p.id) b"
+        + " cross join lateral (select count(*) as n, count(*) filter (where " + COVERED_BOOKING + ") as here,"
+        + " max(e.start_date) filter (where " + COVERED_BOOKING + ") as last_start"
+        + " from document d left join event e on e.id = d.event_id where d.person_id in " + personRows("p.id") + ") b"
         + " order by p.id desc";
 
-    static final String EMAIL_CUSTOMERS_SQL = CUSTOMER_SQL_HEAD
-        + "select q.id from person q where lower(trim(q.email)) = lower(trim($1::text))"
+    private static final String EMAIL_PEOPLE = "select q.id from person q where lower(trim(q.email)) = lower(trim($1::text))"
         + " union select q.id from frontend_account fa join person q on q.frontend_account_id = fa.id and q.owner"
-        + " where lower(trim(fa.username)) = lower(trim($1::text))"
-        + CUSTOMER_SQL_TAIL;
+        + " where lower(trim(fa.username)) = lower(trim($1::text))";
 
     /** abc_names() is plpgsql: in a scalar subquery it runs once, as an InitPlan, never once per row. */
-    static final String NAME_CUSTOMERS_SQL = CUSTOMER_SQL_HEAD
-        + "select q.id from person q where q.abc_names = (select public.abc_names($1::text))"
-        + CUSTOMER_SQL_TAIL;
+    private static final String NAME_PEOPLE = "select q.id from person q where q.abc_names = (select public.abc_names($1::text))";
 
-    static final String REF_CUSTOMERS_SQL = CUSTOMER_SQL_HEAD
-        + "select d.person_id from document d where d.ref = $1::int"
-        + CUSTOMER_SQL_TAIL;
+    private static final String REF_PEOPLE = "select d.person_id from document d where d.ref = $1::int";
+
+    static final String EMAIL_CUSTOMERS_SQL = CUSTOMER_SQL_HEAD + EMAIL_PEOPLE + CUSTOMER_SQL_TAIL;
+
+    static final String NAME_CUSTOMERS_SQL = CUSTOMER_SQL_HEAD + NAME_PEOPLE + CUSTOMER_SQL_TAIL;
+
+    static final String REF_CUSTOMERS_SQL = CUSTOMER_SQL_HEAD + REF_PEOPLE + CUSTOMER_SQL_TAIL;
 
     /**
      * Whether anonymise_booker() (V0163) can take a booking along with others with no tick: no customer record, an
@@ -128,9 +186,15 @@ final class ErasureFind {
         + " coalesce(d.person_first_name = 'Anonymised' and d.person_last_name like '#%' and d.person_email is null, false),"
         + " case when " + SAME_BOOKER_ELIGIBLE + " then dense_rank() over (partition by " + SAME_BOOKER_ELIGIBLE
         + " order by lower(trim(d.person_email)), d.person_abc_names) end"
-        + " from document d left join event e on e.id = d.event_id where ";
+        + ", coalesce(e.organization_id, d.organization_id), o.name"
+        + " from document d left join event e on e.id = d.event_id"
+        + " left join organization o on o.id = coalesce(e.organization_id, d.organization_id) where " + COVERED_BOOKING + " and ";
 
     private static final String BOOKING_SQL_TAIL = " order by d.id desc limit " + (MAX_ROWS + 1);
+
+    /** Whether a booking the text matches belongs to another organisation (or none): the second half of a yes or no. */
+    private static final String HIDDEN_BOOKINGS_HEAD =
+        " or exists (select 1 from document d left join event e on e.id = d.event_id where not " + COVERED_BOOKING + " and ";
 
     /**
      * lower(person_email), not lower(trim(…)): the form document_person_email_lower_idx indexes. With trim, the planner
@@ -138,28 +202,62 @@ final class ErasureFind {
      * has none, against 7 ms. Staging held no address stored with spaces around it (17 Nov 2026; anonymised, so no proof
      * for production); the check (ErasureResidueCheck) compares trimmed, so such a booking would still show there.
      */
-    static final String EMAIL_BOOKINGS_SQL = BOOKING_SQL_HEAD
-        + "lower(d.person_email) = lower(trim($1::text))" + BOOKING_SQL_TAIL;
+    private static final String EMAIL_MATCH = "lower(d.person_email) = lower(trim($1::text))";
+    private static final String NAME_MATCH = "d.person_abc_names = (select public.abc_names($1::text))";
+    private static final String REF_MATCH = "d.ref = $1::int";
 
-    static final String NAME_BOOKINGS_SQL = BOOKING_SQL_HEAD
-        + "d.person_abc_names = (select public.abc_names($1::text))" + BOOKING_SQL_TAIL;
+    static final String EMAIL_BOOKINGS_SQL = BOOKING_SQL_HEAD + EMAIL_MATCH + BOOKING_SQL_TAIL;
 
-    static final String REF_BOOKINGS_SQL = BOOKING_SQL_HEAD + "d.ref = $1::int" + BOOKING_SQL_TAIL;
+    static final String NAME_BOOKINGS_SQL = BOOKING_SQL_HEAD + NAME_MATCH + BOOKING_SQL_TAIL;
 
-    static String customersSql(Kind kind) {
-        return switch (kind) {
+    static final String REF_BOOKINGS_SQL = BOOKING_SQL_HEAD + REF_MATCH + BOOKING_SQL_TAIL;
+
+    static String customersSql(Kind kind, Collection<Integer> covered) {
+        return withCovered(switch (kind) {
             case EMAIL -> EMAIL_CUSTOMERS_SQL;
             case REF -> REF_CUSTOMERS_SQL;
             case NAME -> NAME_CUSTOMERS_SQL;
-        };
+        }, covered);
     }
 
-    static String bookingsSql(Kind kind) {
-        return switch (kind) {
+    static String bookingsSql(Kind kind, Collection<Integer> covered) {
+        return withCovered(switch (kind) {
             case EMAIL -> EMAIL_BOOKINGS_SQL;
             case REF -> REF_BOOKINGS_SQL;
             case NAME -> NAME_BOOKINGS_SQL;
+        }, covered);
+    }
+
+    /**
+     * Whether the text matched anything only in other organisations — a customer with records elsewhere and none
+     * here, or a booking of another organisation (or of none): one boolean, {@code hiddenElsewhere}.
+     */
+    static String hiddenSql(Kind kind, Collection<Integer> covered) {
+        String people = switch (kind) {
+            case EMAIL -> EMAIL_PEOPLE;
+            case REF -> REF_PEOPLE;
+            case NAME -> NAME_PEOPLE;
         };
+        String match = switch (kind) {
+            case EMAIL -> EMAIL_MATCH;
+            case REF -> REF_MATCH;
+            case NAME -> NAME_MATCH;
+        };
+        return withCovered(CUSTOMER_SQL_HEAD + people + CUSTOMER_FLAGS
+            + " select exists (select 1 from f where f.anywhere and not f.here)" + HIDDEN_BOOKINGS_HEAD + match + ")", covered);
+    }
+
+    /** The statement with the caller's organisations written in, as an int[] literal of the ids. */
+    static String withCovered(String sql, Collection<Integer> covered) {
+        return sql.replace(COVERED, intArray(covered));
+    }
+
+    /** {@code '{151,187}'::int[]} — sorted, de-duplicated, nulls left out; {@code '{}'::int[]} for none. Integers only. */
+    static String intArray(Collection<Integer> ids) {
+        StringBuilder sb = new StringBuilder("'{");
+        for (Integer id : new java.util.TreeSet<>(ids.stream().filter(java.util.Objects::nonNull).toList()))
+            sb.append(sb.length() > 2 ? "," : "").append(id.intValue());
+        return sb.append("}'::int[]").toString();
     }
 
     // ===== The rules ===============================================================================================
@@ -209,13 +307,17 @@ final class ErasureFind {
         if (classified.query() == null)
             return DpoErasure.refusal(QUERY_KEY, classified.refusal(), "find", caller.personId());
         Query query = classified.query();
-        return EventErasureRunner.query(customersSql(query.kind()), query.parameter())
-            .compose(customers -> EventErasureRunner.query(bookingsSql(query.kind()), query.parameter())
-                .map(bookings -> {
+        return EventErasureAccess.allOrganizationsHeld(caller).compose(covered ->
+            EventErasureRunner.query(customersSql(query.kind(), covered), query.parameter())
+            .compose(customers -> EventErasureRunner.query(bookingsSql(query.kind(), covered), query.parameter())
+                .compose(bookings -> EventErasureRunner.query(hiddenSql(query.kind(), covered), query.parameter())
+                .map(hidden -> {
+                    boolean hiddenElsewhere = rowCount(hidden) > 0 && DpoErasure.bool(hidden.getValue(0, 0));
                     Console.log(DpoErasure.LOG_PREFIX + "find (" + query.kind().json + ") by person " + caller.personId()
-                                + ": " + rowCount(customers) + " customers, " + rowCount(bookings) + " bookings");
-                    return replyJson(query.kind(), customers, bookings);
-                }))
+                                + " in " + covered.size() + " organisations: " + rowCount(customers) + " customers, "
+                                + rowCount(bookings) + " bookings" + (hiddenElsewhere ? ", some elsewhere" : ""));
+                    return replyJson(query.kind(), customers, bookings, hiddenElsewhere);
+                }))))
             .recover(cause -> DpoErasure.failure(cause, "find (" + query.kind().json + ")", caller.personId(),
                 "The search could not be completed"));
     }
@@ -226,8 +328,8 @@ final class ErasureFind {
 
     // ===== The reply ===============================================================================================
 
-    /** {@code {kind, customers, bookings, truncated}}, each list cut at {@link #MAX_ROWS}. */
-    static String replyJson(Kind kind, QueryResult customers, QueryResult bookings) {
+    /** {@code {kind, customers, bookings, truncated, hiddenElsewhere}}, each list cut at {@link #MAX_ROWS}. */
+    static String replyJson(Kind kind, QueryResult customers, QueryResult bookings, boolean hiddenElsewhere) {
         List<String> customerJson = new ArrayList<>();
         for (int row = 0; row < Math.min(rowCount(customers), MAX_ROWS); row++)
             customerJson.add(customerJson(customers, row));
@@ -239,6 +341,7 @@ final class ErasureFind {
             .raw("customers", EventErasureJson.array(customerJson))
             .raw("bookings", EventErasureJson.array(bookingJson))
             .bool("truncated", rowCount(customers) > MAX_ROWS || rowCount(bookings) > MAX_ROWS)
+            .bool("hiddenElsewhere", hiddenElsewhere)
             .toJson();
     }
 
@@ -253,6 +356,8 @@ final class ErasureFind {
             .number("linkedCopyOf", DpoErasure.number(r.getValue(row, 6)))
             .bool("removed", DpoErasure.bool(r.getValue(row, 7)))
             .number("bookings", DpoErasure.number(r.getValue(row, 8)))
+            .number("bookingsHere", DpoErasure.number(r.getValue(row, 10)))
+            .number("bookingsElsewhere", elsewhere(r.getValue(row, 8), r.getValue(row, 10)))
             .string("lastEventStart", DpoErasure.text(r.getValue(row, 9)))
             .toJson();
     }
@@ -272,6 +377,13 @@ final class ErasureFind {
             .number("personId", DpoErasure.number(r.getValue(row, 10)))
             .bool("anonymised", DpoErasure.bool(r.getValue(row, 11)))
             .number("sameBooker", DpoErasure.number(r.getValue(row, 12)))
+            .number("organizationId", DpoErasure.number(r.getValue(row, 13)))
+            .string("organizationName", DpoErasure.text(r.getValue(row, 14)))
             .toJson();
+    }
+
+    /** All bookings minus those here, or null when either is unknown. */
+    static Number elsewhere(Object all, Object here) {
+        return all instanceof Number a && here instanceof Number h ? (Number) (a.longValue() - h.longValue()) : null;
     }
 }

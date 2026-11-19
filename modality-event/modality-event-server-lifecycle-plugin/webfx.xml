@@ -22,10 +22,11 @@
          plugin because they need the same dedicated connection and the same access class as the event removal, with
          their runs recorded in person_erasure_run.
 
-         Handling a GDPR erasure request end to end on the Data Protection Officer's "Erasure requests" page, DPO only like
-         the anonymisations: finding who a request names (an email, a booking reference or a full name), checking
-         afterwards that nothing identifying them remains, and keeping the register of requests and their deadlines
-         (erasure_request, V0165). -->
+         Erasing a person's data from the Data Protection Officer's "Erase personal data" page, DPO only like the
+         anonymisations: finding who the person is (an email, a booking reference or a full name), checking afterwards
+         that nothing identifying them remains, both limited to the organisations where the DPO holds DataProtection;
+         and, to erase a person everywhere, the approvals of the other organisations' DPOs (person_erasure_approval,
+         V0176: ids, dates and states only). No register of requests is kept (erasure_request dropped by V0174). -->
 
     <exported-packages>
         <source-packages/>
@@ -47,8 +48,6 @@
         <source-module>webfx-stack-orm-datasourcemodel</source-module>
         <source-module>webfx-stack-orm-entity</source-module>
         <source-module>webfx-stack-session-state</source-module>
-        <!-- An erasure request is saved as a JSON object sent as a string (ErasureRequests): JSON must be plugged in -->
-        <plugin-module>webfx-platform-ast-json-plugin</plugin-module>
     </dependencies>
 
     <providers>
@@ -65,8 +64,10 @@
         <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.event.server.lifecycle.DataProtectionAccessEndpoint</provider>
         <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.event.server.lifecycle.ErasureFindEndpoint</provider>
         <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.event.server.lifecycle.ErasureCheckEndpoint</provider>
-        <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.event.server.lifecycle.ErasureRequestsEndpoint</provider>
-        <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.event.server.lifecycle.SaveErasureRequestEndpoint</provider>
+        <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.event.server.lifecycle.AskErasureApprovalEndpoint</provider>
+        <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.event.server.lifecycle.ErasureApprovalsEndpoint</provider>
+        <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.event.server.lifecycle.DecideErasureApprovalEndpoint</provider>
+        <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.event.server.lifecycle.WithdrawErasureApprovalEndpoint</provider>
         <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.event.server.lifecycle.RetentionPolicyEndpoint</provider>
         <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.event.server.lifecycle.SetRetentionPolicyEndpoint</provider>
         <provider interface="dev.webfx.stack.com.bus.call.spi.BusCallEndpoint">one.modality.event.server.lifecycle.DataProtectionActivityEndpoint</provider>

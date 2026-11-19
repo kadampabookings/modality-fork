@@ -4,9 +4,9 @@ import dev.webfx.platform.async.Future;
 import dev.webfx.platform.console.Console;
 
 /**
- * What the four endpoints of the Data Protection Officer's "Erasure requests" page share ({@link ErasureFind},
- * {@link ErasureResidueCheck}, {@link ErasureRequests}): the log prefix, the failure key, the framing of refusals,
- * and reading values back from a query.
+ * What the endpoints of the Data Protection Officer's "Erase personal data" page share besides the anonymisation
+ * itself ({@link ErasureFind}, {@link ErasureResidueCheck}, {@link ErasureApprovals}): the log prefix, the failure key,
+ * the framing of refusals, and reading values back from a query. No register of requests is kept (V0174).
  *
  * <p>What the log says, everywhere: the endpoint, the caller's person id, ids and counts. Never what was searched
  * for, an email, a name or a phone — the page exists to make a person disappear, and a log line would outlive that.
@@ -38,7 +38,9 @@ final class DpoErasure {
      */
     static <T> Future<T> failure(Throwable cause, String operation, Integer callerId, String text) {
         String message = cause == null ? null : cause.getMessage();
-        if (message != null && message.startsWith("[Erasure") && message.indexOf(']') > 0) {
+        if (message != null && (message.startsWith("[Erasure") || message.startsWith("[" + EventErasureAccess.NOT_YOUR_ORGANIZATION_KEY)
+                                || message.startsWith("[" + PersonAnonymisationRunner.BUSY_KEY))
+            && message.indexOf(']') > 0) {
             Console.log(LOG_PREFIX + operation + " by person " + callerId + " refused: " + message.substring(1, message.indexOf(']')));
             return Future.failedFuture(message);
         }

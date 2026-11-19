@@ -1,5 +1,6 @@
 package one.modality.event.server.lifecycle;
 
+import dev.webfx.platform.ast.ReadOnlyAstObject;
 import dev.webfx.platform.conf.Config;
 import dev.webfx.platform.conf.ConfigLoader;
 import dev.webfx.platform.console.Console;
@@ -72,16 +73,19 @@ final class EventErasureConfig {
                         + " was not regenerated with `webfx update`?) — personal-data removal is DRY-RUN ONLY on this server");
             return;
         }
+        // Read as what it is, a ReadOnlyAstObject: Config's getString comes from there, and naming the type here is what
+        // makes `webfx update` keep webfx-platform-ast a compile dependency of this module (it detects imports only)
+        ReadOnlyAstObject settings = config;
         String value;
         try {
-            value = Strings.trim(config.getString("commitEnabled"));
+            value = Strings.trim(settings.getString("commitEnabled"));
         } catch (RuntimeException e) { // a value that is not a scalar: off, like any other unexpected value
             value = null;
         }
         commitEnabled = "true".equalsIgnoreCase(value);
         String archiveValue;
         try {
-            archiveValue = Strings.trim(config.getString("archiveCommitEnabled"));
+            archiveValue = Strings.trim(settings.getString("archiveCommitEnabled"));
         } catch (RuntimeException e) {
             archiveValue = null;
         }

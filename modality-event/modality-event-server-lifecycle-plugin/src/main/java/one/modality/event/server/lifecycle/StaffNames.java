@@ -57,6 +57,34 @@ final class StaffNames {
         return writer.toJson();
     }
 
+    /** {@code id -> name} from {@link #sql}'s rows; a blank name is left out. Pure, for the check. */
+    static java.util.Map<Long, String> map(QueryResult r) {
+        java.util.Map<Long, String> names = new java.util.HashMap<>();
+        for (int row = 0; r != null && row < r.getRowCount(); row++) {
+            Object id = r.getValue(row, 0);
+            Object name = r.getValue(row, 1);
+            if (id instanceof Number n && name != null && !name.toString().isBlank())
+                names.put(n.longValue(), name.toString());
+        }
+        return names;
+    }
+
+    /**
+     * The names of these staff ids, by id — for a reply that places each name beside its id (the erasure approvals:
+     * who asked, who decided). Never fails: a lookup that goes wrong is logged and answers no name.
+     */
+    static Future<java.util.Map<Long, String>> lookupMap(Collection<? extends Number> ids) {
+        String sql = sql(ids);
+        if (sql == null)
+            return Future.succeededFuture(java.util.Map.of());
+        return EventErasureRunner.query(sql)
+            .map(StaffNames::map)
+            .recover(cause -> {
+                Console.log(LOG_PREFIX + "Reading staff names failed: " + (cause == null ? null : cause.getMessage()));
+                return Future.succeededFuture(java.util.Map.of());
+            });
+    }
+
     /**
      * The names of these staff ids as JSON. Never fails: a lookup that goes wrong is logged and answers {@code {}}, and
      * the page then shows ids, as it did before names existed.

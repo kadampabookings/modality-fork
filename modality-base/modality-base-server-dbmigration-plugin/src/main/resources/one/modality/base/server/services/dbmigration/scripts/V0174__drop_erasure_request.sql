@@ -1,0 +1,22 @@
+-- V0174: drop erasure_request — the register of erasure requests (V0165) is withdrawn before anybody used it.
+--
+-- WHY. The Data Protection Officer's tool no longer keeps a register of requests (plan "Erase personal data: the DPO
+-- tool on the authorization framework, with no request register", 19 Nov 2026): it finds the person, shows what an
+-- erasure does and keeps, erases, and checks — each run is already recorded in person_erasure_run (V0153). Of the
+-- register, only the approvals of an "erase everywhere" survive, in person_erasure_approval (V0176). The endpoints
+-- that read and wrote erasure_request (ErasureRequests, modality-event-server-lifecycle-plugin) are removed with it.
+--
+-- WHAT IS LOST. Whatever rows a DPO recorded since V0165 shipped (18 Nov 2026): dates, codes, ids and booleans, never
+-- a name, address or free text (V0165's CHECKs). Production had the page for one day; read the table before deploying
+-- if that matters (SELECT count(*) FROM erasure_request).
+--
+-- DDL: one table and its sequence (owned by the serial column: dropped with it). No foreign key leads to or from it,
+-- no view or function reads it. IF EXISTS: safe to re-run, and on a database that never had V0165.
+--
+-- ANONYMISER. scripts/gdpr-anonymise/10-anon-helpers.sql keeps its classification row until production has this
+-- migration: the refresh's precheck refuses a production column with no row, and ignores a row for a table that does
+-- not exist. scripts/gdpr-erasure/manifest.tsv drops its rows now (CI replays every migration).
+--
+-- No BEGIN/COMMIT: the runner wraps every pending script in one transaction.
+
+DROP TABLE IF EXISTS public.erasure_request;

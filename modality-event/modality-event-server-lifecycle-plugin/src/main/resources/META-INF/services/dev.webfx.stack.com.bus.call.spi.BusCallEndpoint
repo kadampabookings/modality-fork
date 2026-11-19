@@ -11,8 +11,10 @@ one.modality.event.server.lifecycle.CommitBookerAnonymisationEndpoint
 one.modality.event.server.lifecycle.DataProtectionAccessEndpoint
 one.modality.event.server.lifecycle.ErasureFindEndpoint
 one.modality.event.server.lifecycle.ErasureCheckEndpoint
-one.modality.event.server.lifecycle.ErasureRequestsEndpoint
-one.modality.event.server.lifecycle.SaveErasureRequestEndpoint
+one.modality.event.server.lifecycle.AskErasureApprovalEndpoint
+one.modality.event.server.lifecycle.ErasureApprovalsEndpoint
+one.modality.event.server.lifecycle.DecideErasureApprovalEndpoint
+one.modality.event.server.lifecycle.WithdrawErasureApprovalEndpoint
 one.modality.event.server.lifecycle.RetentionPolicyEndpoint
 one.modality.event.server.lifecycle.SetRetentionPolicyEndpoint
 one.modality.event.server.lifecycle.DataProtectionActivityEndpoint

@@ -170,5 +170,9 @@ V0167__super_admin_organization.sql
 V0168__data_protection.sql
 V0169__erase_departed_bookings.sql
 V0170__archive_event_bookings.sql
+V0171__reserved_not_shipped.sql
 V0172__data_protection_grant_seen.sql
 V0173__fold_googlemail_into_gmail.sql
+V0174__drop_erasure_request.sql
+V0175__anonymise_by_organisation.sql
+V0176__person_erasure_approval.sql

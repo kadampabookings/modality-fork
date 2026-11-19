@@ -245,9 +245,10 @@ final class EventErasureAccess {
      * Runs {@code work} once the caller — already let through by {@link #whenDataProtectionOfficer} or
      * {@link #whenDataProtectionOfficerReadingStatus} — holds DataProtection for the whole of the organization
      * {@code organizationId} resolves to, and refuses otherwise. For an action on something one organization owns: a
-     * past event's removal, its run, its retention period. Erasing a person stays any organization's DPO's until the
-     * data-controller question is answered (admin-tiers plan, Phase 0); an event belongs to one organization, so it
-     * need not wait.
+     * past event's removal, its run, its retention period. Erasing a person is scoped differently, since a person's
+     * records span organisations: {@link #organizationsHeldFresh} over the organisations of the person's records (the run acts in those the caller
+     * holds, and keeps the rest), and
+     * {@link ErasureApprovals} for erasing everywhere.
      *
      * <p>A refusal for ANOTHER organization's target says so ({@link #NOT_YOUR_ORGANIZATION_KEY}): the caller is a Data
      * Protection Officer, and the screens that offer these actions already list every organization's events by
@@ -328,6 +329,44 @@ final class EventErasureAccess {
                     held.add(ids.get(i));
             return (Set<Integer>) held;
         })).otherwise(Set.of());
+    }
+
+    // ── Erasing a person, by organisation (2026-11-19) ────────────────────────────────────────────────────────────────
+
+    /**
+     * Every organisation where the caller holds DataProtection for the whole organisation, from the CACHED grants —
+     * for what only finds or shows (the erasure's find and check, the approvals list): the gate in front asked fresh.
+     * A read that fails, or a caller with no state, holds none.
+     */
+    static Future<Set<Integer>> allOrganizationsHeld(Caller caller) {
+        if (caller == null || caller.state() == null)
+            return Future.succeededFuture(Set.of());
+        return EventErasureRunner.query(ORGANIZATIONS_SQL)
+            .compose(rows -> organizationsHeld(caller, firstColumn(rows)))
+            .otherwise(Set.of());
+    }
+
+    /**
+     * Which of these organisations the caller holds DataProtection in, each asked from FRESH grants ({@link #holdsIn},
+     * flag guard included) — for a handful of organisations: those of the records of the person an erasure is about
+     * (PersonAnonymisationRunner.organizationsCovered), or that a proposal involves. A failure leaves that organisation
+     * out.
+     */
+    static Future<Set<Integer>> organizationsHeldFresh(Caller caller, Collection<Integer> organizationIds) {
+        List<Integer> ids = new ArrayList<>(new LinkedHashSet<>(organizationIds));
+        ids.remove(null);
+        if (ids.isEmpty() || caller == null || caller.state() == null)
+            return Future.succeededFuture(Set.of());
+        List<Future<Boolean>> answers = new ArrayList<>();
+        for (Integer id : ids)
+            answers.add(holdsIn(caller, id, true));
+        return Future.all(new ArrayList<>(answers)).map(all -> {
+            Set<Integer> held = new java.util.TreeSet<>();
+            for (int i = 0; i < ids.size(); i++)
+                if (Boolean.TRUE.equals(all.resultAt(i)))
+                    held.add(ids.get(i));
+            return (Set<Integer>) held;
+        }).otherwise(Set.of());
     }
 
     /**

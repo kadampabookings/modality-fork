@@ -3,11 +3,11 @@ package one.modality.event.server.lifecycle;
 import dev.webfx.stack.com.bus.call.spi.AsyncFunctionBusCallEndpoint;
 
 /**
- * Who is it? — step 1 of the Data Protection Officer's "Erasure requests" page: the customers and bookings an email
- * address, a booking reference or a full name points at.
+ * Who is it? — step 1 of the Data Protection Officer's "Erase personal data" page: the customers and bookings an
+ * email address, a booking reference or a full name points at, in the organisations the DPO covers.
  *
  * <p>The argument is {@code [query]}, the text the DPO typed. The reply is a JSON string {@code {kind, customers,
- * bookings, truncated}}; the rules and the shapes are {@link ErasureFind}'s. A refusal comes back as
+ * bookings, truncated, hiddenElsewhere}}; the rules and the shapes are {@link ErasureFind}'s. A refusal comes back as
  * {@code [ErasureQueryError] text}, a failure as {@code [ErasureSqlError] text}. The reply names people: it is never
  * logged or stored.
  *
