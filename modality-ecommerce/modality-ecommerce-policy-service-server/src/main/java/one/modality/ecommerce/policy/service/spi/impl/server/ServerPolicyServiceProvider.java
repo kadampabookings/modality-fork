@@ -85,6 +85,11 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
         // global row. Scope = sites of this event's bookable scheduled items (NOT just the venue —
         // event-bound items can sit at other sites); date params $2/$3 are ignored here (harmless
         // superset).
+        // Except a MEAL event configuration (a sitting, V0178): it serves only its own event's bookings,
+        // so another event's form must not see it — the allocation trigger leaves that event's meal lines
+        // unallocated and never refuses them on a sitting's capacity. Its own event matches by id or by the
+        // event it repeats, as the trigger's doc.event_id / repeated_event_id. coalesce: an item with no
+        // family is not a meal (none on staging, 2026-11-19).
         ", rc as materialized (select x.resource.id as rcResource, x.resource.site.id as rcSite, x.item, x.online, x.allowsMale, x.allowsFemale, x.allowsLay, x.allowsOrdained, x.max, x.maxReserved, x.startDate, x.endDate" +
         ", coalesce(x.event?.preDate, x.event?.startDate) as rcFirst, coalesce(x.event?.postDate, x.event?.endDate) as rcLast" +
         // The beds a WHOLE-ROOM booking of this room's item needs free (V0141: share_owner_quantity := item
@@ -94,6 +99,7 @@ public final class ServerPolicyServiceProvider implements PolicyServiceProvider 
         " from ResourceConfiguration x" +
         " where (x.event=null or coalesce(x.event?.postDate, x.event?.endDate) >= (select sd.sdFirst from sd)" +
         " and coalesce(x.event?.preDate, x.event?.startDate) <= (select sd.sdLast from sd))" +
+        " and (x.event=null or x.event=$1 or x.event=(select e.finalEvent from e) or coalesce(x.item.family?.code, '')!='meals')" +
         " and exists(select ScheduledItem si2 where bookableScheduledItem=id and si2.site=x.resource.site and (si2.event=(select e.finalEvent from e) or si2.event=null and si2.site=(select e.venue from e))))" +
         // The windows of those event configurations, by room — whatever their item: a global
         // configuration is not in force on a night an event configuration of its room covers, nor
