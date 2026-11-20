@@ -40,15 +40,19 @@ import java.util.Set;
  * (2026-11-12): it is being left behind. Server code never passes through this guard.
  *
  * <p><b>Observed first.</b> Row rules are enforced the moment they deploy, and a front-office write missing from the
- * list would break for every member at once; this ships logging "WOULD REFUSE a write to a back-office table" and is
- * switched on after a census. Its REFUSED line will need a CloudWatch filter of its own.
+ * list would break for every member at once; this shipped logging "WOULD REFUSE a write to a back-office table" and
+ * was switched on after a week's census (see {@link #ENFORCING}).
  *
  * @author Claude Code
  */
 final class FrontOfficeTablesWritePolicy implements ClientSubmitGuard.WritePolicy {
 
-    /** False while it observes: decisions are logged but nothing is refused. */
-    static final boolean ENFORCING = false;
+    /**
+     * True since 2026-11-20: from the 13 Nov production deploy to 20 Nov the census read one line, a letter save from a
+     * lapsed back-office session that the identity-less rule already refuses. Refusals log "REFUSED a write to a
+     * back-office table" (CloudWatch filter kbs3-wg-backoffice-tables).
+     */
+    static final boolean ENFORCING = true;
 
     /** The tables a client without a verified back-office token may write. Entity names, as the write request carries them. */
     static final Set<String> FRONT_OFFICE_ENTITIES = Set.of(

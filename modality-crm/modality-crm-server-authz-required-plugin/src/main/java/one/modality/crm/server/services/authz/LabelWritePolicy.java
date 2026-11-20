@@ -39,14 +39,17 @@ import java.util.Set;
  * which event it belongs to without a walk across the tables that use it. For the same reason a grant scoped to one
  * event or event type does not count, so such a translator is refused (security review, 2026-11-12).
  *
- * <p><b>Observed first</b> ("WOULD REFUSE a label write"); its REFUSED line will need a CloudWatch filter of its own.
+ * <p><b>Observed first</b> ("WOULD REFUSE a label write"), switched on after a week's census (see {@link #ENFORCING}).
  *
  * @author Claude Code
  */
 final class LabelWritePolicy implements ClientSubmitGuard.WritePolicy {
 
-    /** False while it observes: decisions are logged but nothing is refused. */
-    static final boolean ENFORCING = false;
+    /**
+     * True since 2026-11-20: the production census read 0 "WOULD REFUSE a label write" lines from 13 to 20 Nov.
+     * Refusals log "REFUSED a label write" (CloudWatch filter kbs3-wg-label).
+     */
+    static final boolean ENFORCING = true;
 
     /** The language columns, as the domain model names them (the translation page writes one per label). */
     static final Set<String> LANGUAGE_FIELDS = Set.of("de", "el", "en", "es", "fr", "it", "pt", "vi", "zhs", "zht");

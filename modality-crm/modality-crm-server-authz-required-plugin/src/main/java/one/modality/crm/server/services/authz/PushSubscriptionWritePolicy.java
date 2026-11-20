@@ -62,14 +62,18 @@ import java.util.Set;
  * not deliver its notifications elsewhere. An event or
  * organisation recipient with no identity hears that event's or organisation's broadcasts, which are not personal.
  *
- * <p><b>Observed first</b> ("WOULD REFUSE a push subscription write"); its REFUSED line will need a CloudWatch filter.
+ * <p><b>Observed first</b> ("WOULD REFUSE a push subscription write"), switched on after a week's census (see
+ * {@link #ENFORCING}).
  *
  * @author Claude Code
  */
 final class PushSubscriptionWritePolicy implements ClientSubmitGuard.WritePolicy {
 
-    /** False while it observes: decisions are logged but nothing is refused. */
-    static final boolean ENFORCING = false;
+    /**
+     * True since 2026-11-20: the production census read 0 "WOULD REFUSE a push subscription write" lines from 13 to
+     * 20 Nov. Refusals log "REFUSED a push subscription write" (CloudWatch filter kbs3-wg-push-subscription).
+     */
+    static final boolean ENFORCING = true;
 
     static final String SUBSCRIPTION = "PushSubscription", RECIPIENT = "PushSubscriptionRecipient";
 

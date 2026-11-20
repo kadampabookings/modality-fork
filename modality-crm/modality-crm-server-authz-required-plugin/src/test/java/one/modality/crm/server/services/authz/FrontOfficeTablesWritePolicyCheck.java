@@ -78,7 +78,7 @@ public class FrontOfficeTablesWritePolicyCheck {
 
     public static void main(String[] args) throws IOException {
         System.out.println("the switch:");
-        check("ships OBSERVING", !FrontOfficeTablesWritePolicy.ENFORCING);
+        check("is ENFORCING (clean census 13-20 Nov 2026)", FrontOfficeTablesWritePolicy.ENFORCING);
         String job = ChatWritePolicyCheck.readJob();
         check("is registered among the row rules", job == null || job.contains("new FrontOfficeTablesWritePolicy()"));
 

@@ -428,12 +428,13 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         // - and viewing records: a MediaConsumption row is written by the account whose attendance it is, or the
         //   back office. Observed from 2026-11-10, enforcing from 2026-11-18. See MediaConsumptionWritePolicy.
         // - and back office by default: without a verified back-office token, a client writes only the tables the
-        //   front office writes. Observing first (2026-11-12). See FrontOfficeTablesWritePolicy.
+        //   front office writes. Observed from 2026-11-12, enforcing from 2026-11-20. See FrontOfficeTablesWritePolicy.
         // - and two of the front office's own tables: a Label is only translated, by a translator; the volunteer
-        //   tables take only the public pages' writes, once per emailed link. Observing first (2026-11-12). See
+        //   tables take only the public pages' writes, once per emailed link. Labels observed from 2026-11-12, enforcing
+        //   from 2026-11-20; volunteer tables enforcing from 2026-11-12. See
         //   LabelWritePolicy and VolunteerWritePolicy.
         // - and push subscriptions: a device subscribes for its own person, address and bookings, and its endpoint is
-        //   never rewritten. Observing first (2026-11-12). See PushSubscriptionWritePolicy.
+        //   never rewritten. Observed from 2026-11-12, enforcing from 2026-11-20. See PushSubscriptionWritePolicy.
         //
         // THREE RULES USED TO STAND HERE AND NO LONGER DO: an owner's email is their login, an email on
         // somebody else's account's person, and moving a person into another account. All three asked
