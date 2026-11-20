@@ -321,8 +321,23 @@ final class ChatReadScope implements ClientReadScope.Provider, ClientScopeToken.
     public Expression<?> readScopeCondition(Object domainClass, Object scopeToken) {
         String name = String.valueOf(domainClass);
         String dql = conditionDql(name, scopeToken);
-        if (dql == null)
+        if (dql == null) {
+            // THE BLIND SPOT, found 2026-11-20. A super admin reads every root under UNRESTRICTED, for
+            // which conditionDql returns no predicate — so this returned here, before the line below, and
+            // the census's 7e showed zero back-office reads of chat for two censuses running. That zero was
+            // read as "the back office never reads chat"; what it actually meant was "the back-office
+            // readers we have are super admins, and the probe cannot see them". 7h said so in the same
+            // census — "a super admin reads unscoped (seen 100)" — but per QUERY, not per root, so the two
+            // could not be told apart. Reported now so they can.
+            //
+            // Only for a root this provider would otherwise scope: conditionDql returns null for every
+            // other entity in the system too, and counting those would be a flood. Unthrottled like the
+            // line below, and affordable for the same reason — the compiler is cached per (statement,
+            // token), so this fires once per statement SHAPE, which is why 7e's numbers are single digits.
+            if (UNRESTRICTED.equals(scopeToken) && conditionDql(name, MEMBER) != null)
+                Console.log(unscopedLogLine(name, scopeToken));
             return null; // an entity this does not scope compiles exactly as it did before
+        }
         Console.log(logLine(name, scopeToken));
         // PARSED EVEN WHILE OBSERVING, and this is the point of observing at all. Returning null before the
         // parse — which is what this did for its first two days — means the rule TEXT is never exercised
@@ -360,8 +375,23 @@ final class ChatReadScope implements ClientReadScope.Provider, ClientScopeToken.
      * before, more than once; the check asserts this against the same regex the script uses.
      */
     static String logLine(String entityName, Object scopeToken) {
-        return "\uD83D\uDEE1 " + (isEnforced(entityName) ? "SCOPING" : "WOULD SCOPE") + " READ of " + entityName
-             + " under " + scopeToken;
+        return logLine(isEnforced(entityName) ? "SCOPING" : "WOULD SCOPE", entityName, scopeToken);
+    }
+
+    /**
+     * The same shape under a third mode: a root this caller reads with NO predicate at all.
+     *
+     * <p>A third mode rather than a sentence of its own, because 7e parses the mode out of this shape and
+     * groups by it — and because a line merely CONTAINING "SCOPING READ" would be parsed as the enforcing
+     * mode and read as a root having been flipped. The script's filter and parse, and the regex pinned in
+     * {@code ChatReadScopeCheck}, name all three modes together for that reason.
+     */
+    static String unscopedLogLine(String entityName, Object scopeToken) {
+        return logLine("UNSCOPED", entityName, scopeToken);
+    }
+
+    private static String logLine(String mode, String entityName, Object scopeToken) {
+        return "\uD83D\uDEE1 " + mode + " READ of " + entityName + " under " + scopeToken;
     }
 
     /**

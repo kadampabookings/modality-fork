@@ -94,7 +94,12 @@ public class ChatReadScopeCheck {
         // same script reported nothing for days because of an unescaped paren.
         String line = ChatReadScope.logLine("ChatMessage", ChatReadScope.MEMBER);
         check("the reported line matches the census regex",
-              line.matches(".*(WOULD SCOPE|SCOPING) READ of [A-Za-z]+ under [a-z.]+"));
+              line.matches(".*(WOULD SCOPE|SCOPING|UNSCOPED) READ of [A-Za-z]+ under [a-z.]+"));
+        String unscoped = ChatReadScope.unscopedLogLine("Conversation", ChatReadScope.UNRESTRICTED);
+        check("the unscoped line takes the same shape, so 7e parses it with the other two",
+              unscoped.matches(".*(WOULD SCOPE|SCOPING|UNSCOPED) READ of [A-Za-z]+ under [a-z.]+"));
+        check("and is NOT mistaken for the enforcing mode, which would read as a root having been flipped",
+              !unscoped.contains("SCOPING READ"));
         check("and it names the entity and the scope",
               line.contains("ChatMessage") && line.contains(ChatReadScope.MEMBER));
         // The statement never goes in the line: its literals are a conversation id, and through it a person.
