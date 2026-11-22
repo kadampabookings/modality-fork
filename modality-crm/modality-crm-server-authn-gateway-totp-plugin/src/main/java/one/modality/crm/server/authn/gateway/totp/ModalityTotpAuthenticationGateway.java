@@ -433,8 +433,33 @@ public final class ModalityTotpAuthenticationGateway implements ServerAuthentica
         // support view mechanism exists to close, so the refusal is blanket. Guests carry a different
         // principal type and are refused by the same check.
         Object userId = ThreadLocalStateHolder.getUserId();
-        if (!(userId instanceof ModalityUserPrincipal principal) || principal.isSupportView())
+        if (!(userId instanceof ModalityUserPrincipal principal) || principal.isSupportView()) {
+            // THE ONE BRANCH HERE THAT RETURNED WITHOUT SAYING WHY, which left its refusals
+            // indistinguishable in the log from a real enrolment failure — everything else in this file
+            // logs its reason. Three prod censuses running (18, 20 and 22 Nov 2026) spent a detour on
+            // AuthnTotpEnrolmentError lines that were not enrolments at all: every one paired, within the
+            // same millisecond, with a verifyAuthenticated failure on LOGOUT_USER_ID. That is the back
+            // office calling getSecondFactorStatus on a session the server has already ended. Routine, and
+            // worth one line that says so.
+            //
+            // The two cases are logged apart because they mean opposite things. No principal names nobody,
+            // so it costs no identifier and is the common, boring one. A support view names the staff
+            // account — ids only, this file's convention — and is the case actually worth reading: a
+            // support view asking to START an enrolment is the transferable-credential hole this check
+            // exists to close, not a stale tab. Naming the argument type is what separates them at a
+            // glance, since a status read and an enrolment arrive at the same refusal.
+            //
+            // The refusal itself stays generic. A caller learns nothing new here, which is the point:
+            // the reason goes to the log, never to the client.
+            String asked = updateCredentialsArgument.getClass().getSimpleName();
+            if (userId instanceof ModalityUserPrincipal supportView)
+                Console.log(LOG_PREFIX + "🛑 Refused " + asked + " for a SUPPORT VIEW on account "
+                            + TotpCredentialStore.normaliseId(supportView.getUserAccountId()));
+            else
+                Console.log(LOG_PREFIX + "Refused " + asked + ": no signed-in account on this session"
+                            + " — a client asking after its session ended, not a failed enrolment");
             return enrolmentFailure();
+        }
         Object accountId = TotpCredentialStore.normaliseId(principal.getUserAccountId());
         if (updateCredentialsArgument instanceof StartTotpEnrolmentCredentials cred)
             return startEnrolment(principal, accountId, cred);
