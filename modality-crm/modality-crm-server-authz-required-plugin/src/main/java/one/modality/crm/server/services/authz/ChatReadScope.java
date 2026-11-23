@@ -174,7 +174,12 @@ final class ChatReadScope implements ClientReadScope.Provider, ClientScopeToken.
     private static final String GRANTED_CONVERSATIONS =
         "(select id from Conversation where " + GRANTED_EVENTS + ")";
 
-    private static final ChatReadScope INSTANCE = new ChatReadScope();
+    /**
+     * Package-private, like {@link #logLine}, and for the same reason: the check calls
+     * {@link #readScopeCondition} directly to pin that a super admin reading a root is REPORTED. That
+     * behaviour cannot be asserted from the rule text — it lives in the early return above the report.
+     */
+    static final ChatReadScope INSTANCE = new ChatReadScope();
 
     /** Parsed once per (entity, scope): the condition is evaluated for every row of every read. */
     private final Map<String, Expression<?>> parsed = new ConcurrentHashMap<>();

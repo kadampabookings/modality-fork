@@ -1,5 +1,11 @@
 package one.modality.crm.server.services.authz;
 
+import dev.webfx.platform.console.spi.ConsoleProvider;
+import dev.webfx.platform.service.SingleServiceProvider;
+
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * The chat read rules themselves — which entities are scoped, by what, and which are left alone.
  *
@@ -174,6 +180,27 @@ public class ChatReadScopeCheck {
         check("and logs again at ten and a hundred, not in between",
               ChatReadScope.shouldLog(10, false) && !ChatReadScope.shouldLog(11, false)
               && ChatReadScope.shouldLog(100, false));
+
+        // ── THE BLIND SPOT, pinned where it actually lived: the early return above the report ───────────
+        // Asserting the rule text could never have caught this. conditionDql returns null for UNRESTRICTED
+        // by design — a super admin gets no predicate — and readScopeCondition used to return on that null
+        // BEFORE its report line. So a super admin reading a chat root logged nothing, census 7e showed
+        // zero back-office observations for two censuses running, and that zero was read as "the back
+        // office never reads chat" while 7h logged 100 of their reads in the same output. Three censuses
+        // later production still had not exercised it, because it needs a super admin to open the support
+        // inbox on a freshly restarted process. Pinned here instead, where it costs nothing to run.
+        List<String> logged = new ArrayList<>();
+        SingleServiceProvider.registerServiceProvider(ConsoleProvider.class, new ConsoleProvider() {
+            @Override public void log(String message) { logged.add(message); }
+            @Override public void error(String message, Throwable error) { }
+        });
+        ChatReadScope.INSTANCE.readScopeCondition("Conversation", ChatReadScope.UNRESTRICTED);
+        check("a super admin reading a chat root is REPORTED, not silently skipped",
+              logged.size() == 1 && logged.get(0).contains("UNSCOPED READ of Conversation under unrestricted"));
+        logged.clear();
+        ChatReadScope.INSTANCE.readScopeCondition("Document", ChatReadScope.UNRESTRICTED);
+        check("but an entity this provider never scopes stays silent - otherwise every read in the system"
+              + " would log", logged.isEmpty());
 
         System.out.println(fail == 0 ? "\nALL " + pass + " PASS" : "\n" + fail + " FAILED");
         if (fail > 0)
