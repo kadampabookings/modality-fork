@@ -118,20 +118,28 @@ public class ChatReadScopeCheck {
         // single flag would make the first flip the riskiest one available. Conversation goes first — it is
         // the only rule that is a local column test, so what it returns is the easiest to reason about, and
         // it is where the exposure is: any signed-in member could read any conversation by changing one id.
-        // Back to none: the 11 Nov staging rehearsal found the back-office arm returns nothing for a caller
-        // whose scope is UNRESTRICTED (empty arrays) or stale (null), so no root is enforced again until
-        // both are fixed. See the plan's rehearsal section.
-        for (String entity : new String[] {"Conversation", "ChatMessage", "ChatMessageReaction",
-                                           "ConversationParticipant", "ChatPresence"})
-            check("no root is enforced while the rehearsal's findings stand (" + entity + ")",
+        // The 11 Nov rehearsal sent this back to none, because the back-office arm returned nothing for a
+        // caller whose scope was UNRESTRICTED (empty arrays) or stale (null). BOTH are fixed — a third
+        // token whose rules are null, and a retriable refusal instead of a null bind — so the first three
+        // are enforced again for the staging rehearsal of precondition 3. This assertion is the tripwire
+        // that says so out loud: it must be changed deliberately, never drift.
+        for (String entity : new String[] {"Conversation", "ChatMessage", "ChatMessageReaction"})
+            check("the first flip's roots are enforced (" + entity + ")",
+                  ChatReadScope.isEnforced(entity));
+        // The two nobody has asked the question of yet — ConversationParticipant is read only as the
+        // caller's own row today, ChatPresence is about agents rather than a conversation.
+        for (String entity : new String[] {"ConversationParticipant", "ChatPresence"})
+            check("and a root outside the first flip is not (" + entity + ")",
                   !ChatReadScope.isEnforced(entity));
         check("an entity this does not scope is not enforced either",
               !ChatReadScope.isEnforced("Document"));
         // The line says which mode each root is in, so ONE census tells observing from enforcing per root.
         // With the first root flipped the two wordings appear side by side, which is the point: a census
         // that could only say "this deploy is enforcing" would say nothing about which of the five.
-        check("every root reports WOULD SCOPE while none is enforced",
-              ChatReadScope.logLine("Conversation", ChatReadScope.MEMBER).contains("WOULD SCOPE READ"));
+        check("an enforced root reports SCOPING",
+              ChatReadScope.logLine("Conversation", ChatReadScope.MEMBER).contains("SCOPING READ"));
+        check("and one outside the flip still reports WOULD SCOPE, so ONE census tells them apart per root",
+              ChatReadScope.logLine("ChatPresence", ChatReadScope.MEMBER).contains("WOULD SCOPE READ"));
 
         // ── The token names the CALLER, not the feature ──────────────────────────────────────────────────
         // It is issued for every client read, chat or not, and selects per-entity rules. A feature-named

@@ -70,9 +70,18 @@ final class ChatReadScope implements ClientReadScope.Provider, ClientScopeToken.
      * the first flip the riskiest one available, which is how a control gets reverted wholesale over one
      * root's bug. Adding a name here is the reviewed change; the surrounding machinery does not move.
      *
-     * <p>Empty, so nothing is narrowed yet. <b>The first flip is {@code Conversation} AND
-     * {@code ChatMessage}, together</b> — decided 2026-11-18, after a security pass over the token seam
-     * asked what the obvious first entry would actually close.
+     * <p><b>ENFORCING THE FIRST THREE, FOR THE STAGING REHEARSAL (precondition 3) — 2026-11-23.</b> This
+     * is the change the 11 November rehearsal reverted, made again on the staging branch only, now that
+     * both of that rehearsal's findings are fixed: an unrestricted caller gets a third token whose rules
+     * are all null (so it no longer binds two empty arrays and reads nothing), and a stale or missing
+     * scope is refused retriably instead of binding null and returning an empty result. <b>It must not
+     * reach the prod branch until the rehearsal passes with an operator of each kind</b> — event-granted,
+     * organisation-granted and unrestricted — against predicted row counts, because testing with one
+     * account is precisely how 11 November passed and then emptied the inbox.
+     *
+     * <p><b>The first flip is {@code Conversation}, {@code ChatMessage} and {@code ChatMessageReaction}</b>
+     * — decided 2026-11-18/19, after a security pass over the token seam asked what the obvious first entry
+     * would actually close.
      *
      * <p>{@code Conversation} alone was that obvious entry: it is the only rule that is a local column test,
      * so what it returns is the easiest to reason about. But it does not close the exposure named at the top
@@ -101,7 +110,8 @@ final class ChatReadScope implements ClientReadScope.Provider, ClientScopeToken.
      * about agents' presence rather than a conversation. Both would need revisiting the moment anything
      * wants a membership list.
      */
-    private static final Set<String> ENFORCED_ROOTS = Set.of();
+    private static final Set<String> ENFORCED_ROOTS =
+        Set.of("Conversation", "ChatMessage", "ChatMessageReaction");
 
     /** Whether this root's condition is applied rather than merely reported. */
     static boolean isEnforced(String entityName) {
