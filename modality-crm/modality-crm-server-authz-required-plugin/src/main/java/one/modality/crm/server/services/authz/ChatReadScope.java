@@ -70,14 +70,18 @@ final class ChatReadScope implements ClientReadScope.Provider, ClientScopeToken.
      * the first flip the riskiest one available, which is how a control gets reverted wholesale over one
      * root's bug. Adding a name here is the reviewed change; the surrounding machinery does not move.
      *
-     * <p><b>ENFORCING THE FIRST THREE, FOR THE STAGING REHEARSAL (precondition 3) — 2026-11-23.</b> This
-     * is the change the 11 November rehearsal reverted, made again on the staging branch only, now that
-     * both of that rehearsal's findings are fixed: an unrestricted caller gets a third token whose rules
-     * are all null (so it no longer binds two empty arrays and reads nothing), and a stale or missing
-     * scope is refused retriably instead of binding null and returning an empty result. <b>It must not
-     * reach the prod branch until the rehearsal passes with an operator of each kind</b> — event-granted,
-     * organisation-granted and unrestricted — against predicted row counts, because testing with one
-     * account is precisely how 11 November passed and then emptied the inbox.
+     * <p><b>ENFORCING THE FIRST THREE — staging 2026-11-23, production 2026-11-24.</b> This is the change
+     * the 11 November rehearsal reverted, made again once both of that rehearsal's findings were fixed: an
+     * unrestricted caller gets a third token whose rules are all null (so it no longer binds two empty
+     * arrays and reads nothing), and a stale or missing scope is refused retriably instead of binding null
+     * and returning an empty result.
+     *
+     * <p>It was kept off the prod branch until the rehearsal passed <b>with an operator of each kind</b> —
+     * event-granted, organisation-granted and unrestricted — against predicted row counts, because testing
+     * with one account is precisely how 11 November passed and then emptied the inbox. That sitting was
+     * repeated on 2026-11-24 and passed on all five identities, so the gate is discharged; what it was for
+     * is recorded in {@code docs/security/chat-read-rehearsal-runbook.md} rather than re-imposed here. The
+     * next root to be added faces the same question again, and the runbook is the procedure for it.
      *
      * <p><b>The first flip is {@code Conversation}, {@code ChatMessage} and {@code ChatMessageReaction}</b>
      * — decided 2026-11-18/19, after a security pass over the token seam asked what the obvious first entry
@@ -94,6 +98,21 @@ final class ChatReadScope implements ClientReadScope.Provider, ClientScopeToken.
      * subquery evaluated for every message row, and the back-office arm nests a second one inside it. Time
      * it against real volume before the flip, not after — a rule that is free on 248 conversations is not
      * free on every message in them.
+     *
+     * <p><b>Timed 2026-11-24, and — against that advice — after the flip rather than before.</b> On staging,
+     * whose chat tables are a production copy the anonymiser does not empty: 249 conversations, 2,266
+     * messages, 12 reactions. With NO client filter at all and the widest grant a caller could hold (1,081
+     * events, every organisation), {@code Conversation} runs in 9.7 ms, {@code ChatMessage} in 33.7 ms and
+     * {@code ChatMessageReaction} in 4.6 ms. Those are upper bounds twice over: the arrays were built by
+     * subquery rather than bound as parameters, so part of each number is work the real query does not do,
+     * and no client sends an unfiltered read. The shape the front office does send — a thread by
+     * conversation id — is 0.08 ms. The cost is in PLANNING, 4–11 ms, paid once per (statement, token) and
+     * then cached. What makes this small is the data, not the rule: at a hundred times the messages the
+     * {@code ChatMessage} arm is the one to re-time.
+     *
+     * <p>These do not contradict the 0.07 ms recorded for {@code ChatMessageReaction} below — that is the
+     * EXTRA cost the injected conditions add to the shape a client actually sends; these are whole tables
+     * with no client filter, which is the ceiling rather than the bill.
      *
      * <p><b>{@code ChatMessageReaction} goes with them</b> (2026-11-19). It is the third root a client reaches
      * with a conversation id of its own choosing — {@code use-message-reactions.ts} reads
