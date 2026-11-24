@@ -301,9 +301,18 @@ final class ChatReadScope implements ClientReadScope.Provider, ClientScopeToken.
             return UNRESTRICTED;
         }
         if (scope == null)
-            // Stale or never computed: the 120s TTL, or a caller whose grants were never asked for. Both
-            // bind null and match nothing once enforcing, which is the silently empty screen.
-            report(STALE_SEEN, "no scope cached for a back office — its rules would match NOTHING if enforced", true);
+            // Stale or never computed: the 120s TTL, or a caller whose grants were never asked for. What
+            // follows depends on the ROOT, which is why this line no longer claims one outcome for both.
+            // An ENFORCED root binds CALLER_GRANTED_* from the inspector's own names, so
+            // ModalityCallerParameterResolver answers UNAVAILABLE and the read is refused retriably
+            // (census 7k) instead of emptied. An unenforced root injects no condition and is unaffected,
+            // which is what this line usually is: production's first one after the flip, 2026-11-24
+            // 17:01:02, was a back-office read of something that is not chat.
+            //
+            // It read "its rules would match NOTHING if enforced" until then — true of the code before
+            // the 17 November refusal and of a branch where nothing was enforced, and now of neither. A
+            // probe that describes a fixed failure keeps pointing at it.
+            report(STALE_SEEN, "no scope cached for a back office — an enforced root's read is refused, an unenforced one unaffected", true);
         else if (scope.isEmpty())
             report(EMPTY_SEEN, "a back office with no grants at all", true);
         return BACKOFFICE;
