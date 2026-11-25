@@ -119,20 +119,35 @@ public final class ModalityDeviceLoginAuthenticationGateway implements ServerAut
         " (select count(*) from person p where p.frontend_account_id = a.id and p.removed is not true)" +
         " from frontend_account a where a.id = $1 and a.disabled is not true";
 
-    // Two statements rather than one rewritten at runtime, because the rewrite was a defect: it dropped
-    // $1 from the SQL and went on binding a six-element array with a leading null, so PostgreSQL saw a
-    // parameter nothing referenced and failed the INSERT with 42P18 - and record()'s own "never fail the
-    // caller" swallowed it. Every refusal row was lost, silently, which is the one case the audit is for.
-    // Separate constants cannot drift from their parameter arrays the way a string rewrite can.
+    // Both forms bind the SAME five parameters, and the request's age is a literal rather than a sixth.
+    // That shape is the resolution of two defects in a row, and it matters more than either of them.
+    //
+    // The first: one SQL string rewritten at runtime dropped $1 while still binding a six-element array,
+    // so PostgreSQL saw a parameter nothing referenced and failed with 42P18. Splitting it in two fixed
+    // the drift but kept the age AS a parameter - "cast($1 as interval)", under a comment claiming there
+    // were no inferred casts. There was one: an explicit cast is exactly what makes PostgreSQL DECLARE $1
+    // as interval, after which the Vert.x driver wants an io.vertx.pgclient.data.Interval and refuses the
+    // String "78 seconds" with "can not be coerced to the expected class". Nothing on this side of the
+    // wire could have caught it - it was found on staging, on the first real approval, because record()'s
+    // "never fail the caller" swallows it: the session was minted and delivered with NO audit row, which
+    // is the single case this table exists for.
+    //
+    // So the age is interpolated, as RETENTION_DAYS already is in PURGE_SQL below. It is a long computed
+    // from two clock readings - never user input, and a long cannot carry SQL - and interpolating it
+    // leaves both statements taking an identical five-element array, so neither type inference nor
+    // parameter drift has anywhere left to go. A sixth parameter here would be another bet on inference
+    // across the driver boundary, and that is the bet no unit test on this side of it can settle.
     static final String INSERT_COLUMNS =
         "insert into device_login_attempt (requested_at, decided_at, frontend_account_id, outcome, audience,"
         + " session_family_id, approver_sign_in_method) values ";
-    /** With a known request time, as an explicit interval back from now - no arithmetic, no inferred casts. */
-    static final String INSERT_WITH_AGE_SQL =
-        INSERT_COLUMNS + "(now() - cast($1 as interval), now(), $2, $3, $4, $5, $6)";
-    /** Without one: a refusal that never reached a pending entry has no request to date. */
+    /** Without a known request time: a refusal that never reached a pending entry has no request to date. */
     static final String INSERT_NO_AGE_SQL =
         INSERT_COLUMNS + "(now(), now(), $1, $2, $3, $4, $5)";
+
+    /** With one, dated back from now by the seconds the request stood. Same five parameters as above. */
+    static String insertWithAgeSql(long ageSeconds) {
+        return INSERT_COLUMNS + "(now() - interval '" + ageSeconds + " seconds', now(), $1, $2, $3, $4, $5)";
+    }
 
     /** How long a decision is kept. Tighter than the Activity tab's 90-day filter, on purpose: see V0181. */
     private static final int RETENTION_DAYS = 30;
@@ -159,13 +174,15 @@ public final class ModalityDeviceLoginAuthenticationGateway implements ServerAut
     }
 
     private void purgeOldAttempts() {
+        // Success says nothing, and that is not laziness. SubmitResult.getRowCount() counts ROW SETS, not
+        // affected rows - VertxSqlUtil.toWebFxSubmitResult walks rows.next() and counts the hops - so one
+        // DELETE answers 1 whatever it removed, including nothing. The line this used to print ("removed 1
+        // device-login decision(s) older than 30 days") was therefore false on every hourly run against an
+        // empty table, and it read as evidence that rows were being aged out when none ever had been. A
+        // true count would need the delete to RETURN its rows, and reading those would mean routing a
+        // delete through the query path, taking a write around checkWriteAllowed - not a trade a retention
+        // log line is worth. Failures still speak, below, and they are what an operator needs to hear.
         executeRawSubmit(PURGE_SQL)
-            .onSuccess(result -> {
-                // Silence is the normal case, and the only honest report of it.
-                if (result != null && result.getRowCount() > 0)
-                    Console.log("\ud83e\uddf9 " + LOG_PREFIX + "removed " + result.getRowCount()
-                                + " device-login decision(s) older than " + RETENTION_DAYS + " days");
-            })
             // Best effort by design: retrying harder would load the same pool that just refused.
             .onFailure(e -> Console.log("\u26a0\ufe0f " + LOG_PREFIX + "could not purge old decisions: " + e));
     }
@@ -474,21 +491,26 @@ public final class ModalityDeviceLoginAuthenticationGateway implements ServerAut
     private Future<Void> record(String outcome, Object accountId, PendingDeviceLoginStore.Pending entry,
                                 String audience, String sessionFamilyId, String approverMethods) {
         String sql;
-        Object[] parameters;
-        if (entry == null) {
+        if (entry == null)
             sql = INSERT_NO_AGE_SQL;
-            parameters = new Object[]{accountId, outcome, audience, sessionFamilyId, approverMethods};
-        } else {
+        else {
             long ageMillis = Math.max(0, System.currentTimeMillis()
                                          - (entry.expiresAtMillis() - PendingDeviceLoginStore.TTL_MILLIS));
-            sql = INSERT_WITH_AGE_SQL;
-            parameters = new Object[]{(ageMillis / 1000) + " seconds",
-                                      accountId, outcome, audience, sessionFamilyId, approverMethods};
+            sql = insertWithAgeSql(ageMillis / 1000);
         }
+        // One array for both statements: the age lives in the SQL, so there is no sixth to misalign.
+        Object[] parameters = {accountId, outcome, audience, sessionFamilyId, approverMethods};
         return executeRawSubmit(sql, parameters)
             .<Void>mapEmpty()
             .otherwise(e -> {
-                Console.log("\u26a0\ufe0f " + LOG_PREFIX + "could not record a " + outcome + " decision: " + e);
+                // Console.error, not Console.log, and the level is the point. This is the loss of the only
+                // durable trace of an authentication grant, and the swallow above means it is the ONLY
+                // signal that it happened - a caller is told nothing, by design. Logged at INFO it sat
+                // unread through the whole of development and through the first real approval on staging,
+                // which is precisely the gap section 7m of check-prod-logs-read-aspect.sh was written for:
+                // the error section reads ERROR only, so an INFO line naming the cause is invisible to it.
+                Console.error("\u26a0\ufe0f " + LOG_PREFIX + "could not record a " + outcome
+                              + " decision - THIS DECISION HAS NO AUDIT ROW: " + e);
                 return null;
             });
     }
