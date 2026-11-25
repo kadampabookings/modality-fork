@@ -19,6 +19,11 @@
              default), so a deployment that forgets this module locks people out visibly rather than
              letting them in quietly. -->
         <plugin-module>modality-crm-server-authn-gateway-totp-plugin</plugin-module>
+        <!-- The browser-approved device login (V0181). Default-deny at the account, so a deployment
+             that includes it still mints nothing until frontend_account.device_login is set; a
+             deployment that LEAVES IT OUT simply has no such flow, and the command-line client's
+             request is refused by a server with no gateway for it. Either way the failure is loud. -->
+        <plugin-module>modality-crm-server-authn-gateway-device-plugin</plugin-module>
         <plugin-module>modality-crm-server-authz-required-plugin</plugin-module>
         <!-- Without this module the identity token still slides and is still capped, but nothing rotates
              it and a stolen copy stays undetectable — a plugin module is only built in if a list names
