@@ -179,3 +179,4 @@ V0176__person_erasure_approval.sql
 V0178__meal_sittings_own_event_only.sql
 V0179__meal_sittings_route.sql
 V0180__grant_send_document_letter_registration.sql
+V0181__device_login.sql
