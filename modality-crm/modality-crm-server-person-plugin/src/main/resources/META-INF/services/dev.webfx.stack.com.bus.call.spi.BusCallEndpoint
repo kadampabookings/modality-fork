@@ -19,6 +19,7 @@ one.modality.crm.server.person.ClaimMembersEndpoint
 one.modality.crm.server.person.RequestRefundEndpoint
 one.modality.crm.server.person.ContactCentreEndpoint
 one.modality.crm.server.person.SendDocumentLetterEndpoint
+one.modality.crm.server.person.ReadDocumentMailEndpoint
 one.modality.crm.server.person.EmailHasAccountEndpoint
 one.modality.crm.server.person.ChatTypingSignalEndpoint
 one.modality.crm.server.person.MatchingAccountsEndpoint

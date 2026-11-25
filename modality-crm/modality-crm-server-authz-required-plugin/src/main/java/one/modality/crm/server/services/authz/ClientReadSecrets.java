@@ -158,7 +158,20 @@ final class ClientReadSecrets {
         //       gateway_parameter and magic_link columns denied above: that screen reads those today.
         //   (the three capability tokens that used to be listed here are now declared above: they did not need
         //       an endpoint after all, only a rule saying they may be tested and not read.)
+        // WATCHED 2026-11-25, to be denied flat: mail.content. A booking's composed letter carries its [yourCart]
+        // link, a bearer token for the booking (DocumentLetterRules explains it), so reading a mail is holding one
+        // — the "way in" this list is for. The back office now reads a mail's content only through
+        // modality/service/document/readMail (ReadDocumentMailEndpoint), fenced on SendDocumentLetter for the
+        // booking and logged; no React screen selects the column any more (registration's use-mail-content.ts was
+        // the only one, and the volunteering mail list never selected it). Watched first rather than denied blind,
+        // which is the lesson recorded for bunny_api_key above: the legacy GWT back office and any stale bundle
+        // may still read it, and only the log can say.
+        //   filter @message like /OBSERVED-READ mail.content/
+        // Deny it (denyColumn("mail", "content"), INSTEAD of this line — both together throw at boot) after a
+        // week with no line, checking the instrument was running over the same window ("client read shape").
+        // KBS2 runs its own server and is not bound by this list either way.
+        ClientReadDenyList.observeColumn("mail", "content");
         Console.log("🛡 Client queries may not touch the sign-in, credential and key columns (2 tables, 7 columns),"
-                    + " and may test but not read 3 capability tokens (none paused)");
+                    + " and may test but not read 3 capability tokens (none paused); mail.content is watched");
     }
 }

@@ -8,6 +8,9 @@ import dev.webfx.stack.orm.entity.EntityStore;
 import dev.webfx.stack.orm.entity.UpdateStore;
 import one.modality.base.shared.entities.Document;
 import one.modality.base.shared.entities.Event;
+import one.modality.base.shared.entities.History;
+import one.modality.base.shared.entities.Letter;
+import one.modality.base.shared.entities.Mail;
 import one.modality.crm.server.authn.gateway.shared.RouteAccessGuard;
 
 /**
@@ -33,6 +36,12 @@ import one.modality.crm.server.authn.gateway.shared.RouteAccessGuard;
  * <p>See {@code docs/security/frontoffice-write-authorization-plan.md}, "Document — the letter-redirect
  * interception", for the measurements and the two rejected alternatives.
  *
+ * <p><b>The letter is checked too</b> ({@link LetterApplicability}), not only the booking: it must be
+ * one the back office's picker offers for this booking. And the send is <b>confirmed</b>: the trigger
+ * silently composes nothing for a letter with no sending account or no text in the person's language,
+ * so the answer is true only once a new mail row exists, and only then is the booking's history told
+ * "Sent '<subject>'" — the line KBS2's "Send a letter" wrote, naming the mail and the sender.
+ *
  * @author Claude Code
  */
 final class DocumentLetterRules {
@@ -42,6 +51,15 @@ final class DocumentLetterRules {
 
     private static final String LOG_PREFIX = "[letter] ";
     private static final String TRIGGER_SEND_LETTER = "triggerSendLetter";
+
+    /**
+     * The failure when the trigger composed nothing. Bracketed like the other refusal keys, so the
+     * client can tell it apart and say why, rather than "could not send".
+     */
+    static final String NOT_COMPOSED_KEY = "LetterNotComposed";
+
+    /** The newest mail of a booking for a letter — compared before and after the send. */
+    static final String LAST_MAIL_DQL = "select id,subject from Mail where document=$1 and letter=$2 order by id desc limit 1";
 
     private DocumentLetterRules() {
     }
@@ -61,28 +79,103 @@ final class DocumentLetterRules {
      * @param callerUserId likewise — it is what the audit triggers stamp
      */
     static Future<Boolean> sendLetter(Object state, Object documentId, Object letterId, Object callerUserId) {
-        if (documentId == null || letterId == null)
+        if (letterId == null)
+            return RouteAccessGuard.refused();
+        return forLetterSenderOf(state, documentId, "Send", (store, document, callerPersonId) ->
+            checkLetterThenFire(store, document, letterId, callerUserId, callerPersonId));
+    }
+
+    /**
+     * One of a booking's mails, content included, for the back office's mail viewer — to the same callers
+     * who may send that booking letters, and to nobody else.
+     *
+     * <p><b>Why it is fenced like a send.</b> A composed mail is the letter as the booker received it: their
+     * details, and the {@code [yourCart]} link, which is a bearer token for their booking. Reading one is
+     * holding that token. So it is granted on {@code SendDocumentLetter} in the booking's own organization
+     * and event, which a read-only role (the Data Protection Officer's, on staging) does not hold, and each
+     * read is logged with who asked. The mail must belong to the booking named — a mail id alone is never
+     * enough, so a caller with a grant over one booking cannot read another's mails by guessing ids.
+     *
+     * @return the mail's content (possibly empty), or a refusal — the same one whether the booking or the
+     *         mail is missing or the caller is not allowed near it
+     */
+    static Future<String> readMailContent(Object state, Object documentId, Object mailId, Object callerUserId) {
+        if (mailId == null)
+            return RouteAccessGuard.refused();
+        return forLetterSenderOf(state, documentId, "Mail read", (store, document, callerPersonId) ->
+            ServerWrite.asServer(() -> store.<Mail>executeQuery(MAIL_CONTENT_DQL, mailId, Entities.getPrimaryKey(document)))
+                .compose(mails -> {
+                    // Refusals are logged too: a caller walking mail ids against a booking they hold reads
+                    // nothing, but should not do it without a trace.
+                    if (mails.isEmpty()) {
+                        Console.log(LOG_PREFIX + "Mail read refused: mail " + mailId + " is not of document "
+                                    + Entities.getPrimaryKey(document) + ", asked by person " + callerPersonId);
+                        return RouteAccessGuard.<String>refused();
+                    }
+                    Console.log(LOG_PREFIX + "Mail " + mailId + " of document " + Entities.getPrimaryKey(document)
+                                + " read by person " + callerPersonId);
+                    String content = mails.get(0).getStringFieldValue("content");
+                    return Future.succeededFuture(content == null ? "" : content);
+                }));
+    }
+
+    /** One mail of one booking, its content only. */
+    static final String MAIL_CONTENT_DQL = "select content from Mail where id=$1 and document=$2 limit 1";
+
+    /** What runs once the caller is known to hold the grant over the booking. */
+    @FunctionalInterface
+    interface ForBooking<T> {
+        Future<T> apply(EntityStore store, Document document, Object callerPersonId);
+    }
+
+    /**
+     * The fence both the send and the read stand behind: a back-office caller holding
+     * {@code SendDocumentLetter} for the organization and event that own the booking.
+     */
+    private static <T> Future<T> forLetterSenderOf(Object state, Object documentId, String act, ForBooking<T> action) {
+        if (documentId == null)
             return RouteAccessGuard.refused();
         // Refuse an anonymous or front-office caller BEFORE reading anything. The grant itself cannot be
         // checked yet — it is scoped to the booking's owner, which is what the query below is for — but
         // the fences that do not depend on the target can be, and otherwise this address lets anyone at
         // all make the server look up document ids one by one. Nothing is disclosed either way: the same
         // refusal comes back whether the document is missing or the caller is not allowed near it.
-        if (RouteAccessGuard.backOfficeCallerPersonId(state) == null)
+        Object callerPersonId = RouteAccessGuard.backOfficeCallerPersonId(state);
+        if (callerPersonId == null)
             return RouteAccessGuard.refused();
         EntityStore store = EntityStore.create(DataSourceModelService.getDefaultDataSourceModel());
         return ServerWrite.asServer(() -> store.<Document>executeQuery(
-                "select event.(id,organization) from Document where id=$1 limit 1", documentId))
+                "select " + LetterApplicability.DOCUMENT_FIELDS + " from Document where id=$1 limit 1", documentId))
             .compose(documents -> {
                 Document document = documents.isEmpty() ? null : documents.get(0);
                 Event event = document == null ? null : document.getEvent();
                 if (event == null) {
-                    Console.log(LOG_PREFIX + "Send refused: document " + documentId + " has no resolvable event");
-                    return RouteAccessGuard.<Boolean>refused();
+                    Console.log(LOG_PREFIX + act + " refused: document " + documentId + " has no resolvable event");
+                    return RouteAccessGuard.<T>refused();
                 }
                 return RouteAccessGuard.whenCallerHoldsOperation(state, SEND_DOCUMENT_LETTER_OPERATION,
                     Entities.getPrimaryKey(event.getOrganizationId()), event.getPrimaryKey(),
-                    () -> fire(store, document, letterId, callerUserId));
+                    () -> action.apply(store, document, callerPersonId));
+            });
+    }
+
+    /**
+     * Refuses a letter the booking is not offered ({@link LetterApplicability}) — read only once the
+     * caller is known to hold the grant, so the refusal tells nobody else anything about letters — and
+     * fires the one it is.
+     */
+    private static Future<Boolean> checkLetterThenFire(EntityStore store, Document document, Object letterId,
+                                                       Object callerUserId, Object callerPersonId) {
+        return ServerWrite.asServer(() -> store.<Letter>executeQuery(
+                "select " + LetterApplicability.LETTER_FIELDS + " from Letter where id=$1 limit 1", letterId))
+            .compose(letters -> {
+                Letter letter = letters.isEmpty() ? null : letters.get(0);
+                if (!LetterApplicability.isSendable(letter, document)) {
+                    Console.log(LOG_PREFIX + "Send refused: letter " + letterId + " is not offered for document "
+                                + Entities.getPrimaryKey(document));
+                    return RouteAccessGuard.<Boolean>refused();
+                }
+                return fire(store, document, letterId, callerUserId, callerPersonId);
             });
     }
 
@@ -91,20 +184,74 @@ final class DocumentLetterRules {
      * the client-origin stamp has to go (the write path refuses a raw statement that carries it) while
      * the principal has to stay (it is what {@code document}'s audit triggers record).
      *
+     * <p>Then the confirmation: the newest mail of this booking for this letter, before and after. A new
+     * one means the trigger composed it; none means it skipped the letter (no sending account, no text
+     * in the person's language — {@code trigger_document_send_letter}, V0160) or that
+     * {@code auto_recipient} dropped a mail it could not address (V0059), and the call fails with
+     * {@link #NOT_COMPOSED_KEY} instead of reporting a send that did not happen.
+     *
+     * <p><b>Known limit:</b> the two reads are not atomic with the send. Two people sending the same
+     * letter to the same booking in the same second can both see the second mail, so one history line
+     * names the other's mail; another writer of a mail for this letter between the reads could turn a
+     * skipped send into a reported one. Both need concurrent sends of one letter to one booking, which
+     * the desk does not do; closing them for good means the trigger returning its mail id.
+     *
      * <p>The log line is the point as much as the write is. A redirect leaves a {@code mail} row addressed
      * to wherever it went; this says who asked for it, which that row does not.
      */
-    private static Future<Boolean> fire(EntityStore store, Document document, Object letterId, Object callerUserId) {
+    private static Future<Boolean> fire(EntityStore store, Document document, Object letterId,
+                                        Object callerUserId, Object callerPersonId) {
+        Object documentId = Entities.getPrimaryKey(document);
+        return lastMail(store, documentId, letterId)
+            .compose(before -> ServerWrite.asServerActingFor(callerUserId, () -> {
+                    UpdateStore updateStore = UpdateStore.createAbove(store);
+                    Document update = updateStore.updateEntity(document);
+                    update.setForeignField(TRIGGER_SEND_LETTER, letterId);
+                    return updateStore.submitChanges();
+                })
+                .compose(ignored -> lastMail(store, documentId, letterId))
+                .compose(after -> {
+                    if (after == null || (before != null && Entities.samePrimaryKey(before, after))) {
+                        Console.log(LOG_PREFIX + "Letter " + letterId + " composed no mail for document " + documentId
+                                    + " (no sending account, no text in the booker's language, or no address)");
+                        return Future.<Boolean>failedFuture("[" + NOT_COMPOSED_KEY + "] The letter was not sent: no mail"
+                                                            + " could be composed or addressed for this booking");
+                    }
+                    Console.log(LOG_PREFIX + "Letter " + letterId + " sent for document " + documentId
+                                + " by person " + callerPersonId);
+                    return recordHistory(store, document, after, callerUserId, callerPersonId);
+                }));
+    }
+
+    /** The newest mail of the booking for the letter, or null when there is none. */
+    private static Future<Mail> lastMail(EntityStore store, Object documentId, Object letterId) {
+        return ServerWrite.asServer(() -> store.<Mail>executeQuery(LAST_MAIL_DQL, documentId, letterId))
+            .map(mails -> mails.isEmpty() ? null : mails.get(0));
+    }
+
+    /**
+     * Tells the booking's history the letter went: "Sent '<subject>'" (the subject as the booker got it),
+     * naming the mail and the sender, as KBS2's "Send a letter" did.
+     *
+     * <p>Written AFTER the send, in its own transaction, and a failure here does not fail the call: the
+     * mail is already queued, and answering "not sent" would invite a second, duplicate send.
+     */
+    private static Future<Boolean> recordHistory(EntityStore store, Document document, Mail mail,
+                                                 Object callerUserId, Object callerPersonId) {
         return ServerWrite.asServerActingFor(callerUserId, () -> {
-            UpdateStore updateStore = UpdateStore.createAbove(store);
-            Document update = updateStore.updateEntity(document);
-            update.setForeignField(TRIGGER_SEND_LETTER, letterId);
-            return updateStore.submitChanges()
-                .map(ignored -> {
-                    Console.log(LOG_PREFIX + "Letter " + letterId + " sent for document "
-                                + Entities.getPrimaryKey(document) + " by person " + callerUserId);
-                    return true;
+                UpdateStore updateStore = UpdateStore.createAbove(store);
+                History history = updateStore.insertEntity(History.class);
+                history.setDocument(document);
+                history.setMail(mail);
+                history.setUserPerson(callerPersonId);
+                history.setComment("Sent '" + mail.getSubject() + "'");
+                return updateStore.submitChanges();
+            })
+            .compose(ignored -> Future.succeededFuture(true),
+                error -> {
+                    Console.log(LOG_PREFIX + "History not recorded for mail " + Entities.getPrimaryKey(mail)
+                                + " of document " + Entities.getPrimaryKey(document) + ": " + error.getMessage());
+                    return Future.succeededFuture(true);
                 });
-        });
     }
 }
