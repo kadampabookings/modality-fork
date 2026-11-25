@@ -47,3 +47,6 @@ one.modality.crm.shared.services.authn.serial.EndSessionsCredentialsSerialCodec
 one.modality.crm.shared.services.authn.serial.BlockAccountCredentialsSerialCodec
 one.modality.crm.shared.services.authn.serial.UnblockAccountCredentialsSerialCodec
 one.modality.crm.shared.services.authn.serial.ListSecurityEventsCredentialsSerialCodec
+one.modality.crm.shared.services.authn.serial.RequestDeviceLoginCredentialsSerialCodec
+one.modality.crm.shared.services.authn.serial.DescribeDeviceLoginCredentialsSerialCodec
+one.modality.crm.shared.services.authn.serial.ApproveDeviceLoginCredentialsSerialCodec
