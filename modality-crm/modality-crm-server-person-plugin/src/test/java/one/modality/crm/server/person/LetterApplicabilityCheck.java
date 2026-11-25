@@ -120,6 +120,40 @@ public class LetterApplicabilityCheck {
             webfx.contains("ReadDocumentMailEndpoint") && services.contains("ReadDocumentMailEndpoint")
             && moduleInfo.contains("ReadDocumentMailEndpoint"));
 
+        // --- previewing a letter: same fence, same letter rule, same composition as the send trigger ---
+        check("the preview stands behind the letter-sender fence",
+            source.contains("forLetterSenderOf(state, documentId, \"Preview\""));
+        check("and previews only a letter the booking is offered",
+            source.contains("withSendableLetter(store, document, letterId, \"Preview\""));
+        check("the send goes through the same letter rule",
+            source.contains("withSendableLetter(store, document, letterId, \"Send\""));
+        check("the preview composes through the read-only letter_preview(), with the letter and booking bound",
+            DocumentLetterRules.PREVIEW_SQL.equals("select subject, content from letter_preview($1, $2)"));
+        check("and binds the CHECKED letter's key, not the caller's value",
+            source.contains(".setParameters(Entities.getPrimaryKey(letter), Entities.getPrimaryKey(document))"));
+        String migration = AccountOwnerCheck.readSource(
+            "modality-fork/modality-base/modality-base-server-dbmigration-plugin/src/main/resources/one/modality/base/"
+            + "server/services/dbmigration/scripts/V0182__letter_preview_read_only.sql");
+        int readOnlyAt = migration.indexOf("PERFORM set_config('transaction_read_only', 'on', true);");
+        int composeAt = migration.indexOf("letter_compose_email(l, letter_mail_lang(l, d.person_lang, d.organization_id), d.id, NULL)");
+        check("letter_preview switches to read only BEFORE it composes", readOnlyAt > 0 && composeAt > readOnlyAt);
+        String writeSecrets = AccountOwnerCheck.readSource(
+            "modality-fork/modality-crm/modality-crm-server-authz-required-plugin/src/main/java/one/modality/crm/"
+            + "server/services/authz/ClientWriteSecrets.java");
+        check("clients may not write the bracket patterns a preview executes",
+            writeSecrets.contains("denyTable(\"bracket_pattern\");"));
+        check("the preview is a read, never a write",
+            source.contains("QueryService.executeQuery(new QueryArgumentBuilder()") && !source.contains("SubmitService"));
+        check("each preview is logged with the person who asked",
+            source.contains("\" previewed for document \""));
+        String previewEndpoint = AccountOwnerCheck.readSource(
+            "modality-fork/modality-crm/modality-crm-server-person-plugin/src/main/java/"
+            + "one/modality/crm/server/person/PreviewDocumentLetterEndpoint.java");
+        check("the preview endpoint takes exactly two arguments", previewEndpoint.contains("arguments.length != 2"));
+        check("the preview endpoint is registered in webfx.xml, the service file and module-info",
+            webfx.contains("PreviewDocumentLetterEndpoint") && services.contains("PreviewDocumentLetterEndpoint")
+            && moduleInfo.contains("PreviewDocumentLetterEndpoint"));
+
         System.out.println(pass + " passed, " + fail + " failed");
         if (fail > 0)
             System.exit(1);

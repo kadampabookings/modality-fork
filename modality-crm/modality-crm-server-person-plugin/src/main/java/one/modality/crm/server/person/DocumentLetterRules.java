@@ -2,6 +2,8 @@ package one.modality.crm.server.person;
 
 import dev.webfx.platform.async.Future;
 import dev.webfx.platform.console.Console;
+import dev.webfx.stack.db.query.QueryArgumentBuilder;
+import dev.webfx.stack.db.query.QueryService;
 import dev.webfx.stack.orm.datasourcemodel.service.DataSourceModelService;
 import dev.webfx.stack.orm.entity.Entities;
 import dev.webfx.stack.orm.entity.EntityStore;
@@ -12,6 +14,8 @@ import one.modality.base.shared.entities.History;
 import one.modality.base.shared.entities.Letter;
 import one.modality.base.shared.entities.Mail;
 import one.modality.crm.server.authn.gateway.shared.RouteAccessGuard;
+
+import java.util.function.Function;
 
 /**
  * Sending a booking's letter, as an authorised act rather than as a column write.
@@ -159,25 +163,73 @@ final class DocumentLetterRules {
             });
     }
 
+    /** Fires a letter the booking is offered, refusing any other. */
+    private static Future<Boolean> checkLetterThenFire(EntityStore store, Document document, Object letterId,
+                                                       Object callerUserId, Object callerPersonId) {
+        return withSendableLetter(store, document, letterId, "Send",
+            letter -> fire(store, document, letterId, callerUserId, callerPersonId));
+    }
+
     /**
      * Refuses a letter the booking is not offered ({@link LetterApplicability}) — read only once the
      * caller is known to hold the grant, so the refusal tells nobody else anything about letters — and
-     * fires the one it is.
+     * hands the one it is to {@code action}.
      */
-    private static Future<Boolean> checkLetterThenFire(EntityStore store, Document document, Object letterId,
-                                                       Object callerUserId, Object callerPersonId) {
+    private static <T> Future<T> withSendableLetter(EntityStore store, Document document, Object letterId, String act,
+                                                    Function<Letter, Future<T>> action) {
         return ServerWrite.asServer(() -> store.<Letter>executeQuery(
                 "select " + LetterApplicability.LETTER_FIELDS + " from Letter where id=$1 limit 1", letterId))
             .compose(letters -> {
                 Letter letter = letters.isEmpty() ? null : letters.get(0);
                 if (!LetterApplicability.isSendable(letter, document)) {
-                    Console.log(LOG_PREFIX + "Send refused: letter " + letterId + " is not offered for document "
+                    Console.log(LOG_PREFIX + act + " refused: letter " + letterId + " is not offered for document "
                                 + Entities.getPrimaryKey(document));
-                    return RouteAccessGuard.<Boolean>refused();
+                    return RouteAccessGuard.<T>refused();
                 }
-                return fire(store, document, letterId, callerUserId, callerPersonId);
+                return action.apply(letter);
             });
     }
+
+    /**
+     * The letter as the booker would receive it — subject and body with the brackets filled in from this
+     * booking — for the back office's preview before sending (KBS2 showed it filled in, and it is the
+     * desk's check that the letter says the right things to the right person).
+     *
+     * <p>Composed by {@code letter_compose_email} in {@code letter_mail_lang}'s language: the very
+     * functions {@code trigger_document_send_letter} sends with, so the preview is what goes out. It is a
+     * READ, and enforced as one: {@code letter_preview()} (V0182) switches its transaction to read only
+     * before composing, because bracket patterns are SQL the database executes, and the query path runs in
+     * autocommit with no read-only transaction of its own. Nothing is queued, and no history is written.
+     *
+     * <p>Fenced and logged like a mail read, because it is one in advance: the filled-in letter carries the
+     * booking's cart link, a bearer token. Only letters the booking is offered can be previewed.
+     *
+     * @return {@code [subject, content]}, both null when the letter has no text to send in that language
+     */
+    static Future<Object[]> previewLetter(Object state, Object documentId, Object letterId) {
+        if (letterId == null)
+            return RouteAccessGuard.refused();
+        return forLetterSenderOf(state, documentId, "Preview", (store, document, callerPersonId) ->
+            withSendableLetter(store, document, letterId, "Preview", letter ->
+                ServerWrite.asServer(() -> QueryService.executeQuery(new QueryArgumentBuilder()
+                        .setDataSourceId(DataSourceModelService.getDefaultDataSourceId())
+                        .setStatement(PREVIEW_SQL)
+                        // The CHECKED letter's key, not the caller's value: what was checked is what is composed.
+                        .setParameters(Entities.getPrimaryKey(letter), Entities.getPrimaryKey(document))
+                        .build()))
+                    .map(result -> {
+                        Console.log(LOG_PREFIX + "Letter " + letterId + " previewed for document "
+                                    + Entities.getPrimaryKey(document) + " by person " + callerPersonId);
+                        boolean found = result != null && result.getRowCount() > 0;
+                        return new Object[] { found ? result.getValue(0, 0) : null, found ? result.getValue(0, 1) : null };
+                    })));
+    }
+
+    /**
+     * The letter composed for the booking exactly as the send trigger composes it, in a read-only transaction:
+     * {@code letter_preview()} (V0182) wraps {@code letter_mail_lang} + {@code letter_compose_email}.
+     */
+    static final String PREVIEW_SQL = "select subject, content from letter_preview($1, $2)";
 
     /**
      * The write itself, as the server but in the caller's name — {@link ServerWrite#asServerActingFor}:

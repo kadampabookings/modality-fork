@@ -213,6 +213,17 @@ final class ClientWriteSecrets {
         // organisation and SMTP account decide whose mail it carries.
         denyTable("letter_type");
         denyTable("mail_account");
+        // What letters are FILLED IN with (security review, 2026-11-25). bracket_pattern.replacement and .condition are
+        // SQL: interpret_brackets EXECUTEs `select (<replacement>) from document d where ... and (<condition>)` as the
+        // application's database role, for every letter every centre sends, and since the back office's letter preview
+        // (modality/service/document/previewLetter) the result comes straight back to the caller. Writable by any
+        // back-office client, that is arbitrary SQL for anyone who can send one booking a letter — read
+        // frontend_account's password hashes through a preview, or plant a write that fires on every send. Closed
+        // outright: bracket patterns are reference rows changed by hand-run SQL (scripts/*bracket*.sql in the
+        // aggregate) or migrations, and no client writes them (checked 2026-11-25: kbs3-react's letter editor only
+        // READS them for its chips; KBS2 writes the database itself and never reaches this list). Any refusal is an
+        // attempt.
+        denyTable("bracket_pattern");
         // The event type's link to its registration account is the second step of the same resolution: pointing it
         // at an account someone else reads redirects that type's staff alerts in every centre. Only the column:
         // nothing writes event types from a client today, but an event-type editor may, and its other columns
@@ -222,7 +233,7 @@ final class ClientWriteSecrets {
         denyColumn("event_type", "registration_mail_account_id");
         int columns = DENIED_COLUMNS.values().stream().mapToInt(Set::size).sum();
         Console.log("🛡 Client writes may not touch people, payments, payment configuration, sign-in links or invitation"
-                    + " authorship, a mail's delivery record, a booking's letter trigger, where letters are addressed, nor the account's"
+                    + " authorship, a mail's delivery record, a booking's letter trigger, where letters are addressed, what they are filled in with, nor the account's"
                     + " sign-in, status or privilege"
                     + " columns (" + String.join(", ", DENIED_TABLES) + " entirely, plus " + columns
                     + " columns across " + DENIED_COLUMNS.size() + " tables)");
