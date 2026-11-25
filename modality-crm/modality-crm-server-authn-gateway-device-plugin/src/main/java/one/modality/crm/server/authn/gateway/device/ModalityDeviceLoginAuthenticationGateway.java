@@ -92,7 +92,14 @@ public final class ModalityDeviceLoginAuthenticationGateway implements ServerAut
      * turn the page into a way to test accounts. The operator who typed their own code correctly is not
      * helped by the distinction; everybody else is.
      */
-    static final String REFUSAL = "That code cannot be approved. Check the code shown by the device, and try again.";
+    /**
+     * The key a client maps to its own translated sentence, in the convention the rest of this system uses
+     * ({@code hasServerErrorKey} matches on the brackets). The English after it is for a log and for a
+     * caller with no translation, never for a page: the back office shows its own wording in the
+     * operator's language, and a server that answered in English only would have no way to.
+     */
+    static final String REFUSAL =
+        "[DeviceLoginRefused] That code cannot be approved. Check the code shown by the device, and try again.";
 
     /**
      * NOT a refusal, and deliberately distinguishable from one: the session was minted and recorded, and
@@ -100,8 +107,8 @@ public final class ModalityDeviceLoginAuthenticationGateway implements ServerAut
      * would leave a live session nobody had been told about.
      */
     static final String UNDELIVERED =
-        "The session was created but could not be delivered to the device. End it from the sign-in security"
-        + " page, and have the device ask for a new code.";
+        "[DeviceLoginUndelivered] The session was created but could not be delivered to the device. End it"
+        + " from the sign-in security page, and have the device ask for a new code.";
 
     // The account's flag, and how many live people share it. Both in one round trip because the second is
     // what makes the first meaningful: the flag is per ACCOUNT and a device session is minted as ONE
