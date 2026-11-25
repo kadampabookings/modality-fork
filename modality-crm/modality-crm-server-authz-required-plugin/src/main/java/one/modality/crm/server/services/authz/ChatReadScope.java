@@ -132,9 +132,20 @@ final class ChatReadScope implements ClientReadScope.Provider, ClientScopeToken.
     private static final Set<String> ENFORCED_ROOTS =
         Set.of("Conversation", "ChatMessage", "ChatMessageReaction");
 
-    /** Whether this root's condition is applied rather than merely reported. */
+    /**
+     * Whether this root's condition is applied rather than merely reported.
+     *
+     * <p>Asks {@link PersonReadScope} too, because this class is the ONLY registered provider — the SPI
+     * holds one and {@code registerProvider} replaces it, so a second registration would turn chat's
+     * enforcement off. Entities this class does not own are delegated rather than re-registered.
+     */
     static boolean isEnforced(String entityName) {
-        return ENFORCED_ROOTS.contains(entityName);
+        return ENFORCED_ROOTS.contains(entityName) || PersonReadScope.isEnforced(entityName);
+    }
+
+    /** Any root enforced, here or in a delegate: what the token and the refusal seam derive from. */
+    private static boolean enforcesAnything() {
+        return !ENFORCED_ROOTS.isEmpty() || PersonReadScope.enforcesAnything();
     }
 
     /** True while any root is still only reported — kept for the checks and the boot line. */
@@ -235,7 +246,7 @@ final class ChatReadScope implements ClientReadScope.Provider, ClientScopeToken.
      */
     @Override
     public Object tokenForCaller() {
-        if (!(OBSERVING || !ENFORCED_ROOTS.isEmpty()) || !ThreadLocalStateHolder.isClientOrigin())
+        if (!(OBSERVING || enforcesAnything()) || !ThreadLocalStateHolder.isClientOrigin())
             return null;
         if (!ThreadLocalStateHolder.isEffectivelyBackoffice())
             return MEMBER; // the member rules bind caller.person, which is resolved per call, not cached
@@ -256,7 +267,7 @@ final class ChatReadScope implements ClientReadScope.Provider, ClientScopeToken.
      */
     @Override
     public boolean isScopeRequired() {
-        return !ENFORCED_ROOTS.isEmpty();
+        return enforcesAnything();
     }
 
     /**
@@ -377,7 +388,10 @@ final class ChatReadScope implements ClientReadScope.Provider, ClientScopeToken.
             // other entity in the system too, and counting those would be a flood. Unthrottled like the
             // line below, and affordable for the same reason — the compiler is cached per (statement,
             // token), so this fires once per statement SHAPE, which is why 7e's numbers are single digits.
-            if (UNRESTRICTED.equals(scopeToken) && conditionDql(name, MEMBER) != null)
+            // Widened 2026-11-25 from "only UNRESTRICTED" to "any token with no rule here". Person's
+            // back-office arm is Phase 2, so a back office reads Person unnarrowed; without this the only
+            // evidence of that would be an absence, and an absence is exactly what was misread on 20 Nov.
+            if (conditionDql(name, MEMBER) != null)
                 Console.log(unscopedLogLine(name, scopeToken));
             return null; // an entity this does not scope compiles exactly as it did before
         }
@@ -399,7 +413,7 @@ final class ChatReadScope implements ClientReadScope.Provider, ClientScopeToken.
                 throw e;
             // Observing and unparseable: harmless, and said loudly. One line per statement shape, since an
             // unscoped compile is cached and this is not consulted again for that shape.
-            Console.log("🛡 CHAT SCOPE RULE WILL NOT COMPILE for " + name + " under " + scopeToken
+            Console.log("🛡 SCOPE RULE WILL NOT COMPILE for " + name + " under " + scopeToken
                         + " — it would fail reads if enforced: " + e);
             return null;
         }
@@ -468,7 +482,9 @@ final class ChatReadScope implements ClientReadScope.Provider, ClientScopeToken.
                 // viewer's last-seen: a per-person last-seen readable by any member is a tracker.
                 return backoffice ? GRANTED_EVENTS : "agent";
             default:
-                return null;
+                // Not a chat root: the entities this provider does not own, delegated rather than
+                // registered separately. See isEnforced above for why a second provider is not an option.
+                return PersonReadScope.conditionDql(entityName, scopeToken);
         }
     }
 

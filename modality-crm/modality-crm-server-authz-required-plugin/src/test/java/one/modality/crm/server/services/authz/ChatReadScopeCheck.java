@@ -86,8 +86,6 @@ public class ChatReadScopeCheck {
 
         // ── Everything else is untouched ─────────────────────────────────────────────────────────────────
         check("an entity this does not scope has no rule", dql("Document", ChatReadScope.MEMBER) == null);
-        check("nor does Person, which a read POLICY handles instead",
-              dql("Person", ChatReadScope.BACKOFFICE) == null);
         check("and an unknown scope scopes nothing, rather than guessing",
               dql("Conversation", "some.other.scope") == null);
         check("including a null one, which is what a server-origin read compiles under",
@@ -133,6 +131,24 @@ public class ChatReadScopeCheck {
                   !ChatReadScope.isEnforced(entity));
         check("an entity this does not scope is not enforced either",
               !ChatReadScope.isEnforced("Document"));
+
+        // ── PERSON, phase 1: the member arm only, and STAGING ONLY ─────────────────────────────────────
+        // The same tripwire as the chat roots above, for the same reason: it must be changed deliberately,
+        // never drift. This one carries a second condition the chat ones do not — it must not reach the
+        // prod branch until the back-office arm is timed (a correlated exists, ~60k probes on an
+        // unfiltered person list) and the 11,235 persons it reaches neither way are a decision.
+        check("Person is enforced (staging only - see PersonReadScope)",
+              ChatReadScope.isEnforced("Person"));
+        check("a member reads the people on their own account",
+              "frontendAccount=CALLER_ACCOUNT"
+            + " or accountPerson in (select id from Person where frontendAccount=CALLER_ACCOUNT)",
+              dql("Person", ChatReadScope.MEMBER));
+        // Phase 2. Null here is what keeps enforcement - which is per ENTITY, not per token - from
+        // narrowing the back office in the same edit that narrows the front office.
+        check("but a back office reads Person unnarrowed, deliberately, until the arm is timed",
+              dql("Person", ChatReadScope.BACKOFFICE) == null);
+        check("and a super admin gets no predicate for Person either",
+              dql("Person", ChatReadScope.UNRESTRICTED) == null);
         // The line says which mode each root is in, so ONE census tells observing from enforcing per root.
         // With the first root flipped the two wordings appear side by side, which is the point: a census
         // that could only say "this deploy is enforcing" would say nothing about which of the five.
@@ -209,6 +225,14 @@ public class ChatReadScopeCheck {
         ChatReadScope.INSTANCE.readScopeCondition("Document", ChatReadScope.UNRESTRICTED);
         check("but an entity this provider never scopes stays silent - otherwise every read in the system"
               + " would log", logged.isEmpty());
+        // THE WIDENED PROBE (25 Nov). Person's back-office arm is Phase 2, so a back office reads Person
+        // with no predicate. Before the widening only UNRESTRICTED was reported, so the only evidence of
+        // that gap would have been an absence in 7e - and an absence is precisely what was misread on
+        // 20 Nov, two paragraphs up. Pinned so the report cannot be narrowed back without failing here.
+        logged.clear();
+        ChatReadScope.INSTANCE.readScopeCondition("Person", ChatReadScope.BACKOFFICE);
+        check("a back office reading Person with no rule yet is REPORTED, not silently unscoped",
+              logged.size() == 1 && logged.get(0).contains("UNSCOPED READ of Person under backoffice"));
 
         System.out.println(fail == 0 ? "\nALL " + pass + " PASS" : "\n" + fail + " FAILED");
         if (fail > 0)
