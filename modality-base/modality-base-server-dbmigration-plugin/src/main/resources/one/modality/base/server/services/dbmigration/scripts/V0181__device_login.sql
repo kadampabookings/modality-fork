@@ -101,7 +101,9 @@ CREATE TABLE IF NOT EXISTS public.device_login_attempt (
     session_family_id       varchar(64),
     -- The approving session's own $amr (pwd, pk, totp, ml, code, ...), which is the point: the CLI
     -- authenticated not at all, so these codes say whether the person who approved had presented a factor.
-    approver_sign_in_method varchar(32),
+    -- 64, matching auth_session.methods, which is where this value comes from. 32 was narrower than its
+    -- own source: a long enough comma list would have failed the INSERT and lost the APPROVED row.
+    approver_sign_in_method varchar(64),
     -- The three the DPO question covers. WRITTEN NULL IN V1 — see the header.
     request_ip              inet,
     request_location        varchar(128),
@@ -128,7 +130,10 @@ CREATE INDEX IF NOT EXISTS device_login_attempt_account_idx
 
 -- The retention purge's question, which has no account in it. v1 keeps 30 days, tighter than the Activity
 -- tab's 90-day filter: a window can be loosened later, whereas rows kept too long cannot be un-kept. The
--- purge itself is a scheduled job in the gateway plugin, on auth_session's pattern (V0181 adds no scheduler).
+-- purge itself is a scheduled job in the gateway plugin (ModalityDeviceLoginAuthenticationGateway.boot),
+-- on ModalityAuthSessionStoreInitializer's pattern. V0181 adds no scheduler - a migration cannot - so the
+-- retention this table promises holds only where that gateway is deployed. It is the same coupling
+-- V0155's context clearing has, and worth knowing rather than assuming the database enforces it.
 CREATE INDEX IF NOT EXISTS device_login_attempt_requested_at_idx
     ON public.device_login_attempt (requested_at);
 
