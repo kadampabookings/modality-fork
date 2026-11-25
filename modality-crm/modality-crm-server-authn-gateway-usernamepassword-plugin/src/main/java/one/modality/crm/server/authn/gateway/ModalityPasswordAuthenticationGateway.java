@@ -78,13 +78,22 @@ public final class ModalityPasswordAuthenticationGateway implements ServerAuthen
     public void boot() {
         AuditActorRegistry.registerResolver(ModalityUserPrincipal::getUserPersonId);
         RestrictedPrincipalRegistry.setRegisteredUserPredicate(userId -> userId instanceof ModalityUserPrincipal);
-        // Tells the SQL submit provider which sessions may only read. A support view is a member of
-        // staff looking at a customer's front office; it must not be able to change anything, and
-        // the only place that can be guaranteed is the layer every write passes through. Registered
-        // here for the same reason as the resolver above: the gateway is what creates the principal,
-        // so it is the component that can interpret one.
+        // Tells the SQL submit provider which sessions may only read. Two kinds, for one reason: each is
+        // a USE of a credential rather than a holding of one, and neither should be able to change
+        // anything. A support view is a member of staff looking at a customer's front office; a device
+        // login (V0181) is a session a browser approved for a command-line client, whose holder presented
+        // nothing at all. The only place the restriction can be guaranteed is the layer every write passes
+        // through. Registered here for the same reason as the resolver above: the gateway is what creates
+        // the principal, so it is the component that can interpret one.
+        //
+        // IT ALSO SETS THE LIFETIME, which is why the device login needs no tier of its own.
+        // SessionTokenService.tierForNewSession reads this very predicate and answers SUPPORT_VIEW for
+        // anything restricted — thirty minutes idle AND absolute, the hard cap David's review asked for,
+        // reached through a code every build already understands rather than a new tier that an older
+        // instance would read as the back office's three hours. The tier says how long, never what for;
+        // the principal is not a support view and must never be made into one.
         RestrictedPrincipalRegistry.registerRestrictedUserPredicate(userId ->
-            userId instanceof ModalityUserPrincipal mup && mup.isSupportView());
+            userId instanceof ModalityUserPrincipal mup && (mup.isSupportView() || mup.isDeviceLogin()));
         // Tells the SQL submit provider what a transaction preamble says, so that a client asking for
         // one no longer gets to write it. Sending the SQL was how a caller chose the privileges its own
         // transaction ran under: set_transaction_parameters(true) is what makes the document triggers

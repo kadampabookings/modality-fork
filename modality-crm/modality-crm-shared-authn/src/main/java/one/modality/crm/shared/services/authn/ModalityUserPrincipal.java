@@ -17,6 +17,7 @@ public final class ModalityUserPrincipal {
     private final Object userPersonId;
     private final Object userAccountId;
     private final Object supportAgentPersonId;
+    private final boolean deviceLogin;
 
     public ModalityUserPrincipal(Object userPersonId, Object userAccountId) {
         this(userPersonId, userAccountId, null);
@@ -29,9 +30,25 @@ public final class ModalityUserPrincipal {
      *                             someone else's front office. See {@link #isSupportView()}.
      */
     public ModalityUserPrincipal(Object userPersonId, Object userAccountId, Object supportAgentPersonId) {
+        this(userPersonId, userAccountId, supportAgentPersonId, false);
+    }
+
+    /**
+     * @param deviceLogin true when this principal belongs to a session a browser approved for a device —
+     *                    a command-line client, and later whatever else uses that flow. See
+     *                    {@link #isDeviceLogin()}.
+     */
+    public ModalityUserPrincipal(Object userPersonId, Object userAccountId, Object supportAgentPersonId,
+                                 boolean deviceLogin) {
         this.userPersonId = userPersonId;
         this.userAccountId = userAccountId;
         this.supportAgentPersonId = supportAgentPersonId;
+        this.deviceLogin = deviceLogin;
+    }
+
+    /** A device-login principal for this account holder: the same person, a different kind of session. */
+    public static ModalityUserPrincipal forDeviceLogin(Object userPersonId, Object userAccountId) {
+        return new ModalityUserPrincipal(userPersonId, userAccountId, null, true);
     }
 
     public Object getUserPersonId() {
@@ -59,7 +76,33 @@ public final class ModalityUserPrincipal {
     }
 
     /**
-     * A support view is deliberately NOT equal to the account holder's own session.
+     * True when this session was minted by the browser-approved device login rather than by the person
+     * signing in here.
+     *
+     * <p>Like a support view, such a session is <b>restricted to reads</b> and time-boxed, and for the same
+     * reason: it is a use of a credential rather than a holding of one. Both are registered through the one
+     * {@code RestrictedPrincipalRegistry} predicate, so the write gate at the bottom of the submit path
+     * refuses them together and nothing has to remember to check twice.
+     *
+     * <p><b>It is NOT a support view, and must never be made into one.</b> A support view carries the viewed
+     * person's id with the agent's beside it, and code keyed on {@link #isSupportView()} looks for a live
+     * pass row to match — a device login has no such row and would die on that check. The two are siblings
+     * in what they are allowed to do and unrelated in what they are.
+     */
+    public boolean isDeviceLogin() {
+        return deviceLogin;
+    }
+
+    /**
+     * A support view is deliberately NOT equal to the account holder's own session, and neither is a
+     * device login.
+     *
+     * <p><b>The device-login flag belongs in here for a reason sharper than tidiness.</b> This principal is
+     * what {@code RestrictedPrincipalRegistry} judges to decide whether a session may write, and what the
+     * authorization cache is keyed on. If a device principal compared equal to the person's ordinary one,
+     * two sessions that differ precisely in being allowed to write would be the same object to every cache
+     * and comparator in the system. Leaving the field out of equality would not be a cosmetic omission; it
+     * would be the restriction failing to attach to the thing it restricts.
      *
      * <p>The principal is the cache key for authorizations and the value the session syncer compares
      * to detect a login transition, so collapsing the two would let a support view inherit whatever
@@ -86,7 +129,8 @@ public final class ModalityUserPrincipal {
         ModalityUserPrincipal that = (ModalityUserPrincipal) o;
         return Numbers.identicalObjectsOrNumberValues(userPersonId, that.userPersonId)
                && Numbers.identicalObjectsOrNumberValues(userAccountId, that.userAccountId)
-               && Numbers.identicalObjectsOrNumberValues(supportAgentPersonId, that.supportAgentPersonId);
+               && Numbers.identicalObjectsOrNumberValues(supportAgentPersonId, that.supportAgentPersonId)
+               && deviceLogin == that.deviceLogin;
     }
 
     /**
@@ -95,7 +139,7 @@ public final class ModalityUserPrincipal {
      */
     @Override
     public int hashCode() {
-        return Objects.hash(canonicalId(userPersonId), canonicalId(userAccountId), canonicalId(supportAgentPersonId));
+        return Objects.hash(canonicalId(userPersonId), canonicalId(userAccountId), canonicalId(supportAgentPersonId), deviceLogin);
     }
 
     /** One representation per numeric value, so Integer 42, Byte 42 and Long 42 hash alike. */
@@ -127,8 +171,16 @@ public final class ModalityUserPrincipal {
      */
     @Override
     public String toString() {
-        String s = "person=" + userPersonId + ",account=" + userAccountId;
-        return supportAgentPersonId == null ? s : s + ",supportAgent=" + supportAgentPersonId;
+        StringBuilder s = new StringBuilder("person=").append(userPersonId).append(",account=").append(userAccountId);
+        if (supportAgentPersonId != null)
+            s.append(",supportAgent=").append(supportAgentPersonId);
+        // Same rule as the suffix above: appended after the leading segment, and "deviceLogin" contains no
+        // lowercase "person=" of its own, so V0068's substring(note from 'person=(\d+)') still reads the
+        // person id. A device session cannot write either, so this too is belt and braces - the durable
+        // record is the device_login_attempt row (V0181).
+        if (deviceLogin)
+            s.append(",deviceLogin=true");
+        return s.toString();
     }
 
     // Static methods helpers
