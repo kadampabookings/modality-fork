@@ -161,6 +161,103 @@ public class PersonLinkCheck {
         // without the deny its rules are bypassable by not calling it. Neither is safe alone.
         check("ClaimMembersEndpoint IS registered", services.contains("ClaimMembersEndpoint"));
 
+        // --- the claim's READ half, and the managers' names (PersonReadScope, Nov 2026) ---
+        // Scoping `Person` to the caller's own account closed the two client statements these replace.
+        // Both reached across accounts, and the first did it on an address the CALLER supplied, which
+        // answered "did anyone book for this address, and in whose account?" about anybody. The screens
+        // went blank the moment that closed, which is the whole reason these exist: a rule that leaves
+        // the feature broken does not survive contact with the next person who has to ship something.
+        check("ClaimableMembersEndpoint IS registered", services.contains("ClaimableMembersEndpoint"));
+        check("ManagerAccountOwnersEndpoint IS registered",
+            services.contains("ManagerAccountOwnersEndpoint"));
+
+        // The offer and the claim must agree about what is claimable. If they drift, a member is shown
+        // a row that is then not claimed -- or worse, claims one they were never shown, because the
+        // notice to that account's owner is sent by the screen from the list the screen was given.
+        // Asserted as ONE shared constant rather than as two matching strings: two strings that happen
+        // to agree today is exactly the state this is meant to prevent.
+        check("the offer and the claim share one definition of claimable",
+            claim.contains("private static final String CLAIMABLE_SQL = \"select id from person\" + CLAIMABLE_WHERE;")
+            && claim.contains("frontend_account_id from person\" + CLAIMABLE_WHERE"));
+        check("the offer takes the address from the caller, never from an argument",
+            claim.contains("static Future<Object> offers(Object callerAccountId)")
+            && !claim.contains("static Future<Object> offers(String"));
+        // Data minimisation, and it is load-bearing rather than tidy: the rows' own addresses ARE the
+        // proof the derivation runs on. Returning them would hand a caller the one value that decides
+        // what they may claim, and no screen reads it -- the only address in the reply is the owner's,
+        // which is where the notice goes.
+        check("no claimable row's own email is sent back",
+            claim.contains("select id, first_name, last_name, frontend_account_id from person"));
+
+        String claimableEndpoint = AccountOwnerCheck.readSource(
+            "modality-fork/modality-crm/modality-crm-server-person-plugin/src/main/java/"
+            + "one/modality/crm/server/person/ClaimableMembersEndpoint.java");
+        check("the offer is behind the fenced door, as the claim is",
+            claimableEndpoint.contains("MemberSessionGuard.whenCallerIsVerifiedMember"));
+        // A support view's principal carries the VIEWED member's person id, so an unfenced version
+        // would hand a support agent the claimables of the member they are helping.
+        check("and it passes the guard's account, not anything from the argument",
+            claimableEndpoint.contains("MemberClaimRules.offers(callerAccountId)"));
+
+        String managerOwners = AccountOwnerCheck.readSource(
+            "modality-fork/modality-crm/modality-crm-server-person-plugin/src/main/java/"
+            + "one/modality/crm/server/person/ManagerAccountOwnersEndpoint.java");
+        check("the managers' owners are behind the same door",
+            managerOwners.contains("MemberSessionGuard.whenCallerIsVerifiedMember"));
+        // The point of the whole endpoint. Taking the accounts as an argument would answer "who owns
+        // account N?" for any N a caller cares to send -- the question the read scope was written to
+        // stop, reopened by the thing meant to replace it. They are derived from the live link itself.
+        check("the manager accounts are derived from the link, not taken as ids",
+            managerOwners.contains("where account_person_id = $1 and owner = false and removed = false")
+            && managerOwners.contains("and account_person_revoked_date is null"));
+        check("and the caller's own account is excluded, as the page's own query excludes it",
+            managerOwners.contains("and frontend_account_id <> $2"));
+
+        // --- the booking form's NEEDS_VALIDATION badge, the fourth read the scope closed ---
+        // Found during review of the three above, in shared/ rather than frontoffice/, and it had
+        // failed SILENTLY: zero rows reads exactly like "nobody here has their own account", so the
+        // badge simply stopped appearing with nothing in any log.
+        check("MembersWithOwnAccountEndpoint IS registered",
+            services.contains("MembersWithOwnAccountEndpoint"));
+        String ownAccount = AccountOwnerCheck.readSource(
+            "modality-fork/modality-crm/modality-crm-server-person-plugin/src/main/java/"
+            + "one/modality/crm/server/person/MembersWithOwnAccountEndpoint.java");
+        check("it is behind the fenced door",
+            ownAccount.contains("MemberSessionGuard.whenCallerIsVerifiedMember"));
+        // Every row it names is on the caller's own account, which the read scope's first arm already
+        // lets them read, and nothing about the matched account comes back. That bounds the REPLY.
+        //
+        // It does NOT make the endpoint safe the way its two siblings are, and this check must not be
+        // read as saying so. Their derived input cannot be chosen; this one's is person.email on the
+        // caller's own rows, which a member writes at will through updatePersonDetails / addMember,
+        // neither metered. So it answers a membership question about addresses the caller picked, in
+        // bulk, with no budget -- what EmailHasAccountEndpoint meters at 30 per ten minutes.
+        //
+        // It grants nothing today because FrontendAccount is itself read-unscoped (read-authorization
+        // -plan.md records that). It survives the fix, though, because it runs under asServer on raw
+        // SQL: metering or re-deriving it belongs in the change that scopes FrontendAccount.
+        check("every row it returns is on the caller's own account",
+            ownAccount.contains("where m.frontend_account_id = $1"));
+        check("and nothing about the matched account is selected",
+            ownAccount.contains("select distinct m.id from person m")
+            && !ownAccount.contains("fa.username,")
+            && !ownAccount.contains("select distinct m.id, "));
+        // The googlemail fold the client used to do, kept rather than quietly dropped: an address
+        // written @googlemail.com is the same mailbox as @gmail.com, and V0173 only folds NEW
+        // writes -- the existing rows wait on scripts/fold-googlemail-accounts.sql. Both sides.
+        // Both sides, schema-qualified, and btrim OUTSIDE the fold: the function trims whitespace only
+        // on the branch that matches, so 'a@gmail.com  ' would otherwise never equal 'a@gmail.com' and
+        // the member would silently lose the badge -- this endpoint's own failure mode.
+        check("the googlemail fold is applied to both sides, as the client's canonicalEmail was",
+            ownAccount.contains("lower(btrim(public.canonical_email_domain(fa.username)))")
+            && ownAccount.contains("lower(btrim(public.canonical_email_domain(m.email)))"));
+        // Measured, not guessed: the correlated exists form hashes all 49,650 owner rows joined to
+        // all 49,664 accounts before testing anything (531 ms on staging's worst account), where the
+        // join hashes the caller's own members -- one at the median, 17 at the worst -- and streams
+        // frontend_account past it once (134 ms). A future edit back to `exists` is a 4x regression.
+        check("written as a join rather than a correlated exists, which is 4x slower here",
+            !ownAccount.contains("and exists (select"));
+
         // --- closing an invitation without a link (V0157) ---
         // Declining and cancelling were client writes nobody checked the party of. The table closes to
         // clients and three endpoints replace them; as with the claim, the deny and the endpoints are safe

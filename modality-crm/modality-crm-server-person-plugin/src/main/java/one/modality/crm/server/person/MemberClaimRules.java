@@ -1,5 +1,8 @@
 package one.modality.crm.server.person;
 
+import dev.webfx.platform.ast.AST;
+import dev.webfx.platform.ast.AstArray;
+import dev.webfx.platform.ast.AstObject;
 import dev.webfx.platform.async.Batch;
 import dev.webfx.platform.async.Future;
 import dev.webfx.platform.util.Numbers;
@@ -73,11 +76,51 @@ final class MemberClaimRules {
      * <p>Read before the write so the caller can be told WHICH rows were claimed — the notices their
      * screen sends go to the owners of those accounts, and it needs to know which.
      */
-    private static final String CLAIMABLE_SQL =
-        "select id from person" +
+    /**
+     * What makes a row claimable — written once, because two statements have to agree about it.
+     *
+     * <p>{@link #offers} shows a member what they may claim and {@link #claimable} decides what
+     * {@link #claim} will take. If those two ever disagree, a member is shown a row that is then not
+     * claimed, or claims one they were never shown — and the second case is the worse one, because the
+     * notice to that account's owner is sent by the screen, from the list the screen was given.
+     *
+     * <p>Not shared with {@link #CLAIM_SQL}, which spells the same five conditions again on purpose: see
+     * its own note. That repetition is between a read and the write that follows it, and exists so a row
+     * that changed in between is not claimed on the strength of how it looked a moment earlier.
+     *
+     * <p>Parameters: {@code $1} the caller's own address, {@code $2} their account.
+     */
+    private static final String CLAIMABLE_WHERE =
         " where lower(email) = lower($1) and owner = false and removed = false" +
         " and account_person_id is null and frontend_account_id is not null" +
         " and frontend_account_id <> $2";
+
+    private static final String CLAIMABLE_SQL = "select id from person" + CLAIMABLE_WHERE;
+
+    /**
+     * The same rows, with what a screen needs to name them. No email: the row's own address is the
+     * proof this derivation runs on, never something a caller is told — and no screen reads it. The
+     * only address in the reply is the OWNER's, which is where the claim notice goes.
+     */
+    private static final String OFFER_SQL =
+        "select id, first_name, last_name, frontend_account_id from person" + CLAIMABLE_WHERE;
+
+    /**
+     * Who holds the accounts those rows sit in — the name a member is shown and the address the notice
+     * goes to.
+     *
+     * <p>The accounts are derived from {@link #OFFER_SQL}'s own result, never taken from the caller.
+     * Taking them as an argument would be an oracle on any account id: "who owns 23147?" is the question
+     * {@code PersonReadScope} was written to stop a member asking, and an endpoint does not close an
+     * oracle while an argument reopens it.
+     *
+     * <p>All owner rows, not one per account: an account can carry more than one {@code owner = true}
+     * row, and which of them is the holder is the caller's tie-break to make — lowest person id wins,
+     * where it is already tested.
+     */
+    private static final String OFFER_OWNERS_SQL =
+        "select id, first_name, last_name, email, frontend_account_id from person" +
+        " where owner = true and removed = false and frontend_account_id in (";
 
     /**
      * The caller may NARROW the set to rows it asked about — never widen it.
@@ -140,6 +183,91 @@ final class MemberClaimRules {
                 : claimable(address, callerAccountId, narrowing)
                     .compose(ids -> ids.isEmpty() ? Future.succeededFuture((Object) new Object[0])
                         : run(callerPersonId, address, callerAccountId, narrowing, callerUserId, ids)));
+    }
+
+    /**
+     * What this caller may claim, and who they would be claiming it from.
+     *
+     * <p>The read half of {@link #claim}, and the reason it exists is the same reason the write half
+     * stopped trusting the client: the browser used to FIND these rows itself, with
+     * {@code select … from Person where lower(email)=$1 and frontendAccount!=$2}. That statement reaches
+     * across accounts by an address the caller supplies, which is an enumeration oracle on the whole
+     * {@code person} table — ask it about any address and learn whether somebody booked for it, and in
+     * whose account. {@code PersonReadScope} closed it, and closing it is what left the screens with
+     * nothing to show. So the question moves here, where the address is not an argument: it is read
+     * from the caller's own {@code frontend_account.username}, which only the server ever writes.
+     *
+     * <p>Takes no argument at all, deliberately. There is one set a caller may be offered and it is
+     * fully determined by who they are, so there is nothing for a caller to choose and no narrowing to
+     * accept — unlike {@link #claim}, which takes ids because a screen must be able to claim fewer rows
+     * than match, having shown fewer.
+     *
+     * <p>Reply: {@code {members: [{id, firstName, lastName, accountId}], owners: [{id, firstName,
+     * lastName, email, accountId}]}}. Two lists rather than rows already joined, because the join has a
+     * rule in it — an account may hold several owner rows and the lowest id is the holder — and that
+     * rule is already written and tested on the client that consumes this.
+     *
+     * <p>The owners query runs only when something matched, so an ordinary signup, which matches
+     * nothing, costs one statement rather than two.
+     *
+     * @param callerAccountId the caller's account, from the principal — never from the argument
+     */
+    static Future<Object> offers(Object callerAccountId) {
+        return address(callerAccountId)
+            .compose(address -> address == null || address.isBlank() ? refusal(NO_ADDRESS_KEY)
+                : query(OFFER_SQL, address, callerAccountId)
+                    .compose(members -> owners(members)
+                        .map(owners -> reply(members, owners))));
+    }
+
+    /** The owner rows of the accounts {@link #OFFER_SQL} just found — derived, never asked for. */
+    private static Future<QueryResult> owners(QueryResult members) {
+        List<Object> accountIds = new ArrayList<>();
+        if (members != null)
+            for (int row = 0; row < members.getRowCount(); row++) {
+                Object accountId = Numbers.toLong(members.getValue(row, 3));
+                if (accountId != null && !accountIds.contains(accountId))
+                    accountIds.add(accountId);
+            }
+        if (accountIds.isEmpty())
+            return Future.succeededFuture(null);
+        return query(OFFER_OWNERS_SQL + AccountMergeRules.placeholders(1, accountIds.size()) + ")",
+            accountIds.toArray());
+    }
+
+    /**
+     * The two lists, as the bus carries them.
+     *
+     * <p>{@code setScalar} throughout rather than a typed overload: the ids are whatever width the
+     * driver returned, and casting to pick an overload would decide the wire type by which cast was
+     * written — the trap {@code MatchingAccountsEndpoint} records.
+     */
+    private static Object reply(QueryResult members, QueryResult owners) {
+        AstArray memberArray = AST.createArray();
+        if (members != null)
+            for (int row = 0; row < members.getRowCount(); row++) {
+                AstObject member = AST.createObject();
+                member.setScalar("id", members.getValue(row, 0));
+                member.setScalar("firstName", members.getValue(row, 1));
+                member.setScalar("lastName", members.getValue(row, 2));
+                member.setScalar("accountId", members.getValue(row, 3));
+                memberArray.push(member);
+            }
+        AstArray ownerArray = AST.createArray();
+        if (owners != null)
+            for (int row = 0; row < owners.getRowCount(); row++) {
+                AstObject owner = AST.createObject();
+                owner.setScalar("id", owners.getValue(row, 0));
+                owner.setScalar("firstName", owners.getValue(row, 1));
+                owner.setScalar("lastName", owners.getValue(row, 2));
+                owner.setScalar("email", owners.getValue(row, 3));
+                owner.setScalar("accountId", owners.getValue(row, 4));
+                ownerArray.push(owner);
+            }
+        AstObject reply = AST.createObject();
+        reply.setArray("members", memberArray);
+        reply.setArray("owners", ownerArray);
+        return reply;
     }
 
     private static Future<String> address(Object callerAccountId) {

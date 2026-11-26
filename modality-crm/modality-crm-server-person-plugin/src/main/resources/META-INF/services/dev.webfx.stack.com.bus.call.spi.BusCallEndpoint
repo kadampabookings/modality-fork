@@ -28,3 +28,6 @@ one.modality.crm.server.person.AnswerVolunteerArrivalEndpoint
 one.modality.crm.server.person.AnswerVolunteerDatesEndpoint
 one.modality.crm.server.person.GetUserSettingsEndpoint
 one.modality.crm.server.person.PatchUserSettingsEndpoint
+one.modality.crm.server.person.ClaimableMembersEndpoint
+one.modality.crm.server.person.ManagerAccountOwnersEndpoint
+one.modality.crm.server.person.MembersWithOwnAccountEndpoint
