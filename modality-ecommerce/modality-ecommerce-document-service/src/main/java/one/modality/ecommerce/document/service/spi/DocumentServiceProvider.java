@@ -48,4 +48,18 @@ public interface DocumentServiceProvider {
      */
     Future<String> verifyMoneyTransfers(Object organizationId, Object[] transferIds, boolean verified);
 
+    /** Records a payment, or with a negative amount a refund, on a booking — see {@code DocumentService.recordPayment}. */
+    Future<Object> recordPayment(Object documentId, Object methodId, Object amount, Object wireless,
+                                 Object transactionRef, Object comment, Object markArrived);
+
+    /** Moves an amount paid on one booking to another — see {@code DocumentService.transferPayment}. */
+    Future<Object> transferPayment(Object fromDocumentId, Object toDocumentId, Object amount, Object comment);
+
+    /** Corrects a payment entered by hand — see {@code DocumentService.editPayment}. */
+    Future<Object> editPayment(Object documentId, Object moneyTransferId, Object methodId, Object amount,
+                               Object wireless, Object transactionRef, Object comment);
+
+    /** Deletes a payment entered by hand, or a whole transfer — see {@code DocumentService.deletePayment}. */
+    Future<Object> deletePayment(Object documentId, Object moneyTransferId, Object comment);
+
 }

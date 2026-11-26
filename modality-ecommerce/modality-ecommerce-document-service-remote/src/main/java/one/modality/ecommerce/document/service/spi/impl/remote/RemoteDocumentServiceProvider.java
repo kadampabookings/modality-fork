@@ -83,4 +83,32 @@ public class RemoteDocumentServiceProvider implements DocumentServiceProvider {
         return BusCallService.call(DocumentServiceBusAddresses.VERIFY_MONEY_TRANSFERS_ADDRESS,
             new Object[] { organizationId, transferIds, verified });
     }
+
+    // The payment calls: one array argument each, in the order the endpoint reads it (and the React client sends).
+
+    @Override
+    public Future<Object> recordPayment(Object documentId, Object methodId, Object amount, Object wireless,
+                                        Object transactionRef, Object comment, Object markArrived) {
+        return BusCallService.call(DocumentServiceBusAddresses.RECORD_PAYMENT_ADDRESS,
+            new Object[] { documentId, methodId, amount, wireless, transactionRef, comment, markArrived });
+    }
+
+    @Override
+    public Future<Object> transferPayment(Object fromDocumentId, Object toDocumentId, Object amount, Object comment) {
+        return BusCallService.call(DocumentServiceBusAddresses.TRANSFER_PAYMENT_ADDRESS,
+            new Object[] { fromDocumentId, toDocumentId, amount, comment });
+    }
+
+    @Override
+    public Future<Object> editPayment(Object documentId, Object moneyTransferId, Object methodId, Object amount,
+                                      Object wireless, Object transactionRef, Object comment) {
+        return BusCallService.call(DocumentServiceBusAddresses.EDIT_PAYMENT_ADDRESS,
+            new Object[] { documentId, moneyTransferId, methodId, amount, wireless, transactionRef, comment });
+    }
+
+    @Override
+    public Future<Object> deletePayment(Object documentId, Object moneyTransferId, Object comment) {
+        return BusCallService.call(DocumentServiceBusAddresses.DELETE_PAYMENT_ADDRESS,
+            new Object[] { documentId, moneyTransferId, comment });
+    }
 }

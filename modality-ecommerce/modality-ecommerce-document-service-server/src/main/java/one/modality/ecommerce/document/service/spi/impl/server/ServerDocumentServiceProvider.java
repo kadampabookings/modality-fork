@@ -1177,6 +1177,36 @@ public class ServerDocumentServiceProvider implements DocumentServiceProvider {
         return MoneyTransferVerification.verify(callerState, organizationId, transferIds, verified);
     }
 
+    /*------------------------------------------------------------------------------------------------------------------
+    |                                         PAYMENTS ENTERED BY STAFF                                                |
+    ------------------------------------------------------------------------------------------------------------------*/
+
+    // Each reads the caller's state HERE, on the caller's thread, for the reason verifyMoneyTransfers gives.
+
+    @Override
+    public Future<Object> recordPayment(Object documentId, Object methodId, Object amount, Object wireless,
+                                        Object transactionRef, Object comment, Object markArrived) {
+        return BookingPayments.record(ThreadLocalStateHolder.getThreadLocalState(), documentId, methodId, amount,
+            wireless, transactionRef, comment, markArrived);
+    }
+
+    @Override
+    public Future<Object> transferPayment(Object fromDocumentId, Object toDocumentId, Object amount, Object comment) {
+        return BookingPayments.transfer(ThreadLocalStateHolder.getThreadLocalState(), fromDocumentId, toDocumentId, amount, comment);
+    }
+
+    @Override
+    public Future<Object> editPayment(Object documentId, Object moneyTransferId, Object methodId, Object amount,
+                                      Object wireless, Object transactionRef, Object comment) {
+        return BookingPayments.edit(ThreadLocalStateHolder.getThreadLocalState(), documentId, moneyTransferId, methodId,
+            amount, wireless, transactionRef, comment);
+    }
+
+    @Override
+    public Future<Object> deletePayment(Object documentId, Object moneyTransferId, Object comment) {
+        return BookingPayments.delete(ThreadLocalStateHolder.getThreadLocalState(), documentId, moneyTransferId, comment);
+    }
+
     /**
      * Refuses, as SOLD_OUT, a new front-office sharing place when no bed is free for it (room-mate plan
      * §1c, step 6). Returns the sold-out result to send back, or null to go ahead.

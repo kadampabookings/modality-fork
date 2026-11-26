@@ -33,4 +33,16 @@ public interface DocumentServiceBusAddresses {
 
     /** Mirrored in the React client's BUS_ADDRESSES.VERIFY_MONEY_TRANSFERS. */
     String VERIFY_MONEY_TRANSFERS_ADDRESS = "modality/service/document/verifyMoneyTransfers";
+
+    /** Mirrored in the React client's BUS_ADDRESSES.RECORD_PAYMENT. */
+    String RECORD_PAYMENT_ADDRESS = "modality/service/document/recordPayment";
+
+    /** Mirrored in the React client's BUS_ADDRESSES.TRANSFER_PAYMENT. */
+    String TRANSFER_PAYMENT_ADDRESS = "modality/service/document/transferPayment";
+
+    /** Mirrored in the React client's BUS_ADDRESSES.EDIT_PAYMENT. */
+    String EDIT_PAYMENT_ADDRESS = "modality/service/document/editPayment";
+
+    /** Mirrored in the React client's BUS_ADDRESSES.DELETE_PAYMENT. */
+    String DELETE_PAYMENT_ADDRESS = "modality/service/document/deletePayment";
 }

@@ -114,6 +114,63 @@ public final class DocumentService {
         return getProvider().verifyMoneyTransfers(organizationId, transferIds, verified);
     }
 
+    /*
+     * Payments entered by the back office on a booking (KBS2's "Add a payment", "Add a transfer", "Edit…", "Delete…").
+     * No client may write money_transfer, so these are the only way staff record one. The server checks a verified
+     * back office, the RecordPayments (or DeletePayments) operation in the organisation and event that own the
+     * booking, that the event's accounts are still open, and — for an edit or a delete — that the payment is the
+     * booking's own and one staff entered by hand. It chooses the date and the money accounts and writes the
+     * booking's history. Design: docs/design/registration-bookings-payments.md (aggregate repo).
+     */
+
+    /**
+     * Records a payment — or, with a negative amount, a refund made elsewhere — on a booking.
+     *
+     * @param methodId       1 Cash, 2 Cheque, 3 Credit card, 4 Bank transfer, 5 Online (a refund made at the gateway)
+     * @param amount         minor units, non-zero
+     * @param wireless       contactless; kept for a card payment only
+     * @param transactionRef optional; refused if it holds a card number
+     * @param comment        optional; likewise
+     * @param markArrived    also mark the booking as arrived, as the registration desk's buttons do
+     * @return the new payment's id
+     */
+    public static Future<Object> recordPayment(Object documentId, Object methodId, Object amount, Object wireless,
+                                               Object transactionRef, Object comment, Object markArrived) {
+        return getProvider().recordPayment(documentId, methodId, amount, wireless, transactionRef, comment, markArrived);
+    }
+
+    /**
+     * Moves {@code amount} (minor units, positive) paid on one booking to another booking of the same organisation:
+     * a Contra transfer with one row on each.
+     *
+     * @return the transfer's id
+     */
+    public static Future<Object> transferPayment(Object fromDocumentId, Object toDocumentId, Object amount, Object comment) {
+        return getProvider().transferPayment(fromDocumentId, toDocumentId, amount, comment);
+    }
+
+    /**
+     * Corrects the method, amount, contactless flag, reference and comment of a payment staff entered by hand on
+     * this booking. Refused for a gateway's payment, a verified one, one in a batch or on a statement, and a transfer.
+     *
+     * @return true
+     */
+    public static Future<Object> editPayment(Object documentId, Object moneyTransferId, Object methodId, Object amount,
+                                             Object wireless, Object transactionRef, Object comment) {
+        return getProvider().editPayment(documentId, moneyTransferId, methodId, amount, wireless, transactionRef, comment);
+    }
+
+    /**
+     * Deletes a payment staff entered by hand on this booking — or, when it is one side of a transfer, the whole
+     * transfer. Requires DeletePayments.
+     *
+     * @param comment why, for the booking's history (optional)
+     * @return true
+     */
+    public static Future<Object> deletePayment(Object documentId, Object moneyTransferId, Object comment) {
+        return getProvider().deletePayment(documentId, moneyTransferId, comment);
+    }
+
     // Additional top-level utility methods to load a document (not directly implemented by the provider and not directly serialized)
 
     public static Future<DocumentAggregate> loadDocument(Object event, Object userPerson) {
