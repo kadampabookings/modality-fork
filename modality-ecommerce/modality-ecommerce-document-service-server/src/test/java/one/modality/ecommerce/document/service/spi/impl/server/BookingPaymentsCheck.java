@@ -90,13 +90,22 @@ public class BookingPaymentsCheck {
         check("12.50", "12.50".equals(BookingPayments.formatAmount(1250)));
         check("-7.00", "-7.00".equals(BookingPayments.formatAmount(-700)));
         check("0.05", "0.05".equals(BookingPayments.formatAmount(5)));
-        Booking a = new Booking(10, 7, 1957, 1, null), b = new Booking(11, 8, 1957, 1, null), c = new Booking(12, 9, 1993, 1, null);
+        Booking a = new Booking(10, 7, 1957, 1, null, 0), b = new Booking(11, 8, 1957, 1, null, 0), c = new Booking(12, 9, 1993, 1, null, 0);
         check("a booking of the same event is named by its ref", "#8".equals(BookingPayments.labelFrom(b, a)));
         check("one of another event says which", "#9 (event 1993)".equals(BookingPayments.labelFrom(c, a)));
-        check("a reconciled event is closed", new Booking(1, 1, 1, 1, "RECONCILED").eventClosed());
-        check("an archived event is closed", new Booking(1, 1, 1, 1, "ARCHIVED").eventClosed());
-        check("an event with no state is open", !new Booking(1, 1, 1, 1, null).eventClosed());
-        check("an open event is open", !new Booking(1, 1, 1, 1, "OPEN").eventClosed());
+        check("a reconciled event is closed", new Booking(1, 1, 1, 1, "RECONCILED", 0).eventClosed());
+        check("an archived event is closed", new Booking(1, 1, 1, 1, "ARCHIVED", 0).eventClosed());
+        check("an event with no state is open", !new Booking(1, 1, 1, 1, null, 0).eventClosed());
+        check("an open event is open", !new Booking(1, 1, 1, 1, "OPEN", 0).eventClosed());
+
+        // ── A transfer takes no more than was paid on the booking it leaves ──
+        Booking paid120 = new Booking(1, 1, 1, 1, null, 12000);
+        check("a transfer of everything paid is allowed", !paid120.cannotGive(12000));
+        check("a transfer of part of it is allowed", !paid120.cannotGive(1));
+        check("a transfer of a cent more is refused", paid120.cannotGive(12001));
+        check("nothing paid gives nothing", new Booking(1, 1, 1, 1, null, 0).cannotGive(1));
+        check("an overdrawn booking gives nothing", new Booking(1, 1, 1, 1, null, -500).cannotGive(1));
+        check("the booking read takes the paid amount", BookingPayments.BOOKING_SQL.contains("d.price_deposit"));
 
         // ── Which payments staff may change ──
         check("a hand-entered cash payment may be changed", BookingPayments.notChangeableReason(payment(1, false, false, false, false, null, false)) == null);

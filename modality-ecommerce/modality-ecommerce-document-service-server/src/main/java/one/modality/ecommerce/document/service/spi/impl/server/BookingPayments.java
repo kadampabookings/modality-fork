@@ -83,6 +83,7 @@ final class BookingPayments {
     static final String CARD_NUMBER = "[PaymentCardNumber] A card number must never be typed in a payment";
     static final String ACCOUNT_CLOSED = "[PaymentAccountClosed] The money account for this payment is closed";
     static final String NO_ACCOUNT = "[PaymentNoAccount] The organisation has no open money account for this method";
+    static final String MORE_THAN_PAID = "[PaymentMoreThanPaid] A transfer cannot move more than was paid on the booking";
 
     /** Cash, Cheque, Credit card, Bank transfer, Online (for a refund made at the gateway). Not Contra, not Gift card. */
     static final Set<Integer> RECORDABLE_METHODS = Set.of(1, 2, 3, 4, 5);
@@ -118,8 +119,8 @@ final class BookingPayments {
     //
     // Constants only; every value is a bound parameter.
 
-    /** A booking and who owns it: id, ref, event, organisation, event state. */
-    static final String BOOKING_SQL = "select d.id, d.ref, e.id, e.organization_id, e.state"
+    /** A booking and who owns it: id, ref, event, organisation, event state, and what was paid on it. */
+    static final String BOOKING_SQL = "select d.id, d.ref, e.id, e.organization_id, e.state, d.price_deposit"
         + " from document d join event e on e.id = d.event_id where d.id = $1";
 
     /**
@@ -211,9 +212,17 @@ final class BookingPayments {
     // ── The rows read ──────────────────────────────────────────────────────────────────────────────────────────
 
     /** A booking as {@link #BOOKING_SQL} reads it. */
-    record Booking(Object id, Object ref, Object eventId, Object organizationId, String eventState) {
+    record Booking(Object id, Object ref, Object eventId, Object organizationId, String eventState, int paid) {
         boolean eventClosed() {
             return eventState != null && CLOSED_EVENT_STATES.contains(eventState);
+        }
+
+        /**
+         * Whether moving {@code amount} out of this booking would take more than was paid on it — leaving it with a
+         * negative paid amount, a slip KBS2 allowed. The back office's dialog says so first; this is the rule.
+         */
+        boolean cannotGive(int amount) {
+            return amount > paid;
         }
 
         /** "#ref", as KBS2's history named a booking. */
@@ -297,7 +306,8 @@ final class BookingPayments {
      * parent's amount at their sum, zero.
      *
      * <p>Both bookings must be of the same organisation (KBS2's rule) and the caller must hold the right on both;
-     * they may be of different events (301 of 749 transfers on staging in two years were).
+     * they may be of different events (301 of 749 transfers on staging in two years were). The amount may not exceed
+     * what was paid on the booking it leaves, as read just before the write (KBS2 allowed it; Bruno, 2026-11-26).
      *
      * @return the transfer's (parent's) id
      */
@@ -321,6 +331,9 @@ final class BookingPayments {
                     () -> {
                         if (debited.eventClosed() || credited.eventClosed())
                             return Future.failedFuture(EVENT_CLOSED);
+                        // After the right is shown on both: a caller without it learns nothing of the amount paid.
+                        if (debited.cannotGive(value))
+                            return Future.failedFuture(MORE_THAN_PAID);
                         UpdateStore store = newUpdateStore();
                         MoneyTransfer parent = store.insertEntity(MoneyTransfer.class);
                         parent.setMethod(CONTRA_METHOD);
@@ -544,8 +557,10 @@ final class BookingPayments {
             if (rows.getRowCount() == 0)
                 return null;
             Object id = rows.getValue(0, 0), ref = rows.getValue(0, 1), event = rows.getValue(0, 2),
-                organization = rows.getValue(0, 3), state = rows.getValue(0, 4);
-            return new Booking(id, ref, event, organization, state == null ? null : state.toString());
+                organization = rows.getValue(0, 3), state = rows.getValue(0, 4), deposit = rows.getValue(0, 5);
+            // price_deposit is NOT NULL (default 0); a number of any width, read as cents.
+            int paid = deposit instanceof Number n ? n.intValue() : 0;
+            return new Booking(id, ref, event, organization, state == null ? null : state.toString(), paid);
         });
     }
 
