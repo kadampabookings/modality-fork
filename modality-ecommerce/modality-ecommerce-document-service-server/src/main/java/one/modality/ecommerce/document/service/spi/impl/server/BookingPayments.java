@@ -19,6 +19,7 @@ import one.modality.base.shared.entities.MoneyTransfer;
 import one.modality.crm.server.authn.gateway.shared.RouteAccessGuard;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Supplier;
@@ -83,6 +84,7 @@ final class BookingPayments {
     static final String CARD_NUMBER = "[PaymentCardNumber] A card number must never be typed in a payment";
     static final String ACCOUNT_CLOSED = "[PaymentAccountClosed] The money account for this payment is closed";
     static final String NO_ACCOUNT = "[PaymentNoAccount] The organisation has no open money account for this method";
+    static final String CANCELLED_ARRIVAL = "[PaymentCancelledArrival] A cancelled booking cannot be marked arrived";
     static final String MORE_THAN_PAID = "[PaymentMoreThanPaid] A transfer cannot move more than was paid on the booking";
 
     /** Cash, Cheque, Credit card, Bank transfer, Online (for a refund made at the gateway). Not Contra, not Gift card. */
@@ -119,8 +121,8 @@ final class BookingPayments {
     //
     // Constants only; every value is a bound parameter.
 
-    /** A booking and who owns it: id, ref, event, organisation, event state, and what was paid on it. */
-    static final String BOOKING_SQL = "select d.id, d.ref, e.id, e.organization_id, e.state, d.price_deposit"
+    /** A booking and who owns it: id, ref, event, organisation, event state, what was paid on it, and cancelled. */
+    static final String BOOKING_SQL = "select d.id, d.ref, e.id, e.organization_id, e.state, d.price_deposit, d.cancelled"
         + " from document d join event e on e.id = d.event_id where d.id = $1";
 
     /**
@@ -175,7 +177,9 @@ final class BookingPayments {
      */
     static final String EDIT_SQL = "with changed as (update money_transfer mt"
         + " set method_id = $3, amount = $4, wireless = $5, transaction_ref = $6, comment = $7"
-        + " where " + STILL_CHANGEABLE + " and mt.method_id = $8 and mt.amount = $9 returning mt.id)"
+        + " where " + STILL_CHANGEABLE + " and mt.method_id = $8 and mt.amount = $9"
+        // The rule of becomesOnline, repeated where the row is written.
+        + " and ($3::int <> 5 or mt.method_id = 5) returning mt.id)"
         + " insert into history (document_id, money_transfer_id, user_person_id, comment)"
         + " select $2, c.id, $10, $11 from " + GUARD;
 
@@ -212,7 +216,8 @@ final class BookingPayments {
     // ── The rows read ──────────────────────────────────────────────────────────────────────────────────────────
 
     /** A booking as {@link #BOOKING_SQL} reads it. */
-    record Booking(Object id, Object ref, Object eventId, Object organizationId, String eventState, int paid) {
+    record Booking(Object id, Object ref, Object eventId, Object organizationId, String eventState, int paid,
+                   boolean cancelled) {
         boolean eventClosed() {
             return eventState != null && CLOSED_EVENT_STATES.contains(eventState);
         }
@@ -225,9 +230,9 @@ final class BookingPayments {
             return amount > paid;
         }
 
-        /** "#ref", as KBS2's history named a booking. */
+        /** "#ref", as KBS2's history named a booking; "booking <id>" for one without a ref, never "#null". */
         String label() {
-            return "#" + ref;
+            return ref != null ? "#" + ref : "booking " + id;
         }
     }
 
@@ -271,6 +276,8 @@ final class BookingPayments {
                 () -> !arrived ? Future.succeededFuture(true)
                     : RouteAccessGuard.whenCallerHoldsOperation(callerState, SUBMIT_BOOKINGS, booking.organizationId(), booking.eventId(),
                         () -> Future.succeededFuture(true))).compose(allowed -> booking.eventClosed() ? Future.failedFuture(EVENT_CLOSED)
+                    // A cancelled guest is not at the desk: refused, not ignored — the caller asked for it (code review 2026-11-26).
+                    : arrived && booking.cancelled() ? Future.failedFuture(CANCELLED_ARRIVAL)
                     : readMethodName(method).compose(methodName -> {
                         UpdateStore store = newUpdateStore();
                         MoneyTransfer payment = store.insertEntity(MoneyTransfer.class);
@@ -402,6 +409,11 @@ final class BookingPayments {
         Object callerUserId = StateAccessor.getUserId(callerState);
         return forPaymentOf(callerState, RECORD_PAYMENTS, document, paymentId, (booking, payment) -> {
             if (payment.isTransferRow() || notChangeableReason(payment) != null)
+                return Future.failedFuture(NOT_CHANGEABLE);
+            // Nothing becomes Online by an edit: Online is the gateway's account, and a refund entered as cash, card or bank
+            // was paid back from that till, not by the gateway. An Online refund may still be corrected to another method
+            // (design, "As built (server)"; code review 2026-11-26).
+            if (becomesOnline(payment.methodId(), method))
                 return Future.failedFuture(NOT_CHANGEABLE);
             return readMethodName(method).compose(methodName -> {
                 String text = "Edited " + methodName + " payment amount = " + formatAmount(value)
@@ -557,10 +569,12 @@ final class BookingPayments {
             if (rows.getRowCount() == 0)
                 return null;
             Object id = rows.getValue(0, 0), ref = rows.getValue(0, 1), event = rows.getValue(0, 2),
-                organization = rows.getValue(0, 3), state = rows.getValue(0, 4), deposit = rows.getValue(0, 5);
+                organization = rows.getValue(0, 3), state = rows.getValue(0, 4), deposit = rows.getValue(0, 5),
+                cancelled = rows.getValue(0, 6);
             // price_deposit is NOT NULL (default 0); a number of any width, read as cents.
             int paid = deposit instanceof Number n ? n.intValue() : 0;
-            return new Booking(id, ref, event, organization, state == null ? null : state.toString(), paid);
+            return new Booking(id, ref, event, organization, state == null ? null : state.toString(), paid,
+                Boolean.TRUE.equals(cancelled));
         });
     }
 
@@ -697,6 +711,11 @@ final class BookingPayments {
         return methodId != ONLINE_METHOD || amount < 0;
     }
 
+    /** Whether an edit from {@code fromMethod} to {@code toMethod} would make a payment Online that was not. Pure. */
+    static boolean becomesOnline(int fromMethod, int toMethod) {
+        return toMethod == ONLINE_METHOD && fromMethod != ONLINE_METHOD;
+    }
+
     /** A positive {@code int} from any integral number; null for anything else. Pure. */
     static Integer positiveInt(Object value) {
         return MoneyTransferVerification.positiveInt(value);
@@ -721,8 +740,11 @@ final class BookingPayments {
      * slip at the desk, not against somebody determined to store one: "4111 x 1111…" still gets through. Desk staff have a card terminal in front
      * of them; a number typed here would be stored in a column the anonymiser and the exports carry. Pure.
      *
-     * <p>A long numeric bank reference passes the Luhn check one time in ten and is refused too; the message says
-     * why, and the reference can be typed with a letter or a slash.
+     * <p>Only whole groups are tested, never a stretch cut out of one: a card is written whole, and testing every
+     * 13–19-digit window of a long number refused most long bank references (an 18-digit one 89% of the time,
+     * code review 2026-11-26). Now a numeric reference of 13 to 19 digits passes the Luhn check, and is refused, one
+     * time in ten; a longer one only when a run of its groups does. The message says why, and the reference can be
+     * typed with a letter or a slash.
      */
     static boolean containsCardNumber(String text) {
         if (text == null)
@@ -736,6 +758,8 @@ final class BookingPayments {
             }
             int groupEnd = digitsEnd(text, i);
             StringBuilder digits = new StringBuilder(text.substring(i, groupEnd));
+            // Where each group ends in `digits`: a candidate starts and ends on these, never inside a group.
+            List<Integer> bounds = new ArrayList<>(List.of(0, digits.length()));
             // Join further groups only as cards are written: one separator, the same one each time, and groups of 3 to 6
             // digits (4-4-4-4, 4-6-5). So "26/11/2026 120.00" stays a date and an amount.
             char separator = 0;
@@ -747,11 +771,12 @@ final class BookingPayments {
                     break;
                 separator = text.charAt(j);
                 digits.append(text, j + 1, nextEnd);
+                bounds.add(digits.length());
                 i = j + 1;
                 groupEnd = nextEnd;
                 j = nextEnd;
             }
-            if (hasCardNumber(digits))
+            if (hasCardNumber(digits, bounds))
                 return true;
             i = groupEnd;
         }
@@ -772,13 +797,14 @@ final class BookingPayments {
     /** What may stand between two digit groups of a card number as people type one. */
     static final String CARD_SEPARATORS = " -./_";
 
-    /** Whether any 13-to-19-digit window of {@code digits} passes the Luhn check. */
-    private static boolean hasCardNumber(CharSequence digits) {
-        int n = digits.length();
-        for (int size = 13; size <= Math.min(19, n); size++)
-            for (int start = 0; start + size <= n; start++)
-                if (luhn(digits, start, size))
+    /** Whether a run of whole groups of {@code digits} (between two {@code bounds}) is 13 to 19 digits and passes Luhn. */
+    private static boolean hasCardNumber(CharSequence digits, List<Integer> bounds) {
+        for (int a = 0; a < bounds.size(); a++)
+            for (int b = a + 1; b < bounds.size(); b++) {
+                int start = bounds.get(a), size = bounds.get(b) - start;
+                if (size >= 13 && size <= 19 && luhn(digits, start, size))
                     return true;
+            }
         return false;
     }
 

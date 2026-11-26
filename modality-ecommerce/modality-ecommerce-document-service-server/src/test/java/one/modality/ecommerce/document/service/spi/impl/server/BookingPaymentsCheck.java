@@ -70,6 +70,12 @@ public class BookingPaymentsCheck {
         check("a date and an amount are not a card", !BookingPayments.containsCardNumber("26/11/2026 120.00"));
         check("null is not a card", !BookingPayments.containsCardNumber(null));
         check("two spaces break a group (separate numbers)", !BookingPayments.containsCardNumber("4111  1111  1111  1111"));
+        // Whole groups only: a long bank reference is not cut into card-sized windows (code review 2026-11-26).
+        check("an 18-digit reference whose 16-digit windows pass Luhn is not a card",
+            !BookingPayments.containsCardNumber("411111111111111101") && BookingPayments.luhn("411111111111111101", 0, 16));
+        check("a 24-digit reference is not a card", !BookingPayments.containsCardNumber("123456789012345678901234"));
+        check("a card followed by a separate group is still found", BookingPayments.containsCardNumber("4111 1111 1111 1111 123"));
+        check("a card after a separate group is still found", BookingPayments.containsCardNumber("ref 123 4111 1111 1111 1111"));
         check("the Luhn check accepts a valid number", BookingPayments.luhn("79927398713", 0, 11));
         check("the Luhn check refuses an invalid one", !BookingPayments.luhn("79927398710", 0, 11));
 
@@ -90,21 +96,30 @@ public class BookingPaymentsCheck {
         check("12.50", "12.50".equals(BookingPayments.formatAmount(1250)));
         check("-7.00", "-7.00".equals(BookingPayments.formatAmount(-700)));
         check("0.05", "0.05".equals(BookingPayments.formatAmount(5)));
-        Booking a = new Booking(10, 7, 1957, 1, null, 0), b = new Booking(11, 8, 1957, 1, null, 0), c = new Booking(12, 9, 1993, 1, null, 0);
+        Booking a = new Booking(10, 7, 1957, 1, null, 0, false), b = new Booking(11, 8, 1957, 1, null, 0, false), c = new Booking(12, 9, 1993, 1, null, 0, false);
         check("a booking of the same event is named by its ref", "#8".equals(BookingPayments.labelFrom(b, a)));
         check("one of another event says which", "#9 (event 1993)".equals(BookingPayments.labelFrom(c, a)));
-        check("a reconciled event is closed", new Booking(1, 1, 1, 1, "RECONCILED", 0).eventClosed());
-        check("an archived event is closed", new Booking(1, 1, 1, 1, "ARCHIVED", 0).eventClosed());
-        check("an event with no state is open", !new Booking(1, 1, 1, 1, null, 0).eventClosed());
-        check("an open event is open", !new Booking(1, 1, 1, 1, "OPEN", 0).eventClosed());
+        check("a reconciled event is closed", new Booking(1, 1, 1, 1, "RECONCILED", 0, false).eventClosed());
+        check("an archived event is closed", new Booking(1, 1, 1, 1, "ARCHIVED", 0, false).eventClosed());
+        check("an event with no state is open", !new Booking(1, 1, 1, 1, null, 0, false).eventClosed());
+        check("an open event is open", !new Booking(1, 1, 1, 1, "OPEN", 0, false).eventClosed());
+        check("a booking without a ref is named by its id, never #null", "booking 12".equals(new Booking(12, null, 1, 1, null, 0, false).label()));
+        check("the booking read takes cancelled", BookingPayments.BOOKING_SQL.contains("d.cancelled"));
+
+        // ── An edit never makes a payment Online ──
+        check("cash to Online is refused", BookingPayments.becomesOnline(1, 5));
+        check("Online to Online is allowed", !BookingPayments.becomesOnline(5, 5));
+        check("Online to cash is allowed", !BookingPayments.becomesOnline(5, 1));
+        check("cash to card is allowed", !BookingPayments.becomesOnline(1, 3));
+        check("the guarded edit repeats it", BookingPayments.EDIT_SQL.contains("$3::int <> 5 or mt.method_id = 5"));
 
         // ── A transfer takes no more than was paid on the booking it leaves ──
-        Booking paid120 = new Booking(1, 1, 1, 1, null, 12000);
+        Booking paid120 = new Booking(1, 1, 1, 1, null, 12000, false);
         check("a transfer of everything paid is allowed", !paid120.cannotGive(12000));
         check("a transfer of part of it is allowed", !paid120.cannotGive(1));
         check("a transfer of a cent more is refused", paid120.cannotGive(12001));
-        check("nothing paid gives nothing", new Booking(1, 1, 1, 1, null, 0).cannotGive(1));
-        check("an overdrawn booking gives nothing", new Booking(1, 1, 1, 1, null, -500).cannotGive(1));
+        check("nothing paid gives nothing", new Booking(1, 1, 1, 1, null, 0, false).cannotGive(1));
+        check("an overdrawn booking gives nothing", new Booking(1, 1, 1, 1, null, -500, false).cannotGive(1));
         check("the booking read takes the paid amount", BookingPayments.BOOKING_SQL.contains("d.price_deposit"));
 
         // ── Which payments staff may change ──
