@@ -87,6 +87,13 @@ final class NoPrincipalReadPolicy implements ProtectedEntityReadRegistry.ReadPol
 
     /**
      * The roots a caller who is nobody may not select from. Says nothing about the schema to the client.
+     *
+     * <p><b>ANOTHER REPOSITORY DEPENDS ON THIS EXACT SENTENCE.</b> The read-scope CLI tells a refusal from a
+     * breakdown by matching it — narrowly, because "Connection refused", a wrong column and a timeout must
+     * stay failures rather than becoming passes — and {@code ReadPolicyRefusalCheck} in {@code kbs3} reads
+     * THIS FILE'S SOURCE to assert the literal still equals its own copy. Reword it and that check fails,
+     * which is the intended outcome: the alternative is a CLI that quietly stops recognising refusals and
+     * reports a working control as a dead bus. Change both together, or neither.
      */
     static final String REFUSED = "This query needs a signed-in caller";
 
