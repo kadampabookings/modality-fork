@@ -92,13 +92,28 @@ import java.util.Set;
 final class PersonReadScope {
 
     /**
-     * Enforced rather than merely reported. STAGING ONLY — see the class comment.
+     * <b>EMPTY ON THIS BRANCH, DELIBERATELY.</b> This is {@code prod}, and the member arm is reported
+     * here but not applied: {@code conditionDql} still returns the rule, so the census prints
+     * {@code WOULD SCOPE READ of Person under member} and production traffic can be read before anything
+     * is narrowed. {@code staging} carries {@code Set.of("Person")} and has since 2026-11-25.
+     *
+     * <p><b>This line therefore differs between the branches, and that is the point.</b> The deploys
+     * build from branches, so before this an ordinary staging → prod merge would have enforced
+     * {@code Person} in production silently, inside a merge nobody was reviewing for it. Diverging here
+     * turns that into a merge CONFLICT on this line, every time, which somebody has to resolve on
+     * purpose. Resolve it by keeping {@code Set.of()} until the flip is a decision of its own.
+     *
+     * <p>What is still owed before that decision, as of 2026-11-27: the select-list finding of
+     * 2026-11-25 (a navigation in a SELECT list outer-joins, so an out-of-scope person NULLs its columns
+     * while {@code fk.id} is pruned and never scoped — the members page reads both to decide whether a
+     * link is an authorisation), and a day of the production census this deploy starts producing. The
+     * rest is discharged; {@code docs/security/person-read-rehearsal-runbook.md} tracks it.
      *
      * <p>Enforcement is per ENTITY, not per token, so this flips the member arm on and leaves the back
      * office unchanged only because {@link #conditionDql} returns null for it. If a back-office rule is
      * added here, adding it ENFORCES it in the same edit; that is the trap this note exists for.
      */
-    private static final Set<String> ENFORCED_ROOTS = Set.of("Person");
+    private static final Set<String> ENFORCED_ROOTS = Set.of();
 
     static boolean isEnforced(String entityName) {
         return ENFORCED_ROOTS.contains(entityName);

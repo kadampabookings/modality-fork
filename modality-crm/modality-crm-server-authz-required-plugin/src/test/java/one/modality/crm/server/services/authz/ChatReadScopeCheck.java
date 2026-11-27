@@ -132,13 +132,17 @@ public class ChatReadScopeCheck {
         check("an entity this does not scope is not enforced either",
               !ChatReadScope.isEnforced("Document"));
 
-        // ── PERSON, phase 1: the member arm only, and STAGING ONLY ─────────────────────────────────────
-        // The same tripwire as the chat roots above, for the same reason: it must be changed deliberately,
-        // never drift. This one carries a second condition the chat ones do not — it must not reach the
-        // prod branch until the back-office arm is timed (a correlated exists, ~60k probes on an
-        // unfiltered person list) and the 11,235 persons it reaches neither way are a decision.
-        check("Person is enforced (staging only - see PersonReadScope)",
-              ChatReadScope.isEnforced("Person"));
+        // ── PERSON, phase 1: the member arm, REPORTED BUT NOT APPLIED ON THIS BRANCH ───────────────────
+        // The same tripwire as the chat roots above, inverted, because this is prod: PersonReadScope's
+        // ENFORCED_ROOTS is empty here and Set.of("Person") on staging. The assertion is kept rather than
+        // deleted so the two branches disagree on a LINE somebody must resolve, instead of agreeing by
+        // accident the next time staging is merged down. Flip both together or neither.
+        //
+        // The rule below is still asserted, and still passes: conditionDql returns it for a member
+        // whether or not the root is enforced, which is exactly what makes the census able to report
+        // WOULD SCOPE on production traffic before anything is narrowed.
+        check("Person is NOT enforced (prod - see PersonReadScope)",
+              !ChatReadScope.isEnforced("Person"));
         check("a member reads the people on their own account",
               "frontendAccount=CALLER_ACCOUNT"
             + " or accountPerson in (select id from Person where frontendAccount=CALLER_ACCOUNT)",
