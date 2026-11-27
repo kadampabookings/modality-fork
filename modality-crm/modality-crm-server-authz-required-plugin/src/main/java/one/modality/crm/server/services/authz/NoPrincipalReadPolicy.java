@@ -87,6 +87,13 @@ final class NoPrincipalReadPolicy implements ProtectedEntityReadRegistry.ReadPol
 
     /**
      * The roots a caller who is nobody may not select from. Says nothing about the schema to the client.
+     *
+     * <p><b>ANOTHER REPOSITORY DEPENDS ON THIS EXACT SENTENCE.</b> The read-scope CLI tells a refusal from a
+     * breakdown by matching it — narrowly, because "Connection refused", a wrong column and a timeout must
+     * stay failures rather than becoming passes — and {@code ReadPolicyRefusalCheck} in {@code kbs3} reads
+     * THIS FILE'S SOURCE to assert the literal still equals its own copy. Reword it and that check fails,
+     * which is the intended outcome: the alternative is a CLI that quietly stops recognising refusals and
+     * reports a working control as a dead bus. Change both together, or neither.
      */
     static final String REFUSED = "This query needs a signed-in caller";
 
@@ -97,18 +104,111 @@ final class NoPrincipalReadPolicy implements ProtectedEntityReadRegistry.ReadPol
      */
     static final Set<String> CLOSED_ROOTS = Set.of("Person", "FrontendAccount");
 
+    /**
+     * <b>ENFORCING on {@code staging} since 2026-11-27</b>, the same day it was written observing. Separate
+     * from {@link #ENFORCING} on purpose and still separate: this arm guards a LIVE PAYMENT PATH and the
+     * other does not, so they must stay switchable apart.
+     *
+     * <p><b>What was checked first</b>, since "it compiled" is not a reason to close a door in front of
+     * people who are mid-payment:
+     *
+     * <ul>
+     *   <li><b>The shaper binds a dotted path.</b> {@code DqlClientReadShaper.pathOf} composes a
+     *       {@code Dot} into {@code left.right}, so {@code cart.uuid=$1} records a bound field and this arm
+     *       never claims that read. Read rather than assumed, because the whole rule turns on it.</li>
+     *   <li><b>The three payment-path shapes are asserted</b> in {@code NoPrincipalReadPolicyCheck} —
+     *       resume-payment bound on {@code cart.uuid} and reaching {@code person}, the cart existence probe,
+     *       and guest pending bookings bound on {@code id}. If the shaper ever stops registering a dotted
+     *       bind, that check fails instead of the payment page.</li>
+     *   <li><b>Four probes on the deployed staging server</b>, with the arm present and observing, behaved
+     *       exactly as predicted — including {@code cart-lookup-without-session} answering, which is the
+     *       bounded read this must leave alone.</li>
+     * </ul>
+     *
+     * <p><b>What it is still a bet on</b>, and what to watch: a read shape nobody has thought of. Staging is
+     * where that costs nothing. Re-run the four probes after this lands — persons refused, booker-details
+     * refused and HOLDING, documents refused, and <b>cart-lookup still answering</b>. The last is the
+     * payment path, and it is the one whose failure means revert rather than investigate.
+     *
+     * <p>{@code prod} does not have this arm at all yet. It arrives there by an ordinary merge, enforcing,
+     * so soak it here first.
+     */
+    static final boolean UNBOUNDED_ENFORCING = true;
+
+    /**
+     * Roots a caller who is nobody may read only when the statement BINDS something — never as a table.
+     *
+     * <h3>What this is for</h3>
+     *
+     * <p>Measured on staging 2026-11-27, with no session at all: {@code select count(1) from Document}
+     * answered <b>294,713</b>, and {@code select person_firstName, person_lastName, person_email from
+     * Document} returned rows. {@code document} carries 56 denormalised {@code person_} columns — names,
+     * email, phone, <b>passport</b>, street and coordinates, carer names — so the copy of a person on their
+     * booking is readable by anyone who can reach the bus, while {@link #CLOSED_ROOTS} shuts the front door
+     * on {@code Person} itself. See {@code docs/security/anonymous-document-exposure.md}.
+     *
+     * <h3>Why bounded, rather than closed or column-denied</h3>
+     *
+     * <p><b>Not {@link #CLOSED_ROOTS}</b>: the class javadoc above records a PRODUCTION measurement of
+     * anonymous callers reading {@code Document … tables=[document, money_transfer, person]} — that is
+     * resume-payment, and refusing the root outright would break a page people are mid-payment on.
+     *
+     * <p><b>Not a column deny</b>: {@code ClientReadDenyList} is a static global list consulted without a
+     * caller, so denying {@code document.person_first_name} would deny it to the signed-in member and the
+     * guest too — and {@code map-order.ts} reads exactly those columns to put a name on an order.
+     *
+     * <p><b>Bounded is the discriminator the shape already carries</b>, and
+     * {@code ProtectedEntityReadRegistry} says what it means: "a statement that is not bounded asks for the
+     * table". Every legitimate anonymous read found binds — resume-payment on {@code cart.uuid}, the cart
+     * existence probe on {@code cart.uuid}, guest pending bookings on {@code id in $2}. The dump binds
+     * nothing, because asking for everybody is the point of it.
+     *
+     * <h3>What this does NOT close, said plainly</h3>
+     *
+     * <p>A bounded statement can still be asked 294,713 times with a different id each time. This closes the
+     * bulk read, not the per-row oracle, and the honest next step is to require a bound FIELD rather than
+     * any binding at all — {@code cart.uuid} or {@code id}. That needs the shaper's field naming confirmed
+     * against a real log line first, which is why it is not written here on a guess.
+     */
+    static final Set<String> BOUNDED_ONLY_ROOTS = Set.of("Document");
+
     @Override
     public String refusalReason(ProtectedEntityReadRegistry.ReadRequest request) {
-        if (!claims(request))
+        boolean closedRoot = claims(request);
+        // Checked second and only when the first did not claim it, so a root in both lists would be governed
+        // by the stricter arm rather than by whichever test ran first.
+        boolean unboundedRoot = !closedRoot && claimsUnbounded(request);
+        if (!closedRoot && !unboundedRoot)
             return null;
+        boolean enforcing = closedRoot ? ENFORCING : UNBOUNDED_ENFORCING;
         // Ends every line of this arm, so one log filter catches all of them and nothing else. The caller is
         // named by KIND, never by value — there is no principal to name, and the statement is not logged:
         // its literals are the email somebody was asked about.
-        Console.log("🛡 " + (ENFORCING ? "REFUSED" : "WOULD REFUSE") + " READ of " + request.entityName()
+        Console.log("🛡 " + (enforcing ? "REFUSED" : "WOULD REFUSE") + " READ of " + request.entityName()
                     + " by " + (ThreadLocalStateHolder.getUserId() == null ? "anonymous" : "a signed-out caller")
                     + " reaching " + Arrays.toString(request.touchedTables())
                     + (request.bounded() ? "" : " UNBOUNDED"));
-        return ENFORCING ? REFUSED : null;
+        return enforcing ? REFUSED : null;
+    }
+
+    /**
+     * Whether the bounded-only arm claims the read: a client caller who is nobody, asking a
+     * {@link #BOUNDED_ONLY_ROOTS} root for the whole table.
+     *
+     * <p>Deliberately NOT folded into {@link #claims}: the two arms have separate switches, so a caller of
+     * either must be able to ask which one it is. The caller tests above are the same and are repeated
+     * rather than shared, because a helper that answered "is this caller nobody" would be the sort of thing
+     * a later edit keys a third rule on without noticing the client-origin test inside it.
+     */
+    boolean claimsUnbounded(ProtectedEntityReadRegistry.ReadRequest request) {
+        if (!ThreadLocalStateHolder.isClientOrigin())
+            return false;
+        if (!LogoutUserId.isLogoutUserIdOrNull(ThreadLocalStateHolder.getUserId()))
+            return false;
+        if (request.bounded())
+            return false;
+        String root = request.entityName();
+        return root != null && BOUNDED_ONLY_ROOTS.contains(root);
     }
 
     /**
