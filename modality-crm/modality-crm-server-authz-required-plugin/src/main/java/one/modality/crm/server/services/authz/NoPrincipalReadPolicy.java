@@ -105,13 +105,35 @@ final class NoPrincipalReadPolicy implements ProtectedEntityReadRegistry.ReadPol
     static final Set<String> CLOSED_ROOTS = Set.of("Person", "FrontendAccount");
 
     /**
-     * OBSERVING, since 2026-11-27. Turn this on only after the census shows the arm below refusing nothing
-     * that is not the dump it is for — {@code WOULD REFUSE READ of Document … UNBOUNDED} in section 7, with
-     * the legitimate anonymous reads (resume-payment, the cart probe) absent from it. Separate from
-     * {@link #ENFORCING} on purpose: this arm guards a LIVE PAYMENT PATH and the other does not, so they
-     * must be switchable apart.
+     * <b>ENFORCING on {@code staging} since 2026-11-27</b>, the same day it was written observing. Separate
+     * from {@link #ENFORCING} on purpose and still separate: this arm guards a LIVE PAYMENT PATH and the
+     * other does not, so they must stay switchable apart.
+     *
+     * <p><b>What was checked first</b>, since "it compiled" is not a reason to close a door in front of
+     * people who are mid-payment:
+     *
+     * <ul>
+     *   <li><b>The shaper binds a dotted path.</b> {@code DqlClientReadShaper.pathOf} composes a
+     *       {@code Dot} into {@code left.right}, so {@code cart.uuid=$1} records a bound field and this arm
+     *       never claims that read. Read rather than assumed, because the whole rule turns on it.</li>
+     *   <li><b>The three payment-path shapes are asserted</b> in {@code NoPrincipalReadPolicyCheck} —
+     *       resume-payment bound on {@code cart.uuid} and reaching {@code person}, the cart existence probe,
+     *       and guest pending bookings bound on {@code id}. If the shaper ever stops registering a dotted
+     *       bind, that check fails instead of the payment page.</li>
+     *   <li><b>Four probes on the deployed staging server</b>, with the arm present and observing, behaved
+     *       exactly as predicted — including {@code cart-lookup-without-session} answering, which is the
+     *       bounded read this must leave alone.</li>
+     * </ul>
+     *
+     * <p><b>What it is still a bet on</b>, and what to watch: a read shape nobody has thought of. Staging is
+     * where that costs nothing. Re-run the four probes after this lands — persons refused, booker-details
+     * refused and HOLDING, documents refused, and <b>cart-lookup still answering</b>. The last is the
+     * payment path, and it is the one whose failure means revert rather than investigate.
+     *
+     * <p>{@code prod} does not have this arm at all yet. It arrives there by an ordinary merge, enforcing,
+     * so soak it here first.
      */
-    static final boolean UNBOUNDED_ENFORCING = false;
+    static final boolean UNBOUNDED_ENFORCING = true;
 
     /**
      * Roots a caller who is nobody may read only when the statement BINDS something — never as a table.
