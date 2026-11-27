@@ -497,6 +497,13 @@ public final class ProtectedEntityWritesJob implements ApplicationJob {
         Console.log("🛡 Client read rules — a caller with no signed-in principal may not select from "
                     + String.join(", ", new java.util.TreeSet<>(NoPrincipalReadPolicy.CLOSED_ROOTS))
                     + (NoPrincipalReadPolicy.ENFORCING ? " — ENFORCING" : " — observing only, nothing is refused yet"));
+        // The second arm, announced separately because it has its own switch and its own failure mode: this
+        // one guards a live payment path, so "deployed but observing" is a state it will sit in deliberately
+        // rather than briefly, and a census of zero must be readable as which of the two it means.
+        Console.log("🛡 Client read rules — and may not ask for the WHOLE of "
+                    + String.join(", ", new java.util.TreeSet<>(NoPrincipalReadPolicy.BOUNDED_ONLY_ROOTS))
+                    + " (an unbounded select; a bound one still runs)"
+                    + (NoPrincipalReadPolicy.UNBOUNDED_ENFORCING ? " — ENFORCING" : " — observing only, nothing is refused yet"));
     }
 
     /**
