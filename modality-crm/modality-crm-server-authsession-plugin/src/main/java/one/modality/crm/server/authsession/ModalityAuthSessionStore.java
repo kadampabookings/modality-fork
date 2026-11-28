@@ -100,12 +100,13 @@ public final class ModalityAuthSessionStore implements SessionFamilyStore {
     // read by position — keep them in step with the SELECT above.
     private static final int RENEWED_GENERATION = 0, RENEWED_ABSOLUTE = 1, SNAPSHOT_GENERATION = 2,
         REVOKED = 3, EXPIRED = 4, MILLIS_SINCE_RENEWAL = 5, SNAPSHOT_ABSOLUTE = 6;
-    // MILLIS_SINCE_RENEWAL is selected and read by NOTHING, on purpose. It used to decide whether a
-    // holder behind its family was a thief, and a clock cannot decide that: the renewal cadence IS the
-    // access window, so two holders are always about one window apart and the false kills reappeared
-    // just past whatever the grace was set to — measured twice on production, at two different values.
-    // Kept in the projection because it is worth having in a log line one day, and named here so that
-    // the next person to find it does not take it for a decision somebody forgot to make.
+    // MILLIS_SINCE_RENEWAL DECIDES NOTHING, and must not. It used to decide whether a holder behind its
+    // family was a thief, and a clock cannot decide that: the renewal cadence IS the access window, so two
+    // holders are always about one window apart and the false kills reappeared just past whatever the grace
+    // was set to — measured twice on production, at two different values.
+    // It is now READ, in one place: the log line at the reuse verdict in classify(), which is the "log line
+    // one day" this was kept in the projection for. Reporting it is not deciding on it — if it ever appears
+    // in a condition again, that is the removed grace coming back under another name.
 
     /**
      * The revocations another instance may have performed, oldest first, in two forms.
@@ -325,6 +326,32 @@ public final class ModalityAuthSessionStore implements SessionFamilyStore {
         // with two tabs who no longer dies for it: 42 families a day, 40 people, 39 of them behind by one.
         if (!isReuse(presentedGeneration, snapshotGeneration))
             return new FamilyRenewal(Verdict.CURRENT, snapshotGeneration, longAt(result, SNAPSHOT_ABSOLUTE));
+        // Says what a kill was, in the two numbers that tell its causes apart. ~3.4 front-office families a
+        // day end here and nothing records WHY, so the question "is this a sleeping second holder or
+        // something else" has been open since October with no data behind it.
+        //
+        //   behindBy             how many generations the family advanced while this holder was away. One
+        //                        is forgiven above, so this is always >= 2. Since a generation only
+        //                        advances on the renewal cadence, it is also roughly how many access
+        //                        windows the holder slept through.
+        //   sinceLastRenewalMs   how long ago the family last advanced, from MILLIS_SINCE_RENEWAL, which is
+        //                        already in the projection for exactly this.
+        //
+        // The pair is what separates the hypotheses: behindBy high with sinceLastRenewalMs low is a family
+        // another holder is still actively using while this one slept — the multi-tab or slept-phone case.
+        // Both high is a stale family whose holders woke in an odd order. Neither reading is available from
+        // auth_session afterwards, because the row keeps no per-holder timing.
+        //
+        // NO IDENTIFIERS, deliberately: not the family id, not the person, not the account. This lands in
+        // CloudWatch, which neither the anonymiser nor the erasure routines can reach, so what goes in is
+        // permanent. The counts answer the question; a pseudonymous id that links back to a member would
+        // not add to the answer and could not be taken back out.
+        //
+        // The "[reuse]" marker is for a log filter to find: this file logs through Console.log at INFO with
+        // only an emoji to go on, unlike the gateways which each carry a LOG_PREFIX, and a filter pattern
+        // on an emoji is a poor thing to rely on.
+        Console.log("🛡 [reuse] Family revoked for reuse: behindBy=" + (snapshotGeneration - presentedGeneration)
+                    + " sinceLastRenewalMs=" + longAt(result, MILLIS_SINCE_RENEWAL));
         return FamilyRenewal.reuseDetected();
     }
 
