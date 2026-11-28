@@ -37,7 +37,9 @@ import java.time.temporal.ChronoUnit;
  *   <li><b>At the centre</b>: an event whose venue (its own, or its repeated event's, as
  *       {@code event_letter_venue_id()} reads it) belongs to the organisation, or, without a venue, which belongs
  *       to it. KBS2 went by the owner alone, which hid the summer festival (organisation 1, held at 151) from
- *       its host.</li>
+ *       its host. <b>Not at a branch</b>: an event whose venue is a branch site ({@code site.branch}: the centre's
+ *       classes in other towns, Barrow, Kendal, Millom...) is held elsewhere, and its people never come to the
+ *       desk (Bruno, 2026-11-28). An unset flag counts as the centre, as the rooms grid's onsite band reads it.</li>
  * </ul>
  *
  * <p><b>The venue rule trusts its inputs to be written by their owners</b>: {@code event.venue_id},
@@ -156,6 +158,7 @@ final class ArrivalsByDay {
             left join event r on r.id = e.repeated_event_id
             left join site s on s.id = coalesce(e.venue_id, r.venue_id)
           where coalesce(s.organization_id, e.organization_id) = $1::int
+            and s.branch is not true
             and (e.end_date is null or e.end_date >= $2::date - %d)),
         l as materialized (
           select dl.id, d.id as doc, d.event_id as ev, f.code = 'acco' as acco

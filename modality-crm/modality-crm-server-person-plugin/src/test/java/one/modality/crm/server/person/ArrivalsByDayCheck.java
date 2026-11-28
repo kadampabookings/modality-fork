@@ -70,6 +70,8 @@ public class ArrivalsByDayCheck {
         check("hosted events count, by the venue or the repeated event's venue",
             sql.contains("coalesce(s.organization_id, e.organization_id) = $1::int")
                 && sql.contains("coalesce(e.venue_id, r.venue_id)"));
+        check("events held at a branch venue are left out, an unset flag counting as the centre",
+            sql.contains("and s.branch is not true"));
         check("events are bounded by their end date and the measured slack",
             sql.contains("e.end_date >= $2::date - " + ArrivalsByDay.EVENT_END_SLACK_DAYS));
         check("attendance is read from two days before to one day after the window",
