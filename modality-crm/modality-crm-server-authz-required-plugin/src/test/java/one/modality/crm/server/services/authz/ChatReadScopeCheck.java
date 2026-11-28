@@ -84,8 +84,22 @@ public class ChatReadScopeCheck {
                       rule == null || !rule.matches(".*\\b[a-z][A-Za-z]*\\.[a-z].*"));
             }
 
+        // Person and Document carry the same prohibition, in a loop of their own. The organisation rule
+        // above is about the CONVERSATION's own column and must not be applied to them: Person's
+        // back-office arm tests `organization in CALLER_GRANTED_ORGANIZATIONS` against Person's own
+        // column on purpose — it is the entire left-hand arm, and the 2026-11-29 measurement says it
+        // carries 3,504 of org 151's people that no booking would reach.
+        for (String entity : new String[] {"Person", "Document"})
+            for (String scope : new String[] {ChatReadScope.MEMBER, ChatReadScope.BACKOFFICE}) {
+                String rule = dql(entity, scope);
+                // Non-null is part of the assertion: both roots now have a rule under both scopes, so a
+                // null here is a rule that has gone missing rather than a rule that has no paths.
+                check("a rule exists and takes no path (" + entity + "/" + scope + ")",
+                      rule != null && !rule.matches(".*\\b[a-z][A-Za-z]*\\.[a-z].*"));
+            }
+
         // ── Everything else is untouched ─────────────────────────────────────────────────────────────────
-        check("an entity this does not scope has no rule", dql("Document", ChatReadScope.MEMBER) == null);
+        check("an entity no scope owns still has no rule", dql("Organization", ChatReadScope.MEMBER) == null);
         check("and an unknown scope scopes nothing, rather than guessing",
               dql("Conversation", "some.other.scope") == null);
         check("including a null one, which is what a server-origin read compiles under",
@@ -129,26 +143,49 @@ public class ChatReadScopeCheck {
         for (String entity : new String[] {"ConversationParticipant", "ChatPresence"})
             check("and a root outside the first flip is not (" + entity + ")",
                   !ChatReadScope.isEnforced(entity));
-        check("an entity this does not scope is not enforced either",
-              !ChatReadScope.isEnforced("Document"));
+        check("an entity no scope owns is not enforced either",
+              !ChatReadScope.isEnforced("Organization"));
 
-        // ── PERSON, phase 1: the member arm only, and STAGING ONLY ─────────────────────────────────────
+        // ── PERSON, both arms, and STAGING ONLY ────────────────────────────────────────────────────────
         // The same tripwire as the chat roots above, for the same reason: it must be changed deliberately,
         // never drift. This one carries a second condition the chat ones do not — it must not reach the
-        // prod branch until the back-office arm is timed (a correlated exists, ~60k probes on an
-        // unfiltered person list) and the 11,235 persons it reaches neither way are a decision.
+        // prod branch while the 11,245 persons it reaches by neither arm are undecided (re-measured
+        // 2026-11-29; 11,235 on 2026-10-19, so the population is stable rather than shrinking).
         check("Person is enforced (staging only - see PersonReadScope)",
               ChatReadScope.isEnforced("Person"));
         check("a member reads the people on their own account",
               "frontendAccount=CALLER_ACCOUNT"
             + " or accountPerson in (select id from Person where frontendAccount=CALLER_ACCOUNT)",
               dql("Person", ChatReadScope.MEMBER));
-        // Phase 2. Null here is what keeps enforcement - which is per ENTITY, not per token - from
-        // narrowing the back office in the same edit that narrows the front office.
-        check("but a back office reads Person unnarrowed, deliberately, until the arm is timed",
-              dql("Person", ChatReadScope.BACKOFFICE) == null);
+        check("a back office reads its centres' people and its events' bookers",
+              "organization in CALLER_GRANTED_ORGANIZATIONS"
+            + " or id in (select person from Document where " + grantedEvents + ")",
+              dql("Person", ChatReadScope.BACKOFFICE));
+        // THE ARM THAT WOULD FAIL SILENTLY. Most production grants are organisation-wide, and such a grant
+        // binds CALLER_GRANTED_EVENTS EMPTY (confirmed by the 2026-11-25 production run). Written as
+        // "event in CALLER_GRANTED_EVENTS" alone, the booking arm matches nothing for exactly the callers
+        // it exists for: organisation 1 has 20 people by centre against 25,359 by booking, so its operator
+        // would see 20 of 25,367 and the screen would look broken rather than narrowed.
+        check("and its booking arm expands organisations into events, or it matches nothing for an org grant",
+              String.valueOf(dql("Person", ChatReadScope.BACKOFFICE))
+                  .contains("select id from Event where organization in CALLER_GRANTED_ORGANIZATIONS"));
         check("and a super admin gets no predicate for Person either",
               dql("Person", ChatReadScope.UNRESTRICTED) == null);
+
+        // ── DOCUMENT: a booking, scoped for the two callers that should not read all of them ────────────
+        // Until 2026-11-29 this root was in no read scope at all: a member, a centre operator and a
+        // platform super administrator each counted all 294,713, and document carries 56 denormalised
+        // person_ columns. Closing Person to a member never closed the copy of it living here.
+        check("Document is enforced (staging only - see DocumentReadScope)",
+              ChatReadScope.isEnforced("Document"));
+        check("a member reads the bookings of the people on their own account",
+              "person in (select id from Person where frontendAccount=CALLER_ACCOUNT"
+            + " or accountPerson in (select id from Person where frontendAccount=CALLER_ACCOUNT))",
+              dql("Document", ChatReadScope.MEMBER));
+        // Document.event is a foreign key on the row, so this needs no subquery over people and no
+        // exists: 49 ms for organisation 1 against 997 ms for the Person rule over the same grant.
+        check("a back office reads the bookings of its granted events",
+              grantedEvents, dql("Document", ChatReadScope.BACKOFFICE));
         // The line says which mode each root is in, so ONE census tells observing from enforcing per root.
         // With the first root flipped the two wordings appear side by side, which is the point: a census
         // that could only say "this deploy is enforcing" would say nothing about which of the five.
@@ -181,8 +218,9 @@ public class ChatReadScopeCheck {
                                            "ConversationParticipant", "ChatPresence"})
             check("an unrestricted caller gets no rule for " + entity,
                   dql(entity, ChatReadScope.UNRESTRICTED) == null);
-        check("and none for an entity this does not scope either",
-              dql("Document", ChatReadScope.UNRESTRICTED) == null);
+        check("nor for Person or Document, which other scopes own",
+              dql("Person", ChatReadScope.UNRESTRICTED) == null
+              && dql("Document", ChatReadScope.UNRESTRICTED) == null);
         check("the unrestricted token is its own scope, not a flag on another",
               !ChatReadScope.UNRESTRICTED.equals(ChatReadScope.BACKOFFICE)
               && !ChatReadScope.UNRESTRICTED.equals(ChatReadScope.MEMBER));
@@ -222,11 +260,15 @@ public class ChatReadScopeCheck {
         check("a super admin reading a chat root is REPORTED, not silently skipped",
               logged.size() == 1 && logged.get(0).contains("UNSCOPED READ of Conversation under unrestricted"));
         logged.clear();
-        ChatReadScope.INSTANCE.readScopeCondition("Document", ChatReadScope.UNRESTRICTED);
+        // Organization rather than Document: Document became a scoped root on 2026-11-29, so it is no
+        // longer an example of an entity nobody owns. The distinction this pins is still the same one —
+        // a root with a rule is reported even when the caller gets no predicate, a root with no rule
+        // anywhere is silent — and using a scoped root as the silent example would assert the opposite.
+        ChatReadScope.INSTANCE.readScopeCondition("Organization", ChatReadScope.UNRESTRICTED);
         check("but an entity this provider never scopes stays silent - otherwise every read in the system"
               + " would log", logged.isEmpty());
-        // THE WIDENED PROBE (25 Nov). Person's back-office arm is Phase 2, so a back office reads Person
-        // with no predicate. Before the widening only UNRESTRICTED was reported, so the only evidence of
+        // THE WIDENED PROBE (25 Nov), written when Person's back-office arm was Phase 2 and a back office
+        // read Person with no predicate. Before the widening only UNRESTRICTED was reported, so the only evidence of
         // that gap would have been an absence in 7e - and an absence is precisely what was misread on
         // 20 Nov, two paragraphs up. Pinned so the report cannot be narrowed back without failing here.
         logged.clear();

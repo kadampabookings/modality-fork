@@ -140,12 +140,16 @@ final class ChatReadScope implements ClientReadScope.Provider, ClientScopeToken.
      * enforcement off. Entities this class does not own are delegated rather than re-registered.
      */
     static boolean isEnforced(String entityName) {
-        return ENFORCED_ROOTS.contains(entityName) || PersonReadScope.isEnforced(entityName);
+        return ENFORCED_ROOTS.contains(entityName)
+               || PersonReadScope.isEnforced(entityName)
+               || DocumentReadScope.isEnforced(entityName);
     }
 
     /** Any root enforced, here or in a delegate: what the token and the refusal seam derive from. */
     private static boolean enforcesAnything() {
-        return !ENFORCED_ROOTS.isEmpty() || PersonReadScope.enforcesAnything();
+        return !ENFORCED_ROOTS.isEmpty()
+               || PersonReadScope.enforcesAnything()
+               || DocumentReadScope.enforcesAnything();
     }
 
     /** True while any root is still only reported — kept for the checks and the boot line. */
@@ -206,7 +210,7 @@ final class ChatReadScope implements ClientReadScope.Provider, ClientScopeToken.
      * each parenthesises what it injects, which is what stops {@code <caller's filter> and A or B} being read
      * as {@code (<filter> and A) or B} — the defect {@code ClientReadScopeCheck} pins.
      */
-    private static final String GRANTED_EVENTS =
+    static final String GRANTED_EVENTS =
         "event in CALLER_GRANTED_EVENTS"
         + " or event in (select id from Event where organization in CALLER_GRANTED_ORGANIZATIONS)";
 
@@ -481,6 +485,11 @@ final class ChatReadScope implements ClientReadScope.Provider, ClientScopeToken.
                 // The front office reads agents' presence to show who is online, and nothing else needs a
                 // viewer's last-seen: a per-person last-seen readable by any member is a tracker.
                 return backoffice ? GRANTED_EVENTS : "agent";
+            case "Document":
+                // Delegated like Person, and for the same reason: one registered provider, several owners
+                // of rules. Named explicitly rather than chained into the default so that two delegates
+                // can never both answer for one entity without somebody editing this line.
+                return DocumentReadScope.conditionDql(entityName, scopeToken);
             default:
                 // Not a chat root: the entities this provider does not own, delegated rather than
                 // registered separately. See isEnforced above for why a second provider is not an option.

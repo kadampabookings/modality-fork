@@ -17,9 +17,10 @@ import java.util.Set;
  *
  * <ul>
  *   <li><b>A member</b> reads the people on their own account — themselves and whoever books with them.</li>
- *   <li><b>A back office</b> reads people who booked an event in scope, or who belong to a centre in scope:
- *       {@code exists(select Document where event in CALLER_GRANTED_EVENTS and person=this) or
- *       organization in CALLER_GRANTED_ORGANIZATIONS}. <b>Not written here yet</b> — see the phases below.</li>
+ *   <li><b>A back office</b> reads people who booked an event in scope, or who belong to a centre in scope.
+ *       <b>Written 2026-11-29</b>, and not in the shape this line used to describe — see
+ *       {@link #GRANTED_PEOPLE}, which expands organisations into events because an organisation-wide
+ *       grant binds {@code CALLER_GRANTED_EVENTS} empty.</li>
  * </ul>
  *
  * <p>Both arms of the member rule avoid a PATH, which a scope condition is refused for at both injection
@@ -28,24 +29,26 @@ import java.util.Set;
  * relationship as {@code accountCanAccessPersonOrders}, whose body is
  * {@code p?.frontendAccount=a or p?.accountPerson?.frontendAccount=a}.
  *
- * <h3>Phase 1 is the member arm, and only on staging</h3>
+ * <h3>Both arms are written; only staging enforces them</h3>
  *
- * <p>The back-office arm returns null here, which means a back-office caller reads {@code Person} exactly as
- * it did before — unnarrowed. That is deliberate, and it is the same staging the chat roots had: the member
- * arm was proved on 11 November and the back-office arm only on 25 November, two weeks apart. Two things
- * have to happen before the back-office arm is written:
+ * <p>The member arm was proved on 11 November, the back-office arm written on 29 November for a demo of
+ * what the server narrows per caller. Of the two things the previous version of this note said had to
+ * happen first, one is answered and one is not:
  *
  * <ul>
- *   <li><b>Time it.</b> The back-office arm is a correlated {@code exists}, roughly one index probe per
- *       candidate row — about 60,000 on an unfiltered person list, which is exactly what
- *       {@code select count(1) from Person} is. The member arm below is an indexed column test and has no
- *       such question, which is why it can go first.</li>
- *   <li><b>Answer for the 11,235.</b> Of 59,714 persons on staging (2026-10-19), 11,235 match neither
- *       back-office arm: front-office self-signups who never booked and never had a centre recorded. Under
- *       that arm no back-office user would see any of them. The plan argues that is right — no booking and
- *       no centre is no relationship — but it is an operational cost (a caller who signed up online will
- *       not be found by a search, and staff will make a duplicate) and it should be a decision, not a
- *       side effect.</li>
+ *   <li><b>Timed, and it is not the feared shape.</b> 997 ms for organisation 1 on an unfiltered
+ *       {@code select count(1) from Person}: Postgres hashes the subplan over the granted events'
+ *       documents rather than probing once per candidate row. Not a per-row disaster, but a second on the
+ *       worst question the back office can ask, against 49 ms for the Document equivalent. Detail on
+ *       {@link #GRANTED_PEOPLE}.</li>
+ *   <li><b>The 11,245 are STILL NOT ANSWERED FOR.</b> Re-measured on staging 2026-11-29: 11,245 persons
+ *       match neither arm — no centre recorded and no booking at all — against 11,235 on 2026-10-19, so
+ *       the population is stable rather than shrinking. A further 9,214 have no centre but do have a
+ *       booking, and those the booking arm rescues. Under this rule no back-office user sees any of the
+ *       11,245. The plan argues that is right (no booking and no centre is no relationship) but it is an
+ *       operational cost — a caller who signed up online will not be found by a search, and staff will
+ *       make a duplicate — and it is why {@link #ENFORCED_ROOTS} must stay empty on {@code prod}. Writing
+ *       the arm did not decide this; it only made the consequence visible.</li>
  * </ul>
  *
  * <h3>And the member arm has preconditions of its own</h3>
@@ -114,10 +117,45 @@ final class PersonReadScope {
      *
      * <p>The second arm is a subquery because {@code accountPerson.frontendAccount} is a path, and a path in
      * a scope condition is refused at both injection points.
+     *
+     * <p>Package-private because {@code DocumentReadScope} reuses it verbatim: a member's bookings are the
+     * bookings OF these people, and the two rules must not be allowed to drift apart into two different
+     * answers to "who is on my account".
      */
-    private static final String MY_ACCOUNT_PEOPLE =
+    static final String MY_ACCOUNT_PEOPLE =
         "frontendAccount=CALLER_ACCOUNT"
         + " or accountPerson in (select id from Person where frontendAccount=CALLER_ACCOUNT)";
+
+    /**
+     * The people a back office may read: whoever belongs to a centre it is granted, and whoever has booked
+     * an event it is granted.
+     *
+     * <p><b>The booking arm is not optional, and the shape of it is not either.</b> Measured on staging
+     * 2026-11-29, for the five organisations that actually carry a grant: organisation 1 has <b>20</b>
+     * people by centre and <b>25,359</b> by booking. An organisation-only rule would therefore show that
+     * centre's operator twenty people out of 25,367 — a screen that looks broken rather than narrowed.
+     *
+     * <p>And the booking arm has to expand organisations INTO events, which is why it reuses
+     * {@link ChatReadScope#GRANTED_EVENTS} rather than testing {@code event in CALLER_GRANTED_EVENTS}
+     * alone. Most production grants are organisation-wide, and such a grant binds
+     * {@code CALLER_GRANTED_EVENTS} EMPTY — confirmed by the 2026-11-25 production run, where the
+     * organisation arm carried the whole test. Written the short way, this arm would match nothing at all
+     * for exactly the callers it exists for.
+     *
+     * <p>Expressed as {@code id in (select person from Document where …)} rather than as a correlated
+     * {@code exists(… and person=this)}: it is the plan Postgres chooses anyway — a hashed SubPlan over the
+     * granted events' documents, not a probe per candidate row — and saying so in the rule makes the cost
+     * predictable instead of dependent on the planner's mood.
+     *
+     * <p><b>Cost, measured rather than feared.</b> 997 ms for organisation 1 on an unfiltered
+     * {@code select count(1) from Person} (59,858 candidates, 162,360 documents across 77 events), against
+     * 49 ms for the equivalent Document rule, which needs no subquery because {@code Document.event} is a
+     * direct foreign key. The javadoc above feared one index probe per candidate row; that is not what
+     * happens, but a second is still a second, and this is the worst case the back office can ask for.
+     */
+    private static final String GRANTED_PEOPLE =
+        "organization in CALLER_GRANTED_ORGANIZATIONS"
+        + " or id in (select person from Document where " + ChatReadScope.GRANTED_EVENTS + ")";
 
     /**
      * The rule for one entity under one scope, or null when this scope does not narrow it.
@@ -130,9 +168,9 @@ final class PersonReadScope {
             return null;
         if (ChatReadScope.MEMBER.equals(scopeToken))
             return MY_ACCOUNT_PEOPLE;
-        // UNRESTRICTED reads everything by design. BACKOFFICE is Phase 2: returning null leaves it reading
-        // Person exactly as it does today, and the UNSCOPED census line says so out loud rather than
-        // leaving the gap to be inferred from an absence.
+        if (ChatReadScope.BACKOFFICE.equals(scopeToken))
+            return GRANTED_PEOPLE;
+        // UNRESTRICTED reads everything by design, and gets no predicate at all.
         return null;
     }
 
